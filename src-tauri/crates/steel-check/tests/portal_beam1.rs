@@ -96,6 +96,11 @@ fn run() -> &'static BeamCheckResult {
             staaf_notities: None,
             profile_end: None,
             custom_section_end: None,
+            tension_only: None,
+            a_net_mm2: None,
+            deflection_add_mm: None,
+            deflection_length_m: None,
+            zijdelingse_knik_in_analyse: None,
         };
         check_beam(input)
     })
@@ -327,6 +332,29 @@ fn portal_beam1_governing_ok() {
 ///   6.61 = 0,0115 + 0,4655·194,80/145,66 = 0,6341 (was 0,8159)
 ///   6.62 = 0,0510 + 0,9846·194,80/145,66 = 1,3678 (was 0,5337) → maatgevend
 ///   boven de kip (1,3373); de ligger bleef al NotOk.
+/// Oktober 2026 — trek, druk alleen bij druk, (6.36) vanaf 0,5·a en 6.3 per
+/// combinatie. Per veld nagelopen; uc_max blijft 1,36782 op vgl. 6.62.
+///  * 6.2.3 (trek): n.v.t., zonder unity check — nergens trek.
+///  * 6.2.9 en 6.2.10: U-profiel, vrijgesteld volgens 6.2.9.1(4) — (6.33) en
+///    (6.34) voldaan bij N = 18,479 kN — dus M_N,y,Rd = M_pl,y,Rd en de UC
+///    blijft 0,931618. Alleen de afleiding en de kanttekeningen zijn nieuw.
+///  * 6.3.3: getallen ongewijzigd; de kanttekeningen noemen nu per combinatie
+///    waar N_Ed en M_Ed vandaan komen.
+/// Oktober 2026 (b) — kip en 6.3.3 bij klasse 3 (art. 6.3.2.1(3), tabel 6.7).
+/// Deze staaf (UNP350, S235) is klasse 1: W_y = W_pl,y blijft, en geen enkel
+/// getal verandert. 6.61 en 6.62 tonen nu de karakteristieke weerstanden van
+/// tabel 6.7 als variabelen, met χ_LT van de maatgevende combinatie erbij:
+///   N_Rk = A·f_y = 7665,7·235 = 1801,4395 kN (in de kanttekening afgerond 1801,439)
+///   M_y,Rk = W_pl,y·f_y = 889 763·235 = 209,094 kNm
+///   M_z,Rk = W_pl,z·f_y = 139 730·235 = 32,837 kNm
+/// en de regel "Tabel 6.7, klasse 1: …" in de kanttekeningen.
+/// Oktober 2026 (c) — 6.2.8 op elk station van de omhullende in plaats van
+/// alleen op het buigpunt. Alle 2 punten getoetst; de grootste dwarskracht
+/// is 235,084 kN, onder V_pl,z,Rd/2 = 335,530 kN, dus ρ = 0 op elk punt en is de
+/// maatgevende plaats het punt met het grootste moment (combinatie 21 op x = 3900 mm): UC = 194,796/209,094 = 0,931618,
+/// ongewijzigd. Wat verandert is de weergave: formule M_y,V,Rd = (1 − ρ)·
+/// M_y,c,Rd, de variabelen ρ en M_y,Ed erbij, de afleidingsstappen ρ en
+/// M_y,V,Rd, en Nederlandse kanttekeningen met de plaats.
 #[test]
 fn portal_beam1_snapshot() {
     insta::assert_json_snapshot!("portal_beam1", run());

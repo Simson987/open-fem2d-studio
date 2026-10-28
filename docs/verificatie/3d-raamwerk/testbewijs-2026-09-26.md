@@ -4,9 +4,9 @@
 
 | Vereiste | Gezaghebbend bewijs | Oordeel |
 | --- | --- | --- |
-| 3D-raamwerkkern met zes vrijheidsgraden | `frame3d-solver`, gesloten oplossingen, evenwicht en 22 groene Rust-tests | Behaald |
+| 3D-raamwerkkern met zes vrijheidsgraden | `open-fem-3d`, gesloten oplossingen, evenwicht en 22 groene Rust-tests | Behaald |
 | Directe tweede orde en knik | P-Delta-, kritieke-last-, nulstand- en Eulerconvergentietests | Behaald |
-| Solverarchitectuur en gebruikerskeuze | versievaste Dedaliano-adapter, capabilityrouter en solverkeuze in Instellingen | Behaald |
+| Solverarchitectuur en gebruikerskeuze | versievaste adapter voor de externe 3D-kern, capabilityrouter en solverkeuze in Instellingen | Behaald |
 | Verificatieberekeningen | `cases.json`, 3D-torsie, twee-assige buiging, veren, releases, temperatuur en opgelegde verplaatsing | Behaald |
 | GUI, IFC, MCP en compacte rapportage | native desktopproeven, 47 MCP-tools, IFC4-regressies en vaste rapportaanzichten | Behaald |
 | Staal-, beton- en kniktoetsing | EN 1993/EN 1992-adapters, twaalf groene 3D-adaptertests en volledige MCP-regressie | Behaald binnen de hieronder genoemde beperkingen |
@@ -20,7 +20,7 @@ voorgesteld.
 
 ## Rekenkern
 
-- Rust-referentieset `frame3d-solver`: **21/21 geslaagd**.
+- Rust-referentieset `open-fem-3d`: **21/21 geslaagd**.
 - Alle vier gepubliceerde gevallen uit `cases.json` worden daarnaast rechtstreeks
   ingelezen en volledig vergeleken. Grootste absolute afwijking:
   `3,553·10⁻¹⁵`; grootste relatieve afwijking: `1,561·10⁻¹⁵`. De onafhankelijk
@@ -58,7 +58,7 @@ voorgesteld.
 
 ## 3D beton en staal
 
-- TypeScript-regressieset `--filter=frame3d`: **10/10 bestanden geslaagd**.
+- TypeScript-regressieset `--filter=openFem3d`: **10/10 bestanden geslaagd**.
 - De EN 1992-adapter geeft `N`, `Vy`, `Vz`, `T`, `My` en `Mz` aan beide
   staafeinden door, bewaart doorsnede, betonklasse en wapeningskorf bij
   projectroundtrip en bij de omzetting van 2D naar 3D. Dezelfde roundtriptest
@@ -257,7 +257,7 @@ nieuwe GUI-gereedschappen `gui_select_3d_plate` en `gui_split_3d_member` nog
 niet als bewuste bedieningsuitzondering te noemen. De tabel is aangevuld en de
 volledige crate-suite is daarna opnieuw uitgevoerd met de productie-Node-runtime:
 alle unit-, integratie-, sidecar-, schema-, foutpad-, drie-wegen- en
-stdio-tests slaagden. De afzonderlijke `frame3d-solver`-suite gaf `22`
+stdio-tests slaagden. De afzonderlijke `open-fem-3d`-suite gaf `22`
 geslaagde referentie- en JSON-tests. Ook de TypeScript-typecontrole, Vite-build
 en volledige native debugbuild zijn na deze correctie opnieuw groen uitgevoerd.
 Een afsluitende losse uitvoering van alle twaalf 3D-adaptertests vond nog een

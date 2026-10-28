@@ -5,6 +5,7 @@ import RibbonButton from "./RibbonButton";
 import RibbonButtonStack from "./RibbonButtonStack";
 import {
   ifcImportIcon,
+  ifcAnalysisImportIcon,
   ifcExportIcon,
   ifcTreeIcon,
   ifcValidateIcon,
@@ -51,10 +52,15 @@ interface IfcTabProps {
   onValidateIfc?: () => void;
   /** Opent het IFC-tabblad (boomstructuur, STEP-tekst, statistieken). */
   onOpenIfcView?: () => void;
+  /**
+   * Importeert een IFC4-analysemodel (Structural Analysis View) als nieuw
+   * 3D-project: bestandskeuze, modelkeuze, verslag. Zie io/ifcAnalyseImport.ts.
+   */
+  onImportAnalysisModel?: () => void;
 }
 
 export default function IfcTab({
-  onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView,
+  onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView, onImportAnalysisModel,
 }: IfcTabProps) {
   const { t } = useTranslation("ribbon");
 
@@ -68,6 +74,14 @@ export default function IfcTab({
             label={t("ifc.import")}
             size="large"
             onClick={pickIfcFile}
+          />
+          <RibbonButton
+            icon={ifcAnalysisImportIcon}
+            label={t("ifc.importAnalysisModel")}
+            title={t("ifc.importAnalysisModelHint")}
+            size="large"
+            disabled={!onImportAnalysisModel}
+            onClick={onImportAnalysisModel}
           />
           <RibbonButtonStack>
             <RibbonButton

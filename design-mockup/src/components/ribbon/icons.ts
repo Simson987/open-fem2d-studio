@@ -19,6 +19,8 @@ export const ifcStatsIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0
 // 3D Viewer Tab icons
 export const viewerLoadIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline stroke-linecap="round" stroke-linejoin="round" stroke-width="2" points="3.27 6.96 12 12.01 20.73 6.96"/><line stroke-linecap="round" stroke-linejoin="round" stroke-width="2" x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
 export const viewerOrbitIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.6 9h16.8M3.6 15h16.8"/></svg>`;
+/** Perspectief: een vloer die naar een verdwijnpunt toe smaller wordt. */
+export const viewerPerspectiveIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 20L9 5h6l6 15z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 13h12M12 5v15"/></svg>`;
 export const viewerSectionIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16v16H4z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12h16" stroke-dasharray="4 2"/></svg>`;
 export const viewerMeasureIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 12h20M6 8v8M18 8v8"/></svg>`;
 export const viewerFitIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`;
@@ -121,6 +123,8 @@ export const loadPointHIcon = `<svg viewBox="0 0 24 24"><line x1="2" y1="12" x2=
 //   3× shafts: kort verticaal segment
 //   3× solid pijlpunten naar onder
 export const loadLineIcon = `<svg viewBox="0 0 24 24"><rect x="1.5" y="1.5" width="21" height="21" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.45"/><line x1="3" y1="5" x2="21" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="6" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="3,13 9,13 6,19" fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/><line x1="12" y1="6" x2="12" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="9,13 15,13 12,19" fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/><line x1="18" y1="6" x2="18" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="15,13 21,13 18,19" fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/></svg>`;
+/** Belastingvlak: gearceerd vlak met lastpijlen erop, voor het 3D-gereedschap. */
+export const loadPanelIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 21l4-8h14l-4 8z" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 21l3-6M13 21l3-6" stroke-width="1" opacity="0.6"/><path d="M8 3v7M14 3v7M20 3v7" stroke-width="1.8" stroke-linecap="round"/><path d="M6 8l2 3 2-3M12 8l2 3 2-3M18 8l2 3 2-3" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 // MOMENT: 3/4 cirkel met solid driehoek-pijlpunt aan het einde (tangentieel).
 //   arc: M5,12 a7,7 0 1,1 9.9,4.95  (270° draaiing rond (12,12))
@@ -156,6 +160,8 @@ export const sectionsIcon = `<svg fill="none" stroke="currentColor" stroke-width
 export const calcSettingsIcon = settingsIcon;
 export const themeSunIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
 export const themeMoonIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`;
+/** AI-assistent (MCP): een tekstballon met een vonk. */
+export const aiAssistantIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 01-12.3 7.6L3 20.5l1.4-5.2A8.5 8.5 0 1121 11.5z"/><path d="M12 7.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/></svg>`;
 export const languageIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>`;
 
 // --- Table tab (Nodes, Elements, Plates, Loads tables) ---
@@ -179,6 +185,8 @@ export const checkPanelIcon = `<svg fill="none" stroke="currentColor" stroke-wid
 export const checkRulesIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`;
 
 // --- IFC tab (FEM ↔ IFC integration — import, structural model, validate, export) ---
+/** Een hal met een pijl naar binnen: een rekenmodel uit een IFC-bestand halen. */
+export const ifcAnalysisImportIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M3 21h18"/><path d="M12 9v8m-3.5-3.5L12 17l3.5-3.5"/></svg>`;
 export const ifcStructuralIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 21V8l9-6 9 6v13"/><path d="M9 21V12h6v9"/></svg>`;
 export const ifcMaterialMapIcon = `<svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
 
@@ -188,3 +196,9 @@ export const reportSectionsIcon = `<svg fill="none" stroke="currentColor" stroke
 
 // Zichtbaarheid (issue #47): een oog — het venster met alle weergave-instellingen.
 export const zichtbaarheidIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>`;
+
+// Plaatweergave in 3D (issue #78): volume (plaat met dikte), vlak (alleen het
+// middenvlak) en mesh (de elementen op het middenvlak). Lint, venster en verkenner.
+export const plateVolumeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10 12 6l9 4-9 4-9-4Z" fill="currentColor" fill-opacity=".18" stroke-width="1.8" stroke-linejoin="round"/><path d="M3 10v3.5l9 4 9-4V10M12 14v3.5" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+export const plateSurfaceIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12 12 8l9 4-9 4-9-4Z" fill="currentColor" fill-opacity=".18" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+export const plateMeshIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12 12 8l9 4-9 4-9-4Z" stroke-width="1.8" stroke-linejoin="round"/><path d="M6 13.33l9-4M9 14.67l9-4M6 10.67l9 4M9 9.33l9 4" stroke-width="1.1"/></svg>`;

@@ -100,10 +100,38 @@ async fn stdio_roundtrip_initialize_list_call() {
     // iemand hem hier noemt, hoort op te vallen. De namenlijst hieronder is
     // niet uitputtend, dus zonder deze telling zou zo'n tool ongemerkt
     // meeliften.
-    // 28 rekenkern-/FEM-tools (inclusief solve_frame3d en solve_native_fem) +
-    // 20 gui_*-tools (het bedieningskanaal van de desktop-app, zie gui_tools.rs) = 48.
-    assert_eq!(tools.len(), 48, "expected 48 tools, got {}", tools.len());
-    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    // 31 rekenkern-/FEM-tools (inclusief solve_open_fem_3d,
+    // open_fem_3d_staalhal_maken en open_fem_3d_ifc_importeren, en het spoor
+    // solve_frame3d en solve_native_fem) + 23
+    // gui_*-tools (het bedieningskanaal van de desktop-app, zie gui_tools.rs;
+    // sinds de staalhal ook gui_build_3d_steel_hall, sinds de IFC-import ook
+    // gui_import_ifc_analysis_model, sinds issue #109 ook gui_start_app)
+    // + project_import (lokale extensie) = 55 vaste tools.
+    // Daarbij één tool per API-commando van de app, uit de ingebakken catalogus
+    // (assets/api-catalogus.json, geschreven door `npm run build:sidecar`).
+    // Ook die tellen exact: elk commando uit de catalogus, niets meer.
+    let catalogus: Value = serde_json::from_str(include_str!("../assets/api-catalogus.json"))
+        .expect("assets/api-catalogus.json");
+    let api_namen: Vec<String> = catalogus["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().replace('.', "_"))
+        .collect();
+    assert_eq!(
+        tools.len(),
+        55 + api_namen.len(),
+        "expected 55 + {} tools, got {}",
+        api_namen.len(),
+        tools.len()
+    );
+    let names: Vec<&str> = tools
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    for api in &api_namen {
+        assert!(names.contains(&api.as_str()), "API-tool {api} ontbreekt in tools/list");
+    }
     let native_fem = tools
         .iter()
         .find(|tool| tool["name"] == "solve_native_fem")
@@ -117,7 +145,9 @@ async fn stdio_roundtrip_initialize_list_call() {
     );
     for expected in [
         "list_steel_profiles",
+        "project_import",
         "gui_status",
+        "gui_start_app",
         "gui_build_3d_model",
         "gui_select_3d_plate",
         "gui_split_3d_member",
@@ -137,9 +167,18 @@ async fn stdio_roundtrip_initialize_list_call() {
         "solve_fem_model",
         "check_fem_model",
         // Ruimtelijke raamwerken: dezelfde Rust-adapter als het Tauri-command.
+        "solve_open_fem_3d",
         "solve_frame3d",
         // Experimentele onafhankelijke Rust FEM-kernels via de gedeelde dispatcher.
         "solve_native_fem",
+        // De stalen hal: generator van de wizard, 3D-kern en staaltoets; zie
+        // `tests/staalhal_mcp.rs`.
+        "open_fem_3d_staalhal_maken",
+        "gui_build_3d_steel_hall",
+        // De import van een IFC4-analysemodel: de import van de app in de
+        // sidecar, 3D-kern en staaltoets; zie `tests/ifc_import_mcp.rs`.
+        "open_fem_3d_ifc_importeren",
+        "gui_import_ifc_analysis_model",
         // De betontools (NEN-EN 1992-1-1). Dezelfde rekengang als het
         // Tauri-command en de toetsbrug; zie `tests/drie_wegen_beton.rs`,
         // `tests/drie_wegen_beff.rs` en `tests/drie_wegen_dekking.rs`.
@@ -290,7 +329,7 @@ async fn stdio_roundtrip_initialize_list_call() {
         "de melding moet beide uitwegen noemen: {tekst}"
     );
 
-    // ── 7. tools/call solve_frame3d ─────────────────────────────────────
+    // ── 7. tools/call solve_open_fem_3d ─────────────────────────────────────
     // Volledige protocolroute: dezelfde uitkraging als de adaptertest, nu via
     // stdin/stdout en de MCP-contentverpakking. Hiermee bewijzen we dat de tool
     // niet alleen in tools/list staat maar ook daadwerkelijk rekent.
@@ -299,7 +338,7 @@ async fn stdio_roundtrip_initialize_list_call() {
         "id": 6,
         "method": "tools/call",
         "params": {
-            "name": "solve_frame3d",
+            "name": "solve_open_fem_3d",
             "arguments": {
                 "schemaVersion": 1,
                 "analysis": "p-delta",
@@ -338,7 +377,7 @@ async fn stdio_roundtrip_initialize_list_call() {
     assert_eq!(resp["id"], 6);
     assert_eq!(resp["result"]["isError"], false, "resp: {resp:?}");
     let solved = &resp["result"]["structuredContent"];
-    assert_eq!(solved["engine"]["id"], "dedaliano");
+    assert_eq!(solved["engine"]["id"], "open-fem-3d");
     assert_eq!(solved["analysis"], "p-delta");
     let uz = solved["displacements"][1]["uz"].as_f64().expect("uz");
     assert!((uz + 0.0019285714285714286).abs() < 1e-12, "uz={uz}");
@@ -354,7 +393,7 @@ async fn stdio_roundtrip_initialize_list_call() {
         "id": 7,
         "method": "tools/call",
         "params": {
-            "name": "solve_frame3d",
+            "name": "solve_open_fem_3d",
             "arguments": {
                 "schemaVersion": 1,
                 "analysis": "linear",
@@ -392,26 +431,122 @@ async fn stdio_roundtrip_initialize_list_call() {
     assert_eq!(resp["id"], 7);
     assert_eq!(resp["result"]["isError"], false, "resp: {resp:?}");
     let solved = &resp["result"]["structuredContent"];
-    let rx = solved["displacements"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|value| value["nodeId"] == 1)
-        .unwrap()["rx"]
-        .as_f64()
-        .unwrap();
+    let rx = solved["displacements"].as_array().unwrap().iter()
+        .find(|value| value["nodeId"] == 1).unwrap()["rx"].as_f64().unwrap();
     assert!((rx - 0.018571428571428572).abs() < 1e-10, "rx={rx}");
-    let mx = solved["reactions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|value| value["nodeId"] == 2)
-        .unwrap()["mx"]
-        .as_f64()
-        .unwrap();
+    let mx = solved["reactions"].as_array().unwrap().iter()
+        .find(|value| value["nodeId"] == 2).unwrap()["mx"].as_f64().unwrap();
     assert!((mx.abs() - 5.0).abs() < 1e-10, "mx={mx}");
+
+    // ── 9. tools/call solve_frame3d (spoor frame3d) ──────────────────────
+    // Dezelfde uitkraging als stap 7, nu door de tool van het frame3d-spoor
+    // (Dedaliano-adapter onder de oude cratenaam).
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "tools/call",
+        "params": {
+            "name": "solve_frame3d",
+            "arguments": {
+                "schemaVersion": 1,
+                "analysis": "p-delta",
+                "nodes": [
+                    { "id": 1, "x": 0.0, "y": 0.0, "z": 0.0 },
+                    { "id": 2, "x": 3.0, "y": 0.0, "z": 0.0 }
+                ],
+                "materials": [{ "id": 1, "name": "S235", "eMpa": 210000.0, "nu": 0.3 }],
+                "sections": [{
+                    "id": 1, "name": "test", "areaM2": 0.01,
+                    "iyM4": 0.0001, "izM4": 0.00005, "torsionJM4": 0.00001
+                }],
+                "members": [{
+                    "id": 1, "startNodeId": 1, "endNodeId": 2,
+                    "materialId": 1, "sectionId": 1, "releases": {}
+                }],
+                "supports": [{
+                    "nodeId": 1, "ux": true, "uy": true, "uz": true,
+                    "rx": true, "ry": true, "rz": true
+                }],
+                "memberLoads": [{
+                    "id": 1, "memberId": 1,
+                    "qyStartKnPerM": 0.0, "qyEndKnPerM": 0.0,
+                    "qzStartKnPerM": -4.0, "qzEndKnPerM": -4.0,
+                    "startPositionM": 0.0, "endPositionM": 3.0
+                }]
+            }
+        }
+    });
+    let mut req = serde_json::to_string(&call).unwrap();
+    req.push('\n');
+    stdin.write_all(req.as_bytes()).await.unwrap();
+    stdin.flush().await.unwrap();
+
+    let resp = read_message(&mut reader).await;
+    assert_eq!(resp["id"], 8);
+    assert_eq!(resp["result"]["isError"], false, "resp: {resp:?}");
+    let solved = &resp["result"]["structuredContent"];
+    assert_eq!(solved["engine"]["id"], "dedaliano");
+    assert_eq!(solved["analysis"], "p-delta");
+    let uz = solved["displacements"][1]["uz"].as_f64().expect("uz");
+    assert!((uz + 0.0019285714285714286).abs() < 1e-12, "uz={uz}");
+    let fz = solved["reactions"][0]["fz"].as_f64().expect("reactie fz");
+    assert!((fz - 12.0).abs() < 1e-10, "fz={fz}");
 
     // Cleanup: drop stdin → server sees EOF → exits.
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// Een client die zijn verzoeken in één keer stuurt en daarna stdin sluit
+/// (een pijp, een script) krijgt toch op elk verzoek antwoord: de server
+/// maakt lopende verzoeken af voordat hij stopt.
+#[tokio::test]
+async fn stdin_dicht_na_verzoeken_beantwoordt_alles() {
+    let mut child = Command::new(BIN_PATH)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn server");
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let berichten = [
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": { "name": "pijp", "version": "0" } } }),
+        json!({ "jsonrpc": "2.0", "method": "notifications/initialized", "params": {} }),
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }),
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": { "name": "list_steel_grades", "arguments": {} } }),
+    ];
+    let mut tekst = String::new();
+    for bericht in &berichten {
+        tekst.push_str(&serde_json::to_string(bericht).unwrap());
+        tekst.push('\n');
+    }
+    stdin.write_all(tekst.as_bytes()).await.unwrap();
+    drop(stdin); // invoer dicht, direct na de verzoeken
+
+    let mut reader = BufReader::new(stdout);
+    let mut ids = Vec::new();
+    loop {
+        let mut line = String::new();
+        let n = timeout(Duration::from_secs(30), reader.read_line(&mut line))
+            .await
+            .expect("timeout waiting for response")
+            .expect("read_line failed");
+        if n == 0 {
+            break;
+        }
+        let bericht: Value = serde_json::from_str(line.trim()).expect("geldige JSON-RPC");
+        assert!(bericht["error"].is_null(), "fout op {line}");
+        ids.push(bericht["id"].as_i64().expect("antwoord met id"));
+    }
+    ids.sort_unstable();
+    assert_eq!(ids, vec![1, 2, 3], "elk verzoek beantwoord, ook na het sluiten van stdin");
+    let status = timeout(Duration::from_secs(30), child.wait())
+        .await
+        .expect("timeout waiting for exit")
+        .expect("wait failed");
+    assert!(status.success(), "server stopt netjes: {status}");
 }

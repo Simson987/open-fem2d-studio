@@ -8,9 +8,11 @@ interface WelcomeScreenProps {
   onNewProject: () => void;
   onOpenProject: () => void;
   onOpenFile?: (path: string) => void;
+  /** Opent de wizard "Stalen hal…" (optioneel). */
+  onSteelHall?: () => void;
 }
 
-export default function WelcomeScreen({ onClose, onNewProject, onOpenProject, onOpenFile }: WelcomeScreenProps) {
+export default function WelcomeScreen({ onClose, onNewProject, onOpenProject, onOpenFile, onSteelHall }: WelcomeScreenProps) {
   const { t } = useTranslation("common");
   const { recentFiles } = useRecentFiles();
 
@@ -71,6 +73,17 @@ export default function WelcomeScreen({ onClose, onNewProject, onOpenProject, on
                 <span>{t("welcome.openProjectDesc")}</span>
               </div>
             </button>
+            {onSteelHall && (
+              <button className="welcome-action-btn" onClick={() => { onSteelHall(); onClose(); }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 20V10l9-6 9 6v10M3 10h18M12 20V7" />
+                </svg>
+                <div>
+                  <strong>{t("welcome.steelHall")}</strong>
+                  <span>{t("welcome.steelHallDesc")}</span>
+                </div>
+              </button>
+            )}
           </div>
 
           <div className="welcome-recent">

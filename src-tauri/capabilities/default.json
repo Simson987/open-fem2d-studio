@@ -22,11 +22,11 @@
     "fs:default",
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "**/*.ifcfem2d" }]
+      "allow": [{ "path": "**/*.ifcfem" }, { "path": "**/*.ifcfem2d" }]
     },
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "**/*.ifcfem2d" }]
+      "allow": [{ "path": "**/*.ifcfem" }, { "path": "**/*.ifcfem2d" }]
     },
     "fs:allow-write-file",
     "opener:allow-open-url",

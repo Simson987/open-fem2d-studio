@@ -54,6 +54,27 @@ jobs:
         run: cargo test -p openaec-mcp-server
         working-directory: src-tauri
 
+  # Het vindbestand bevat het bedieningstoken. De Windows ACL-test moet op
+  # Windows zelf draaien; Linux kan de beveiligingsdescriptor niet controleren.
+  gui-kanaal-windows:
+    name: GUI-kanaal en ACL (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Rust installeren
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust-cache
+        uses: swatinem/rust-cache@v2.9.1
+        with:
+          workspaces: src-tauri -> target
+
+      - name: GUI-kanaal en ACL testen
+        run: cargo test --test gui_kanaal
+        working-directory: src-tauri
+
   # ── 2. Solver-testbatterij ────────────────────────────────
   # De 35 test-*.mjs zijn de enige bewaking op de rekenkern die er is. Ze
   # draaien tegen de bron, niet tegen een bundel — die bestaat in dit stadium
@@ -77,6 +98,27 @@ jobs:
           key: npm-${{ runner.os }}-${{ hashFiles('design-mockup/package-lock.json') }}
           restore-keys: npm-${{ runner.os }}-
 
+      # Een deel van de tests roept de Rust-kern als apart proces aan: de
+      # toetsbrug en de MCP-server (release) en de 3D-solver (debug). Zonder
+      # die binaries falen ze met "bouw eerst …".
+      - name: Rust installeren
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust-cache
+        uses: swatinem/rust-cache@v2.9.1
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Rust-kern bouwen
+        working-directory: src-tauri
+        run: |
+          cargo build --release -p toetsbrug -p openaec-mcp-server
+          cargo build -p open-fem-3d
+
+      - name: 3D-rekenkern testen
+        working-directory: src-tauri
+        run: cargo test -p open-fem-3d
+
       - name: Frontend-afhankelijkheden installeren
         run: npm ci
         working-directory: design-mockup
@@ -99,6 +141,11 @@ jobs:
       # verbergt.
       - name: Testbatterij draaien
         working-directory: design-mockup
+        # De UI-tests starten een headless browser. /usr/bin/chromium is op de
+        # Ubuntu-runner een snap-wrapper die in CI blijft hangen; Google Chrome
+        # staat er als gewoon pakket.
+        env:
+          OPENAEC_BROWSER: /usr/bin/google-chrome
         run: |
           gefaald=0
           totaal=0

@@ -1,0 +1,111 @@
+{
+ "tool": "open-fem-studio__solve_open_fem_3d",
+ "omschrijving": "038: staaf 1 ingeklemd-ingeklemd 5 m dT=+30 K; staaf 2 uitkraging 4 m dT_grad,z=20 K",
+ "arguments": {
+  "schemaVersion": 1,
+  "nodes": [
+   {
+    "id": 1,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 2,
+    "x": 5,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 3,
+    "x": 0,
+    "y": 2,
+    "z": 0
+   },
+   {
+    "id": 4,
+    "x": 4,
+    "y": 2,
+    "z": 0
+   }
+  ],
+  "materials": [
+   {
+    "id": 1,
+    "name": "staal",
+    "eMpa": 210000,
+    "nu": 0.3
+   }
+  ],
+  "sections": [
+   {
+    "id": 1,
+    "name": "test",
+    "areaM2": 0.005,
+    "iyM4": 8.356e-05,
+    "izM4": 6.04e-06,
+    "torsionJM4": 2.01e-07
+   }
+  ],
+  "members": [
+   {
+    "id": 1,
+    "startNodeId": 1,
+    "endNodeId": 2,
+    "materialId": 1,
+    "sectionId": 1
+   },
+   {
+    "id": 2,
+    "startNodeId": 3,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1
+   }
+  ],
+  "supports": [
+   {
+    "nodeId": 1,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 2,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 3,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   }
+  ],
+  "thermalLoads": [
+   {
+    "id": 1,
+    "memberId": 1,
+    "deltaTUniformK": 30
+   },
+   {
+    "id": 2,
+    "memberId": 2,
+    "deltaTUniformK": 0,
+    "deltaTGradientZK": 20
+   }
+  ],
+  "analysis": "linear",
+  "bucklingModes": 3
+ }
+}

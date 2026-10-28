@@ -46,7 +46,7 @@ use nen_en_1993_1_1_section::classification::CrossSectionClass;
 use nen_en_1993_1_1_section::CheckStatus;
 use steel_profiles::{db, ProfileKind};
 
-use crate::input::{BeamCheckInput, CustomLamella, CustomSection};
+use crate::input::{BeamCheckInput, CustomLamella, CustomSection, NIET_VOLLEDIG_GETOETST};
 use crate::orchestrator::{check_beam, plak_notitie, uc_of};
 use crate::result::{
     BeamCheckResult, MaatgevendPunt, NamedCheck, StabiliteitsDoorsnede, ToetsUc, Toetsdoorsnede,
@@ -55,7 +55,8 @@ use crate::result::{
 
 /// De volgorde waarin de toetsen in het resultaat staan — dezelfde als bij een
 /// prismatische staaf, zodat het rapport niets hoeft te weten van het verschil.
-const VOLGORDE: [&str; 14] = [
+const VOLGORDE: [&str; 16] = [
+    "6.2.3_tension",
     "6.2.4_compression",
     "6.2.5_bending_y",
     "6.2.5_bending_z",
@@ -70,10 +71,13 @@ const VOLGORDE: [&str; 14] = [
     "6.3.3_eq_6_62",
     "deflection_w_fin",
     "deflection_w_add",
+    // Alleen bij een trek-alleen staaf: de grootste drukkracht, niet getoetst.
+    crate::input::TOETS_TREK_ALLEEN,
 ];
 
-/// De acht toetsen die per REKENPUNT met de plaatselijke doorsnede gaan.
-const DOORSNEDETOETSEN: [&str; 8] = [
+/// De negen toetsen die per REKENPUNT met de plaatselijke doorsnede gaan.
+const DOORSNEDETOETSEN: [&str; 9] = [
+    "6.2.3_tension",
     "6.2.4_compression",
     "6.2.5_bending_y",
     "6.2.5_bending_z",
@@ -455,8 +459,13 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
         // boven tabel 3.1, klasse 4 op deze plek) stopt de hele staaf. Een
         // staaf die op één rekenpunt niet toetsbaar is, is niet toetsbaar —
         // doorrekenen met de overige punten zou dat punt stil wegpoetsen.
-        if matches!(d.resultaat.status, CheckStatus::NotApplicable)
-            && d.resultaat.checks.iter().all(|c| uc_of(c) <= 0.0)
+        // Een klasse 4-doorsnede zonder effectieve doorsnede rekent alleen
+        // trek en dwarskracht ("NIET TOETSBAAR: …"); ook dat is een weigering.
+        let klasse4_weigering = d.resultaat.classification == CrossSectionClass::Class4
+            && d.resultaat.governing_check_id.starts_with("NIET TOETSBAAR");
+        if klasse4_weigering
+            || (matches!(d.resultaat.status, CheckStatus::NotApplicable)
+                && d.resultaat.checks.iter().all(|c| uc_of(c) <= 0.0))
         {
             return niet_getoetst(
                 &input,
@@ -567,10 +576,11 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
                 reden,
             });
             checks.push(c);
-        } else if DOORBUIGING.contains(&id) {
+        } else if DOORBUIGING.contains(&id) || id == crate::input::TOETS_TREK_ALLEEN {
             // Hangt niet van de doorsnede af: de zakking komt uit de solver,
-            // die al met het verloop rekende. Elke deelvraag geeft hier
-            // hetzelfde; de eerste volstaat.
+            // die al met het verloop rekende, en de drukregel van een
+            // trek-alleen staaf uit de hele omhullende. Elke deelvraag op een
+            // veldgrens krijgt die hele omhullende; de eerste volstaat.
             if let Some(c) = per_grens.first().and_then(|d| d.toets(id)) {
                 checks.push(c.clone());
             }
@@ -609,11 +619,43 @@ pub fn check_beam_verlopend(input: BeamCheckInput, v: Verloop) -> BeamCheckResul
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 {
-        CheckStatus::Ok
-    } else {
+    // Is één rekenpunt NIET VOLLEDIG getoetst (een geweigerde lijfplooitoets
+    // bij V_z,Ed ≠ 0, of een geweigerde knik- of kiptoets aan een doorlopend
+    // staafeind bij druk of buiging, zie `orchestrator::check_beam`), dan de
+    // hele staaf: status n.v.t., nooit "voldoet" — tenzij een gerekende toets
+    // al faalt. Per toets houdt `kies` het punt met de hoogste UC, en dat zou
+    // een geweigerde toets op een ander punt anders stil wegpoetsen.
+    //
+    // Alleen de rekenpunten, niet de veldgrenzen: een rekenpunt draagt zijn
+    // eigen krachten, dus elk punt met druk of buiging ziet de geweigerde
+    // knik- of kiptoets zelf. Een veldgrens rekent met de hele omhullende op
+    // één doorsnede, en zou de lijfplooi daar ook weigeren bij een
+    // dwarskracht die alleen elders staat.
+    let onvolledig = per_punt
+        .iter()
+        .find(|d| {
+            d.resultaat
+                .governing_check_id
+                .starts_with(NIET_VOLLEDIG_GETOETST)
+        })
+        .map(|d| {
+            format!(
+                "{} (op x = {} mm, t = {:.3})",
+                d.resultaat.governing_check_id,
+                mm(d.x_mm),
+                d.t
+            )
+        });
+    let status = if uc_max > 1.0 {
         CheckStatus::NotOk
+    } else if onvolledig.is_some() {
+        CheckStatus::NotApplicable
+    } else {
+        CheckStatus::Ok
     };
+    if let (CheckStatus::NotApplicable, Some(reden)) = (status, onvolledig) {
+        governing_check_id = reden;
+    }
 
     BeamCheckResult {
         beam_id: input.beam_id,

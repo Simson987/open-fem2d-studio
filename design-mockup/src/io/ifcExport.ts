@@ -50,7 +50,7 @@
  *    Verende aansluitingen (Beam.veren) gaan dezelfde weg, als stijfheids-
  *    maat op het DOF (IfcLinearStiffnessMeasure N/m, IfcRotationalStiffness-
  *    Measure N·m/rad); bedding staat als BeddingK/BeddingBreedte in de set
- *    OpenFEM2D_Staaf, want IFC4 heeft daar geen eigen entiteit voor in dit
+ *    OpenFEM_Staaf, want IFC4 heeft daar geen eigen entiteit voor in dit
  *    domein.
  *  - Eigen doorsneden ("EIGEN:<naam>"): een samenstelling wordt een
  *    IfcCompositeProfileDef van rechthoeken (lamellen, elk op zijn plaats en
@@ -63,7 +63,7 @@
  *  - Platen (wandschijven): IfcStructuralSurfaceMember (SHELL) met de dikte
  *    op het lid, een IfcFaceSurface in het rekenvlak met de hoekknopen als
  *    IfcPolyLoop, IfcRelConnectsStructuralMember naar elke hoekknoop, en de
- *    set OpenFEM2D_Plaat (dikte, E, ν, ρ, meshgrootte). Randlasten op een
+ *    set OpenFEM_Plaat (dikte, E, ν, ρ, meshgrootte). Randlasten op een
  *    plaat: IfcStructuralLinearAction met de rand (IfcEdge van de twee
  *    hoekknopen) als eigen topologie, gekoppeld aan het vlaklid; een
  *    deel- of trapeziumrandlast als IfcStructuralCurveAction met een
@@ -75,7 +75,7 @@
  *    de z-assen als VAxes, elk een IfcGridAxis met het aslabel en een lijn
  *    over de omhullende van het model. Rekeninstellingen (analysetype,
  *    scheefstand met noemer, richting en bron) staan als set
- *    OpenFEM2D_Analyse op het IfcStructuralAnalysisModel.
+ *    OpenFEM_Analyse op het IfcStructuralAnalysisModel.
  *  - Profiel + materiaal: IfcRelAssociatesMaterial →
  *    IfcMaterialProfileSetUsage → IfcMaterialProfileSet → IfcMaterialProfile
  *    met IfcMaterial (naam = klasse, bv. S235/C24) en een parametrisch
@@ -119,13 +119,21 @@
  *    twee exports van hetzelfde model byte-identiek zijn.
  *  - IfcOwnerHistory wordt weggelaten ($) — optioneel in IFC4, en een
  *    tijdstempel daarin zou het determinisme breken.
- *  - EIGENSCHAPPENSETS. Elke staaf krijgt drie sets: `OpenFEM2D_Doorsnede`
- *    (profielnaam, materiaal, vorm, h/b, A, I, E), `OpenFEM2D_Staaf`
+ *  - EIGENSCHAPPENSETS. Elke staaf krijgt drie sets: `OpenFEM_Doorsnede`
+ *    (profielnaam, materiaal, vorm, h/b, A, I, E), `OpenFEM_Staaf`
  *    (staafnummer, staaftype, ligger/kolom, lengte, helling, scharnieren) en
- *    — zodra er een toetsuitslag is — `OpenFEM2D_Toetsing` (norm,
+ *    — zodra er een toetsuitslag is — `OpenFEM_Toetsing` (norm,
  *    maatgevende toets, normartikel, unity check, voldoet ja/nee). Dezelfde
  *    set hangt via één IfcRelDefinesByProperties aan zowel de rekenstaaf als
  *    het bouwkundige element.
+ *
+ *    OUDE NAMEN. Tot en met uitgave 2026.39.0 begonnen alle eigen sets met
+ *    `OpenFEM2D_` in plaats van `OpenFEM_`; de eigenschappen erin en de
+ *    GlobalId's (seed zonder setnaam) zijn gelijk gebleven. Wie de sets op
+ *    naam zoekt, hoort beide voorvoegsels te accepteren. De eigen import
+ *    (`ifcAnalyseImport.ts`) leest eigenschappen op eigenschapsnaam, los van
+ *    de setnaam, en leest een oud bestand dus hetzelfde
+ *    (test-ifc-spiegel.mjs).
  *
  *    WAAROM EIGEN NAMEN EN GEEN Pset_*: de Pset-namen van IFC4 zijn
  *    genormeerd en hun eigenschapsnamen ook. Voor "welke unity check haalt
@@ -151,7 +159,7 @@
  *    in de doorsnede, met diameter, oppervlakte en lengte. De beugels komen
  *    als één IfcReinforcingBar (.LIGATURE.) die de hele beugelreeks
  *    voorstelt, met aantal en hart-op-hart in de eigen set
- *    `OpenFEM2D_Beugels` — losse beugelstaven zouden bij s = 100 mm over een
+ *    `OpenFEM_Beugels` — losse beugelstaven zouden bij s = 100 mm over een
  *    lange ligger honderden entiteiten per staaf opleveren. Dat de beugels
  *    zo zijn samengevat staat in `verzamelIfcBeperkingen`. De staven hangen
  *    met IfcRelAggregates in het bouwkundige element.
@@ -176,6 +184,7 @@ import {
   STEEL_SECTION_DIMS,
   type SteelSectionDims, type SteelSectionProps,
 } from "../lib/steelSectionDims.generated";
+import { profielAliasSleutel } from "../lib/strip";
 import type { MemberCheckResult } from "../lib/checkTypes";
 import { isEigenProfiel, zoekEigenDoorsnede } from "../lib/profieleditor/eigenDoorsnedenStore";
 import type { EigenDoorsnede } from "../lib/profieleditor/types";
@@ -184,7 +193,12 @@ import {
   isSteelCheckResult, isConcreteCheckResult,
 } from "../lib/checkTypes";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
-import { frame3DLoadCaseId, frame3DMemberAxes, parseFrame3DModel, type Frame3DModel, type Frame3DPlateBoundarySegment } from "../components/frame3d/frame3dModel";
+import {
+  OPEN_FEM_3D_GLOBAL_DIRECTIONS, isOpenFem3DGlobalMemberLoad, openFem3DLoadCaseId, openFem3DMemberAxes, parseOpenFem3DModel,
+  type OpenFem3DModel, type OpenFem3DPlateBoundarySegment,
+} from "../components/openFem3d/openFem3dModel";
+import { openFem3DBeamVerloop } from "../components/openFem3d/openFem3dVerloop";
+import { openFem3DEnvelopePanelGeometry } from "../components/openFem3d/openFem3dEnvelopePanels";
 
 // ── Invoertype ──────────────────────────────────────────────────────────────
 
@@ -217,12 +231,12 @@ export interface IfcRekenmodelInput {
   loads: Load[];
   loadCases: LoadCase[];
   /** Separate 3D frame in metres; exported as its own IFC4 analysis model. */
-  model3d?: Frame3DModel;
+  model3d?: OpenFem3DModel;
   /**
    * Platen in het model. Een plaat mét hoekknopen (`nodeIds`, minstens
    * drie) wordt een IfcStructuralSurfaceMember (SHELL) met zijn dikte,
    * verbonden aan de puntconnecties van zijn hoeken, en met de set
-   * OpenFEM2D_Plaat (dikte, E, ν, ρ, meshgrootte). Een plaat zonder
+   * OpenFEM_Plaat (dikte, E, ν, ρ, meshgrootte). Een plaat zonder
    * hoekknopen kan niet getekend worden en wordt alleen geteld, zodat de
    * beperkingenlijst hem eerlijk meldt.
    */
@@ -268,7 +282,7 @@ export interface IfcRekenmodelInput {
    * en minstens één as heeft.
    */
   structuralGrid?: { enabled: boolean; xAxes: { id: string; label: string; position: number }[]; zAxes: { id: string; label: string; position: number }[] };
-  /** Rekeninstellingen voor de set OpenFEM2D_Analyse op het analysemodel. */
+  /** Rekeninstellingen voor de set OpenFEM_Analyse op het analysemodel. */
   analysetype?: string;
   /**
    * De scheefstand zoals hij in de berekening zit.
@@ -293,7 +307,7 @@ export interface IfcRekenmodelInput {
   /**
    * De uitslag van de normtoetsing per staaf (checkStore.results), als die er
    * is. ONTBREEKT het veld of is de lijst leeg — er is nog niet getoetst, of
-   * de aanroeper geeft ze niet mee — dan blijft de set `OpenFEM2D_Toetsing`
+   * de aanroeper geeft ze niet mee — dan blijft de set `OpenFEM_Toetsing`
    * eenvoudig weg en verandert er verder niets aan het bestand. Zo valt de
    * export nooit om op een model dat nog niet getoetst is.
    */
@@ -333,9 +347,14 @@ export interface IfcExportOpties {
 // bibliotheek, waardoor gangbare profielen — bijvoorbeeld SHS 60x60x4 —
 // zonder doorsnede in het IFC-bestand terechtkwamen.
 
-/** Zelfde normalisatie als de sleutels van STEEL_SECTION_DIMS. */
+/**
+ * Zelfde normalisatie als de sleutels van STEEL_SECTION_DIMS; massief rond
+ * geschreven als "Ø24" of "ROND 24" wordt "RD24" (`lib/rondStaal.ts`), en
+ * platstaal als "FL 80x10" of "Platstaal 80x10" wordt "STRIP80X10"
+ * (`lib/strip.ts`).
+ */
 function normaliseerProfielnaam(naam: string): string {
-  return naam.replace(/[\s\-.]/g, "").toUpperCase();
+  return profielAliasSleutel(naam.replace(/[\s\-.]/g, "").toUpperCase());
 }
 
 /** Afmetingen van een catalogusprofiel, of undefined als het onbekend is. */
@@ -623,7 +642,7 @@ export function bouwIfcRekenmodel(
 
   // ── Rekeninstellingen op het analysemodel ──────────────────────────────
   // Analysetype en scheefstand horen bij het rekenmodel als geheel; ze
-  // staan als set OpenFEM2D_Analyse op het IfcStructuralAnalysisModel.
+  // staan als set OpenFEM_Analyse op het IfcStructuralAnalysisModel.
   {
     const eig: Eigenschap[] = [];
     if (model.analysetype) eig.push(eLabel("Analysetype", model.analysetype));
@@ -649,7 +668,7 @@ export function bouwIfcRekenmodel(
         }
       }
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Analyse", "analyse", eig, [analyseModel]);
+    schrijfEigenschappen(w, "OpenFEM_Analyse", "analyse", eig, [analyseModel]);
   }
 
   // ── Stramien: IfcGrid in het gebouw ────────────────────────────────────
@@ -802,7 +821,7 @@ export function bouwIfcRekenmodel(
   // Topologie: één IfcFaceSurface in het rekenvlak met de hoekknopen als
   // IfcPolyLoop — dezelfde punten als de puntconnecties, zodat een lezer de
   // plaat aan de knopen kan hangen. De dikte staat op het lid zelf; E, ν, ρ
-  // en de meshgrootte in de set OpenFEM2D_Plaat, want een wandschijf zonder
+  // en de meshgrootte in de set OpenFEM_Plaat, want een wandschijf zonder
   // materiaalnaam heeft geen IfcMaterialProfile.
   const plaatInfo = new Map<number, PlaatInfo>();
   const knoopPerId = new Map<number, Node>(model.nodes.map((n) => [n.id, n]));
@@ -884,7 +903,7 @@ export function bouwIfcRekenmodel(
             `${o.id}: ${o.punten.map((q) => `(${nl(q.x, 0)}, ${nl(q.z, 0)})`).join(" ")}`).join("; "))]
         : []),
     ];
-    schrijfEigenschappen(w, "OpenFEM2D_Plaat", `plaat:${plaat.id}`, eig, [member]);
+    schrijfEigenschappen(w, "OpenFEM_Plaat", `plaat:${plaat.id}`, eig, [member]);
     plaatInfo.set(plaat.id, {
       member, nodeIds: ids, knopen: knoopPerId, vertexPerKnoop,
       openingen: openingen.map((o) => ({ id: o.id, punten: o.punten })),
@@ -945,9 +964,11 @@ export function bouwIfcRekenmodel(
   // hebben een eigen 3d:-naamruimte. Oude 2D-projecten schrijven geen extra
   // entiteiten en houden daardoor exact dezelfde export.
   if (model.model3d !== undefined) {
-    const frame3d = parseFrame3DModel(model.model3d);
-    if (frame3d.beams.length > 0 || (frame3d.plates?.length ?? 0) > 0) {
-      schrijf3DRekenmodel(w, frame3d, {
+    const openFem3d = parseOpenFem3DModel(model.model3d);
+    schrijf3DSchilpanelen(w, openFem3d, context, gebouw);
+    if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0
+      || (openFem3d.envelopePanels?.length ?? 0) > 0) {
+      schrijf3DRekenmodel(w, openFem3d, {
         context, gebouw, richtingY, richtingZ, projectNaam, zonderLasten,
         loadCases: model.loadCases,
       });
@@ -990,6 +1011,46 @@ export function bouwIfcRekenmodel(
   ].join("\n");
 }
 
+/** Gebouwschil zonder rekenstijfheid: IFC4 IfcCovering met een vlak en gaten. */
+function schrijf3DSchilpanelen(w: SpfSchrijver, model: OpenFem3DModel, context: number, gebouw: number): void {
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const coverings: number[] = [];
+  for (const panel of model.envelopePanels ?? []) {
+    const geometry = openFem3DEnvelopePanelGeometry(model, panel);
+    const loop = (ids: number[]) => w.ent("IFCPOLYLOOP", lijst(ids.map((id) => {
+      const node = byId.get(id)!;
+      return w.ent("IFCCARTESIANPOINT", `(${reeel(node.x)},${reeel(node.y)},${reeel(node.z)})`);
+    })));
+    const outer = w.ent("IFCFACEOUTERBOUND", ref(loop(panel.nodeIds)), ".T.");
+    const holes = (panel.openings ?? []).map((opening) =>
+      w.ent("IFCFACEBOUND", ref(loop(opening.nodeIds)), ".T."));
+    const face = w.ent("IFCFACE", lijst([outer, ...holes]));
+    const faceSet = w.ent("IFCCONNECTEDFACESET", lijst([face]));
+    const surface = w.ent("IFCFACEBASEDSURFACEMODEL", lijst([faceSet]));
+    const shape = w.ent("IFCSHAPEREPRESENTATION", ref(context), "'Body'", "'SurfaceModel'", lijst([surface]));
+    const productShape = w.ent("IFCPRODUCTDEFINITIONSHAPE", "$", "$", lijst([shape]));
+    const covering = w.ent("IFCCOVERING",
+      w.guid(`3d:schilpaneel:${panel.id}`), "$", stepString(panel.name ?? `3D-schilpaneel ${panel.id}`),
+      stepString("OpenFEM 3D-schilpaneel zonder constructieve stijfheid"), "$", "$", ref(productShape),
+      stepString(String(panel.id)), panel.type === "roof" ? ".ROOFING." : ".CLADDING.");
+    coverings.push(covering);
+    schrijfEigenschappen(w, "OpenFEM3D_Schilpaneel", `3d:schilpaneel:${panel.id}`, [
+      eGeheel("Paneelnummer", panel.id), eLabel("Type", panel.type),
+      eLabel("Afdracht", panel.distribution), eLabel("Hoekknopen", panel.nodeIds.join(",")),
+      eLabel("Openingen", (panel.openings ?? []).map((opening) =>
+        `${opening.id}:${opening.nodeIds.join(",")}`).join(";")),
+      eJaNee("BuitenwaartsOmgekeerd", !!panel.flipOuterSide),
+      eMaat("NettoOppervlak", "IFCAREAMEASURE", geometry.netAreaM2),
+      ...(panel.claddingWeightKnPerM2 !== undefined
+        ? [eMaat("BekledingsgewichtKNPerM2", "IFCREAL", panel.claddingWeightKnPerM2)] : []),
+      ...(panel.spanDirection ? [eLabel("Overspanningsrichting",
+        `${panel.spanDirection.x},${panel.spanDirection.y},${panel.spanDirection.z}`)] : []),
+    ], [covering]);
+  }
+  if (coverings.length > 0) w.ent("IFCRELCONTAINEDINSPATIALSTRUCTURE",
+    w.guid("3d:schilpanelen:gebouw"), "$", "$", "$", lijst(coverings), ref(gebouw));
+}
+
 // ── Opleggingen ─────────────────────────────────────────────────────────────
 
 /**
@@ -1027,10 +1088,10 @@ function schrijfOplegging(w: SpfSchrijver, steun: Support): number {
  * one connecting member, so isolated editor nodes cannot be written as IFC
  * structural connections. 3D coordinates already use metres.
  */
-function gekoppelde3DKnopen(frame3d: Frame3DModel): Set<number> {
+function gekoppelde3DKnopen(openFem3d: OpenFem3DModel): Set<number> {
   return new Set([
-    ...frame3d.beams.flatMap((staaf) => [staaf.startNodeId, staaf.endNodeId]),
-    ...(frame3d.plates ?? []).flatMap((plaat) => [
+    ...openFem3d.beams.flatMap((staaf) => [staaf.startNodeId, staaf.endNodeId]),
+    ...(openFem3d.plates ?? []).flatMap((plaat) => [
       ...plaat.nodeIds,
       ...(plaat.openings ?? []).flatMap((opening) => opening.nodeIds),
     ]),
@@ -1076,7 +1137,7 @@ function bemonsterAfgeronde3DLus(punten: Punt3D[], straal: number, segmenten = 1
 
 /** IFC PolyLoop kent alleen rechte zijden; sample de exact getekende bogen daarom beheerst. */
 function bemonsterGetekende3DLus(
-  grens: readonly Frame3DPlateBoundarySegment[],
+  grens: readonly OpenFem3DPlateBoundarySegment[],
   knoopPerId: Map<number, { x: number; y: number; z: number }>,
   segmenten = 12,
 ): Punt3D[] {
@@ -1108,7 +1169,7 @@ function bemonsterGetekende3DLus(
 
 function schrijf3DRekenmodel(
   w: SpfSchrijver,
-  frame3d: Frame3DModel,
+  openFem3d: OpenFem3DModel,
   env: {
     context: number;
     gebouw: number;
@@ -1119,23 +1180,23 @@ function schrijf3DRekenmodel(
     loadCases: LoadCase[];
   },
 ): void {
-  const gekoppeld = gekoppelde3DKnopen(frame3d);
+  const gekoppeld = gekoppelde3DKnopen(openFem3d);
   const knoopLasten = env.zonderLasten
     ? []
-    : (frame3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId));
-  const staafLasten = env.zonderLasten ? [] : (frame3d.memberLoads ?? []);
-  const staafPuntLasten = env.zonderLasten ? [] : (frame3d.memberPointLoads ?? []);
-  const temperatuurLasten = env.zonderLasten ? [] : (frame3d.thermalLoads ?? []);
-  const oppervlakteLasten = env.zonderLasten ? [] : (frame3d.surfaceLoads ?? []);
-  const opgelegdeVerplaatsingen = env.zonderLasten ? [] : (frame3d.supports ?? []).filter((steun) =>
+    : (openFem3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId));
+  const staafLasten = env.zonderLasten ? [] : (openFem3d.memberLoads ?? []);
+  const staafPuntLasten = env.zonderLasten ? [] : (openFem3d.memberPointLoads ?? []);
+  const temperatuurLasten = env.zonderLasten ? [] : (openFem3d.thermalLoads ?? []);
+  const oppervlakteLasten = env.zonderLasten ? [] : (openFem3d.surfaceLoads ?? []);
+  const opgelegdeVerplaatsingen = env.zonderLasten ? [] : (openFem3d.supports ?? []).filter((steun) =>
     Object.keys(steun.prescribed ?? {}).length > 0);
   const opgelegdeVerplaatsingenGeval = 0;
   const caseIds = [...new Set([
-    ...knoopLasten.map(frame3DLoadCaseId),
-    ...staafLasten.map(frame3DLoadCaseId),
-    ...staafPuntLasten.map(frame3DLoadCaseId),
-    ...temperatuurLasten.map(frame3DLoadCaseId),
-    ...oppervlakteLasten.map(frame3DLoadCaseId),
+    ...knoopLasten.map(openFem3DLoadCaseId),
+    ...staafLasten.map(openFem3DLoadCaseId),
+    ...staafPuntLasten.map(openFem3DLoadCaseId),
+    ...temperatuurLasten.map(openFem3DLoadCaseId),
+    ...oppervlakteLasten.map(openFem3DLoadCaseId),
     ...(opgelegdeVerplaatsingen.length > 0 ? [opgelegdeVerplaatsingenGeval] : []),
   ])].sort((a, b) => a - b);
   const loadGroepen = new Map(caseIds.map((caseId) => {
@@ -1152,14 +1213,14 @@ function schrijf3DRekenmodel(
   w.ent("IFCRELSERVICESBUILDINGS",
     w.guid("3d:dienst:model-gebouw"), "$", "$", "$", ref(analyse3d), lijst([env.gebouw]));
 
-  const steunPerKnoop = new Map((frame3d.supports ?? []).map((steun) => [steun.nodeId, steun]));
+  const steunPerKnoop = new Map((openFem3d.supports ?? []).map((steun) => [steun.nodeId, steun]));
   const connectiePerKnoop = new Map<number, number>();
   const puntPerKnoop = new Map<number, number>();
   const vertexPerKnoop = new Map<number, number>();
   const memberPerStaaf = new Map<number, number>();
   const memberPerPlaat = new Map<number, number>();
   const leden: number[] = [];
-  for (const knoop of frame3d.nodes.filter((node) => gekoppeld.has(node.id))) {
+  for (const knoop of openFem3d.nodes.filter((node) => gekoppeld.has(node.id))) {
     const punt = w.ent("IFCCARTESIANPOINT",
       `(${reeel(knoop.x)},${reeel(knoop.y)},${reeel(knoop.z)})`);
     puntPerKnoop.set(knoop.id, punt);
@@ -1192,8 +1253,8 @@ function schrijf3DRekenmodel(
     leden.push(connectie);
   }
 
-  const knoopPerId = new Map(frame3d.nodes.map((knoop) => [knoop.id, knoop]));
-  for (const staaf of frame3d.beams) {
+  const knoopPerId = new Map(openFem3d.nodes.map((knoop) => [knoop.id, knoop]));
+  for (const staaf of openFem3d.beams) {
     const van = knoopPerId.get(staaf.startNodeId)!;
     const naar = knoopPerId.get(staaf.endNodeId)!;
     const rand = w.ent("IFCEDGE", ref(vertexPerKnoop.get(van.id)!), ref(vertexPerKnoop.get(naar.id)!));
@@ -1203,7 +1264,7 @@ function schrijf3DRekenmodel(
     // IfcStructuralCurveMember.Axis defines local z. Schrijf de werkelijk
     // gebruikte Z-up-as inclusief profielrotatie, zodat IFC, weergave,
     // lokale staaflasten en solver dezelfde y/z-richting delen.
-    const lokaleAssen = frame3DMemberAxes(van, naar, staaf.rollAngleRad ?? 0);
+    const lokaleAssen = openFem3DMemberAxes(van, naar, staaf.rollAngleRad ?? 0);
     const dwarsrichting = w.ent("IFCDIRECTION",
       "(" + reeel(lokaleAssen.ez[0]) + "," + reeel(lokaleAssen.ez[1]) + "," + reeel(lokaleAssen.ez[2]) + ")");
     const rel = staaf.releases;
@@ -1213,6 +1274,23 @@ function schrijf3DRekenmodel(
       "$", ref(vorm), beideEindenScharnier ? ".PIN_JOINED_MEMBER." : ".RIGID_JOINED_MEMBER.", ref(dwarsrichting));
     memberPerStaaf.set(staaf.id, member);
     leden.push(member);
+    // Verlopende staaf (#73). Het 3D-analysemodel draagt per staaf alleen de
+    // systeemlijn, geen doorsnede (ook niet bij een prismatische staaf); een
+    // IfcExtrudedAreaSolidTapered of een materiaalprofielset met verloop past
+    // daar dus niet. Begin- en eindprofiel en het lineaire verloop staan
+    // daarom in een eigen set aan de staaf, en de beperkingenlijst zegt het.
+    const verloop = staaf.profileNameEnd !== undefined ? openFem3DBeamVerloop(staaf) : null;
+    if (verloop?.status === "verlopend") {
+      schrijfEigenschappen(w, "OpenFEM3D_Staaf", `3d:staaf:${staaf.id}`, [
+        eGeheel("Staafnummer", staaf.id),
+        eLabel("Profiel", staaf.profileName ?? ""),
+        eLabel("Eindprofiel", staaf.profileNameEnd ?? ""),
+        eLabel("Materiaal", staaf.material ?? ""),
+        eTekst("Verloop", verloop.verloop.soort === "gelastI"
+          ? "lineair van begin- naar eindprofiel, gerekend als gelast I-profiel zonder afrondingsstraal"
+          : "lineair van begin- naar eindprofiel (rechthoek b x h)"),
+      ], [member]);
+    }
     for (const [kant, nodeId] of [["start", staaf.startNodeId], ["eind", staaf.endNodeId]] as const) {
       const my = kant === "start" ? rel?.myStart : rel?.myEnd;
       const mz = kant === "start" ? rel?.mzStart : rel?.mzEnd;
@@ -1229,7 +1307,7 @@ function schrijf3DRekenmodel(
         ref(member), ref(connectiePerKnoop.get(nodeId)!), conditie !== undefined ? ref(conditie) : "$", "$", "$", "$");
     }
   }
-  for (const plaat of frame3d.plates ?? []) {
+  for (const plaat of openFem3d.plates ?? []) {
     const buitenKnopen = plaat.nodeIds.map((id) => knoopPerId.get(id)!);
     const buitenPunten = buitenKnopen.map((knoop) => [knoop.x, knoop.y, knoop.z] as const);
     const oorsprong = buitenPunten[0];
@@ -1327,7 +1405,7 @@ function schrijf3DRekenmodel(
       w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
         w.guid(`3d:lastrel:${last.id}`), "$", "$", "$",
         ref(connectiePerKnoop.get(last.nodeId)!), ref(actie));
-      actiesPerGeval.get(frame3DLoadCaseId(last))!.push(actie);
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
     }
     for (const steun of opgelegdeVerplaatsingen) {
       const waarde = steun.prescribed!;
@@ -1348,37 +1426,49 @@ function schrijf3DRekenmodel(
     }
     for (const last of staafLasten) {
       const member = memberPerStaaf.get(last.beamId);
-      const staaf = frame3d.beams.find((item) => item.id === last.beamId);
+      const staaf = openFem3d.beams.find((item) => item.id === last.beamId);
       if (member === undefined || !staaf) continue;
       const van = knoopPerId.get(staaf.startNodeId)!;
       const naar = knoopPerId.get(staaf.endNodeId)!;
       const lengte = Math.hypot(naar.x - van.x, naar.y - van.y, naar.z - van.z);
-      const lijnkracht = (qy: number, qz: number, naam: string) => w.ent(
-        "IFCSTRUCTURALLOADLINEARFORCE", stepString(naam), "$",
-        `IFCLINEARFORCEMEASURE(${reeel(qy * 1e3)})`,
-        `IFCLINEARFORCEMEASURE(${reeel(qz * 1e3)})`, "$", "$", "$",
+      // Componenten X, Y, Z van de lijnkracht; null = "$". Een lokale last
+      // staat in de staafassen (y, z); een globale last (#80) in de globale
+      // assen, per projectie als PROJECTED_LENGTH.
+      const globaal = isOpenFem3DGlobalMemberLoad(last) ? last : null;
+      const lijnkracht = (componenten: readonly (number | null)[], naam: string) => w.ent(
+        "IFCSTRUCTURALLOADLINEARFORCE", stepString(naam),
+        ...componenten.map((q) => q === null ? "$" : `IFCLINEARFORCEMEASURE(${reeel(q * 1e3)})`), "$", "$", "$",
       );
+      const componenten = (eind: boolean): (number | null)[] => {
+        if (!isOpenFem3DGlobalMemberLoad(last)) return [null, eind ? last.qyEnd : last.qyStart, eind ? last.qzEnd : last.qzStart];
+        const q = eind ? last.qEnd : last.qStart;
+        return OPEN_FEM_3D_GLOBAL_DIRECTIONS.map((as) => as === last.globalDirection ? q : 0);
+      };
+      const nul = globaal ? [0, 0, 0] : [null, 0, 0];
+      const stelsel = globaal ? ".GLOBAL_COORDS." : ".LOCAL_COORDS.";
+      const lengteSoort = globaal?.perProjection ? ".PROJECTED_LENGTH." : ".TRUE_LENGTH.";
       const volledig = last.startPositionM <= 1e-12 && Math.abs(last.endPositionM - lengte) <= 1e-9;
-      const uniform = last.qyStart === last.qyEnd && last.qzStart === last.qzEnd;
+      const eindwaarden = componenten(true);
+      const uniform = componenten(false).every((q, index) => q === eindwaarden[index]);
       let actie: number;
       if (volledig && uniform) {
-        const kracht = lijnkracht(last.qyStart, last.qzStart, `3D q ${last.id}`);
+        const kracht = lijnkracht(componenten(false), `3D q ${last.id}`);
         actie = w.ent("IFCSTRUCTURALLINEARACTION",
           w.guid(`3d:staaflast:${last.id}`), "$", stepString(`3D-staaflast ${last.id}`), "$", "$",
-          "$", "$", ref(kracht), ".LOCAL_COORDS.", "$", ".TRUE_LENGTH.", ".CONST.");
+          "$", "$", ref(kracht), stelsel, "$", lengteSoort, ".CONST.");
       } else {
         const waarden: number[] = [];
         const posities: string[] = [];
         if (last.startPositionM > 1e-12) {
-          waarden.push(lijnkracht(0, 0, `3D q ${last.id} nul`));
+          waarden.push(lijnkracht(nul, `3D q ${last.id} nul`));
           posities.push(reeel(0));
         }
-        waarden.push(lijnkracht(last.qyStart, last.qzStart, `3D q ${last.id} begin`));
+        waarden.push(lijnkracht(componenten(false), `3D q ${last.id} begin`));
         posities.push(reeel(last.startPositionM));
-        waarden.push(lijnkracht(last.qyEnd, last.qzEnd, `3D q ${last.id} eind`));
+        waarden.push(lijnkracht(componenten(true), `3D q ${last.id} eind`));
         posities.push(reeel(last.endPositionM));
         if (last.endPositionM < lengte - 1e-9) {
-          waarden.push(lijnkracht(0, 0, `3D q ${last.id} nul`));
+          waarden.push(lijnkracht(nul, `3D q ${last.id} nul`));
           posities.push(reeel(lengte));
         }
         const config = w.ent("IFCSTRUCTURALLOADCONFIGURATION",
@@ -1386,16 +1476,16 @@ function schrijf3DRekenmodel(
           `(${posities.map((positie) => `(${positie})`).join(",")})`);
         actie = w.ent("IFCSTRUCTURALCURVEACTION",
           w.guid(`3d:staaflast:${last.id}`), "$", stepString(`3D-staaflast ${last.id}`), "$", "$",
-          "$", "$", ref(config), ".LOCAL_COORDS.", "$", ".TRUE_LENGTH.",
+          "$", "$", ref(config), stelsel, "$", lengteSoort,
           volledig ? ".LINEAR." : ".POLYGONAL.");
       }
       w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
         w.guid(`3d:staaflastrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
-      actiesPerGeval.get(frame3DLoadCaseId(last))!.push(actie);
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
     }
     for (const last of staafPuntLasten) {
       const member = memberPerStaaf.get(last.beamId);
-      const staaf = frame3d.beams.find((item) => item.id === last.beamId);
+      const staaf = openFem3d.beams.find((item) => item.id === last.beamId);
       if (member === undefined || !staaf) continue;
       const van = knoopPerId.get(staaf.startNodeId)!;
       const naar = knoopPerId.get(staaf.endNodeId)!;
@@ -1414,7 +1504,7 @@ function schrijf3DRekenmodel(
         ref(plaatsing), "$", ref(kracht), ".LOCAL_COORDS.", "$");
       w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
         w.guid(`3d:staafpuntlastrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
-      actiesPerGeval.get(frame3DLoadCaseId(last))!.push(actie);
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
     }
     for (const last of temperatuurLasten) {
       const member = memberPerStaaf.get(last.beamId);
@@ -1429,7 +1519,7 @@ function schrijf3DRekenmodel(
         "$", "$", ref(temperatuur), ".LOCAL_COORDS.", "$", "$", ".CONST.");
       w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
         w.guid(`3d:temperatuurrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
-      actiesPerGeval.get(frame3DLoadCaseId(last))!.push(actie);
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
     }
     for (const last of oppervlakteLasten) {
       const member = memberPerPlaat.get(last.plateId);
@@ -1444,7 +1534,7 @@ function schrijf3DRekenmodel(
         "$", "$", ref(belasting), ".GLOBAL_COORDS.", "$", ".TRUE_LENGTH.", ".CONST.");
       w.ent("IFCRELCONNECTSSTRUCTURALACTIVITY",
         w.guid(`3d:oppervlaktelastrel:${last.id}`), "$", "$", "$", ref(member), ref(actie));
-      actiesPerGeval.get(frame3DLoadCaseId(last))!.push(actie);
+      actiesPerGeval.get(openFem3DLoadCaseId(last))!.push(actie);
     }
     for (const [caseId, acties] of actiesPerGeval) {
       if (acties.length === 0) continue;
@@ -1809,7 +1899,7 @@ function rijNotatie(aantal: number, diameterMm: number): string {
  *
  * De beugels worden NIET als losse staven geschreven maar als één
  * IfcReinforcingBar (.LIGATURE.) die de hele reeks voorstelt, met aantal en
- * hart-op-hart in de eigen set `OpenFEM2D_Beugels`. Bij s = 100 mm over een
+ * hart-op-hart in de eigen set `OpenFEM_Beugels`. Bij s = 100 mm over een
  * ligger van 12 m zou een staaf-per-beugel 121 entiteiten per ligger kosten,
  * en dat maal elke ligger in het model.
  *
@@ -1950,7 +2040,7 @@ function schrijfWapening(
     if (korf.stirrup_legs !== undefined && korf.stirrup_legs !== null) {
       eigenschappen.push(eGeheel("AantalBenen", korf.stirrup_legs));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Beugels",
+    schrijfEigenschappen(w, "OpenFEM_Beugels",
       `beugels:${s.staaf.id}`, eigenschappen, [beugel]);
   }
 
@@ -1980,7 +2070,7 @@ function schrijfWapening(
       samenvatting.push(eMaat("Beugeldiameter", "IFCPOSITIVELENGTHMEASURE",
         beugelMm / 1000));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Wapeningskorf",
+    schrijfEigenschappen(w, "OpenFEM_Wapeningskorf",
       `korf:${s.staaf.id}`, samenvatting, [element]);
   }
   return staven;
@@ -1989,9 +2079,9 @@ function schrijfWapening(
 // ── Eigenschappensets per staaf ─────────────────────────────────────────────
 
 /**
- * De drie sets die elke staaf draagt: `OpenFEM2D_Doorsnede`,
- * `OpenFEM2D_Staaf` en — alleen als er een toetsuitslag is —
- * `OpenFEM2D_Toetsing`. Elke set hangt via ÉÉN IfcRelDefinesByProperties aan
+ * De drie sets die elke staaf draagt: `OpenFEM_Doorsnede`,
+ * `OpenFEM_Staaf` en — alleen als er een toetsuitslag is —
+ * `OpenFEM_Toetsing`. Elke set hangt via ÉÉN IfcRelDefinesByProperties aan
  * zowel de rekenstaaf als het bouwkundige element: het is dezelfde staaf, en
  * twee kopieën van dezelfde eigenschappen zouden uit elkaar kunnen lopen.
  *
@@ -2047,7 +2137,7 @@ function schrijfStaafEigenschappen(
       dEig.push(eMaat("WeerstandsmomentPlastischY", "IFCSECTIONMODULUSMEASURE", props.wplY / 1e9));
       dEig.push(eMaat("Torsietraagheidsmoment", "IFCMOMENTOFINERTIAMEASURE", props.it / 1e12));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Doorsnede",
+    schrijfEigenschappen(w, "OpenFEM_Doorsnede",
       `doorsnede:${s.staaf.id}`, dEig, doelen);
 
     // ── Staaf ──────────────────────────────────────────────────────────────
@@ -2084,7 +2174,7 @@ function schrijfStaafEigenschappen(
       sEig.splice(3, 0,
         eMaat("Lengte", "IFCPOSITIVELENGTHMEASURE", s.lengteMm / 1000));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Staaf", `staaf:${s.staaf.id}`, sEig, doelen);
+    schrijfEigenschappen(w, "OpenFEM_Staaf", `staaf:${s.staaf.id}`, sEig, doelen);
 
     // ── Toetsing ───────────────────────────────────────────────────────────
     const uitslag = uitslagPerStaaf.get(s.staaf.id);
@@ -2115,7 +2205,7 @@ function schrijfStaafEigenschappen(
     if (isConcreteCheckResult(uitslag) && uitslag.reinforcement_summary) {
       tEig.push(eTekst("Wapening", uitslag.reinforcement_summary));
     }
-    schrijfEigenschappen(w, "OpenFEM2D_Toetsing",
+    schrijfEigenschappen(w, "OpenFEM_Toetsing",
       `toetsing:${s.staaf.id}`, tEig, doelen);
   }
 }
@@ -2555,6 +2645,21 @@ export function verzamelIfcBeperkingen(
     );
   }
 
+  // Verlopende 3D-staven (#73): het 3D-analysemodel draagt geen doorsnede per
+  // staaf; zeg waar het verloop wél staat.
+  const verlopend3d = model.model3d
+    ? parseOpenFem3DModel(model.model3d).beams.filter((staaf) =>
+      staaf.profileNameEnd !== undefined && openFem3DBeamVerloop(staaf).status === "verlopend")
+    : [];
+  if (verlopend3d.length > 0) {
+    regels.push(
+      `${verlopend3d.length === 1 ? "Verlopende 3D-staaf" : "Verlopende 3D-staven"} ` +
+      `(${verlopend3d.map((staaf) => staaf.id).join(", ")}): het 3D-rekenmodel in IFC draagt per staaf ` +
+      "alleen de systeemlijn, geen doorsnede. Begin- en eindprofiel en het lineaire verloop staan " +
+      "in de eigenschappenset OpenFEM3D_Staaf van de staaf.",
+    );
+  }
+
   // Staven of lasten die naar iets verwijzen dat niet bestaat.
   const knoopIds = new Set(model.nodes.map(n => n.id));
   const staafIds = new Set(model.beams.map(b => b.id));
@@ -2646,7 +2751,7 @@ export function verzamelIfcBeperkingen(
       regels.push(
         `Beugels van ${metKorf} betonstaaf/staven: elke reeks staat als ÉÉN ` +
         "IfcReinforcingBar (.LIGATURE.) in het bestand, met aantal en " +
-        "hart-op-hart in de set OpenFEM2D_Beugels — niet als losse beugels.",
+        "hart-op-hart in de set OpenFEM_Beugels — niet als losse beugels.",
       );
     }
   }
@@ -2659,47 +2764,55 @@ export function verzamelIfcBeperkingen(
       regels.push(
         "Geen toetsresultaten in het bestand: er is niet getoetst, of de " +
         "uitslag is niet meegegeven. Draai de toetsing vóór de export, dan " +
-        "krijgt elke staaf de set OpenFEM2D_Toetsing met de maatgevende " +
+        "krijgt elke staaf de set OpenFEM_Toetsing met de maatgevende " +
         "toets, het normartikel en de unity check.",
       );
     } else if (zonder.length > 0) {
       regels.push(
         `${zonder.length} van de ${model.beams.length} staven hebben geen toetsuitslag ` +
         `(${zonder.map(b => b.id).join(", ")}): die dragen geen set ` +
-        "OpenFEM2D_Toetsing. Zie het toetsingspaneel voor de reden per staaf.",
+        "OpenFEM_Toetsing. Zie het toetsingspaneel voor de reden per staaf.",
       );
     }
   }
 
   if (model.model3d !== undefined) {
-    const frame3d = parseFrame3DModel(model.model3d);
-    const gekoppeld = gekoppelde3DKnopen(frame3d);
-    const heeft3DElementen = frame3d.beams.length > 0 || (frame3d.plates?.length ?? 0) > 0;
-    if (frame3d.beams.length > 0) {
+    const openFem3d = parseOpenFem3DModel(model.model3d);
+    const gekoppeld = gekoppelde3DKnopen(openFem3d);
+    const heeft3DElementen = openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0;
+    if (openFem3d.beams.length > 0) {
       regels.push(
         "3D-staven staan als analytische lijnen in het IFC-bestand. Het 3D-model " +
         "heeft nog geen materiaal, doorsnede of berekeningsresultaten; er zijn " +
         "daarom geen bouwkundige 3D-liggers of 3D-resultaten geëxporteerd.",
       );
     }
-    if ((frame3d.plates?.length ?? 0) > 0) {
+    if ((openFem3d.plates?.length ?? 0) > 0) {
       regels.push(
         "3D-platen staan als analytische vlakken met dikte en openingen in het " +
         "IFC-bestand; afgeronde randen zijn als een tiensegmenten-polygoon per " +
         "hoek benaderd. Plaatmesh en plaatresultaten ontbreken nog.",
       );
     }
-    if (!heeft3DElementen && frame3d.nodes.length > 0) {
+    const aantalVlakken = openFem3d.loadPanels?.length ?? 0;
+    if (aantalVlakken > 0 && opties.zonderLasten !== true) {
+      regels.push(
+        `${aantalVlakken} 3D-belastingvla${aantalVlakken === 1 ? "k staat" : "kken staan"} niet in het ` +
+        "IFC-bestand: een belastingvlak heeft geen stijfheid en wordt pas bij het rekenen omgezet in " +
+        "staaf- en knooplasten. Zie het 3D-rapport voor die afgeleide lasten.",
+      );
+    }
+    if (!heeft3DElementen && openFem3d.nodes.length > 0) {
       regels.push(
         "Het 3D-model heeft geen staven of platen. IFC4 vereist voor een structurele " +
         "knoopverbinding minstens één aangesloten element; daarom is het " +
         "3D-model niet geëxporteerd.",
       );
     }
-    const losseKnopen = frame3d.nodes.filter((node) => !gekoppeld.has(node.id));
+    const losseKnopen = openFem3d.nodes.filter((node) => !gekoppeld.has(node.id));
     if (losseKnopen.length > 0 && heeft3DElementen) {
-      const losseSteunen = (frame3d.supports ?? []).filter((s) => !gekoppeld.has(s.nodeId)).length;
-      const losseLasten = (frame3d.loads ?? []).filter((l) => !gekoppeld.has(l.nodeId)).length;
+      const losseSteunen = (openFem3d.supports ?? []).filter((s) => !gekoppeld.has(s.nodeId)).length;
+      const losseLasten = (openFem3d.loads ?? []).filter((l) => !gekoppeld.has(l.nodeId)).length;
       regels.push(
         `${losseKnopen.length} losse 3D-${losseKnopen.length === 1 ? "knoop" : "knopen"}` +
         ` (${losseKnopen.map((node) => node.id).join(", ")}) zonder aangesloten element` +
@@ -2707,10 +2820,10 @@ export function verzamelIfcBeperkingen(
         "zijn vanwege die IFC4-regel weggelaten.",
       );
     }
-    const uitvoerbareLasten = (frame3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId)).length +
-      (frame3d.memberLoads ?? []).length + (frame3d.memberPointLoads ?? []).length + (frame3d.thermalLoads ?? []).length +
-      (frame3d.surfaceLoads ?? []).length +
-      (frame3d.supports ?? []).filter((steun) => gekoppeld.has(steun.nodeId) && Object.keys(steun.prescribed ?? {}).length > 0).length;
+    const uitvoerbareLasten = (openFem3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId)).length +
+      (openFem3d.memberLoads ?? []).length + (openFem3d.memberPointLoads ?? []).length + (openFem3d.thermalLoads ?? []).length +
+      (openFem3d.surfaceLoads ?? []).length +
+      (openFem3d.supports ?? []).filter((steun) => gekoppeld.has(steun.nodeId) && Object.keys(steun.prescribed ?? {}).length > 0).length;
     if (opties.zonderLasten === true && uitvoerbareLasten > 0) {
       regels.push(
         `Structurele export: ${uitvoerbareLasten} 3D-belasting(en) zijn bewust weggelaten.`,
@@ -2835,16 +2948,16 @@ export function bouwIfcBoom(
     kinderen: kinderenModel,
   }];
   if (model.model3d !== undefined) {
-    const frame3d = parseFrame3DModel(model.model3d);
-    if (frame3d.beams.length > 0 || (frame3d.plates?.length ?? 0) > 0) {
-      const gekoppeld = gekoppelde3DKnopen(frame3d);
-      const knopen3d = frame3d.nodes.filter((node) => gekoppeld.has(node.id));
-      const steunen3d = (frame3d.supports ?? []).filter((steun) => gekoppeld.has(steun.nodeId));
-      const lasten3d = (frame3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId));
-      const staaflasten3d = frame3d.memberLoads ?? [];
-      const staafpuntlasten3d = frame3d.memberPointLoads ?? [];
-      const temperatuurlasten3d = frame3d.thermalLoads ?? [];
-      const oppervlakteLasten3d = frame3d.surfaceLoads ?? [];
+    const openFem3d = parseOpenFem3DModel(model.model3d);
+    if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0) {
+      const gekoppeld = gekoppelde3DKnopen(openFem3d);
+      const knopen3d = openFem3d.nodes.filter((node) => gekoppeld.has(node.id));
+      const steunen3d = (openFem3d.supports ?? []).filter((steun) => gekoppeld.has(steun.nodeId));
+      const lasten3d = (openFem3d.loads ?? []).filter((last) => gekoppeld.has(last.nodeId));
+      const staaflasten3d = openFem3d.memberLoads ?? [];
+      const staafpuntlasten3d = openFem3d.memberPointLoads ?? [];
+      const temperatuurlasten3d = openFem3d.thermalLoads ?? [];
+      const oppervlakteLasten3d = openFem3d.surfaceLoads ?? [];
       const onderdelen3d: IfcBoomKnoop[] = [
         {
           type: "IfcStructuralPointConnection",
@@ -2858,17 +2971,17 @@ export function bouwIfcBoom(
         {
           type: "IfcStructuralCurveMember",
           naam: "3D-staven",
-          aantal: frame3d.beams.length,
-          kinderen: frame3d.beams.map((b) => ({
+          aantal: openFem3d.beams.length,
+          kinderen: openFem3d.beams.map((b) => ({
             type: "IfcEdge",
             naam: `3D-staaf ${b.id} — knoop ${b.startNodeId} → ${b.endNodeId}`,
           })),
         },
-        ...((frame3d.plates?.length ?? 0) > 0 ? [{
+        ...((openFem3d.plates?.length ?? 0) > 0 ? [{
           type: "IfcStructuralSurfaceMember",
           naam: "3D-platen",
-          aantal: frame3d.plates!.length,
-          kinderen: frame3d.plates!.map((plaat) => ({
+          aantal: openFem3d.plates!.length,
+          kinderen: openFem3d.plates!.map((plaat) => ({
             type: "IfcFaceSurface",
             naam: `3D-plaat ${plaat.id} — t ${nl(plaat.thicknessM)} m · ${plaat.material ?? "—"} · ${plaat.openings?.length ?? 0} opening(en)`,
           })),
@@ -2905,7 +3018,9 @@ export function bouwIfcBoom(
           kinderen: [
             ...staaflasten3d.map((l) => ({
               type: "IfcStructuralCurveAction",
-              naam: `Staaf ${l.beamId} — qy ${l.qyStart}→${l.qyEnd}; qz ${l.qzStart}→${l.qzEnd} kN/m`,
+              naam: isOpenFem3DGlobalMemberLoad(l)
+                ? `Staaf ${l.beamId} — globaal ${l.globalDirection.toUpperCase()} ${l.qStart}→${l.qEnd} kN/m${l.perProjection ? " per projectie" : ""}`
+                : `Staaf ${l.beamId} — qy ${l.qyStart}→${l.qyEnd}; qz ${l.qzStart}→${l.qzEnd} kN/m`,
             })),
             ...staafpuntlasten3d.map((l) => ({
               type: "IfcStructuralPointAction",
@@ -3057,7 +3172,7 @@ export const GEWORTELDE_ENTITEITEN = [
   "IFCSTRUCTURALPOINTACTION", "IFCSTRUCTURALLINEARACTION",
   "IFCSTRUCTURALCURVEACTION",
   // Bouwkundig model, eigenschappen en hoeveelheden
-  "IFCBEAM", "IFCCOLUMN", "IFCREINFORCINGBAR",
+  "IFCBEAM", "IFCCOLUMN", "IFCCOVERING", "IFCREINFORCINGBAR",
   "IFCPROPERTYSET", "IFCELEMENTQUANTITY",
   "IFCRELAGGREGATES", "IFCRELSERVICESBUILDINGS",
   "IFCRELCONNECTSSTRUCTURALMEMBER", "IFCRELCONNECTSSTRUCTURALACTIVITY",
@@ -3483,6 +3598,25 @@ function parametrischProfiel(
           meter(dims.tw), meter(dims.r),
           dims.r2 ? meter(dims.r2) : "$", "$"),
       };
+    case "RoundBar":
+      // Massief rond staal: IfcCircleProfileDef (IFC4) met alleen de straal.
+      // Een IfcCircleHollowProfileDef zou een wand vragen die er niet is.
+      return {
+        vorm: "massief rond",
+        profielDef: w.ent("IFCCIRCLEPROFILEDEF",
+          ".AREA.", naam, positie, meter(dims.h / 2)),
+      };
+    case "FlatBar":
+      // Platstaal: IfcRectangleProfileDef (IFC4) met XDim = de dikte (b in de
+      // maattabel) en YDim = de breedte van de strip (h), dezelfde verdeling
+      // als de koker hierboven: de strip staat op zijn kant, zoals hij
+      // gerekend wordt. De ProfileName is de catalogusnaam ("Strip 80x10"),
+      // en dat is precies de naam die de IFC-import weer herkent.
+      return {
+        vorm: "platstaal",
+        profielDef: w.ent("IFCRECTANGLEPROFILEDEF",
+          ".AREA.", naam, positie, meter(dims.b), meter(dims.h)),
+      };
   }
   return undefined;
 }
@@ -3504,7 +3638,7 @@ function parametrischProfiel(
  * staan in de Description en in de eigenschappenset.
  *
  * h, b en de doorsnedegrootheden komen uit de bewaarde motoruitkomst, zodat
- * de eigenschappenset OpenFEM2D_Doorsnede dezelfde getallen draagt als de
+ * de eigenschappenset OpenFEM_Doorsnede dezelfde getallen draagt als de
  * toetsing.
  */
 function schrijfEigenDoorsnede(w: SpfSchrijver, naam: string, d: EigenDoorsnede): DoorsnedeInfo {
@@ -3512,7 +3646,7 @@ function schrijfEigenDoorsnede(w: SpfSchrijver, naam: string, d: EigenDoorsnede)
   const props = Number.isFinite(e.iz_mm4)
     ? {
         iz: e.iz_mm4, welY: e.wel_y_mm3, welZ: e.wel_z_mm3, wplY: e.wpl_y_mm3, wplZ: e.wpl_z_mm3,
-        avZ: e.av_z_mm2, it: e.it_mm4, iw: e.iw_mm6, iRadY: e.iy_radius_mm, iRadZ: e.iz_radius_mm,
+        avY: e.av_y_mm2, avZ: e.av_z_mm2, it: e.it_mm4, iw: e.iw_mm6, iRadY: e.iy_radius_mm, iRadZ: e.iz_radius_mm,
       }
     : undefined;
   const gemeen = {

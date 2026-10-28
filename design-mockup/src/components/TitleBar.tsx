@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchAppVersion } from "../lib/appVersion";
+import { fetchAppVersion, toonVersie } from "../lib/appVersion";
 import { isTauriApp } from "../lib/tauri";
 import { notifyInfo, notifyWarning } from "../io/notify";
 import type { Window as TauriWindow } from "@tauri-apps/api/window";
@@ -203,7 +203,7 @@ function TitleBar({
 
       <span className="titlebar-title" data-tauri-drag-region>
         {t("appName")}
-        {appVersion && <span className="titlebar-version">v{appVersion}</span>}
+        {appVersion && <span className="titlebar-version">{toonVersie(appVersion)}</span>}
       </span>
 
       <div className="titlebar-controls">

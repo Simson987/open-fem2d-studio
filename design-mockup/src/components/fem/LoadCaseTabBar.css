@@ -33,6 +33,10 @@
   scrollbar-width: none;
   touch-action: pan-x;
   overscroll-behavior-x: contain;
+  /* De scrollbreedte is een hele pixel, de tabs niet altijd (andere letters
+     op Linux): zonder deze marge blijft er van de laatste tab soms een pixel
+     buiten beeld, ook helemaal rechts. */
+  padding-inline-end: 2px;
 }
 .lc-tab-cases::-webkit-scrollbar { display: none; }
 /* Lange namen (windgenerator) afgekort; de volledige naam staat in `title`. */
@@ -172,13 +176,13 @@
   background: var(--theme-text-faint);
   color: var(--theme-bg);
 }
-.lc-tab.active .lc-tab-type { background: var(--theme-accent); }
+.lc-tab.active .lc-tab-type { background: var(--theme-accent); color: var(--theme-accent-text); }
 /* Type colour tags */
 .lc-tab-type-dead  { background: #6b7280; color: white; }   /* G — grijs */
 .lc-tab-type-live  { background: #2563eb; color: white; }   /* Q — blauw */
-.lc-tab-type-snow  { background: #06b6d4; color: white; }   /* S — cyaan */
-.lc-tab-type-wind  { background: #10b981; color: white; }   /* W — groen */
-.lc-tab-type-other { background: #f59e0b; color: white; }   /* — oranje */
+.lc-tab-type-snow  { background: #06b6d4; color: #111827; } /* S — cyaan */
+.lc-tab-type-wind  { background: #10b981; color: #111827; } /* W — groen */
+.lc-tab-type-other { background: #f59e0b; color: #111827; } /* — oranje */
 .lc-tab-type-model { background: var(--theme-text-secondary); color: var(--theme-bg); }
 .lc-tab-model.active .lc-tab-type-model { background: var(--theme-accent); color: var(--theme-accent-text, white); }
 /* Model-tab sluit direct aan op het eerste belastinggeval (geen prefix of
@@ -188,7 +192,7 @@
 }
 
 /* Resultaten-tab — eigen accent (amber/oranje) en spacing-divider links. */
-.lc-tab-type-results { background: #f59e0b; color: white; }
+.lc-tab-type-results { background: #f59e0b; color: #111827; }
 .lc-tab-results {
   margin-left: 8px;
   border-color: rgba(245, 158, 11, 0.45);
@@ -197,7 +201,7 @@
   border-top-color: #f59e0b;
   color: #f59e0b;
 }
-.lc-tab-results.active .lc-tab-type-results { background: #f59e0b; }
+.lc-tab-results.active .lc-tab-type-results { background: #f59e0b; color: #111827; }
 
 .lc-tab-name {
   font-weight: inherit;

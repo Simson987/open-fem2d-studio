@@ -1,0 +1,224 @@
+{
+  "format": "open-fem-studio-v2",
+  "version": 2,
+  "savedAt": "2026-10-11T16:30:00.000Z",
+  "nodes": [
+    {
+      "id": 1,
+      "x": 0,
+      "z": 0
+    },
+    {
+      "id": 2,
+      "x": 6000,
+      "z": 0
+    }
+  ],
+  "beams": [
+    {
+      "id": 1,
+      "from": 1,
+      "to": 2,
+      "profile": "IPE300",
+      "material": "S235"
+    }
+  ],
+  "supports": [
+    {
+      "nodeId": 1,
+      "type": "pinned"
+    },
+    {
+      "nodeId": 2,
+      "type": "zRoller"
+    }
+  ],
+  "plates": [],
+  "loads": [
+    {
+      "id": 1,
+      "type": "lineLoad",
+      "beamId": 1,
+      "q": -10,
+      "caseId": 5
+    },
+    {
+      "id": 2,
+      "type": "pointForce",
+      "posFrac": 0.5,
+      "fz": -20,
+      "caseId": 1
+    },
+    {
+      "id": 3,
+      "type": "pointMoment",
+      "nodeId": 1,
+      "fz": -7,
+      "caseId": 1
+    },
+    {
+      "id": 4,
+      "type": "lineLoad",
+      "beamId": 1,
+      "fz": -3,
+      "caseId": 1
+    }
+  ],
+  "loadCases": [
+    {
+      "id": 1,
+      "name": "G",
+      "type": "dead"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "betonSegmentLengteMm": 400,
+  "betonKruipcoefficient": null,
+  "betonKruipInvoer": null,
+  "combinations": [
+    {
+      "id": 1,
+      "name": "UGT",
+      "type": "uls",
+      "formula": "1·G + 1·geval 5",
+      "factors": {
+        "1": 1,
+        "5": 1
+      }
+    }
+  ],
+  "idTellers": {
+    "belastinggeval": 2,
+    "combinatie": 2
+  },
+  "structuralGrid": {
+    "enabled": true,
+    "xAxes": [
+      {
+        "id": "A",
+        "label": "A",
+        "position": 0
+      },
+      {
+        "id": "B",
+        "label": "B",
+        "position": 12000
+      }
+    ],
+    "yAxes": [
+      {
+        "id": "Y-A",
+        "label": "1",
+        "position": 0
+      },
+      {
+        "id": "Y-B",
+        "label": "2",
+        "position": 6000
+      }
+    ],
+    "zAxes": [
+      {
+        "id": "1",
+        "label": "1",
+        "position": 0
+      },
+      {
+        "id": "2",
+        "label": "2",
+        "position": 5000
+      }
+    ]
+  },
+  "scheefstandEnabled": false,
+  "scheefstandNoemer": 200,
+  "scheefstandRichting": 1,
+  "scheefstandBron": "vast",
+  "scheefstandHoogteM": null,
+  "scheefstandAantalElementen": null,
+  "eigenDoorsneden": [],
+  "eigenCltOpbouwen": [],
+  "projectInfo": {
+    "company": "",
+    "date": "",
+    "description": "Controle 12 oktober 2026, punt K1: lijnlast in belastinggeval 5 dat niet bestaat, puntlast zonder doel, koppel met de waarde in fz, lijnlast met de waarde in fz.",
+    "engineer": "",
+    "location": "",
+    "name": "Ligger met vier verkeerd geadresseerde lasten",
+    "notes": "",
+    "projectNumber": "",
+    "reportHeader": "",
+    "uitgangspunten": {
+      "en1992": false,
+      "en1993": false,
+      "en1995": false,
+      "gevolgklasse": "CC2",
+      "levensduurklasse": "4",
+      "nationaleBijlage": "NL",
+      "normenHandmatig": [],
+      "terreincategorie": "II",
+      "windgebied": "II"
+    }
+  },
+  "windInstellingen": {
+    "windgebied": "II",
+    "terreincategorie": "II",
+    "stuwdrukBron": "berekend",
+    "qpHandmatig_kNm2": 1,
+    "richtingLinks": true,
+    "richtingRechts": true,
+    "richtingHaaks": false,
+    "cpiKeuze": "beide",
+    "cpiHandmatig": 0.2,
+    "hohSpant_m": 5,
+    "positieSpant": "tussenspant",
+    "belastingbreedteOverride_m": null,
+    "gebouwlengte_m": 30,
+    "afstandTotKopgevel_m": 15,
+    "cpeDakLoef": null,
+    "cpeDakLij": null,
+    "cpeDakHaaks": null,
+    "combinatiesGenereren": true,
+    "gevelhoogte_m": null,
+    "vorm": "gebouw",
+    "vrijstaandDakvorm": "lessenaar",
+    "blokkering_phi": 0,
+    "vrijstaandHoogte_m": null,
+    "wrijving": "geen",
+    "aantalOverkappingen": 1,
+    "positieOverkapping": 1,
+    "kolomDoorsnede": "geen",
+    "kolomBreedte_mm": 200,
+    "kolomDiepte_mm": 200
+  },
+  "rapport": {
+    "margeBoven": 18,
+    "margeOnder": 20,
+    "margeBinnen": 15,
+    "margeBuiten": 15,
+    "basisLettergrootte": 10,
+    "regelafstand": 1.45,
+    "pageSize": "A4",
+    "orientation": "portrait",
+    "hiddenSections": {
+      "nodes": true,
+      "beams": true,
+      "plates": true,
+      "materials": true,
+      "combinations": true,
+      "plateStresses": true,
+      "checkDetail": true,
+      "clt": true,
+      "betonStijfheid": true,
+      "spanning": true
+    },
+    "rapportType": "beperkt",
+    "toetsingDetail": "beknopt",
+    "verborgenToetsStaven": {},
+    "inhoudsopgaveDiepte": 1
+  },
+  "modelDimension": "2d"
+}

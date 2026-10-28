@@ -12,6 +12,7 @@
  */
 import { useTranslation } from "react-i18next";
 import type { SolverResult } from "./solver/types";
+import { tussenStations, veldPunten, zakkingPunten } from "./solver/veldExtremen";
 import type { Node, Beam, Support, Load } from "./femTypes";
 import { resolveSection } from "../../lib/sectionResolver";
 import {
@@ -72,7 +73,11 @@ export interface DisplayFlags {
   plaatContour: boolean;
   /** Gekozen contourcomponent (von Mises default) — zie PLAAT_COMPONENTEN in FemCanvas. */
   plaatComponent: "vonMises" | "sigmaX" | "sigmaY" | "tauXY" | "nx" | "ny" | "nxy";
-  /** Elementranden (mesh-lijnen) tonen in de contourlaag. */
+  /**
+   * Elementranden (het rekennet) van de platen tonen: in de modelweergave en
+   * in de contourlaag. Een modelweergave (venster Zichtbaarheid, onthouden);
+   * standaard uit.
+   */
   plaatMesh: boolean;
   /**
    * Profielnaam klein langs elke staaf op het canvas. Dit is een MODEL-
@@ -126,6 +131,11 @@ export interface DisplayFlags {
   supportScale: number;
   /** Scharnieren en veren aan de staafeinden. */
   scharnieren: boolean;
+  /**
+   * "Profielen in kleur": elk profiel een eigen kleur, met een legenda op het
+   * tekenvlak (lib/profielKleur.ts). Een modelweergave; de selectie gaat voor.
+   */
+  profielKleur: boolean;
 }
 
 export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
@@ -144,7 +154,7 @@ export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
   snedeTekens: true,
   uc: false,
   scaleN: 1, scaleV: 1, scaleM: 1, scaleU: 1, scaleR: 1, scaleEI: 1,
-  plaatContour: true, plaatComponent: "vonMises", plaatMesh: true,
+  plaatContour: true, plaatComponent: "vonMises", plaatMesh: false,
   // Aan: de gebruiker wil bij het tekenen kunnen zien welk profiel een staaf
   // heeft zonder hem eerst aan te klikken.
   profielLabels: true,
@@ -163,6 +173,9 @@ export const DEFAULT_DISPLAY_FLAGS: DisplayFlags = {
   opleggingen: true,
   supportScale: 1,
   scharnieren: true,
+  // Uit: het tekenvlak houdt de vertrouwde accentkleur tot de gebruiker de
+  // profielen wil onderscheiden.
+  profielKleur: false,
 };
 
 interface Props {
@@ -440,9 +453,16 @@ export default function FemResultsOverlay({
       (ef.axialDisp?.length  ?? 0) === ef.stations_mm.length;
 
     if (hasCurve && ef) {
+      // De grootste zakking tussen de stations (θ = 0) als extra punt: het
+      // w-label en de kromme tonen zo het echte maximum, niet het station
+      // ernaast (controle 12 oktober 2026, punt C8).
+      const tussen = zakkingPunten(ef);
       for (let k = 0; k < ef.stations_mm.length; k++) {
         const xi = ef.stations_mm[k] / ef.L_mm;
         pushSample(xi, ef.axialDisp[k], ef.deflection[k]);
+        for (const p of tussen) {
+          if (p.i === k) pushSample(p.x / ef.L_mm, tussenStations(ef.axialDisp, p.i, p.s), p.waarde);
+        }
       }
     } else {
       // Fallback (geen station-data): Hermite op knoopwaarden alleen.
@@ -781,7 +801,7 @@ export default function FemResultsOverlay({
       const offset: string[] = [];
       // Bijhouden voor waarde-labels: per sample de geplotte offset-positie
       // + de vlip-waarde (voor label-offset-richting) + de raw waarde.
-      const pts: { ox: number; oy: number; vFlip: number; raw: number; nxW: number; nzW: number; x: number }[] = [];
+      const pts: { ox: number; oy: number; vFlip: number; raw: number; nxW: number; nzW: number; x: number; helling?: number }[] = [];
       for (const sm of samples) {
         const raw = which === "N" ? sm.N
           : which === "V" ? sm.V
@@ -792,7 +812,9 @@ export default function FemResultsOverlay({
         const ox = sm.px + sm.nxW * v * scale;
         const oy = sm.py - sm.nzW * v * scale;
         offset.push(`${ox.toFixed(2)},${oy.toFixed(2)}`);
-        pts.push({ ox, oy, vFlip: v, raw, nxW: sm.nxW, nzW: sm.nzW, x: sm.x });
+        // Bij M is V = dM/dx de helling: daarmee ligt het veldmaximum exact
+        // vast (zie hieronder en solver/veldExtremen.ts).
+        pts.push({ ox, oy, vFlip: v, raw, nxW: sm.nxW, nzW: sm.nzW, x: sm.x, ...(which === "M" ? { helling: sm.V } : {}) });
       }
       // Closing polygon: back to beam (endpoint → startpoint along axis)
       const startBase = `${samples[0].px.toFixed(2)},${samples[0].py.toFixed(2)}`;
@@ -876,13 +898,24 @@ export default function FemResultsOverlay({
           if (dPrev === 0 && dNext === 0) continue;
           const slopeFlips = (dPrev >= 0 && dNext <= 0) || (dPrev <= 0 && dNext >= 0);
           if (!slopeFlips) continue;
-          // Parabolische verfijning van het extremum via 3 gelijk-afstand punten.
           const y0 = pts[iPrev].raw, y1 = pts[i].raw, y2 = pts[iNext].raw;
-          const denom = y0 - 2 * y1 + y2;
           let peakVal = y1;
-          if (Math.abs(denom) > 1e-9) {
-            const t = 0.5 * (y0 - y2) / denom;         // -0.5..0.5 vertex-offset
-            peakVal = y1 - 0.25 * (y0 - y2) * t;       // vertex-waarde
+          const hPrev = pts[iPrev].helling, hI = pts[i].helling, hNext = pts[iNext].helling;
+          if (hPrev !== undefined && hI !== undefined && hNext !== undefined) {
+            // Momentenlijn: het extremum waar V = dM/dx = 0, exact uit M en V
+            // aan weerszijden (kubische Hermite, ook bij een trapeziumlast —
+            // controle 12 oktober 2026, punt C8; dezelfde regel als de
+            // omhullende en de toetsinvoer).
+            for (const p of veldPunten([pts[iPrev].x, pts[i].x, pts[iNext].x], [y0, y1, y2], [hPrev, hI, hNext])) {
+              if (Math.abs(p.waarde) > Math.abs(peakVal)) peakVal = p.waarde;
+            }
+          } else {
+            // Parabolische verfijning van het extremum via 3 gelijk-afstand punten.
+            const denom = y0 - 2 * y1 + y2;
+            if (Math.abs(denom) > 1e-9) {
+              const t = 0.5 * (y0 - y2) / denom;         // -0.5..0.5 vertex-offset
+              peakVal = y1 - 0.25 * (y0 - y2) * t;       // vertex-waarde
+            }
           }
           consider(i, peakVal);
         }

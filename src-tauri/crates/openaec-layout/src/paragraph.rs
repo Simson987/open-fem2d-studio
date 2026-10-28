@@ -1,7 +1,8 @@
 //! Paragraph — styled text with word wrapping.
 //!
-//! Supports basic inline markup: `<b>`, `<i>`, `<b><i>` (stripped for metrics,
-//! preserved for rendering as font variant selection).
+//! Supports basic inline markup: `<b>`, `<i>` and their closing tags (stripped
+//! for metrics and rendering). Every other `<` is text: "n < a" and
+//! "N_Ed < N_pl,Rd" keep everything after the `<`.
 
 use crate::draw::DrawList;
 use crate::flowable::{Flowable, LayoutContext, SplitResult};
@@ -88,18 +89,29 @@ impl Paragraph {
         Self::new(text, ParagraphStyle::default())
     }
 
-    /// Strip inline XML tags for metrics measurement.
+    /// De opmaakcodes `<b>`, `</b>`, `<i>` en `</i>` eruit; elk ander `<` is
+    /// gewone tekst.
+    ///
+    /// Hier werd alles tussen een `<` en de eerstvolgende `>` weggegooid. Een
+    /// kanttekening als "n = 0,177 <= a = 0,234 -> geen reductie" of
+    /// "V_Ed < V_pl,Rd/2: …" verloor zo alles na het `<` tot aan de volgende
+    /// `>` — of tot het eind van de alinea als die er niet was.
     fn strip_tags(text: &str) -> String {
+        const CODES: [&str; 4] = ["<b>", "</b>", "<i>", "</i>"];
         let mut result = String::with_capacity(text.len());
-        let mut in_tag = false;
-        for ch in text.chars() {
-            match ch {
-                '<' => in_tag = true,
-                '>' => in_tag = false,
-                _ if !in_tag => result.push(ch),
-                _ => {}
+        let mut rest = text;
+        while let Some(pos) = rest.find('<') {
+            result.push_str(&rest[..pos]);
+            let vanaf = &rest[pos..];
+            match CODES.iter().find(|c| vanaf.starts_with(**c)) {
+                Some(code) => rest = &vanaf[code.len()..],
+                None => {
+                    result.push('<');
+                    rest = &vanaf[1..];
+                }
             }
         }
+        result.push_str(rest);
         result
     }
 
@@ -343,5 +355,15 @@ mod tests {
             "italic and bold"
         );
         assert_eq!(Paragraph::strip_tags("no tags"), "no tags");
+    }
+
+    /// Een `<` dat geen opmaakcode is, blijft staan, en de tekst erna ook.
+    #[test]
+    fn kleiner_dan_is_gewone_tekst() {
+        assert_eq!(Paragraph::strip_tags("n = 0,2 < a = 0,4"), "n = 0,2 < a = 0,4");
+        assert_eq!(Paragraph::strip_tags("V_Ed < V_pl,Rd/2 en n > 0,5a"), "V_Ed < V_pl,Rd/2 en n > 0,5a");
+        assert_eq!(Paragraph::strip_tags("n <= a -> M_N = M_pl"), "n <= a -> M_N = M_pl");
+        assert_eq!(Paragraph::strip_tags("<b>vet</b> < en <i>schuin</i>"), "vet < en schuin");
+        assert_eq!(Paragraph::strip_tags("eindigt op <"), "eindigt op <");
     }
 }

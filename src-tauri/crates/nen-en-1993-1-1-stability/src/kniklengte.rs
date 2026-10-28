@@ -33,8 +33,50 @@
 //! de vlag gewoon voor elke as waar.
 
 use nen_en_1993_1_1_section::Deelstap;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::opmaak::{lx, nl, nv, stap};
+
+/// Om welke doorsnedeassen de GLOBALE berekening de zijdelingse uitbuiging van
+/// de staaf al in de krachten heeft: een tweede-orde-berekening (P-Δ) MET de
+/// scheefstand van NEN-EN 1993-1-1 5.3.2, waarin de staaf om die as kan
+/// uitbuigen. De invoerbouwer zet dit, want alleen hij kent het analysetype,
+/// de scheefstand, het vlak van het model en de stand van de staaf. De kern
+/// gebruikt het alleen bij een VRIJ staafeind zonder opgegeven kniklengte (zie
+/// [`Kniklengte::vrij_eind_volgens_analyse`]).
+///
+/// De bouwers van deze app zetten het alleen voor STAAL, en alleen bij een
+/// overwegend verticale staaf (een kolom, ≥ 75°) waarvan de scheefstand in de
+/// berekening minstens haar EIGEN φ is (EN 1993-1-1 (5.5) met h = haar lengte en
+/// m = 1). De scheefstand is een horizontale kracht bij de verticale last en
+/// stoot de zijdelingse knikvorm van een kolom aan, niet die van een liggende
+/// uitkraging met druk; en de φ van een heel model middelt over al zijn
+/// kolommen, terwijl een kolom met een vrije kop nergens aan hangt.
+///
+/// Hout zetten de bouwers het niet: NEN-EN 1995-1-1 eist bij tweede orde
+/// E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van 5.4.4(2), en de
+/// tweede-orde-berekening van deze app rekent met E_mean.
+///
+/// WAAROM. Een vrijstaande kolom knikt zijdelings met L_cr = 2·L. Zit die
+/// zijdelingse uitbuiging al in de krachten (het voetmoment bevat dan
+/// N·(φ·h + uitbuiging), vergroot door P-Δ), dan wordt de staaf getoetst met
+/// de systeemlengte (5.2.2(7)b); 2·L zou de zijdelingse knik dubbel tellen.
+/// Zonder scheefstand dekt P-Δ die knik niet: een centrisch gedrukte kolom
+/// verplaatst dan niet zijdelings, en tweede orde vergroot nul.
+///
+/// In een vlak model is hooguit `y` waar: uit het vlak (z) ziet de berekening
+/// niets, ook niet in tweede orde. `None` of weglaten in de invoer = geen van
+/// beide, het gedrag van vóór dit veld (2·L bij een vrij eind).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
+pub struct ZijdelingseKnikInAnalyse {
+    /// Uitbuigen om de sterke y-as zit in de globale berekening.
+    pub y: bool,
+    /// Uitbuigen om de zwakke z-as zit in de globale berekening.
+    pub z: bool,
+}
 
 /// Het label van een kniklengte die in de invoer stond.
 pub const HERKOMST_OPGEGEVEN: &str = "opgegeven";
@@ -45,6 +87,10 @@ pub const HERKOMST_KIPSTEUNEN: &str = "uit de kipsteunen";
 /// Het label van de terugval bij een staaf met een VRIJ staafeind: tweemaal
 /// de staaflengte, de kniklengte van de ingeklemd-vrije staaf.
 pub const HERKOMST_VRIJ_EIND: &str = "2 × staaflengte (vrij staafeind, terugval)";
+/// Het label bij een vrij staafeind waarvan de zijdelingse uitbuiging al in de
+/// tweede-orde-berekening met scheefstand zit: de staaflengte.
+pub const HERKOMST_VRIJ_EIND_TWEEDE_ORDE: &str =
+    "staaflengte (vrij staafeind, zijdelingse knik in de 2e-orde-berekening)";
 
 /// Twee steunen, één aan elke flens (of rand), gelden als één steunpunt voor
 /// de hele doorsnede als ze hooguit zoveel uit elkaar liggen.
@@ -65,6 +111,10 @@ pub enum KniklengteHerkomst {
     /// kolom): L_cr = 2·L. De terugval op de staaflengte veronderstelt dat
     /// beide staafeinden zijdelings gesteund zijn, en een vrij eind is dat niet.
     VrijEind,
+    /// Een vrij staafeind waarvan de zijdelingse uitbuiging al in de globale
+    /// tweede-orde-berekening met scheefstand zit: L_cr = L. Zie
+    /// [`ZijdelingseKnikInAnalyse`].
+    VrijEindTweedeOrde,
 }
 
 impl KniklengteHerkomst {
@@ -74,6 +124,7 @@ impl KniklengteHerkomst {
             Self::Staaflengte => HERKOMST_STAAFLENGTE,
             Self::Kipsteunen => HERKOMST_KIPSTEUNEN,
             Self::VrijEind => HERKOMST_VRIJ_EIND,
+            Self::VrijEindTweedeOrde => HERKOMST_VRIJ_EIND_TWEEDE_ORDE,
         }
     }
 }
@@ -182,9 +233,62 @@ impl Kniklengte {
                  kniklengte van de ingeklemd-vrije staaf (Euler-geval met vrije top), waarbij het \
                  andere staafeind als volledig ingeklemd is aangenomen — bij een scharnierend \
                  eind is zo'n staaf een mechanisme. Wie een andere kniklengte kan onderbouwen, \
-                 geeft haar op.",
+                 geeft haar op. De staaflengte geldt alleen als de zijdelingse knik om de \
+                 {as_naam}-as al in de krachten zit: een tweede-orde-berekening die aan de \
+                 voorwaarden van de norm voldoet (bij staal een scheefstand die deze staaf zelf \
+                 aanstoot, met minstens haar eigen φ; bij hout bovendien rekenstijfheden E_d en de \
+                 boogimperfectie van NEN-EN 1995-1-1 5.4.4). Dat is voor deze staaf niet aangegeven.",
                 nl(l_cr_mm, 0)
             )],
+        }
+    }
+
+    /// Een vrij staafeind waarvan de zijdelingse uitbuiging om deze as al in de
+    /// globale tweede-orde-berekening met scheefstand zit: L_cr = L, de
+    /// systeemlengte. `grond` is de normplaats die dat toestaat, voor de
+    /// toelichting (staal: NEN-EN 1993-1-1 5.2.2(7)b).
+    ///
+    /// `in_rekenvlak` is hier altijd waar: dat de berekening om deze as
+    /// uitbuigt, is precies de voorwaarde.
+    pub fn vrij_eind_in_analyse(as_naam: &str, lengte_mm: f64, plaats: &str, grond: &str) -> Self {
+        Self {
+            as_naam: as_naam.to_string(),
+            l_cr_mm: lengte_mm,
+            staaflengte_mm: lengte_mm,
+            herkomst: KniklengteHerkomst::VrijEindTweedeOrde,
+            in_rekenvlak: true,
+            velden_mm: Vec::new(),
+            toelichting: vec![format!(
+                "Er is geen kniklengte om de {as_naam}-as opgegeven, en {plaats} \
+                 is VRIJ: geen oplegging en geen aansluitende staaf. Op zich zou dat \
+                 L_cr,{as_naam} = 2·L = {} mm geven, de zijdelingse knik van de ingeklemd-vrije \
+                 staaf. De globale berekening is echter tweede orde (P-Δ) MET scheefstand, en de \
+                 staaf kan daarin om de {as_naam}-as uitbuigen: de zijdelingse uitbuiging van het \
+                 vrije eind, vergroot door de normaalkracht, zit al in de krachten van deze toets. \
+                 Dan wordt de staaf getoetst met de systeemlengte ({grond}): \
+                 L_cr,{as_naam} = L = {} mm. Met 2·L zou de zijdelingse knik dubbel tellen.",
+                nl(2.0 * lengte_mm, 0),
+                nl(lengte_mm, 0)
+            )],
+        }
+    }
+
+    /// De kniklengte van een staaf met één vrij staafeind zonder opgegeven
+    /// kniklengte: [`Self::vrij_eind_in_analyse`] (L) als de globale berekening
+    /// de zijdelingse uitbuiging om deze as in de krachten heeft, anders
+    /// [`Self::vrij_eind`] (2·L). Zie [`ZijdelingseKnikInAnalyse`].
+    pub fn vrij_eind_volgens_analyse(
+        as_naam: &str,
+        lengte_mm: f64,
+        in_rekenvlak: bool,
+        plaats: &str,
+        in_analyse: bool,
+        grond: &str,
+    ) -> Self {
+        if in_analyse {
+            Self::vrij_eind_in_analyse(as_naam, lengte_mm, plaats, grond)
+        } else {
+            Self::vrij_eind(as_naam, lengte_mm, in_rekenvlak, plaats)
         }
     }
 
@@ -534,6 +638,7 @@ pub fn kniklengte_deelstap(k: &Kniklengte, article: &str, norm_in_vlak: &str) ->
         }
         KniklengteHerkomst::Staaflengte => (format!(r"{symbool} = L"), String::new()),
         KniklengteHerkomst::VrijEind => (format!(r"{symbool} = 2 \cdot L"), String::new()),
+        KniklengteHerkomst::VrijEindTweedeOrde => (format!(r"{symbool} = L"), String::new()),
         KniklengteHerkomst::Kipsteunen => (
             format!(r"{symbool} = \max_i \left( x_{{i+1}} - x_i \right)"),
             format!(
@@ -699,5 +804,37 @@ mod tests {
             .notes
             .iter()
             .any(|n| n.contains("IN het vlak") && n.contains("5.2.2(7)")));
+    }
+
+    #[test]
+    fn vrij_eind_is_twee_l_tenzij_de_zijdelingse_knik_in_de_tweede_orde_zit() {
+        let grond = "NEN-EN 1993-1-1 5.2.2(7)b";
+        // Eerste orde, of tweede orde zonder scheefstand: 2·L.
+        let k = Kniklengte::vrij_eind_volgens_analyse("y", 3000.0, true, "het eind", false, grond);
+        assert_eq!(k.herkomst, KniklengteHerkomst::VrijEind);
+        assert_eq!(k.l_cr_mm, 6000.0);
+        assert!(k.toelichting[0].contains("eigen φ") && k.toelichting[0].contains("niet aangegeven"), "{:?}", k.toelichting);
+        // Uit het vlak blijft het vlak-label en 2·L, ook als y gedekt is.
+        let z = Kniklengte::vrij_eind_volgens_analyse("z", 3000.0, false, "het eind", false, grond);
+        assert_eq!(z.l_cr_mm, 6000.0);
+        assert!(!z.in_rekenvlak);
+        // Tweede orde met scheefstand om deze as: L, met de normplaats erbij.
+        let t = Kniklengte::vrij_eind_volgens_analyse("y", 3000.0, true, "het eind", true, grond);
+        assert_eq!(t.herkomst, KniklengteHerkomst::VrijEindTweedeOrde);
+        assert_eq!(t.l_cr_mm, 3000.0);
+        assert_eq!(t.staaflengte_mm, 3000.0);
+        assert!(t.in_rekenvlak);
+        assert!(t.toelichting[0].contains("6000 mm") && t.toelichting[0].contains(grond), "{:?}", t.toelichting);
+        let d = kniklengte_deelstap(&t, "art. 6.3.1.3(1)", grond);
+        assert_eq!(d.formula_latex, r"L_{cr,y} = L");
+        assert_eq!(d.notes[0], format!("Herkomst: {}.", HERKOMST_VRIJ_EIND_TWEEDE_ORDE));
+    }
+
+    #[test]
+    fn zijdelingse_knik_in_analyse_weigert_onbekende_velden_en_is_standaard_uit() {
+        let z: ZijdelingseKnikInAnalyse = serde_json::from_str(r#"{"y":true,"z":false}"#).unwrap();
+        assert_eq!(z, ZijdelingseKnikInAnalyse { y: true, z: false });
+        assert!(serde_json::from_str::<ZijdelingseKnikInAnalyse>(r#"{"y":true,"z":false,"x":true}"#).is_err());
+        assert_eq!(ZijdelingseKnikInAnalyse::default(), ZijdelingseKnikInAnalyse { y: false, z: false });
     }
 }

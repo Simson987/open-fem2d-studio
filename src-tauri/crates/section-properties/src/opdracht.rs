@@ -29,9 +29,11 @@
 //! ```
 //!
 //! `soort` is `ISection` | `ISectionSchuin` | `Channel` | `ChannelSchuin` |
-//! `Shs` | `Rhs` | `Chs` | `Rechthoek` | `Angle` (`…Schuin` = toelopende
-//! flenzen: INP met 14 %, UNP met 8 %). Bij een koker telt alleen `t`; bij een
-//! buis is `h` de buitendiameter. Bij een hoeklijn (`Angle`) is `h` het LANGE
+//! `Shs` | `Rhs` | `Chs` | `Rechthoek` | `Angle` | `RoundBar` (`…Schuin` =
+//! toelopende flenzen: INP met 14 %, UNP met 8 %). Bij een koker telt alleen
+//! `t`; bij een buis is `h` de buitendiameter, en bij massief rond staal
+//! (`RoundBar`, de reeks "RD <d>") ook: daar is `h` de diameter en tellen de
+//! andere maten niet. Bij een hoeklijn (`Angle`) is `h` het LANGE
 //! been, `b` het korte, `t` de beendikte, `r` de walsuitronding en `r2` de
 //! teenafronding — de stand en de maatvoering van NEN-EN 1993-1-1 par. 1.7(2)
 //! respectievelijk EN 10056-1. Optioneel `elementen_per_wand` (standaard 8) om
@@ -578,6 +580,9 @@ fn vorm_van_maten(
             r1: r,
             r2,
         },
+        // Massief rond staal ("RD <d>"): `h` is de diameter, net als bij de
+        // buis; de overige maten spelen geen rol.
+        "RoundBar" => Profielvorm::RondStaal { d: h },
         anders => return Err(format!("onbekende soort: {anders}")),
     };
     // Onmogelijke maten worden hier geweigerd, vóór er een contour of mesh
@@ -605,6 +610,8 @@ fn maten_van(vorm: &Profielvorm) -> (f64, f64, f64, f64, f64) {
         Profielvorm::Rechthoek { h, b } => (h, b, b, h, 0.0),
         // Eén beendikte, dus zowel `t_w` als `t_f`; `r` is de walsuitronding.
         Profielvorm::Hoeklijn { h, b, t, r1, .. } => (h, b, t, t, r1),
+        // Massief: de volle maat, zoals `motor::Profielvorm::maten`.
+        Profielvorm::RondStaal { d } => (d, d, d, d, 0.0),
     }
 }
 

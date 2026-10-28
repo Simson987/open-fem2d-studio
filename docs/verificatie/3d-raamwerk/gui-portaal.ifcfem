@@ -1,0 +1,63 @@
+{
+  "format": "open-fem2d-studio-v2",
+  "version": 3,
+  "savedAt": "2026-09-26T00:00:00.000Z",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": false,
+  "nonlinearEnabled": true,
+  "analysetype": "tweedeOrdeGeometrisch",
+  "modelDimension": "3d",
+  "model3d": {
+    "nodes": [
+      { "id": 1, "x": 0, "y": 0, "z": 0 },
+      { "id": 2, "x": 0, "y": 0, "z": 5 }
+    ],
+    "beams": [
+      {
+        "id": 1,
+        "startNodeId": 1,
+        "endNodeId": 2,
+        "profileName": "IPE270",
+        "material": "S235"
+      }
+    ],
+    "supports": [
+      {
+        "nodeId": 1,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      }
+    ],
+    "loads": [
+      {
+        "id": 1,
+        "nodeId": 2,
+        "fx": 10,
+        "fy": 0,
+        "fz": -50,
+        "mx": 0,
+        "my": 0,
+        "mz": 0
+      }
+    ]
+  },
+  "projectInfo": {
+    "name": "3D GUI-verificatie",
+    "projectNumber": "VF-3D-GUI-01",
+    "description": "Uitkragende IPE270-kolom met drukkracht en horizontale puntlast",
+    "uitgangspunten": {
+      "normen": ["NEN-EN 1990", "NEN-EN 1993-1-1"],
+      "gevolgklasse": "CC2"
+    }
+  }
+}

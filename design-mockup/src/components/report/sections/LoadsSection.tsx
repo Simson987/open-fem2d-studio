@@ -15,6 +15,8 @@ import { beamLengthMm } from "../../../lib/steelCheckBuilder";
 import { useReportData } from "../ReportDataContext";
 import { fmtNum } from "../reportFormat";
 import { eigenGewichtOverzicht } from "../../../lib/eigenGewichtOverzicht";
+import { windZoneReport2d } from "../../../lib/wind/windZoneReport2d";
+import { VRIJSTAAND_SLEUTEL_PREFIX } from "../../../lib/wind/windGenerator";
 
 const CASE_TYPE_LABELS: Record<LoadCase["type"], string> = {
   dead: "Permanent",
@@ -185,6 +187,9 @@ export default function LoadsSection() {
       ) : (
         loadCases.map((lc) => {
           const caseLoads = loads.filter((l) => l.caseId === lc.id);
+          const windZones = windZoneReport2d(lc);
+          const vrijstaandWindgeval = lc.gegenereerd?.bron === "wind"
+            && lc.gegenereerd.sleutel.startsWith(VRIJSTAAND_SLEUTEL_PREFIX);
           const carriesSelfWeight = selfWeightCase?.id === lc.id;
           // Type-tag weglaten als de gevalnaam het type al noemt
           // ("Permanent (G)" + tag "Permanent" leest dubbelop).
@@ -312,6 +317,52 @@ export default function LoadsSection() {
                   )}
                 </>
               )}
+              {windZones?.missing && <p className="rpt-note" role="alert">{t(
+                "report.windZones2dMissing",
+                "Bij dit oudere windgeval ontbreken de bewaarde zonecoëfficiënten; genereer de windlasten opnieuw.",
+              )}</p>}
+              {windZones && !windZones.missing && <>
+                <h4 className="rpt-h3">{t("report.windZones2d", "Windzones — toegepaste vormfactoren en lijnlasten")}</h4>
+                {lc.gegenereerd?.windStructuralFactor === undefined ? (
+                  <p className="rpt-note" role="alert">{t("report.windStructuralFactor2dMissing",
+                    "De toegepaste constructiefactor ontbreekt in dit oudere windgeval; genereer de windlasten opnieuw.")}</p>
+                ) : (
+                  <p className="rpt-note">{t("report.windStructuralFactor2d",
+                    "Toegepaste constructiefactor c_s·c_d = {{factor}} op de getoonde windlasten.",
+                    { factor: fmtNum(lc.gegenereerd.windStructuralFactor, 3) })}</p>
+                )}
+                {!vrijstaandWindgeval && (
+                  Number.isFinite(lc.gegenereerd?.windInternalPressureCoefficient)
+                    && lc.gegenereerd?.windInternalPressureSource ? (
+                      <p className="rpt-note">{t("report.windInternalPressure2d",
+                        "Inwendige druk c_pi = {{coefficient}}. Bron: {{source}}",
+                        { coefficient: fmtNum(lc.gegenereerd.windInternalPressureCoefficient!, 3),
+                          source: lc.gegenereerd.windInternalPressureSource })}</p>
+                    ) : (
+                      <p className="rpt-note" role="alert">{t("report.windInternalPressure2dMissing",
+                        "De herkomst van de binnendruk ontbreekt in dit oudere windgeval; genereer de windlasten opnieuw.")}</p>
+                    )
+                )}
+                <table className="rpt-table" data-testid="rpt-wind-zones-2d">
+                  <thead><tr>
+                    <th>{t("report.beamWord", "Staaf")}</th>
+                    <th>{t("report.windZone2dZone", "Zone")}</th>
+                    <th>{t("report.windZone2dCoefficient", "Vormfactor")}</th>
+                    <th>c<sub>pi</sub></th>
+                    <th>w [kN/m²]</th>
+                    <th>q [kN/m]</th>
+                    <th>{t("openFem3d.report.source", "Bron")}</th>
+                  </tr></thead>
+                  <tbody>{windZones.rows.map((row, index) => <tr key={index}>
+                    <td>{row.beamId}</td><td>{row.zone}</td>
+                    <td>{fmtNum(row.cpe, 3)}</td><td>{vrijstaandWindgeval ? "—" : fmtNum(row.cpi, 3)}</td>
+                    <td>{fmtNum(row.w_kNm2, 3)}</td><td>{fmtNum(row.q_kNm, 3)}</td>
+                    <td>{row.bron}</td>
+                  </tr>)}</tbody>
+                </table>
+                <p className="rpt-note">{t("report.windZone2dCoefficientNote",
+                  "De vormfactor is c_pe, c_p,net, c_f of c_fr volgens de vermelde bron.")}</p>
+              </>}
             </div>
           );
         })

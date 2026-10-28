@@ -37,6 +37,7 @@ use nen_en_1993_1_1_stability::Deelstap;
 use section_properties::SectionProperties;
 
 use crate::en_general::GedrukteFlens;
+use crate::KipWeerstandsmoment;
 
 use crate::{l_kip_toelichting, lambda_chi, nb_annex, nl, nl_zonder_min_nul, Veldresultaat};
 
@@ -180,6 +181,8 @@ pub(crate) struct Monogegevens {
 pub(crate) struct Kipgegevens<'a> {
     pub p: &'a SectionProperties,
     pub grade: &'a SteelGrade,
+    /// W_pl,y (klasse 1 en 2) of W_el,y (klasse 3), art. 6.3.2.1(3).
+    pub w_y: KipWeerstandsmoment,
     pub l_g_mm: f64,
     pub v: &'a Veldresultaat,
     /// Alle doorgerekende kipvelden vanaf het staafbegin, het maatgevende
@@ -1287,30 +1290,30 @@ fn m_cr_stap_algemeen(g: &Kipgegevens, m: &Monogegevens) -> Deelstap {
 
 fn lambda_lt_stap(g: &Kipgegevens) -> Deelstap {
     let p = g.p;
+    let w = g.w_y;
     stap(
         "lambda_lt",
         "Relatieve slankheid voor kip",
         r"\bar{\lambda}_{LT}",
         "art. 6.3.2.2(1)",
-        r"\bar{\lambda}_{LT} = \sqrt{\frac{W_{pl,y} \cdot f_y}{M_{cr} \cdot 10^6}}".to_string(),
+        format!(r"\bar{{\lambda}}_{{LT}} = \sqrt{{\frac{{{} \cdot f_y}}{{M_{{cr}} \cdot 10^6}}}}", w.latex()),
         format!(
             r"\bar{{\lambda}}_{{LT}} = \sqrt{{\frac{{{w} \cdot {fy}}}{{{mcr} \cdot 10^6}}}}",
-            w = lx(p.wpl_y_mm3, 0),
+            w = lx(w.mm3(p), 0),
             fy = lx(g.grade.fy_mpa, 0),
             mcr = lx(g.v.m_cr_knm, 3),
         ),
         vec![
-            nv("W_{pl,y}", p.wpl_y_mm3, "mm³"),
+            nv(w.latex(), w.mm3(p), "mm³"),
             nv("f_y", g.grade.fy_mpa, "MPa"),
             nv("M_{cr}", g.v.m_cr_knm, "kNm"),
         ],
         Some(g.lambda_lt),
         "-",
-        vec![
-            "W_pl,y omdat de doorsnede in klasse 1 of 2 valt; de factor 10⁶ zet M_cr van \
-             kNm naar N·mm."
-                .to_string(),
-        ],
+        vec![format!(
+            "{}; de factor 10⁶ zet M_cr van kNm naar N·mm.",
+            w.toelichting()
+        )],
     )
 }
 

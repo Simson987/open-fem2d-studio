@@ -233,20 +233,87 @@ const BEDIENING_REDEN: &str =
      zou moeten kunnen; de app is de enige plek waar een korf gezet of een venster geopend \
      kan worden.";
 
+/// Waarom de API-tools (één per commando van het app-register) als groep buiten
+/// de koppeltabel staan. Het zijn geen rekenkern-opdrachten maar de commando's
+/// van de app zelf (`design-mockup/src/api/`): dezelfde zuivere modelfuncties als
+/// de GUI, zonder app uitgevoerd in de sidecar of in de draaiende app via het
+/// bedieningskanaal. Een Tauri-command of toetsbrugopdracht zou een tweede
+/// toegang tot dezelfde functie zijn. Hun namen komen uit de ingebakken
+/// catalogus (`assets/api-catalogus.json`), niet uit een lijst hier; daarom per
+/// groep en niet per rij.
+const API_REDEN: &str =
+    "Commando van het app-register (src/api/): geen rekenkern-opdracht en daarmee buiten de \
+     drie-wegen-regel; de catalogus is de bron.";
+
+/// De MCP-namen van de API-commando's, uit dezelfde catalogus als de server.
+fn api_tools_uit_de_catalogus() -> Vec<String> {
+    let catalogus: serde_json::Value = serde_json::from_str(include_str!("../assets/api-catalogus.json"))
+        .expect("assets/api-catalogus.json is geldige JSON");
+    catalogus["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .map(|c| c["name"].as_str().expect("naam").replace('.', "_"))
+        .collect()
+}
+
 /// De reden voor de twee Tauri-commands van het kanaal zelf.
 const KANAAL_REDEN: &str =
     "Het bedieningskanaal zelf: hiermee vraagt de pagina aan Rust of het kanaal aanstaat, en \
      meldt zij wat een opdracht opleverde. Geen rekenkern; de toetsbrug en de MCP-server hebben \
      er niets aan.";
 
+/// De reden voor de drie commands van de schakelaar (issue #109).
+const SCHAKELAAR_REDEN: &str =
+    "De schakelaar van het bedieningskanaal zelf (Instellingen → AI-assistent (MCP)): de pagina \
+     bewaart hiermee of een AI-assistent de app mag bedienen en zet het kanaal meteen aan of uit. \
+     Programmawerk van de desktop-app; er wordt niets gerekend, en een MCP-client hoort het kanaal \
+     niet zelf aan te kunnen zetten.";
+
+/// De reden voor de twee commands van het koppelpaneel (issue #109).
+const KOPPELING_REDEN: &str =
+    "Programmawerk van de desktop-app: het paneel AI-assistent (MCP) vraagt waar de meegeleverde \
+     MCP-server staat en zet hem op een klik van de gebruiker in de config van Claude Desktop. Er \
+     wordt niets gerekend; de toetsbrug en de MCP-server hebben er niets aan.";
+
+/// De reden voor het command van de bestandskoppeling (issue #90).
+const BESTANDSKOPPELING_REDEN: &str =
+    "Programmawerk van de desktop-app: de pagina haalt hiermee op welke projectbestanden het \
+     besturingssysteem aanreikte (dubbelklik, Openen met, een tweede start). Een browser of een \
+     MCP-client heeft geen bestandskoppeling; er wordt niets gerekend.";
+
+const EXTENSIE_REDEN: &str =
+    "Programmawerk van de desktop-app: lokale extensiemappen scannen, hun scripts en toegestane \
+     importbestanden lezen, ZIP-installatie en verwijderen. Er wordt niets gerekend; de MCP-server \
+     gebruikt zijn eigen extensiepad zonder deze Tauri-commando's.";
+
 const UITZONDERINGEN: &[Rij] = &[
     // ── Het bedieningskanaal (gui_control.rs) en zijn MCP-tools ──────────────
     Rij { tauri: Some("gui_control_actief"), toetsbrug: None, mcp: None, reden: KANAAL_REDEN },
     Rij { tauri: Some("gui_control_antwoord"), toetsbrug: None, mcp: None, reden: KANAAL_REDEN },
+    // De schakelaar van het kanaal (issue #109): Instellingen → AI-assistent (MCP).
+    Rij { tauri: Some("gui_kanaal_status"), toetsbrug: None, mcp: None, reden: SCHAKELAAR_REDEN },
+    Rij { tauri: Some("gui_kanaal_aan"), toetsbrug: None, mcp: None, reden: SCHAKELAAR_REDEN },
+    Rij { tauri: Some("gui_kanaal_uit"), toetsbrug: None, mcp: None, reden: SCHAKELAAR_REDEN },
+    // ── Een AI-assistent koppelen (mcp_koppeling.rs, issue #109) ─────────────
+    Rij { tauri: Some("mcp_koppeling_info"), toetsbrug: None, mcp: None, reden: KOPPELING_REDEN },
+    Rij { tauri: Some("mcp_claude_desktop_toevoegen"), toetsbrug: None, mcp: None, reden: KOPPELING_REDEN },
+    // ── De bestandskoppeling (bestandskoppeling.rs) ──────────────────────────
+    Rij { tauri: Some("bestandskoppeling_ophalen"), toetsbrug: None, mcp: None, reden: BESTANDSKOPPELING_REDEN },
+    Rij { tauri: Some("extensies_lezen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_script_lezen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_bestand_lezen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_zip_installeren"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: Some("extensie_verwijderen"), toetsbrug: None, mcp: None, reden: EXTENSIE_REDEN },
+    Rij { tauri: None, toetsbrug: None, mcp: Some("project_import"), reden: EXTENSIE_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_status"), reden: BEDIENING_REDEN },
+    // Start de geïnstalleerde app met het kanaal aan als hij nog niet draait (issue #109).
+    Rij { tauri: None, toetsbrug: None, mcp: Some("gui_start_app"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_load_model"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_build_model"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_build_3d_model"), reden: BEDIENING_REDEN },
+    Rij { tauri: None, toetsbrug: None, mcp: Some("gui_build_3d_steel_hall"), reden: BEDIENING_REDEN },
+    Rij { tauri: None, toetsbrug: None, mcp: Some("gui_import_ifc_analysis_model"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_configure_3d_view"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_select_3d_combination"), reden: BEDIENING_REDEN },
     Rij { tauri: None, toetsbrug: None, mcp: Some("gui_select_member"), reden: BEDIENING_REDEN },
@@ -274,6 +341,30 @@ const UITZONDERINGEN: &[Rij] = &[
         toetsbrug: None,
         mcp: None,
         reden: "Metadata-command voor de solverregistratie van de desktop-app. De MCP-tool solve_frame3d levert dezelfde engine-id, revisie en licentie in ieder rekenresultaat; een afzonderlijke toetsbrug- of MCP-opdracht voegt daarom geen rekenroute toe.",
+    },
+    Rij {
+        tauri: Some("solve_open_fem_3d"),
+        toetsbrug: None,
+        mcp: Some("solve_open_fem_3d"),
+        reden: "De 3D-raamwerkkern is rechtstreeks beschikbaar in de desktop-app en in MCP. De ontwikkelbrowser roept hetzelfde versievaste contract via /api/openFem3d/solve aan; die HTTP-route loopt buiten de algemene toetsbrug omdat zij een eigen Rust-binary met tweede-orde- en knikanalyse gebruikt.",
+    },
+    Rij {
+        tauri: None,
+        toetsbrug: None,
+        mcp: Some("open_fem_3d_staalhal_maken"),
+        reden: "Geen eigen rekenkern: de hal komt uit de TypeScript-generator van de wizard, die in de app zelf draait en voor MCP in de solverbundel. Het rekenen en toetsen erachter gaat door `open_fem_3d::solve` en `steel_check::check_all_beams`, die als `solve_open_fem_3d` en `check_steel_beams` al langs hun wegen bereikbaar zijn; in de app bouwt de wizard het model en rekent de knop Berekenen.",
+    },
+    Rij {
+        tauri: None,
+        toetsbrug: None,
+        mcp: Some("open_fem_3d_ifc_importeren"),
+        reden: "Geen eigen rekenkern: de import van een IFC4-analysemodel is de TypeScript-functie achter de knop \"Rekenmodel importeren\", die in de app zelf draait en voor MCP in de solverbundel. Het rekenen en toetsen erachter gaat door `open_fem_3d::solve` en `steel_check::check_all_beams`, die als `solve_open_fem_3d` en `check_steel_beams` al langs hun wegen bereikbaar zijn; in de app importeert de knop het model en rekent de knop Berekenen.",
+    },
+    Rij {
+        tauri: Some("open_fem_3d_engine_info"),
+        toetsbrug: None,
+        mcp: None,
+        reden: "Metadata-command voor de solverregistratie van de desktop-app. De MCP-tool solve_open_fem_3d levert dezelfde engine-id, revisie en licentie in ieder rekenresultaat; een afzonderlijke toetsbrug- of MCP-opdracht voegt daarom geen rekenroute toe.",
     },
     Rij {
         tauri: Some("check_stress_beams"),
@@ -535,7 +626,19 @@ fn vergelijk_kolom(
 async fn de_drie_namenlijsten_dekken_elkaar() {
     let commands = tauri_commands();
     let opdrachten = toetsbrug_opdrachten();
-    let gereedschappen = mcp_gereedschappen().await;
+    let alle_gereedschappen = mcp_gereedschappen().await;
+
+    // De API-tools als groep (zie API_REDEN): elk commando uit de catalogus
+    // staat in tools/list, en geen rij van de koppeltabel draagt zo'n naam.
+    let api = api_tools_uit_de_catalogus();
+    for naam in &api {
+        assert!(alle_gereedschappen.contains(naam), "API-tool `{naam}` uit de catalogus ontbreekt in tools/list");
+        assert!(
+            !alle_rijen().iter().any(|r| r.mcp == Some(naam.as_str())),
+            "`{naam}` is een API-tool uit de catalogus en hoort niet in de koppeltabel. {API_REDEN}"
+        );
+    }
+    let gereedschappen: Vec<String> = alle_gereedschappen.into_iter().filter(|n| !api.contains(n)).collect();
 
     vergelijk_kolom(
         "tauri",

@@ -23,7 +23,7 @@
 use approx::assert_relative_eq;
 use mechanics::{ForcePoint, InternalForces};
 use nen_en_1995_1_1::clt::CltLayup;
-use nen_en_1995_1_1::{LoadDurationClass, ServiceClass};
+use nen_en_1995_1_1::{CheckStatus, LoadDurationClass, ServiceClass};
 use steel_check::{CheckKind, NamedCheck};
 use timber_check::clt::{check_clt_beam, CltBeamCheckInput};
 use timber_check::{check_timber_beam, CombinationLoadDuration, TimberBeamCheckInput};
@@ -51,6 +51,9 @@ fn duur(combinatie: u32, d: LoadDurationClass, basis: &str) -> CombinationLoadDu
 
 fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> TimberBeamCheckInput {
     TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         beam_id: 1,
         width_mm: b,
@@ -82,6 +85,7 @@ fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> Timbe
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 
@@ -97,6 +101,60 @@ fn uc(c: &NamedCheck) -> f64 {
         CheckKind::Resistance(r) => r.uc.as_ref().map(|u| u.uc).unwrap_or(0.0),
         CheckKind::Stability(s) => s.uc.as_ref().map(|u| u.uc).unwrap_or(0.0),
     }
+}
+
+#[test]
+fn buiging_kiest_het_station_met_mz_ook_als_my_elders_groter_is() {
+    let eerste = punt(1, 500.0, 0.0, 0.0, 10.0);
+    let mut tweede = punt(2, 2500.0, 0.0, 0.0, 0.0);
+    tweede.forces.mz_ed = 20.0;
+    let result = check_timber_beam(ligger("C24", 100.0, 200.0, 3.0, vec![eerste, tweede]));
+    let bending = toets(&result.checks, "6.1.6_bending");
+    let CheckKind::Resistance(calc) = &bending.kind else { panic!("buiging is een doorsnedetoets") };
+    assert_eq!(calc.force_state.combination_id, 2);
+    assert_eq!(calc.force_state.position_mm, 2500.0);
+    assert!(uc(bending) > 1.0, "Mz alleen moet een niet-nul UC geven");
+}
+
+#[test]
+fn vy_en_torsie_kiezen_hun_eigen_stations() {
+    let mut vy = punt(1, 500.0, 0.0, 0.0, 0.0);
+    vy.forces.vy_ed = 30.0;
+    let mut torsie = punt(2, 2500.0, 0.0, 0.0, 0.0);
+    torsie.forces.mt_ed = 2.0;
+    let result = check_timber_beam(ligger("C24", 100.0, 200.0, 3.0, vec![vy, torsie]));
+    let shear = toets(&result.checks, "6.1.7_shear");
+    let twist = toets(&result.checks, "6.1.8_torsion");
+    assert!(uc(shear) > 0.0 && uc(twist) > 0.0);
+    assert_eq!(combinatie_van(shear), 1);
+    assert_eq!(combinatie_van(twist), 2);
+}
+
+#[test]
+fn ruimtelijke_uitkraging_gebruikt_twee_keer_de_staaflengte_voor_beide_knikassen() {
+    let mut input = ligger("C24", 100.0, 200.0, 3.0, vec![punt(1, 0.0, -100.0, 0.0, 0.0)]);
+    input.ruimtelijk = true;
+    input.is_cantilever = true;
+    let result = check_timber_beam(input);
+    let column = toets(&result.checks, "6.3.2_column_stability");
+    let notes = notities(column).join(" ");
+    assert!(notes.contains("2 × staaflengte"), "{notes}");
+    assert!(notes.contains("6000"), "{notes}");
+}
+
+#[test]
+fn ontbrekende_bgt_geeft_geen_schijnbaar_geslaagde_doorbuigingstoets() {
+    let mut input = ligger("C24", 100.0, 200.0, 3.0, vec![punt(1, 0.0, 0.0, 0.0, 4.0)]);
+    input.deflection_not_applicable_reason = Some("karakteristieke BGT-combinatie ontbreekt".into());
+    let result = check_timber_beam(input);
+    for id in ["deflection_w_fin", "deflection_w_add"] {
+        let check = toets(&result.checks, id);
+        let CheckKind::Resistance(calc) = &check.kind else { panic!("doorbuiging is een doorsnedetoets") };
+        assert!(matches!(calc.status, CheckStatus::NotApplicable));
+        assert!(calc.uc.is_none());
+        assert!(notities(check).join(" ").contains("BGT-combinatie ontbreekt"));
+    }
+    assert!(uc(toets(&result.checks, "6.1.6_bending")) > 0.0);
 }
 
 fn notities(c: &NamedCheck) -> &[String] {

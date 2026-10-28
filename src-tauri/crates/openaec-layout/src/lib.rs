@@ -43,6 +43,7 @@ pub mod page_template;
 pub mod paragraph;
 pub mod spacer;
 pub mod table;
+pub mod tekstruns;
 pub mod types;
 
 // Re-exports

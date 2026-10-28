@@ -21059,5 +21059,4109 @@
       "y_axis": "b",
       "z_axis": "b"
     }
+  },
+  {
+    "name": "RD 10",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 10,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 78.5398,
+      "iy_mm4": 490.874,
+      "iz_mm4": 490.874,
+      "wel_y_mm3": 98.1748,
+      "wel_z_mm3": 98.1748,
+      "wpl_y_mm3": 166.667,
+      "wpl_z_mm3": 166.667,
+      "av_y_mm2": 58.9049,
+      "av_z_mm2": 58.9049,
+      "it_mm4": 981.748,
+      "iw_mm6": 0,
+      "iy_radius_mm": 2.5,
+      "iz_radius_mm": 2.5,
+      "h_mm": 10,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 12",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 12,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 113.097,
+      "iy_mm4": 1017.88,
+      "iz_mm4": 1017.88,
+      "wel_y_mm3": 169.646,
+      "wel_z_mm3": 169.646,
+      "wpl_y_mm3": 288,
+      "wpl_z_mm3": 288,
+      "av_y_mm2": 84.823,
+      "av_z_mm2": 84.823,
+      "it_mm4": 2035.75,
+      "iw_mm6": 0,
+      "iy_radius_mm": 3,
+      "iz_radius_mm": 3,
+      "h_mm": 12,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 16",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 16,
+      "b": 16,
+      "tw": 16,
+      "tf": 16,
+      "t": 16,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 201.062,
+      "iy_mm4": 3216.99,
+      "iz_mm4": 3216.99,
+      "wel_y_mm3": 402.124,
+      "wel_z_mm3": 402.124,
+      "wpl_y_mm3": 682.667,
+      "wpl_z_mm3": 682.667,
+      "av_y_mm2": 150.796,
+      "av_z_mm2": 150.796,
+      "it_mm4": 6433.98,
+      "iw_mm6": 0,
+      "iy_radius_mm": 4,
+      "iz_radius_mm": 4,
+      "h_mm": 16,
+      "b_mm": 16,
+      "tw_mm": 16,
+      "tf_mm": 16,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 20",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 20,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 314.159,
+      "iy_mm4": 7853.98,
+      "iz_mm4": 7853.98,
+      "wel_y_mm3": 785.398,
+      "wel_z_mm3": 785.398,
+      "wpl_y_mm3": 1333.33,
+      "wpl_z_mm3": 1333.33,
+      "av_y_mm2": 235.619,
+      "av_z_mm2": 235.619,
+      "it_mm4": 15708,
+      "iw_mm6": 0,
+      "iy_radius_mm": 5,
+      "iz_radius_mm": 5,
+      "h_mm": 20,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 24",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 24,
+      "b": 24,
+      "tw": 24,
+      "tf": 24,
+      "t": 24,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 452.389,
+      "iy_mm4": 16286,
+      "iz_mm4": 16286,
+      "wel_y_mm3": 1357.17,
+      "wel_z_mm3": 1357.17,
+      "wpl_y_mm3": 2304,
+      "wpl_z_mm3": 2304,
+      "av_y_mm2": 339.292,
+      "av_z_mm2": 339.292,
+      "it_mm4": 32572,
+      "iw_mm6": 0,
+      "iy_radius_mm": 6,
+      "iz_radius_mm": 6,
+      "h_mm": 24,
+      "b_mm": 24,
+      "tw_mm": 24,
+      "tf_mm": 24,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 27",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 27,
+      "b": 27,
+      "tw": 27,
+      "tf": 27,
+      "t": 27,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 572.555,
+      "iy_mm4": 26087,
+      "iz_mm4": 26087,
+      "wel_y_mm3": 1932.37,
+      "wel_z_mm3": 1932.37,
+      "wpl_y_mm3": 3280.5,
+      "wpl_z_mm3": 3280.5,
+      "av_y_mm2": 429.416,
+      "av_z_mm2": 429.416,
+      "it_mm4": 52174.1,
+      "iw_mm6": 0,
+      "iy_radius_mm": 6.75,
+      "iz_radius_mm": 6.75,
+      "h_mm": 27,
+      "b_mm": 27,
+      "tw_mm": 27,
+      "tf_mm": 27,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 30",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 30,
+      "b": 30,
+      "tw": 30,
+      "tf": 30,
+      "t": 30,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 706.858,
+      "iy_mm4": 39760.8,
+      "iz_mm4": 39760.8,
+      "wel_y_mm3": 2650.72,
+      "wel_z_mm3": 2650.72,
+      "wpl_y_mm3": 4500,
+      "wpl_z_mm3": 4500,
+      "av_y_mm2": 530.144,
+      "av_z_mm2": 530.144,
+      "it_mm4": 79521.6,
+      "iw_mm6": 0,
+      "iy_radius_mm": 7.5,
+      "iz_radius_mm": 7.5,
+      "h_mm": 30,
+      "b_mm": 30,
+      "tw_mm": 30,
+      "tf_mm": 30,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 33",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 33,
+      "b": 33,
+      "tw": 33,
+      "tf": 33,
+      "t": 33,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 855.299,
+      "iy_mm4": 58213.8,
+      "iz_mm4": 58213.8,
+      "wel_y_mm3": 3528.11,
+      "wel_z_mm3": 3528.11,
+      "wpl_y_mm3": 5989.5,
+      "wpl_z_mm3": 5989.5,
+      "av_y_mm2": 641.474,
+      "av_z_mm2": 641.474,
+      "it_mm4": 116428,
+      "iw_mm6": 0,
+      "iy_radius_mm": 8.25,
+      "iz_radius_mm": 8.25,
+      "h_mm": 33,
+      "b_mm": 33,
+      "tw_mm": 33,
+      "tf_mm": 33,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 36",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 36,
+      "b": 36,
+      "tw": 36,
+      "tf": 36,
+      "t": 36,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1017.88,
+      "iy_mm4": 82448,
+      "iz_mm4": 82448,
+      "wel_y_mm3": 4580.44,
+      "wel_z_mm3": 4580.44,
+      "wpl_y_mm3": 7776,
+      "wpl_z_mm3": 7776,
+      "av_y_mm2": 763.407,
+      "av_z_mm2": 763.407,
+      "it_mm4": 164896,
+      "iw_mm6": 0,
+      "iy_radius_mm": 9,
+      "iz_radius_mm": 9,
+      "h_mm": 36,
+      "b_mm": 36,
+      "tw_mm": 36,
+      "tf_mm": 36,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 39",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 39,
+      "b": 39,
+      "tw": 39,
+      "tf": 39,
+      "t": 39,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1194.59,
+      "iy_mm4": 113561,
+      "iz_mm4": 113561,
+      "wel_y_mm3": 5823.63,
+      "wel_z_mm3": 5823.63,
+      "wpl_y_mm3": 9886.5,
+      "wpl_z_mm3": 9886.5,
+      "av_y_mm2": 895.943,
+      "av_z_mm2": 895.943,
+      "it_mm4": 227122,
+      "iw_mm6": 0,
+      "iy_radius_mm": 9.75,
+      "iz_radius_mm": 9.75,
+      "h_mm": 39,
+      "b_mm": 39,
+      "tw_mm": 39,
+      "tf_mm": 39,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 42",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 42,
+      "b": 42,
+      "tw": 42,
+      "tf": 42,
+      "t": 42,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1385.44,
+      "iy_mm4": 152745,
+      "iz_mm4": 152745,
+      "wel_y_mm3": 7273.57,
+      "wel_z_mm3": 7273.57,
+      "wpl_y_mm3": 12348,
+      "wpl_z_mm3": 12348,
+      "av_y_mm2": 1039.08,
+      "av_z_mm2": 1039.08,
+      "it_mm4": 305490,
+      "iw_mm6": 0,
+      "iy_radius_mm": 10.5,
+      "iz_radius_mm": 10.5,
+      "h_mm": 42,
+      "b_mm": 42,
+      "tw_mm": 42,
+      "tf_mm": 42,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 45",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 45,
+      "b": 45,
+      "tw": 45,
+      "tf": 45,
+      "t": 45,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1590.43,
+      "iy_mm4": 201289,
+      "iz_mm4": 201289,
+      "wel_y_mm3": 8946.18,
+      "wel_z_mm3": 8946.18,
+      "wpl_y_mm3": 15187.5,
+      "wpl_z_mm3": 15187.5,
+      "av_y_mm2": 1192.82,
+      "av_z_mm2": 1192.82,
+      "it_mm4": 402578,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.25,
+      "iz_radius_mm": 11.25,
+      "h_mm": 45,
+      "b_mm": 45,
+      "tw_mm": 45,
+      "tf_mm": 45,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 48",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 48,
+      "b": 48,
+      "tw": 48,
+      "tf": 48,
+      "t": 48,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1809.56,
+      "iy_mm4": 260576,
+      "iz_mm4": 260576,
+      "wel_y_mm3": 10857.3,
+      "wel_z_mm3": 10857.3,
+      "wpl_y_mm3": 18432,
+      "wpl_z_mm3": 18432,
+      "av_y_mm2": 1357.17,
+      "av_z_mm2": 1357.17,
+      "it_mm4": 521153,
+      "iw_mm6": 0,
+      "iy_radius_mm": 12,
+      "iz_radius_mm": 12,
+      "h_mm": 48,
+      "b_mm": 48,
+      "tw_mm": 48,
+      "tf_mm": 48,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 52",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 52,
+      "b": 52,
+      "tw": 52,
+      "tf": 52,
+      "t": 52,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2123.72,
+      "iy_mm4": 358908,
+      "iz_mm4": 358908,
+      "wel_y_mm3": 13804.2,
+      "wel_z_mm3": 13804.2,
+      "wpl_y_mm3": 23434.7,
+      "wpl_z_mm3": 23434.7,
+      "av_y_mm2": 1592.79,
+      "av_z_mm2": 1592.79,
+      "it_mm4": 717816,
+      "iw_mm6": 0,
+      "iy_radius_mm": 13,
+      "iz_radius_mm": 13,
+      "h_mm": 52,
+      "b_mm": 52,
+      "tw_mm": 52,
+      "tf_mm": 52,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 56",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 56,
+      "b": 56,
+      "tw": 56,
+      "tf": 56,
+      "t": 56,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2463.01,
+      "iy_mm4": 482750,
+      "iz_mm4": 482750,
+      "wel_y_mm3": 17241.1,
+      "wel_z_mm3": 17241.1,
+      "wpl_y_mm3": 29269.3,
+      "wpl_z_mm3": 29269.3,
+      "av_y_mm2": 1847.26,
+      "av_z_mm2": 1847.26,
+      "it_mm4": 965499,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14,
+      "iz_radius_mm": 14,
+      "h_mm": 56,
+      "b_mm": 56,
+      "tw_mm": 56,
+      "tf_mm": 56,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 60",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 60,
+      "b": 60,
+      "tw": 60,
+      "tf": 60,
+      "t": 60,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2827.43,
+      "iy_mm4": 636173,
+      "iz_mm4": 636173,
+      "wel_y_mm3": 21205.8,
+      "wel_z_mm3": 21205.8,
+      "wpl_y_mm3": 36000,
+      "wpl_z_mm3": 36000,
+      "av_y_mm2": 2120.58,
+      "av_z_mm2": 2120.58,
+      "it_mm4": 1272350,
+      "iw_mm6": 0,
+      "iy_radius_mm": 15,
+      "iz_radius_mm": 15,
+      "h_mm": 60,
+      "b_mm": 60,
+      "tw_mm": 60,
+      "tf_mm": 60,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "RD 64",
+    "kind": "RoundBar",
+    "geometry": {
+      "h": 64,
+      "b": 64,
+      "tw": 64,
+      "tf": 64,
+      "t": 64,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 3216.99,
+      "iy_mm4": 823550,
+      "iz_mm4": 823550,
+      "wel_y_mm3": 25735.9,
+      "wel_z_mm3": 25735.9,
+      "wpl_y_mm3": 43690.7,
+      "wpl_z_mm3": 43690.7,
+      "av_y_mm2": 2412.74,
+      "av_z_mm2": 2412.74,
+      "it_mm4": 1647100,
+      "iw_mm6": 0,
+      "iy_radius_mm": 16,
+      "iz_radius_mm": 16,
+      "h_mm": 64,
+      "b_mm": 64,
+      "tw_mm": 64,
+      "tf_mm": 64,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 30x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 30,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 150,
+      "iy_mm4": 11250,
+      "iz_mm4": 312.5,
+      "wel_y_mm3": 750,
+      "wel_z_mm3": 125,
+      "wpl_y_mm3": 1125,
+      "wpl_z_mm3": 187.5,
+      "av_y_mm2": 100,
+      "av_z_mm2": 100,
+      "it_mm4": 1118.76,
+      "iw_mm6": 0,
+      "iy_radius_mm": 8.66025,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 30,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 30x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 30,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 180,
+      "iy_mm4": 13500,
+      "iz_mm4": 540,
+      "wel_y_mm3": 900,
+      "wel_z_mm3": 180,
+      "wpl_y_mm3": 1350,
+      "wpl_z_mm3": 270,
+      "av_y_mm2": 120,
+      "av_z_mm2": 120,
+      "it_mm4": 1887.88,
+      "iw_mm6": 0,
+      "iy_radius_mm": 8.66025,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 30,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 30x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 30,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 240,
+      "iy_mm4": 18000,
+      "iz_mm4": 1280,
+      "wel_y_mm3": 1200,
+      "wel_z_mm3": 320,
+      "wpl_y_mm3": 1800,
+      "wpl_z_mm3": 480,
+      "av_y_mm2": 160,
+      "av_z_mm2": 160,
+      "it_mm4": 4260.2,
+      "iw_mm6": 0,
+      "iy_radius_mm": 8.66025,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 30,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 30x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 30,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 300,
+      "iy_mm4": 22500,
+      "iz_mm4": 2500,
+      "wel_y_mm3": 1500,
+      "wel_z_mm3": 500,
+      "wpl_y_mm3": 2250,
+      "wpl_z_mm3": 750,
+      "av_y_mm2": 200,
+      "av_z_mm2": 200,
+      "it_mm4": 7902.16,
+      "iw_mm6": 0,
+      "iy_radius_mm": 8.66025,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 30,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 30x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 30,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 360,
+      "iy_mm4": 27000,
+      "iz_mm4": 4320,
+      "wel_y_mm3": 1800,
+      "wel_z_mm3": 720,
+      "wpl_y_mm3": 2700,
+      "wpl_z_mm3": 1080,
+      "av_y_mm2": 240,
+      "av_z_mm2": 240,
+      "it_mm4": 12934.7,
+      "iw_mm6": 0,
+      "iy_radius_mm": 8.66025,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 30,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 30x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 30,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 450,
+      "iy_mm4": 33750,
+      "iz_mm4": 8437.5,
+      "wel_y_mm3": 2250,
+      "wel_z_mm3": 1125,
+      "wpl_y_mm3": 3375,
+      "wpl_z_mm3": 1687.5,
+      "av_y_mm2": 300,
+      "av_z_mm2": 300,
+      "it_mm4": 23174.1,
+      "iw_mm6": 0,
+      "iy_radius_mm": 8.66025,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 30,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 40x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 40,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 200,
+      "iy_mm4": 26666.7,
+      "iz_mm4": 416.667,
+      "wel_y_mm3": 1333.33,
+      "wel_z_mm3": 166.667,
+      "wpl_y_mm3": 2000,
+      "wpl_z_mm3": 250,
+      "av_y_mm2": 133.333,
+      "av_z_mm2": 133.333,
+      "it_mm4": 1535.42,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.547,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 40,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 40x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 40,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 240,
+      "iy_mm4": 32000,
+      "iz_mm4": 720,
+      "wel_y_mm3": 1600,
+      "wel_z_mm3": 240,
+      "wpl_y_mm3": 2400,
+      "wpl_z_mm3": 360,
+      "av_y_mm2": 160,
+      "av_z_mm2": 160,
+      "it_mm4": 2607.85,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.547,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 40,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 40x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 40,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 320,
+      "iy_mm4": 42666.7,
+      "iz_mm4": 1706.67,
+      "wel_y_mm3": 2133.33,
+      "wel_z_mm3": 426.667,
+      "wpl_y_mm3": 3200,
+      "wpl_z_mm3": 640,
+      "av_y_mm2": 213.333,
+      "av_z_mm2": 213.333,
+      "it_mm4": 5966.62,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.547,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 40,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 40x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 40,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 400,
+      "iy_mm4": 53333.3,
+      "iz_mm4": 3333.33,
+      "wel_y_mm3": 2666.67,
+      "wel_z_mm3": 666.667,
+      "wpl_y_mm3": 4000,
+      "wpl_z_mm3": 1000,
+      "av_y_mm2": 266.667,
+      "av_z_mm2": 266.667,
+      "it_mm4": 11234,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.547,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 40,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 40x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 40,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 480,
+      "iy_mm4": 64000,
+      "iz_mm4": 5760,
+      "wel_y_mm3": 3200,
+      "wel_z_mm3": 960,
+      "wpl_y_mm3": 4800,
+      "wpl_z_mm3": 1440,
+      "av_y_mm2": 320,
+      "av_z_mm2": 320,
+      "it_mm4": 18688.4,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.547,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 40,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 40x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 40,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 600,
+      "iy_mm4": 80000,
+      "iz_mm4": 11250,
+      "wel_y_mm3": 4000,
+      "wel_z_mm3": 1500,
+      "wpl_y_mm3": 6000,
+      "wpl_z_mm3": 2250,
+      "av_y_mm2": 400,
+      "av_z_mm2": 400,
+      "it_mm4": 34386.3,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.547,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 40,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 40x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 40,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 800,
+      "iy_mm4": 106667,
+      "iz_mm4": 26666.7,
+      "wel_y_mm3": 5333.33,
+      "wel_z_mm3": 2666.67,
+      "wpl_y_mm3": 8000,
+      "wpl_z_mm3": 4000,
+      "av_y_mm2": 533.333,
+      "av_z_mm2": 533.333,
+      "it_mm4": 73241.7,
+      "iw_mm6": 0,
+      "iy_radius_mm": 11.547,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 40,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 50x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 50,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 250,
+      "iy_mm4": 52083.3,
+      "iz_mm4": 520.833,
+      "wel_y_mm3": 2083.33,
+      "wel_z_mm3": 208.333,
+      "wpl_y_mm3": 3125,
+      "wpl_z_mm3": 312.5,
+      "av_y_mm2": 166.667,
+      "av_z_mm2": 166.667,
+      "it_mm4": 1952.08,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14.4338,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 50,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 50x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 50,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 300,
+      "iy_mm4": 62500,
+      "iz_mm4": 900,
+      "wel_y_mm3": 2500,
+      "wel_z_mm3": 300,
+      "wpl_y_mm3": 3750,
+      "wpl_z_mm3": 450,
+      "av_y_mm2": 200,
+      "av_z_mm2": 200,
+      "it_mm4": 3327.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14.4338,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 50,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 50x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 50,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 400,
+      "iy_mm4": 83333.3,
+      "iz_mm4": 2133.33,
+      "wel_y_mm3": 3333.33,
+      "wel_z_mm3": 533.333,
+      "wpl_y_mm3": 5000,
+      "wpl_z_mm3": 800,
+      "av_y_mm2": 266.667,
+      "av_z_mm2": 266.667,
+      "it_mm4": 7673.22,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14.4338,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 50,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 50x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 50,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 500,
+      "iy_mm4": 104167,
+      "iz_mm4": 4166.67,
+      "wel_y_mm3": 4166.67,
+      "wel_z_mm3": 833.333,
+      "wpl_y_mm3": 6250,
+      "wpl_z_mm3": 1250,
+      "av_y_mm2": 333.333,
+      "av_z_mm2": 333.333,
+      "it_mm4": 14566.9,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14.4338,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 50,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 50x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 50,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 600,
+      "iy_mm4": 125000,
+      "iz_mm4": 7200,
+      "wel_y_mm3": 5000,
+      "wel_z_mm3": 1200,
+      "wpl_y_mm3": 7500,
+      "wpl_z_mm3": 1800,
+      "av_y_mm2": 400,
+      "av_z_mm2": 400,
+      "it_mm4": 24446.6,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14.4338,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 50,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 50x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 50,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 750,
+      "iy_mm4": 156250,
+      "iz_mm4": 14062.5,
+      "wel_y_mm3": 6250,
+      "wel_z_mm3": 1875,
+      "wpl_y_mm3": 9375,
+      "wpl_z_mm3": 2812.5,
+      "av_y_mm2": 500,
+      "av_z_mm2": 500,
+      "it_mm4": 45625.9,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14.4338,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 50,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 50x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 50,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1000,
+      "iy_mm4": 208333,
+      "iz_mm4": 33333.3,
+      "wel_y_mm3": 8333.33,
+      "wel_z_mm3": 3333.33,
+      "wpl_y_mm3": 12500,
+      "wpl_z_mm3": 5000,
+      "av_y_mm2": 666.667,
+      "av_z_mm2": 666.667,
+      "it_mm4": 99805,
+      "iw_mm6": 0,
+      "iy_radius_mm": 14.4338,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 50,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 60x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 60,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 300,
+      "iy_mm4": 90000,
+      "iz_mm4": 625,
+      "wel_y_mm3": 3000,
+      "wel_z_mm3": 250,
+      "wpl_y_mm3": 4500,
+      "wpl_z_mm3": 375,
+      "av_y_mm2": 200,
+      "av_z_mm2": 200,
+      "it_mm4": 2368.75,
+      "iw_mm6": 0,
+      "iy_radius_mm": 17.3205,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 60,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 60x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 60,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 360,
+      "iy_mm4": 108000,
+      "iz_mm4": 1080,
+      "wel_y_mm3": 3600,
+      "wel_z_mm3": 360,
+      "wpl_y_mm3": 5400,
+      "wpl_z_mm3": 540,
+      "av_y_mm2": 240,
+      "av_z_mm2": 240,
+      "it_mm4": 4047.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 17.3205,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 60,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 60x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 60,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 480,
+      "iy_mm4": 144000,
+      "iz_mm4": 2560,
+      "wel_y_mm3": 4800,
+      "wel_z_mm3": 640,
+      "wpl_y_mm3": 7200,
+      "wpl_z_mm3": 960,
+      "av_y_mm2": 320,
+      "av_z_mm2": 320,
+      "it_mm4": 9379.86,
+      "iw_mm6": 0,
+      "iy_radius_mm": 17.3205,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 60,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 60x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 60,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 600,
+      "iy_mm4": 180000,
+      "iz_mm4": 5000,
+      "wel_y_mm3": 6000,
+      "wel_z_mm3": 1000,
+      "wpl_y_mm3": 9000,
+      "wpl_z_mm3": 1500,
+      "av_y_mm2": 400,
+      "av_z_mm2": 400,
+      "it_mm4": 17900.1,
+      "iw_mm6": 0,
+      "iy_radius_mm": 17.3205,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 60,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 60x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 60,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 720,
+      "iy_mm4": 216000,
+      "iz_mm4": 8640,
+      "wel_y_mm3": 7200,
+      "wel_z_mm3": 1440,
+      "wpl_y_mm3": 10800,
+      "wpl_z_mm3": 2160,
+      "av_y_mm2": 480,
+      "av_z_mm2": 480,
+      "it_mm4": 30206,
+      "iw_mm6": 0,
+      "iy_radius_mm": 17.3205,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 60,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 60x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 60,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 900,
+      "iy_mm4": 270000,
+      "iz_mm4": 16875,
+      "wel_y_mm3": 9000,
+      "wel_z_mm3": 2250,
+      "wpl_y_mm3": 13500,
+      "wpl_z_mm3": 3375,
+      "av_y_mm2": 600,
+      "av_z_mm2": 600,
+      "it_mm4": 56872.2,
+      "iw_mm6": 0,
+      "iy_radius_mm": 17.3205,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 60,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 60x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 60,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1200,
+      "iy_mm4": 360000,
+      "iz_mm4": 40000,
+      "wel_y_mm3": 12000,
+      "wel_z_mm3": 4000,
+      "wpl_y_mm3": 18000,
+      "wpl_z_mm3": 6000,
+      "av_y_mm2": 800,
+      "av_z_mm2": 800,
+      "it_mm4": 126435,
+      "iw_mm6": 0,
+      "iy_radius_mm": 17.3205,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 60,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 70x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 70,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 350,
+      "iy_mm4": 142917,
+      "iz_mm4": 729.167,
+      "wel_y_mm3": 4083.33,
+      "wel_z_mm3": 291.667,
+      "wpl_y_mm3": 6125,
+      "wpl_z_mm3": 437.5,
+      "av_y_mm2": 233.333,
+      "av_z_mm2": 233.333,
+      "it_mm4": 2785.42,
+      "iw_mm6": 0,
+      "iy_radius_mm": 20.2073,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 70,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 70x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 70,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 420,
+      "iy_mm4": 171500,
+      "iz_mm4": 1260,
+      "wel_y_mm3": 4900,
+      "wel_z_mm3": 420,
+      "wpl_y_mm3": 7350,
+      "wpl_z_mm3": 630,
+      "av_y_mm2": 280,
+      "av_z_mm2": 280,
+      "it_mm4": 4767.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 20.2073,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 70,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 70x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 70,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 560,
+      "iy_mm4": 228667,
+      "iz_mm4": 2986.67,
+      "wel_y_mm3": 6533.33,
+      "wel_z_mm3": 746.667,
+      "wpl_y_mm3": 9800,
+      "wpl_z_mm3": 1120,
+      "av_y_mm2": 373.333,
+      "av_z_mm2": 373.333,
+      "it_mm4": 11086.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 20.2073,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 70,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 70x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 70,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 700,
+      "iy_mm4": 285833,
+      "iz_mm4": 5833.33,
+      "wel_y_mm3": 8166.67,
+      "wel_z_mm3": 1166.67,
+      "wpl_y_mm3": 12250,
+      "wpl_z_mm3": 1750,
+      "av_y_mm2": 466.667,
+      "av_z_mm2": 466.667,
+      "it_mm4": 21233.4,
+      "iw_mm6": 0,
+      "iy_radius_mm": 20.2073,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 70,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 70x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 70,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 840,
+      "iy_mm4": 343000,
+      "iz_mm4": 10080,
+      "wel_y_mm3": 9800,
+      "wel_z_mm3": 1680,
+      "wpl_y_mm3": 14700,
+      "wpl_z_mm3": 2520,
+      "av_y_mm2": 560,
+      "av_z_mm2": 560,
+      "it_mm4": 35965.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 20.2073,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 70,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 70x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 70,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1050,
+      "iy_mm4": 428750,
+      "iz_mm4": 19687.5,
+      "wel_y_mm3": 12250,
+      "wel_z_mm3": 2625,
+      "wpl_y_mm3": 18375,
+      "wpl_z_mm3": 3937.5,
+      "av_y_mm2": 700,
+      "av_z_mm2": 700,
+      "it_mm4": 68120.6,
+      "iw_mm6": 0,
+      "iy_radius_mm": 20.2073,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 70,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 70x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 70,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1400,
+      "iy_mm4": 571667,
+      "iz_mm4": 46666.7,
+      "wel_y_mm3": 16333.3,
+      "wel_z_mm3": 4666.67,
+      "wpl_y_mm3": 24500,
+      "wpl_z_mm3": 7000,
+      "av_y_mm2": 933.333,
+      "av_z_mm2": 933.333,
+      "it_mm4": 153085,
+      "iw_mm6": 0,
+      "iy_radius_mm": 20.2073,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 70,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 80x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 80,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 400,
+      "iy_mm4": 213333,
+      "iz_mm4": 833.333,
+      "wel_y_mm3": 5333.33,
+      "wel_z_mm3": 333.333,
+      "wpl_y_mm3": 8000,
+      "wpl_z_mm3": 500,
+      "av_y_mm2": 266.667,
+      "av_z_mm2": 266.667,
+      "it_mm4": 3202.08,
+      "iw_mm6": 0,
+      "iy_radius_mm": 23.094,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 80,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 80x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 80,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 480,
+      "iy_mm4": 256000,
+      "iz_mm4": 1440,
+      "wel_y_mm3": 6400,
+      "wel_z_mm3": 480,
+      "wpl_y_mm3": 9600,
+      "wpl_z_mm3": 720,
+      "av_y_mm2": 320,
+      "av_z_mm2": 320,
+      "it_mm4": 5487.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 23.094,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 80,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 80x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 80,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 640,
+      "iy_mm4": 341333,
+      "iz_mm4": 3413.33,
+      "wel_y_mm3": 8533.33,
+      "wel_z_mm3": 853.333,
+      "wpl_y_mm3": 12800,
+      "wpl_z_mm3": 1280,
+      "av_y_mm2": 426.667,
+      "av_z_mm2": 426.667,
+      "it_mm4": 12793.2,
+      "iw_mm6": 0,
+      "iy_radius_mm": 23.094,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 80,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 80x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 80,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 800,
+      "iy_mm4": 426667,
+      "iz_mm4": 6666.67,
+      "wel_y_mm3": 10666.7,
+      "wel_z_mm3": 1333.33,
+      "wpl_y_mm3": 16000,
+      "wpl_z_mm3": 2000,
+      "av_y_mm2": 533.333,
+      "av_z_mm2": 533.333,
+      "it_mm4": 24566.7,
+      "iw_mm6": 0,
+      "iy_radius_mm": 23.094,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 80,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 80x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 80,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 960,
+      "iy_mm4": 512000,
+      "iz_mm4": 11520,
+      "wel_y_mm3": 12800,
+      "wel_z_mm3": 1920,
+      "wpl_y_mm3": 19200,
+      "wpl_z_mm3": 2880,
+      "av_y_mm2": 640,
+      "av_z_mm2": 640,
+      "it_mm4": 41725.6,
+      "iw_mm6": 0,
+      "iy_radius_mm": 23.094,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 80,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 80x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 80,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1200,
+      "iy_mm4": 640000,
+      "iz_mm4": 22500,
+      "wel_y_mm3": 16000,
+      "wel_z_mm3": 3000,
+      "wpl_y_mm3": 24000,
+      "wpl_z_mm3": 4500,
+      "av_y_mm2": 800,
+      "av_z_mm2": 800,
+      "it_mm4": 79369.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 23.094,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 80,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 80x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 80,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1600,
+      "iy_mm4": 853333,
+      "iz_mm4": 53333.3,
+      "wel_y_mm3": 21333.3,
+      "wel_z_mm3": 5333.33,
+      "wpl_y_mm3": 32000,
+      "wpl_z_mm3": 8000,
+      "av_y_mm2": 1066.67,
+      "av_z_mm2": 1066.67,
+      "it_mm4": 179744,
+      "iw_mm6": 0,
+      "iy_radius_mm": 23.094,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 80,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 90x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 90,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 450,
+      "iy_mm4": 303750,
+      "iz_mm4": 937.5,
+      "wel_y_mm3": 6750,
+      "wel_z_mm3": 375,
+      "wpl_y_mm3": 10125,
+      "wpl_z_mm3": 562.5,
+      "av_y_mm2": 300,
+      "av_z_mm2": 300,
+      "it_mm4": 3618.75,
+      "iw_mm6": 0,
+      "iy_radius_mm": 25.9808,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 90,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 90x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 90,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 540,
+      "iy_mm4": 364500,
+      "iz_mm4": 1620,
+      "wel_y_mm3": 8100,
+      "wel_z_mm3": 540,
+      "wpl_y_mm3": 12150,
+      "wpl_z_mm3": 810,
+      "av_y_mm2": 360,
+      "av_z_mm2": 360,
+      "it_mm4": 6207.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 25.9808,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 90,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 90x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 90,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 720,
+      "iy_mm4": 486000,
+      "iz_mm4": 3840,
+      "wel_y_mm3": 10800,
+      "wel_z_mm3": 960,
+      "wpl_y_mm3": 16200,
+      "wpl_z_mm3": 1440,
+      "av_y_mm2": 480,
+      "av_z_mm2": 480,
+      "it_mm4": 14499.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 25.9808,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 90,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 90x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 90,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 900,
+      "iy_mm4": 607500,
+      "iz_mm4": 7500,
+      "wel_y_mm3": 13500,
+      "wel_z_mm3": 1500,
+      "wpl_y_mm3": 20250,
+      "wpl_z_mm3": 2250,
+      "av_y_mm2": 600,
+      "av_z_mm2": 600,
+      "it_mm4": 27900,
+      "iw_mm6": 0,
+      "iy_radius_mm": 25.9808,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 90,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 90x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 90,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1080,
+      "iy_mm4": 729000,
+      "iz_mm4": 12960,
+      "wel_y_mm3": 16200,
+      "wel_z_mm3": 2160,
+      "wpl_y_mm3": 24300,
+      "wpl_z_mm3": 3240,
+      "av_y_mm2": 720,
+      "av_z_mm2": 720,
+      "it_mm4": 47485.6,
+      "iw_mm6": 0,
+      "iy_radius_mm": 25.9808,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 90,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 90x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 90,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1350,
+      "iy_mm4": 911250,
+      "iz_mm4": 25312.5,
+      "wel_y_mm3": 20250,
+      "wel_z_mm3": 3375,
+      "wpl_y_mm3": 30375,
+      "wpl_z_mm3": 5062.5,
+      "av_y_mm2": 900,
+      "av_z_mm2": 900,
+      "it_mm4": 90619.4,
+      "iw_mm6": 0,
+      "iy_radius_mm": 25.9808,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 90,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 90x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 90,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1800,
+      "iy_mm4": 1215000,
+      "iz_mm4": 60000,
+      "wel_y_mm3": 27000,
+      "wel_z_mm3": 6000,
+      "wpl_y_mm3": 40500,
+      "wpl_z_mm3": 9000,
+      "av_y_mm2": 1200,
+      "av_z_mm2": 1200,
+      "it_mm4": 206407,
+      "iw_mm6": 0,
+      "iy_radius_mm": 25.9808,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 90,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 100x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 100,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 500,
+      "iy_mm4": 416667,
+      "iz_mm4": 1041.67,
+      "wel_y_mm3": 8333.33,
+      "wel_z_mm3": 416.667,
+      "wpl_y_mm3": 12500,
+      "wpl_z_mm3": 625,
+      "av_y_mm2": 333.333,
+      "av_z_mm2": 333.333,
+      "it_mm4": 4035.42,
+      "iw_mm6": 0,
+      "iy_radius_mm": 28.8675,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 100,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 100x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 100,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 600,
+      "iy_mm4": 500000,
+      "iz_mm4": 1800,
+      "wel_y_mm3": 10000,
+      "wel_z_mm3": 600,
+      "wpl_y_mm3": 15000,
+      "wpl_z_mm3": 900,
+      "av_y_mm2": 400,
+      "av_z_mm2": 400,
+      "it_mm4": 6927.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 28.8675,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 100,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 100x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 100,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 800,
+      "iy_mm4": 666667,
+      "iz_mm4": 4266.67,
+      "wel_y_mm3": 13333.3,
+      "wel_z_mm3": 1066.67,
+      "wpl_y_mm3": 20000,
+      "wpl_z_mm3": 1600,
+      "av_y_mm2": 533.333,
+      "av_z_mm2": 533.333,
+      "it_mm4": 16206.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 28.8675,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 100,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 100x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 100,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1000,
+      "iy_mm4": 833333,
+      "iz_mm4": 8333.33,
+      "wel_y_mm3": 16666.7,
+      "wel_z_mm3": 1666.67,
+      "wpl_y_mm3": 25000,
+      "wpl_z_mm3": 2500,
+      "av_y_mm2": 666.667,
+      "av_z_mm2": 666.667,
+      "it_mm4": 31233.4,
+      "iw_mm6": 0,
+      "iy_radius_mm": 28.8675,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 100,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 100x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 100,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1200,
+      "iy_mm4": 1000000,
+      "iz_mm4": 14400,
+      "wel_y_mm3": 20000,
+      "wel_z_mm3": 2400,
+      "wpl_y_mm3": 30000,
+      "wpl_z_mm3": 3600,
+      "av_y_mm2": 800,
+      "av_z_mm2": 800,
+      "it_mm4": 53245.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 28.8675,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 100,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 100x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 100,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1500,
+      "iy_mm4": 1250000,
+      "iz_mm4": 28125,
+      "wel_y_mm3": 25000,
+      "wel_z_mm3": 3750,
+      "wpl_y_mm3": 37500,
+      "wpl_z_mm3": 5625,
+      "av_y_mm2": 1000,
+      "av_z_mm2": 1000,
+      "it_mm4": 101869,
+      "iw_mm6": 0,
+      "iy_radius_mm": 28.8675,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 100,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 100x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 100,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2000,
+      "iy_mm4": 1666670,
+      "iz_mm4": 66666.7,
+      "wel_y_mm3": 33333.3,
+      "wel_z_mm3": 6666.67,
+      "wpl_y_mm3": 50000,
+      "wpl_z_mm3": 10000,
+      "av_y_mm2": 1333.33,
+      "av_z_mm2": 1333.33,
+      "it_mm4": 233071,
+      "iw_mm6": 0,
+      "iy_radius_mm": 28.8675,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 100,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 120x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 120,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 600,
+      "iy_mm4": 720000,
+      "iz_mm4": 1250,
+      "wel_y_mm3": 12000,
+      "wel_z_mm3": 500,
+      "wpl_y_mm3": 18000,
+      "wpl_z_mm3": 750,
+      "av_y_mm2": 400,
+      "av_z_mm2": 400,
+      "it_mm4": 4868.75,
+      "iw_mm6": 0,
+      "iy_radius_mm": 34.641,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 120,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 120x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 120,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 720,
+      "iy_mm4": 864000,
+      "iz_mm4": 2160,
+      "wel_y_mm3": 14400,
+      "wel_z_mm3": 720,
+      "wpl_y_mm3": 21600,
+      "wpl_z_mm3": 1080,
+      "av_y_mm2": 480,
+      "av_z_mm2": 480,
+      "it_mm4": 8367.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 34.641,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 120,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 120x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 120,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 960,
+      "iy_mm4": 1152000,
+      "iz_mm4": 5120,
+      "wel_y_mm3": 19200,
+      "wel_z_mm3": 1280,
+      "wpl_y_mm3": 28800,
+      "wpl_z_mm3": 1920,
+      "av_y_mm2": 640,
+      "av_z_mm2": 640,
+      "it_mm4": 19619.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 34.641,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 120,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 120x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 120,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1200,
+      "iy_mm4": 1440000,
+      "iz_mm4": 10000,
+      "wel_y_mm3": 24000,
+      "wel_z_mm3": 2000,
+      "wpl_y_mm3": 36000,
+      "wpl_z_mm3": 3000,
+      "av_y_mm2": 800,
+      "av_z_mm2": 800,
+      "it_mm4": 37900,
+      "iw_mm6": 0,
+      "iy_radius_mm": 34.641,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 120,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 120x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 120,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1440,
+      "iy_mm4": 1728000,
+      "iz_mm4": 17280,
+      "wel_y_mm3": 28800,
+      "wel_z_mm3": 2880,
+      "wpl_y_mm3": 43200,
+      "wpl_z_mm3": 4320,
+      "av_y_mm2": 960,
+      "av_z_mm2": 960,
+      "it_mm4": 64765.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 34.641,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 120,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 120x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 120,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1800,
+      "iy_mm4": 2160000,
+      "iz_mm4": 33750,
+      "wel_y_mm3": 36000,
+      "wel_z_mm3": 4500,
+      "wpl_y_mm3": 54000,
+      "wpl_z_mm3": 6750,
+      "av_y_mm2": 1200,
+      "av_z_mm2": 1200,
+      "it_mm4": 124369,
+      "iw_mm6": 0,
+      "iy_radius_mm": 34.641,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 120,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 120x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 120,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2400,
+      "iy_mm4": 2880000,
+      "iz_mm4": 80000,
+      "wel_y_mm3": 48000,
+      "wel_z_mm3": 8000,
+      "wpl_y_mm3": 72000,
+      "wpl_z_mm3": 12000,
+      "av_y_mm2": 1600,
+      "av_z_mm2": 1600,
+      "it_mm4": 286402,
+      "iw_mm6": 0,
+      "iy_radius_mm": 34.641,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 120,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 140x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 140,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 700,
+      "iy_mm4": 1143330,
+      "iz_mm4": 1458.33,
+      "wel_y_mm3": 16333.3,
+      "wel_z_mm3": 583.333,
+      "wpl_y_mm3": 24500,
+      "wpl_z_mm3": 875,
+      "av_y_mm2": 466.667,
+      "av_z_mm2": 466.667,
+      "it_mm4": 5702.08,
+      "iw_mm6": 0,
+      "iy_radius_mm": 40.4145,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 140,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 140x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 140,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 840,
+      "iy_mm4": 1372000,
+      "iz_mm4": 2520,
+      "wel_y_mm3": 19600,
+      "wel_z_mm3": 840,
+      "wpl_y_mm3": 29400,
+      "wpl_z_mm3": 1260,
+      "av_y_mm2": 560,
+      "av_z_mm2": 560,
+      "it_mm4": 9807.84,
+      "iw_mm6": 0,
+      "iy_radius_mm": 40.4145,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 140,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 140x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 140,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1120,
+      "iy_mm4": 1829330,
+      "iz_mm4": 5973.33,
+      "wel_y_mm3": 26133.3,
+      "wel_z_mm3": 1493.33,
+      "wpl_y_mm3": 39200,
+      "wpl_z_mm3": 2240,
+      "av_y_mm2": 746.667,
+      "av_z_mm2": 746.667,
+      "it_mm4": 23033.2,
+      "iw_mm6": 0,
+      "iy_radius_mm": 40.4145,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 140,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 140x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 140,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1400,
+      "iy_mm4": 2286670,
+      "iz_mm4": 11666.7,
+      "wel_y_mm3": 32666.7,
+      "wel_z_mm3": 2333.33,
+      "wpl_y_mm3": 49000,
+      "wpl_z_mm3": 3500,
+      "av_y_mm2": 933.333,
+      "av_z_mm2": 933.333,
+      "it_mm4": 44566.7,
+      "iw_mm6": 0,
+      "iy_radius_mm": 40.4145,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 140,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 140x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 140,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1680,
+      "iy_mm4": 2744000,
+      "iz_mm4": 20160,
+      "wel_y_mm3": 39200,
+      "wel_z_mm3": 3360,
+      "wpl_y_mm3": 58800,
+      "wpl_z_mm3": 5040,
+      "av_y_mm2": 1120,
+      "av_z_mm2": 1120,
+      "it_mm4": 76285.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 40.4145,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 140,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 140x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 140,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2100,
+      "iy_mm4": 3430000,
+      "iz_mm4": 39375,
+      "wel_y_mm3": 49000,
+      "wel_z_mm3": 5250,
+      "wpl_y_mm3": 73500,
+      "wpl_z_mm3": 7875,
+      "av_y_mm2": 1400,
+      "av_z_mm2": 1400,
+      "it_mm4": 146869,
+      "iw_mm6": 0,
+      "iy_radius_mm": 40.4145,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 140,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 140x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 140,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2800,
+      "iy_mm4": 4573330,
+      "iz_mm4": 93333.3,
+      "wel_y_mm3": 65333.3,
+      "wel_z_mm3": 9333.33,
+      "wpl_y_mm3": 98000,
+      "wpl_z_mm3": 14000,
+      "av_y_mm2": 1866.67,
+      "av_z_mm2": 1866.67,
+      "it_mm4": 339734,
+      "iw_mm6": 0,
+      "iy_radius_mm": 40.4145,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 140,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 150x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 150,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 750,
+      "iy_mm4": 1406250,
+      "iz_mm4": 1562.5,
+      "wel_y_mm3": 18750,
+      "wel_z_mm3": 625,
+      "wpl_y_mm3": 28125,
+      "wpl_z_mm3": 937.5,
+      "av_y_mm2": 500,
+      "av_z_mm2": 500,
+      "it_mm4": 6118.75,
+      "iw_mm6": 0,
+      "iy_radius_mm": 43.3013,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 150,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 150x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 150,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 900,
+      "iy_mm4": 1687500,
+      "iz_mm4": 2700,
+      "wel_y_mm3": 22500,
+      "wel_z_mm3": 900,
+      "wpl_y_mm3": 33750,
+      "wpl_z_mm3": 1350,
+      "av_y_mm2": 600,
+      "av_z_mm2": 600,
+      "it_mm4": 10527.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 43.3013,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 150,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 150x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 150,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1200,
+      "iy_mm4": 2250000,
+      "iz_mm4": 6400,
+      "wel_y_mm3": 30000,
+      "wel_z_mm3": 1600,
+      "wpl_y_mm3": 45000,
+      "wpl_z_mm3": 2400,
+      "av_y_mm2": 800,
+      "av_z_mm2": 800,
+      "it_mm4": 24739.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 43.3013,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 150,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 150x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 150,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1500,
+      "iy_mm4": 2812500,
+      "iz_mm4": 12500,
+      "wel_y_mm3": 37500,
+      "wel_z_mm3": 2500,
+      "wpl_y_mm3": 56250,
+      "wpl_z_mm3": 3750,
+      "av_y_mm2": 1000,
+      "av_z_mm2": 1000,
+      "it_mm4": 47900,
+      "iw_mm6": 0,
+      "iy_radius_mm": 43.3013,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 150,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 150x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 150,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1800,
+      "iy_mm4": 3375000,
+      "iz_mm4": 21600,
+      "wel_y_mm3": 45000,
+      "wel_z_mm3": 3600,
+      "wpl_y_mm3": 67500,
+      "wpl_z_mm3": 5400,
+      "av_y_mm2": 1200,
+      "av_z_mm2": 1200,
+      "it_mm4": 82045.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 43.3013,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 150,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 150x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 150,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2250,
+      "iy_mm4": 4218750,
+      "iz_mm4": 42187.5,
+      "wel_y_mm3": 56250,
+      "wel_z_mm3": 5625,
+      "wpl_y_mm3": 84375,
+      "wpl_z_mm3": 8437.5,
+      "av_y_mm2": 1500,
+      "av_z_mm2": 1500,
+      "it_mm4": 158119,
+      "iw_mm6": 0,
+      "iy_radius_mm": 43.3013,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 150,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 150x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 150,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 3000,
+      "iy_mm4": 5625000,
+      "iz_mm4": 100000,
+      "wel_y_mm3": 75000,
+      "wel_z_mm3": 10000,
+      "wpl_y_mm3": 112500,
+      "wpl_z_mm3": 15000,
+      "av_y_mm2": 2000,
+      "av_z_mm2": 2000,
+      "it_mm4": 366401,
+      "iw_mm6": 0,
+      "iy_radius_mm": 43.3013,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 150,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 160x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 160,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 800,
+      "iy_mm4": 1706670,
+      "iz_mm4": 1666.67,
+      "wel_y_mm3": 21333.3,
+      "wel_z_mm3": 666.667,
+      "wpl_y_mm3": 32000,
+      "wpl_z_mm3": 1000,
+      "av_y_mm2": 533.333,
+      "av_z_mm2": 533.333,
+      "it_mm4": 6535.42,
+      "iw_mm6": 0,
+      "iy_radius_mm": 46.188,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 160,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 160x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 160,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 960,
+      "iy_mm4": 2048000,
+      "iz_mm4": 2880,
+      "wel_y_mm3": 25600,
+      "wel_z_mm3": 960,
+      "wpl_y_mm3": 38400,
+      "wpl_z_mm3": 1440,
+      "av_y_mm2": 640,
+      "av_z_mm2": 640,
+      "it_mm4": 11247.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 46.188,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 160,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 160x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 160,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1280,
+      "iy_mm4": 2730670,
+      "iz_mm4": 6826.67,
+      "wel_y_mm3": 34133.3,
+      "wel_z_mm3": 1706.67,
+      "wpl_y_mm3": 51200,
+      "wpl_z_mm3": 2560,
+      "av_y_mm2": 853.333,
+      "av_z_mm2": 853.333,
+      "it_mm4": 26446.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 46.188,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 160,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 160x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 160,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1600,
+      "iy_mm4": 3413330,
+      "iz_mm4": 13333.3,
+      "wel_y_mm3": 42666.7,
+      "wel_z_mm3": 2666.67,
+      "wpl_y_mm3": 64000,
+      "wpl_z_mm3": 4000,
+      "av_y_mm2": 1066.67,
+      "av_z_mm2": 1066.67,
+      "it_mm4": 51233.3,
+      "iw_mm6": 0,
+      "iy_radius_mm": 46.188,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 160,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 160x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 160,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1920,
+      "iy_mm4": 4096000,
+      "iz_mm4": 23040,
+      "wel_y_mm3": 51200,
+      "wel_z_mm3": 3840,
+      "wpl_y_mm3": 76800,
+      "wpl_z_mm3": 5760,
+      "av_y_mm2": 1280,
+      "av_z_mm2": 1280,
+      "it_mm4": 87805.5,
+      "iw_mm6": 0,
+      "iy_radius_mm": 46.188,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 160,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 160x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 160,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2400,
+      "iy_mm4": 5120000,
+      "iz_mm4": 45000,
+      "wel_y_mm3": 64000,
+      "wel_z_mm3": 6000,
+      "wpl_y_mm3": 96000,
+      "wpl_z_mm3": 9000,
+      "av_y_mm2": 1600,
+      "av_z_mm2": 1600,
+      "it_mm4": 169369,
+      "iw_mm6": 0,
+      "iy_radius_mm": 46.188,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 160,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 160x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 160,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 3200,
+      "iy_mm4": 6826670,
+      "iz_mm4": 106667,
+      "wel_y_mm3": 85333.3,
+      "wel_z_mm3": 10666.7,
+      "wpl_y_mm3": 128000,
+      "wpl_z_mm3": 16000,
+      "av_y_mm2": 2133.33,
+      "av_z_mm2": 2133.33,
+      "it_mm4": 393067,
+      "iw_mm6": 0,
+      "iy_radius_mm": 46.188,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 160,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 180x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 180,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 900,
+      "iy_mm4": 2430000,
+      "iz_mm4": 1875,
+      "wel_y_mm3": 27000,
+      "wel_z_mm3": 750,
+      "wpl_y_mm3": 40500,
+      "wpl_z_mm3": 1125,
+      "av_y_mm2": 600,
+      "av_z_mm2": 600,
+      "it_mm4": 7368.75,
+      "iw_mm6": 0,
+      "iy_radius_mm": 51.9615,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 180,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 180x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 180,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1080,
+      "iy_mm4": 2916000,
+      "iz_mm4": 3240,
+      "wel_y_mm3": 32400,
+      "wel_z_mm3": 1080,
+      "wpl_y_mm3": 48600,
+      "wpl_z_mm3": 1620,
+      "av_y_mm2": 720,
+      "av_z_mm2": 720,
+      "it_mm4": 12687.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 51.9615,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 180,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 180x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 180,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1440,
+      "iy_mm4": 3888000,
+      "iz_mm4": 7680,
+      "wel_y_mm3": 43200,
+      "wel_z_mm3": 1920,
+      "wpl_y_mm3": 64800,
+      "wpl_z_mm3": 2880,
+      "av_y_mm2": 960,
+      "av_z_mm2": 960,
+      "it_mm4": 29859.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 51.9615,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 180,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 180x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 180,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1800,
+      "iy_mm4": 4860000,
+      "iz_mm4": 15000,
+      "wel_y_mm3": 54000,
+      "wel_z_mm3": 3000,
+      "wpl_y_mm3": 81000,
+      "wpl_z_mm3": 4500,
+      "av_y_mm2": 1200,
+      "av_z_mm2": 1200,
+      "it_mm4": 57900,
+      "iw_mm6": 0,
+      "iy_radius_mm": 51.9615,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 180,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 180x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 180,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2160,
+      "iy_mm4": 5832000,
+      "iz_mm4": 25920,
+      "wel_y_mm3": 64800,
+      "wel_z_mm3": 4320,
+      "wpl_y_mm3": 97200,
+      "wpl_z_mm3": 6480,
+      "av_y_mm2": 1440,
+      "av_z_mm2": 1440,
+      "it_mm4": 99325.4,
+      "iw_mm6": 0,
+      "iy_radius_mm": 51.9615,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 180,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 180x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 180,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2700,
+      "iy_mm4": 7290000,
+      "iz_mm4": 50625,
+      "wel_y_mm3": 81000,
+      "wel_z_mm3": 6750,
+      "wpl_y_mm3": 121500,
+      "wpl_z_mm3": 10125,
+      "av_y_mm2": 1800,
+      "av_z_mm2": 1800,
+      "it_mm4": 191869,
+      "iw_mm6": 0,
+      "iy_radius_mm": 51.9615,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 180,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 180x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 180,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 3600,
+      "iy_mm4": 9720000,
+      "iz_mm4": 120000,
+      "wel_y_mm3": 108000,
+      "wel_z_mm3": 12000,
+      "wpl_y_mm3": 162000,
+      "wpl_z_mm3": 18000,
+      "av_y_mm2": 2400,
+      "av_z_mm2": 2400,
+      "it_mm4": 446400,
+      "iw_mm6": 0,
+      "iy_radius_mm": 51.9615,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 180,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 200x5",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 200,
+      "b": 5,
+      "tw": 5,
+      "tf": 5,
+      "t": 5,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1000,
+      "iy_mm4": 3333330,
+      "iz_mm4": 2083.33,
+      "wel_y_mm3": 33333.3,
+      "wel_z_mm3": 833.333,
+      "wpl_y_mm3": 50000,
+      "wpl_z_mm3": 1250,
+      "av_y_mm2": 666.667,
+      "av_z_mm2": 666.667,
+      "it_mm4": 8202.08,
+      "iw_mm6": 0,
+      "iy_radius_mm": 57.735,
+      "iz_radius_mm": 1.44338,
+      "h_mm": 200,
+      "b_mm": 5,
+      "tw_mm": 5,
+      "tf_mm": 5,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 200x6",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 200,
+      "b": 6,
+      "tw": 6,
+      "tf": 6,
+      "t": 6,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1200,
+      "iy_mm4": 4000000,
+      "iz_mm4": 3600,
+      "wel_y_mm3": 40000,
+      "wel_z_mm3": 1200,
+      "wpl_y_mm3": 60000,
+      "wpl_z_mm3": 1800,
+      "av_y_mm2": 800,
+      "av_z_mm2": 800,
+      "it_mm4": 14127.8,
+      "iw_mm6": 0,
+      "iy_radius_mm": 57.735,
+      "iz_radius_mm": 1.73205,
+      "h_mm": 200,
+      "b_mm": 6,
+      "tw_mm": 6,
+      "tf_mm": 6,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 200x8",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 200,
+      "b": 8,
+      "tw": 8,
+      "tf": 8,
+      "t": 8,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 1600,
+      "iy_mm4": 5333330,
+      "iz_mm4": 8533.33,
+      "wel_y_mm3": 53333.3,
+      "wel_z_mm3": 2133.33,
+      "wpl_y_mm3": 80000,
+      "wpl_z_mm3": 3200,
+      "av_y_mm2": 1066.67,
+      "av_z_mm2": 1066.67,
+      "it_mm4": 33273.2,
+      "iw_mm6": 0,
+      "iy_radius_mm": 57.735,
+      "iz_radius_mm": 2.3094,
+      "h_mm": 200,
+      "b_mm": 8,
+      "tw_mm": 8,
+      "tf_mm": 8,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 200x10",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 200,
+      "b": 10,
+      "tw": 10,
+      "tf": 10,
+      "t": 10,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2000,
+      "iy_mm4": 6666670,
+      "iz_mm4": 16666.7,
+      "wel_y_mm3": 66666.7,
+      "wel_z_mm3": 3333.33,
+      "wpl_y_mm3": 100000,
+      "wpl_z_mm3": 5000,
+      "av_y_mm2": 1333.33,
+      "av_z_mm2": 1333.33,
+      "it_mm4": 64566.7,
+      "iw_mm6": 0,
+      "iy_radius_mm": 57.735,
+      "iz_radius_mm": 2.88675,
+      "h_mm": 200,
+      "b_mm": 10,
+      "tw_mm": 10,
+      "tf_mm": 10,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 200x12",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 200,
+      "b": 12,
+      "tw": 12,
+      "tf": 12,
+      "t": 12,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 2400,
+      "iy_mm4": 8000000,
+      "iz_mm4": 28800,
+      "wel_y_mm3": 80000,
+      "wel_z_mm3": 4800,
+      "wpl_y_mm3": 120000,
+      "wpl_z_mm3": 7200,
+      "av_y_mm2": 1600,
+      "av_z_mm2": 1600,
+      "it_mm4": 110845,
+      "iw_mm6": 0,
+      "iy_radius_mm": 57.735,
+      "iz_radius_mm": 3.4641,
+      "h_mm": 200,
+      "b_mm": 12,
+      "tw_mm": 12,
+      "tf_mm": 12,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 200x15",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 200,
+      "b": 15,
+      "tw": 15,
+      "tf": 15,
+      "t": 15,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 3000,
+      "iy_mm4": 10000000,
+      "iz_mm4": 56250,
+      "wel_y_mm3": 100000,
+      "wel_z_mm3": 7500,
+      "wpl_y_mm3": 150000,
+      "wpl_z_mm3": 11250,
+      "av_y_mm2": 2000,
+      "av_z_mm2": 2000,
+      "it_mm4": 214369,
+      "iw_mm6": 0,
+      "iy_radius_mm": 57.735,
+      "iz_radius_mm": 4.33013,
+      "h_mm": 200,
+      "b_mm": 15,
+      "tw_mm": 15,
+      "tf_mm": 15,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
+  },
+  {
+    "name": "Strip 200x20",
+    "kind": "FlatBar",
+    "geometry": {
+      "h": 200,
+      "b": 20,
+      "tw": 20,
+      "tf": 20,
+      "t": 20,
+      "r": 0
+    },
+    "properties": {
+      "area_mm2": 4000,
+      "iy_mm4": 13333300,
+      "iz_mm4": 133333,
+      "wel_y_mm3": 133333,
+      "wel_z_mm3": 13333.3,
+      "wpl_y_mm3": 200000,
+      "wpl_z_mm3": 20000,
+      "av_y_mm2": 2666.67,
+      "av_z_mm2": 2666.67,
+      "it_mm4": 499734,
+      "iw_mm6": 0,
+      "iy_radius_mm": 57.735,
+      "iz_radius_mm": 5.7735,
+      "h_mm": 200,
+      "b_mm": 20,
+      "tw_mm": 20,
+      "tf_mm": 20,
+      "r_mm": 0
+    },
+    "buckling_curves": {
+      "y_axis": "c",
+      "z_axis": "c"
+    }
   }
 ]

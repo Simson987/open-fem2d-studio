@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Transform Open-FEM2D-Studio into a fully OpenAEC-Foundation-compliant desktop application with Tauri v2 wrapper, OpenAEC design tokens, modernized A4 reports per OpenAEC §4.3 spec, and proper organizational identity.
+**Goal:** Transform Open FEM Studio into a fully OpenAEC-Foundation-compliant desktop application with Tauri v2 wrapper, OpenAEC design tokens, modernized A4 reports per OpenAEC §4.3 spec, and proper organizational identity.
 
 **Architecture:** Four sequential phases. Phase A lays the design-token foundation with backwards-compat shim so existing 42 component CSS files keep working unchanged. Phase B adds OpenAEC shell components (Backstage, SettingsDialog, Modal, AboutDialog, TitleBar). Phase D modernizes the report system (live preview + HTML export). Phase C migrates from Electron to Tauri v2 with a hard cutover. Each phase ends in a working app — you can stop, verify, and resume.
 
@@ -356,7 +356,7 @@ Run: `cat src/index.css | head -30` (verify GitHub-dark palette is what's there)
 
 ```css
 /* src/index.css
- * Open FEM2D Studio — base styles
+ * Open FEM Studio — base styles
  * Imports OpenAEC design tokens + theme + canvas tokens.
  */
 
@@ -458,7 +458,7 @@ Expected: 13 lines, basic Vite template with `<title>Open FEM Studio</title>`
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Open FEM2D Studio</title>
+    <title>Open FEM Studio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -483,7 +483,7 @@ git add index.html
 git commit -m "feat(fonts): load Space Grotesk + Inter + JetBrains Mono
 
 Adds Google Fonts preconnect and stylesheet link per OpenAEC
-spec. Updates title to 'Open FEM2D Studio' (matching repo name)."
+spec. Updates title to 'Open FEM Studio'."
 ```
 
 ---
@@ -591,8 +591,8 @@ OpenAEC Style Book §9 forbids 3BM references. companyName now
 - [ ] **Step 1: Edit package.json — update name, author, license, description**
 
 Use Edit tool. Change:
-- `"name": "open-fem-studio"` → `"name": "open-fem2d-studio"`
-- `"description": "Web-based 2D Finite Element Method application for structural analysis"` → `"description": "Open FEM2D Studio — 2D Finite Element Method solver. Part of the OpenAEC Foundation portfolio."`
+- `"name"` → `"open-fem-studio"`
+- `"description": "Web-based 2D Finite Element Method application for structural analysis"` → `"description": "Open FEM Studio — 2D Finite Element Method solver. Part of the OpenAEC Foundation portfolio."`
 - Add (if not present): `"author": "OpenAEC Foundation"`, `"license": "CC-BY-SA-4.0"`, `"homepage": "https://github.com/OpenAEC-Foundation"`
 
 The `main`, `scripts`, `dependencies`, `devDependencies` keep existing values.
@@ -608,7 +608,7 @@ Expected: `OK`
 git add package.json
 git commit -m "chore(brand): update package.json with OpenAEC identity
 
-name=open-fem2d-studio, author=OpenAEC Foundation, license=CC-BY-SA-4.0."
+name=open-fem-studio, author=OpenAEC Foundation, license=CC-BY-SA-4.0."
 ```
 
 ---
@@ -627,7 +627,7 @@ Expected: 14 lines, basic description
 
 ```markdown
 <p align="center">
-  <strong>Open FEM2D Studio</strong>
+  <strong>Open FEM Studio</strong>
 </p>
 
 <p align="center">
@@ -707,7 +707,7 @@ Expected: PASS
 Run: `npm run dev` (background)
 
 Open `http://localhost:3000`. Verify:
-- Page title in browser tab is "Open FEM2D Studio"
+- Page title in browser tab is "Open FEM Studio"
 - App loads without console errors
 - Body uses Inter font (inspect computed styles on body element → font-family contains "Inter")
 - App background is `#FAFAF9` (light) or `#2A2A32` (openaec) — not `#0d1117` GitHub dark
@@ -1428,7 +1428,7 @@ export function AboutDialog({ isOpen, onClose, t }: AboutDialogProps) {
     <Modal isOpen={isOpen} onClose={onClose} title={t('about.title')} size="sm">
       <div className="about-content">
         <Box className="about-logo" strokeWidth={1.5} size={80} />
-        <div className="about-name">Open FEM2D Studio</div>
+        <div className="about-name">Open FEM Studio</div>
         <div className="about-version">v{APP_VERSION}</div>
         <div className="about-tagline">"Build free. Build together."</div>
         <div className="about-meta">
@@ -1560,7 +1560,7 @@ export function TitleBar({
     <div className="title-bar">
       <div className="title-bar-left">
         <Box size={14} />
-        <span>Open FEM2D Studio</span>
+        <span>Open FEM Studio</span>
         {(onSave || onUndo || onRedo) && (
           <div className="title-bar-quick-access">
             {onSave && (
@@ -1614,7 +1614,7 @@ Quick-access wiring (onSave/onUndo/onRedo) is left for Task B.11 once we know th
 - [ ] **Step 5: TypeScript check + visual smoke**
 
 Run: `npx tsc --noEmit`
-Run: `npm run dev` → verify title bar shows "Open FEM2D Studio" + project name. Stop server.
+Run: `npm run dev` → verify title bar shows "Open FEM Studio" + project name. Stop server.
 
 - [ ] **Step 6: Commit**
 
@@ -1818,7 +1818,7 @@ backstage: {
   preferences: 'Preferences',
   preferencesDesc: 'Open the settings dialog (theme, language).',
   about: 'About',
-  aboutDesc: 'Information about Open FEM2D Studio.',
+  aboutDesc: 'Information about Open FEM Studio.',
   exit: 'Exit',
   exitDesc: 'Close the application.',
 },
@@ -1835,7 +1835,7 @@ settings: {
   },
 },
 about: {
-  title: 'About Open FEM2D Studio',
+  title: 'About Open FEM Studio',
   builtOn: 'Built on the OpenAEC platform',
 },
 common: {
@@ -1858,7 +1858,7 @@ backstage: {
   preferences: 'Voorkeuren',
   preferencesDesc: 'Open het instellingenvenster (thema, taal).',
   about: 'Over',
-  aboutDesc: 'Informatie over Open FEM2D Studio.',
+  aboutDesc: 'Informatie over Open FEM Studio.',
   exit: 'Afsluiten',
   exitDesc: 'Sluit de applicatie.',
 },
@@ -1875,7 +1875,7 @@ settings: {
   },
 },
 about: {
-  title: 'Over Open FEM2D Studio',
+  title: 'Over Open FEM Studio',
   builtOn: 'Gebouwd op het OpenAEC platform',
 },
 common: {
@@ -1892,7 +1892,7 @@ backstage: {
   save: 'Guardar', saveDesc: 'Guardar el proyecto actual en disco.',
   saveAs: 'Guardar como', saveAsDesc: 'Guardar el proyecto actual con un nuevo nombre.',
   preferences: 'Preferencias', preferencesDesc: 'Abrir el cuadro de diálogo de configuración (tema, idioma).',
-  about: 'Acerca de', aboutDesc: 'Información sobre Open FEM2D Studio.',
+  about: 'Acerca de', aboutDesc: 'Información sobre Open FEM Studio.',
   exit: 'Salir', exitDesc: 'Cerrar la aplicación.',
 },
 settings: {
@@ -1900,7 +1900,7 @@ settings: {
   languageHelp: 'Elige tu idioma de interfaz.',
   theme: { label: 'Tema', help: 'Elige tu tema visual.', light: 'Claro', openaec: 'OpenAEC' },
 },
-about: { title: 'Acerca de Open FEM2D Studio', builtOn: 'Construido sobre la plataforma OpenAEC' },
+about: { title: 'Acerca de Open FEM Studio', builtOn: 'Construido sobre la plataforma OpenAEC' },
 common: { close: 'Cerrar' },
 ```
 
@@ -1913,7 +1913,7 @@ backstage: {
   save: 'Enregistrer', saveDesc: 'Enregistrer le projet actuel sur le disque.',
   saveAs: 'Enregistrer sous', saveAsDesc: 'Enregistrer le projet actuel sous un nouveau nom.',
   preferences: 'Préférences', preferencesDesc: 'Ouvrir la boîte de dialogue des paramètres (thème, langue).',
-  about: 'À propos', aboutDesc: 'Informations sur Open FEM2D Studio.',
+  about: 'À propos', aboutDesc: 'Informations sur Open FEM Studio.',
   exit: 'Quitter', exitDesc: 'Fermer l\'application.',
 },
 settings: {
@@ -1921,7 +1921,7 @@ settings: {
   languageHelp: 'Choisissez votre langue d\'interface.',
   theme: { label: 'Thème', help: 'Choisissez votre thème visuel.', light: 'Clair', openaec: 'OpenAEC' },
 },
-about: { title: 'À propos d\'Open FEM2D Studio', builtOn: 'Construit sur la plateforme OpenAEC' },
+about: { title: 'À propos d\'Open FEM Studio', builtOn: 'Construit sur la plateforme OpenAEC' },
 common: { close: 'Fermer' },
 ```
 
@@ -1934,7 +1934,7 @@ backstage: {
   save: 'Salva', saveDesc: 'Salva il progetto corrente su disco.',
   saveAs: 'Salva con nome', saveAsDesc: 'Salva il progetto corrente con un nuovo nome.',
   preferences: 'Preferenze', preferencesDesc: 'Apri la finestra delle impostazioni (tema, lingua).',
-  about: 'Informazioni', aboutDesc: 'Informazioni su Open FEM2D Studio.',
+  about: 'Informazioni', aboutDesc: 'Informazioni su Open FEM Studio.',
   exit: 'Esci', exitDesc: 'Chiudi l\'applicazione.',
 },
 settings: {
@@ -1942,7 +1942,7 @@ settings: {
   languageHelp: 'Scegli la lingua dell\'interfaccia.',
   theme: { label: 'Tema', help: 'Scegli il tema visivo.', light: 'Chiaro', openaec: 'OpenAEC' },
 },
-about: { title: 'Informazioni su Open FEM2D Studio', builtOn: 'Costruito sulla piattaforma OpenAEC' },
+about: { title: 'Informazioni su Open FEM Studio', builtOn: 'Costruito sulla piattaforma OpenAEC' },
 common: { close: 'Chiudi' },
 ```
 
@@ -1955,7 +1955,7 @@ backstage: {
   save: '保存', saveDesc: '将当前项目保存到磁盘。',
   saveAs: '另存为', saveAsDesc: '将当前项目以新名称保存。',
   preferences: '首选项', preferencesDesc: '打开设置对话框（主题、语言）。',
-  about: '关于', aboutDesc: '关于 Open FEM2D Studio 的信息。',
+  about: '关于', aboutDesc: '关于 Open FEM Studio 的信息。',
   exit: '退出', exitDesc: '关闭应用程序。',
 },
 settings: {
@@ -1963,7 +1963,7 @@ settings: {
   languageHelp: '选择您的界面语言。',
   theme: { label: '主题', help: '选择您的视觉主题。', light: '浅色', openaec: 'OpenAEC' },
 },
-about: { title: '关于 Open FEM2D Studio', builtOn: '构建于 OpenAEC 平台之上' },
+about: { title: '关于 Open FEM Studio', builtOn: '构建于 OpenAEC 平台之上' },
 common: { close: '关闭' },
 ```
 
@@ -2129,7 +2129,7 @@ With dev server running:
 - Click an existing dialog (e.g. Project Info) → still works, OpenAEC styled
 - Verify: Ribbon = 122px, File tab amber, animated indicator slides between tabs
 - Verify: StatusBar = 22px (or documented deviation)
-- Verify: TitleBar shows "Open FEM2D Studio" + project name
+- Verify: TitleBar shows "Open FEM Studio" + project name
 
 - [ ] **Step 4: Stop dev server, no commit**
 
@@ -3068,8 +3068,8 @@ Expected: packages added to package.json
 
 Run: `npx tauri init`
 Prompts:
-- App name: `Open FEM2D Studio`
-- Window title: `Open FEM2D Studio`
+- App name: `Open FEM Studio`
+- Window title: `Open FEM Studio`
 - Web assets location: `../dist`
 - Dev URL: `http://localhost:1420`
 - Frontend dev command: `npm run dev`
@@ -3104,9 +3104,9 @@ in next tasks (frameless window, plugins, OpenAEC branding)."
 ```json
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Open FEM2D Studio",
+  "productName": "Open FEM Studio",
   "version": "1.0.0",
-  "identifier": "org.openaec.fem2d-studio",
+  "identifier": "org.openaec.fem-studio",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -3116,7 +3116,7 @@ in next tasks (frameless window, plugins, OpenAEC branding)."
   "app": {
     "windows": [
       {
-        "title": "Open FEM2D Studio",
+        "title": "Open FEM Studio",
         "label": "main",
         "width": 1400,
         "height": 900,
@@ -3146,7 +3146,7 @@ in next tasks (frameless window, plugins, OpenAEC branding)."
     "copyright": "© 2026 OpenAEC Foundation. CC BY-SA 4.0",
     "category": "Productivity",
     "shortDescription": "2D Finite Element Method solver",
-    "longDescription": "Open FEM2D Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
+    "longDescription": "Open FEM Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
   },
   "plugins": {
     "store": {},
@@ -3169,7 +3169,7 @@ Expected: `OK`
 git add src-tauri/tauri.conf.json
 git commit -m "feat(tauri): configure OpenAEC branding and frameless window
 
-Identifier org.openaec.fem2d-studio, frameless (decorations:false),
+Identifier org.openaec.fem-studio, frameless (decorations:false),
 1400x900 default with 1024x600 minimum, MSI + NSIS bundles,
 publisher OpenAEC Foundation, CC BY-SA 4.0. CSP allows
 OSM tiles, Google Fonts, Nominatim. Plugins: store, dialog, fs."
@@ -3186,15 +3186,15 @@ OSM tiles, Google Fonts, Nominatim. Plugins: store, dialog, fs."
 
 ```toml
 [package]
-name = "open-fem2d-studio"
+name = "open-fem-studio"
 version = "1.0.0"
-description = "Open FEM2D Studio — 2D FEM solver"
+description = "Open FEM Studio — 2D FEM solver"
 authors = ["OpenAEC Foundation"]
 license = "CC-BY-SA-4.0"
 edition = "2021"
 
 [lib]
-name = "open_fem2d_studio_lib"
+name = "open_fem_studio_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -3213,7 +3213,7 @@ serde_json = "1"
 
 ```rust
 fn main() {
-    open_fem2d_studio_lib::run()
+    open_fem_studio_lib::run()
 }
 ```
 
@@ -3336,7 +3336,7 @@ Used by TitleBar window control buttons (min/max/close)."
 ```ts
 /**
  * Persistent settings store via Tauri plugin-store.
- * Settings persist to ~/.local/share/org.openaec.fem2d-studio/settings.json
+ * Settings persist to ~/.local/share/org.openaec.fem-studio/settings.json
  * (or platform equivalent).
  */
 import { Store } from '@tauri-apps/plugin-store';
@@ -3658,7 +3658,7 @@ export function TitleBar({
     <div className="title-bar" data-tauri-drag-region>
       <div className="title-bar-left" data-tauri-drag-region>
         <Box size={14} />
-        <span>Open FEM2D Studio</span>
+        <span>Open FEM Studio</span>
         {(onSave || onUndo || onRedo) && (
           <div className="title-bar-quick-access" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             {onSave && <button className="title-bar-qa-btn" onClick={onSave} title="Save (Ctrl+S)" aria-label="Save"><Save size={14} /></button>}
@@ -3883,13 +3883,13 @@ Expected:
 - Vite builds frontend → `dist/`
 - Rust release build (~5-10 min first time)
 - Bundle creates `.msi` and `.exe` installers
-- Output: `src-tauri/target/release/bundle/msi/Open FEM2D Studio_1.0.0_x64_en-US.msi`
-- Output: `src-tauri/target/release/bundle/nsis/Open FEM2D Studio_1.0.0_x64-setup.exe`
+- Output: `src-tauri/target/release/bundle/msi/Open FEM Studio_1.0.0_x64_en-US.msi`
+- Output: `src-tauri/target/release/bundle/nsis/Open FEM Studio_1.0.0_x64-setup.exe`
 
 - [ ] **Step 2: Install and run**
 
 Either:
-- Install on the dev machine (`Open FEM2D Studio_1.0.0_x64_en-US.msi` double-click)
+- Install on the dev machine (`Open FEM Studio_1.0.0_x64_en-US.msi` double-click)
 - Or use Tauri's preview: `cd src-tauri && cargo run --release`
 
 Verify:

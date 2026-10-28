@@ -23,9 +23,13 @@ log("\n[2] FemCanvas");
 const c = readFileSync(join(HIER, "src", "components", "fem", "FemCanvas.tsx"), "utf8").replace(/\r\n/g, "\n");
 check("elke last-groep draagt data-last-id", (c.match(/className=\{`fem-(point|line)load-group\$\{isSel \? " selected" : ""\}`\}\n\s*data-last-id=\{l\.id\}/g) ?? []).length === 4);
 const b = c.indexOf('if (e.button === 0 && tool === "select" && !popover) {');
-const romp = c.slice(b, b + 1200);
-const iLast = romp.indexOf("lastIdVanKlik(e.target"), iKnoop = romp.indexOf("findSnapNode(sx, sy)");
-check("de last wordt vóór de knoop-/staafzoektocht herkend", iLast > 0 && iKnoop > iLast);
+const selectieStart = c.indexOf("// CASE A", b);
+const romp = b >= 0 && selectieStart > b ? c.slice(b, selectieStart) : "";
+const iLast = romp.indexOf("lastIdVanKlik(e.target");
+const iKnoop = romp.indexOf("findSnapNode(sx, sy)");
+const iStaaf = romp.indexOf("findSnapBeam(sx, sy)");
+check("de last wordt vóór de knoop-/staafzoektocht herkend",
+  iLast > 0 && iKnoop > iLast && iStaaf > iLast);
 check("en al bij het indrukken geselecteerd, zonder te slepen", /setSelection\(\{ type: "load", id: lastId \}\);\s*return;/.test(romp));
 
 check("het getal bij een puntlast is klikbaar en focust Fz of Fx",

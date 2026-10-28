@@ -18,6 +18,11 @@ pub fn sigma_axial_mpa(n_ed_kn: f64, area_mm2: f64) -> f64 {
 /// Verificatie: referentie-uitwerking staaf 2 — sigma_c,0,d = 57640/43200
 /// = 1,3 N/mm2 < f_c,0,d = 12,9 N/mm2 → UC 0,10.
 /// N-tekenconventie: druk negatief (conform `mechanics`).
+///
+/// Bij trek (N ≥ 0) is de toets niet van toepassing: σ_c,0,d = 0 en er is
+/// geen unity check. Tot oktober 2026 stond hier |N|/A, zodat een trekstaaf
+/// zijn trekspanning als drukspanning in het rapport kreeg (controle
+/// 2026-10, punt K3).
 pub fn check_compression_parallel(
     section: &TimberSection,
     f_c0d_mpa: f64,
@@ -25,13 +30,18 @@ pub fn check_compression_parallel(
 ) -> ResistanceCalc {
     let area = section.a_mm2;
     let n_ed = force_state.forces.n_ed;
-    let sigma = sigma_axial_mpa(n_ed, area);
+    let druk = n_ed < 0.0;
+    let sigma = if druk {
+        sigma_axial_mpa(n_ed, area)
+    } else {
+        0.0
+    };
     let uc = if f_c0d_mpa > 0.0 {
         sigma / f_c0d_mpa
     } else {
         0.0
     };
-    let status = if n_ed >= 0.0 {
+    let status = if !druk {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
         CheckStatus::Ok
@@ -49,7 +59,7 @@ pub fn check_compression_parallel(
         variables: vec![
             NamedValue {
                 symbol: r"N_{c,Ed}".to_string(),
-                value: n_ed.abs(),
+                value: if druk { -n_ed } else { 0.0 },
                 unit: "kN".to_string(),
             },
             NamedValue {
@@ -65,14 +75,22 @@ pub fn check_compression_parallel(
         ],
         value: sigma,
         unit: "N/mm²".to_string(),
-        uc: Some(UnityCheck {
+        uc: druk.then(|| UnityCheck {
             ed: sigma,
             rd: f_c0d_mpa,
             uc,
             formula_latex: r"\sigma_{c,0,d} / f_{c,0,d}".to_string(),
         }),
         status,
-        notes: vec![],
+        notes: if druk {
+            vec![]
+        } else {
+            vec![format!(
+                "Niet van toepassing: N_Ed = {} kN is geen drukkracht (N is trek-positief), dus \
+                 σ_c,0,d = 0. Trek met buiging staat in 6.2.3.",
+                format!("{n_ed:.3}").replace('.', ",")
+            )]
+        },
     }
 }
 
@@ -88,13 +106,19 @@ pub fn check_tension_parallel(
 ) -> ResistanceCalc {
     let area = section.a_mm2;
     let n_ed = force_state.forces.n_ed;
-    let sigma = sigma_axial_mpa(n_ed, area);
+    // Alleen trek: een drukkracht hoort niet als trekspanning in de toets.
+    let trek = n_ed > 0.0;
+    let sigma = if trek {
+        sigma_axial_mpa(n_ed, area)
+    } else {
+        0.0
+    };
     let uc = if f_t0d_mpa > 0.0 {
         sigma / f_t0d_mpa
     } else {
         0.0
     };
-    let status = if n_ed <= 0.0 {
+    let status = if !trek {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
         CheckStatus::Ok
@@ -112,7 +136,7 @@ pub fn check_tension_parallel(
         variables: vec![
             NamedValue {
                 symbol: r"N_{t,Ed}".to_string(),
-                value: n_ed.abs(),
+                value: if trek { n_ed } else { 0.0 },
                 unit: "kN".to_string(),
             },
             NamedValue {
@@ -128,7 +152,7 @@ pub fn check_tension_parallel(
         ],
         value: sigma,
         unit: "N/mm²".to_string(),
-        uc: Some(UnityCheck {
+        uc: trek.then(|| UnityCheck {
             ed: sigma,
             rd: f_t0d_mpa,
             uc,

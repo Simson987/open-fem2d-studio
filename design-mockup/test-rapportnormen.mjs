@@ -295,8 +295,10 @@ log("\n[11] De uitgangspunten en de rapportsectie zijn gewired zoals hierboven")
   // nog wel maar draait de app er niet meer op.
   const dialoog = readFileSync(
     join(hier, "src/components/project/ProjectSettingsDialog.tsx"), "utf8");
-  const start = dialoog.indexOf("export const DEFAULT_UITGANGSPUNTEN");
-  const defaults = dialoog.slice(start, dialoog.indexOf("};", start));
+  const defaults = readFileSync(
+    join(hier, "src/lib/projectBasisDefaults.ts"), "utf8");
+  checkWaar("de dialoog gebruikt de gedeelde uitgangspunten",
+    dialoog.includes('from "../../lib/projectBasisDefaults"'));
   checkWaar("geen enkele norm staat standaard aan",
     /en1993: false/.test(defaults) &&
     /en1995: false/.test(defaults) &&

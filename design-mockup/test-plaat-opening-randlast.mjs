@@ -24,12 +24,12 @@
 //       opening, `openingId` zonder `edgeIndex`, een rand-index buiten het
 //       aantal openingshoeken, en een dubbel openings-id. Nooit een stille
 //       terugval op de omtrek.
-//   [4] PLAAT ZONDER OPENINGEN: bit-identiek aan vóór deze wijziging. De
+//   [4] PLAAT ZONDER OPENINGEN: numeriek gelijk aan vóór deze wijziging. De
 //       referentiegetallen zijn GEMETEN door hetzelfde model te draaien
 //       tegen de broncode van master d5e310b ("chore: sidecarbundel herbouwd
 //       na verlopende profielen deel 3") en tegen deze tak; de uitvoer van
-//       beide was byte-gelijk. Ze staan hieronder voluit (dubbele precisie)
-//       en worden met === vergeleken, niet met een tolerantie.
+//       beide was byte-gelijk. RCM verandert de eliminatievolgorde; vergelijk
+//       dezelfde referenties daarom binnen de afrondruis van dubbele precisie.
 //   [5] DOORVOER: mapping (het veld gaat mee, en ONTBREEKT als de last hem
 //       niet heeft — zo blijft de solverinvoer van een omtreklast
 //       byte-gelijk), MCP-route, projectbestand en het label van paneel,
@@ -374,14 +374,13 @@ log("\n[3] Weigeringen: nooit stil op de omtrek");
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// [4] Plaat ZONDER openingen: bit-identiek aan vóór deze wijziging
+// [4] Plaat ZONDER openingen: numeriek gelijk aan vóór deze wijziging
 // ─────────────────────────────────────────────────────────────────────────
 // Het model: dezelfde wand 4 × 3 m zonder opening, met alle vier de soorten
 // plaatlast op de OMTREK (gelijkmatig, deellast in x, trapezium, en een
 // randpuntlast met twee componenten). Gemeten tegen master d5e310b en tegen
-// deze tak: byte-gelijke uitvoer. De getallen hieronder zijn die meting,
-// voluit; de vergelijking is === en niet een tolerantie — een verschil in de
-// laatste bit is hier al een regressie.
+// deze tak: byte-gelijke uitvoer vóór hernummering. De getallen hieronder
+// blijven onveranderd; de RCM-volgorde mag alleen afrondruis veroorzaken.
 const BIT_REACTIES = [
   [1, 4.547473508864641e-13, 3542.144462759922],
   [2, 3.183231456205249e-12, 5926.895976785609],
@@ -404,7 +403,8 @@ const BIT_SPANNINGEN = [
   [47, 0.24249003056892174, -0.8465301759499264, -0.3184223635657606],
 ];
 
-log("\n[4] Plaat zonder openingen: bit-identiek aan master d5e310b");
+const nagenoeg = (a, b) => Number.isFinite(a) && Math.abs(a - b) <= 1e-10 + 1e-11 * Math.abs(b);
+log("\n[4] Plaat zonder openingen: numeriek gelijk aan master d5e310b");
 {
   const mi = wand({
     edgeLoads: [
@@ -418,21 +418,21 @@ log("\n[4] Plaat zonder openingen: bit-identiek aan master d5e310b");
   let gelijk = 0, afwijkend = [];
   for (const [id, fx, fz] of BIT_REACTIES) {
     const re = r.reactions.get(id);
-    if (Object.is(re?.fx, fx) && Object.is(re?.fz, fz)) gelijk++;
+    if (nagenoeg(re?.fx, fx) && nagenoeg(re?.fz, fz)) gelijk++;
     else afwijkend.push(`knoop ${id}: ${re?.fx} / ${re?.fz}`);
   }
-  checkTrue("9 reacties bit-identiek", gelijk === 9 && afwijkend.length === 0, afwijkend.join("; "));
+  checkTrue("9 reacties binnen afrondruis", gelijk === 9 && afwijkend.length === 0, afwijkend.join("; "));
   for (const [id, ux, uz] of BIT_VERPLAATSINGEN) {
     const d = r.displacements.get(id);
-    checkTrue(`verplaatsing knoop ${id} bit-identiek`,
-      Object.is(d?.ux, ux) && Object.is(d?.uz, uz), `${d?.ux} / ${d?.uz}`);
+    checkTrue(`verplaatsing knoop ${id} binnen afrondruis`,
+      nagenoeg(d?.ux, ux) && nagenoeg(d?.uz, uz), `${d?.ux} / ${d?.uz}`);
   }
   const els = r.plateElements[0].elements;
   checkEq("48 elementen (4×3 m, meshSize 500, vierhoeken)", els.length, 48);
   for (const [i, sx, sy, txy] of BIT_SPANNINGEN) {
     const el = els[i];
-    checkTrue(`element ${i} bit-identiek (σx, σy, τxy)`,
-      Object.is(el?.sigmaX, sx) && Object.is(el?.sigmaY, sy) && Object.is(el?.tauXY, txy),
+    checkTrue(`element ${i} binnen afrondruis (σx, σy, τxy)`,
+      nagenoeg(el?.sigmaX, sx) && nagenoeg(el?.sigmaY, sy) && nagenoeg(el?.tauXY, txy),
       `${el?.sigmaX} / ${el?.sigmaY} / ${el?.tauXY}`);
   }
 }

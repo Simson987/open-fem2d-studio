@@ -51,6 +51,12 @@ export type SectionShape =
     }
   | { type: "box"; h: number; b: number; t: number; r: number }
   | { type: "tube"; d: number; t: number }
+  /**
+   * Massief rond staal (reeks "RD <d>"): één volle cirkel met diameter `d`.
+   * Geen wanddikte — dat onderscheidt hem van de buis, en de tekening hoort
+   * dat verschil te laten zien.
+   */
+  | { type: "rond"; d: number }
   | { type: "rect"; h: number; b: number }
   /**
    * Hoeklijn (L-profiel, EN 10056-1). De hiel ligt linksonder; `h` is het
@@ -180,6 +186,14 @@ export function steelShape(dims: SteelSectionDims | undefined): SectionShape | n
       // zichtbaar fout voor een gewalste hoeklijn — daarom hoort de maat in
       // profiles.json, net als de flenshelling van een UNP.
       return { type: "angle", h: dims.h, b: dims.b, t: dims.tw, r: dims.r, r2: dims.r2 ?? 0 };
+    case "RoundBar":
+      // Massief rond: h = b = d in de database.
+      return { type: "rond", d: dims.h };
+    case "FlatBar":
+      // Platstaal: een volle rechthoek. In de database is h de breedte van
+      // de strip (langs z) en b de dikte, dus de strip staat op zijn kant —
+      // dezelfde stand als waarin hij gerekend wordt (I_y is de sterke as).
+      return { type: "rect", h: dims.h, b: dims.b };
   }
 }
 
@@ -225,7 +239,7 @@ export function shapeVanBetonDoorsnede(d: ConcreteSectionInput): SectionShape | 
 
 /** Buitenmaten van een vorm (mm) — voor schaling en aria-teksten. */
 export function buitenmaten(shape: SectionShape): { b: number; h: number } {
-  return shape.type === "tube"
+  return shape.type === "tube" || shape.type === "rond"
     ? { b: shape.d, h: shape.d }
     : { b: shape.b, h: shape.h };
 }
@@ -390,6 +404,20 @@ export function shapePath(shape: SectionShape, s: number, x0: number, y0: number
         `a ${(rad * s).toFixed(2)} ${(rad * s).toFixed(2)} 0 1 0 ${(2 * rad * s).toFixed(2)} 0 ` +
         `a ${(rad * s).toFixed(2)} ${(rad * s).toFixed(2)} 0 1 0 ${(-2 * rad * s).toFixed(2)} 0 Z`;
       return { d: `${cirkel(rBuiten)} ${cirkel(rBinnen)}`, fillRule: "evenodd" };
+    }
+    case "rond": {
+      // Eén volle cirkel: twee halve bogen, zelfde opbouw als de buitenrand
+      // van de buis hierboven, maar zonder gat.
+      const r = shape.d / 2;
+      const cx = x0 + r * s;
+      const cy = y0 + r * s;
+      const rs = (r * s).toFixed(2);
+      return {
+        d:
+          `M ${(cx - r * s).toFixed(2)} ${cy.toFixed(2)} ` +
+          `a ${rs} ${rs} 0 1 0 ${(2 * r * s).toFixed(2)} 0 ` +
+          `a ${rs} ${rs} 0 1 0 ${(-2 * r * s).toFixed(2)} 0 Z`,
+      };
     }
     case "rect": {
       const { h, b } = shape;

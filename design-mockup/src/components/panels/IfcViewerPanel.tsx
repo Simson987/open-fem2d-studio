@@ -22,6 +22,7 @@ import {
   type IfcRekenmodelInput,
   type IfcBoomKnoop,
 } from "../../io/ifcExport";
+import { openExternal } from "../../lib/tauri";
 import "./IfcViewerPanel.css";
 
 // ── BuildingSMART documentation links ─────────────────────────
@@ -37,13 +38,9 @@ function getIfcDocsUrl(entityType: string): string {
 
 function openIfcDocs(entityType: string, e: React.MouseEvent) {
   e.stopPropagation();
-  const url = getIfcDocsUrl(entityType);
-  // Use Tauri shell opener if available, otherwise window.open
-  import("@tauri-apps/plugin-opener").then(({ openUrl }) => {
-    openUrl(url);
-  }).catch(() => {
-    window.open(url, "_blank", "noopener");
-  });
+  // Via de gedeelde helper (#38): in de app de standaardbrowser, anders een
+  // nieuw tabblad; een geweigerde plugin valt terug in plaats van stil te falen.
+  void openExternal(getIfcDocsUrl(entityType));
 }
 
 // ── Syntax highlighting for IFC4 STEP ─────────────────────────

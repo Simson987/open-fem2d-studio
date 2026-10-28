@@ -523,7 +523,8 @@ check("de windtekening heeft geen vaste Nederlandse titels meer",
   !/Tussenspant op|— leeg|Staaf \$\{|Wind haaks op het spant|Alle windrichtingen|Plattegrond, gebouwlengte|Blokkering onder/.test(bron("lib/wind/WindSchema.tsx")));
 check("de toetshint zet geen spaties rond de toets",
   /\{t\("props\.load\.pressBefore"\)\}<kbd>\{t\("props\.multi\.deleteKey"\)\}<\/kbd>\{t\("props\.load\.pressAfter"\)\}/.test(bron("components/fem/FemProperties.tsx")));
-check("de φ-knop krijgt de vertaalde toelichting", /scheefstandToelichtingVertaald\(scheefstandUitkomst, scheefstandGeometrie, t\)/.test(bron("App.tsx")));
+check("de φ-knop krijgt de vertaalde toelichting (in 3D die van het 3D-model)",
+  /scheefstandToelichtingVertaald\(scheefstandBalk\.uitkomst, scheefstandBalk\.geometrie, t, scheefstandBalk\.richtingen\)/.test(bron("App.tsx")));
 
 log(`\n${passed} geslaagd, ${failed} gefaald`);
 process.exit(failed === 0 ? 0 : 1);

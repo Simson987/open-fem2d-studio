@@ -58,6 +58,7 @@ import {
   crossSectionClassLabel,
   deelstappenVan,
   fmtCheckedAt,
+  fmtGeheel,
   fmtUc,
   fmtValue,
   isStabilityCalc,
@@ -171,8 +172,8 @@ export function VerloopBlok({ verloop }: { verloop: VerloopRapport }) {
               <td>{fmtValue(d.x_mm, 0)}{maatgevend ? " *" : ""}</td>
               <td>{fmtValue(d.t, 3)}</td>
               <td>{maten(d.maten)}</td>
-              <td>{fmtValue(d.area_mm2, 0)}</td>
-              <td>{fmtValue(d.w_y_mm3, 0)}</td>
+              <td>{fmtGeheel(d.area_mm2)}</td>
+              <td>{fmtGeheel(d.w_y_mm3)}</td>
               <td>{d.klasse ? crossSectionClassLabel(d.klasse) : "—"}</td>
               <td>{uc ? `${fmtUc(uc.uc)} (${splitsArtikel(uc.id).artikel})` : "—"}</td>
             </tr>
@@ -408,8 +409,10 @@ function MemberBlock({
 
       <div className="rpt-chk-member-meta">
         <span>{meta}</span>
-        <span className={`rpt-chk-member-uc${result.uc_max > 1 ? " rpt-uc-fail" : ""}`}>
-          {t("report.colUc", "UC")} = {fmtUc(result.uc_max)}
+        {/* Status n.v.t. = niet (volledig) getoetst: geen UC-getal (zie
+            CheckTableSection). */}
+        <span className={`rpt-chk-member-uc${result.status !== "NotApplicable" && result.uc_max > 1 ? " rpt-uc-fail" : ""}`}>
+          {t("report.colUc", "UC")} = {result.status === "NotApplicable" ? "—" : fmtUc(result.uc_max)}
         </span>
         <span className={`rpt-chk-status ${statusClass(result.status)}`}>
           {statusLabel(t, result.status)}

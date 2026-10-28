@@ -172,12 +172,12 @@ automatisch is getest en een controleerbare berekeningsuitdraai kan maken.
 
 - [x] Een neutraal solverregister en capabilityselectie toevoegen.
 - [x] **Automatisch** en een expliciete solverkeuze in Instellingen tonen.
-- [x] Dedaliano/Stabileo achter een versievaste adapter plaatsen.
+- [x] De externe 3D-kern achter een versievaste adapter plaatsen.
 - [x] De geteste upstream-revisie vastpinnen.
 - [x] Engine, revisie en AGPL-licentie in resultaat en rapport tonen.
 - [ ] De AGPL-netwerkverplichtingen concreet in distributie- en SaaS-documentatie vastleggen.
-- [ ] Beslissen of Open FEM Studio volledig open SaaS blijft of een commerciële Dedaliano-licentie nodig heeft.
-- [ ] De bestaande licentie-inconsistentie tussen repository, package en Cargo-manifesten oplossen.
+- [x] Licentie: app AGPL-3.0-or-later, normtoetsingsbibliotheken LGPL-3.0-or-later (de externe kern kan later worden vervangen).
+- [x] De bestaande licentie-inconsistentie tussen repository, package en Cargo-manifesten oplossen.
 - [ ] Een permissieve tweede frame-engine of onafhankelijke verificatieadapter toevoegen.
 - [ ] Het neutrale contract voor plaat-, schaal- en volume-elementen definitief versiebeheer geven.
 - [ ] SaaS-jobcontract toevoegen: limieten, time-out, annuleren, reproduceerbare engineversie en auditlog.
@@ -272,7 +272,7 @@ automatisch is getest en een controleerbare berekeningsuitdraai kan maken.
 
 ## 9. MCP en automatisering (P0/P1)
 
-- [x] `frame3d_engine_info` en `solve_frame3d` aan Tauri toevoegen.
+- [x] `open_fem_3d_engine_info` en `solve_open_fem_3d` aan Tauri toevoegen.
 - [x] Een browser-devroute voor dezelfde 3D-solve toevoegen.
 - [x] Een directe MCP-tool voor de 3D-solver toevoegen.
 - [x] MCP stdio-roundtrip voor de 3D-tool toevoegen.

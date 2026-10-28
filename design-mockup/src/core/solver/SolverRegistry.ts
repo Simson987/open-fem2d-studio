@@ -8,7 +8,13 @@
 
 export const SOLVER_PREFERENCE_KEY = "solverPreference";
 
-export type SolverEngineId = "open-fem-2d" | "dedaliano" | "openaec-native-fem";
+/**
+ * "open-fem-3d" is de Dedaliano-kern (dezelfde pin als het vroegere id "dedaliano").
+ * "dedaliano" blijft alleen in het type staan voor de frame3d-adapter
+ * (components/frame3d/frame3dSolver.ts) en wordt niet meer als keuze aangeboden;
+ * een opgeslagen voorkeur "dedaliano" wordt gelezen als "open-fem-3d".
+ */
+export type SolverEngineId = "open-fem-2d" | "open-fem-3d" | "openaec-native-fem" | "dedaliano";
 export type SolverPreference = "automatic" | SolverEngineId;
 export type SolverDimension = "2d" | "3d";
 export type SolverAnalysisKind = "linear" | "p-delta" | "material-nonlinear";
@@ -48,8 +54,10 @@ export class SolverResolutionError extends Error {
 
 export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
   {
+    // Het id blijft "open-fem-2d": het staat als `solverPreference` in de
+    // opgeslagen instellingen. Alleen de getoonde naam is veranderd.
     id: "open-fem-2d",
-    name: "Open FEM 2D",
+    name: "Open FEM",
     version: "built-in",
     license: "project license",
     available: true,
@@ -61,8 +69,8 @@ export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
     },
   },
   {
-    id: "dedaliano",
-    name: "Dedaliano / Stabileo",
+    id: "open-fem-3d",
+    name: "Open FEM 3D (externe kern)",
     version: "7d87e551b765c88956df95b375e0ef0befda53f7",
     license: "AGPL-3.0",
     available: true,
@@ -70,7 +78,9 @@ export const SOLVER_REGISTRY: readonly SolverDescriptor[] = Object.freeze([
     capabilities: {
       dimensions: ["3d"],
       analyses: ["linear", "p-delta"],
-      elementFamilies: ["frame"],
+      // Platen rekenen met MITC4-vierhoeken; met platen alleen lineair (de app
+      // meldt dat bij een tweede-ordekeuze).
+      elementFamilies: ["frame", "plate"],
     },
   },
   {
@@ -94,6 +104,8 @@ export function isSolverPreference(value: unknown): value is SolverPreference {
 }
 
 export function normaliseSolverPreference(value: unknown): SolverPreference {
+  // Vroeger id van de Dedaliano-3D-kern; dezelfde kern heet nu "open-fem-3d".
+  if (value === "dedaliano") return "open-fem-3d";
   return isSolverPreference(value) ? value : "automatic";
 }
 

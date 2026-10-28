@@ -140,6 +140,7 @@ export function lijfHart(basis: Basisprofiel): number {
     case "ISectionSchuin":
     case "Chs":
     case "Rechthoek":
+    case "RoundBar":
       return basis.b / 2;
   }
 }
@@ -204,6 +205,9 @@ export function toegestanePlaatsen(basis: Basisprofiel): GatPlaats[] {
     case "Chs":
       return ["wand"];
     case "Rechthoek":
+    // Massief rond: net als de rechthoek geen plaat om doorheen te boren,
+    // alleen een langsgat in het doorsnedevlak.
+    case "RoundBar":
       return ["vlak"];
     // Een hoeklijn heeft twee platen en geen derde: het lange been (dat hier
     // de rol van "lijf" speelt, want het staat langs z) en het korte been

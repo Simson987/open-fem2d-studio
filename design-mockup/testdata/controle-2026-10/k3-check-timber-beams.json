@@ -1,0 +1,104 @@
+{
+ "tool": "check_timber_beams",
+ "toelichting": "Staaf 1: N = +40 kN, M = 3 kNm, V = 5 kN; staaf 2: N = +80 kN, M = 6 kNm (N trek-positief). GL24h 90 x 180, klimaatklasse 1, middellang. Hand: (6.17) = 0,5480 en 1,0960.",
+ "arguments": {
+  "inputs": [
+   {
+    "beam_id": 1,
+    "width_mm": 90,
+    "height_mm": 180,
+    "strength_class": "GL24h",
+    "service_class": "Sc1",
+    "load_duration": "MediumTerm",
+    "length_m": 3,
+    "perform_ltb_check": false,
+    "forces_envelope": [
+     {
+      "combination_id": 1,
+      "position_mm": 0,
+      "forces": {
+       "n_ed": 40,
+       "vy_ed": 0,
+       "vz_ed": 5,
+       "mt_ed": 0,
+       "my_ed": 3,
+       "mz_ed": 0
+      }
+     },
+     {
+      "combination_id": 1,
+      "position_mm": 1500.0,
+      "forces": {
+       "n_ed": 40,
+       "vy_ed": 0,
+       "vz_ed": 5,
+       "mt_ed": 0,
+       "my_ed": 3,
+       "mz_ed": 0
+      }
+     },
+     {
+      "combination_id": 1,
+      "position_mm": 3000,
+      "forces": {
+       "n_ed": 40,
+       "vy_ed": 0,
+       "vz_ed": 5,
+       "mt_ed": 0,
+       "my_ed": 3,
+       "mz_ed": 0
+      }
+     }
+    ]
+   },
+   {
+    "beam_id": 2,
+    "width_mm": 90,
+    "height_mm": 180,
+    "strength_class": "GL24h",
+    "service_class": "Sc1",
+    "load_duration": "MediumTerm",
+    "length_m": 3,
+    "perform_ltb_check": false,
+    "forces_envelope": [
+     {
+      "combination_id": 1,
+      "position_mm": 0,
+      "forces": {
+       "n_ed": 80,
+       "vy_ed": 0,
+       "vz_ed": 0,
+       "mt_ed": 0,
+       "my_ed": 6,
+       "mz_ed": 0
+      }
+     },
+     {
+      "combination_id": 1,
+      "position_mm": 1500.0,
+      "forces": {
+       "n_ed": 80,
+       "vy_ed": 0,
+       "vz_ed": 0,
+       "mt_ed": 0,
+       "my_ed": 6,
+       "mz_ed": 0
+      }
+     },
+     {
+      "combination_id": 1,
+      "position_mm": 3000,
+      "forces": {
+       "n_ed": 80,
+       "vy_ed": 0,
+       "vz_ed": 0,
+       "mt_ed": 0,
+       "my_ed": 6,
+       "mz_ed": 0
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

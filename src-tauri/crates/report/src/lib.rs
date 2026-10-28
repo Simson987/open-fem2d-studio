@@ -422,6 +422,10 @@ pub struct ReportMember<'a> {
     /// begrip niet kent (beton, kruislaaghout, de vrije spanningstoets), want
     /// een verlopende doorsnede wordt daar geweigerd en niet stil benaderd.
     pub verloop: Option<&'a VerloopRapport>,
+    /// Een trek-alleen staaf (windverband): alleen de trek is getoetst. De
+    /// kopregel en de samenvatting zeggen dat, zodat niemand een ontbrekende
+    /// knik- of buigtoets voor een vergeten toets aanziet.
+    pub trek_alleen: bool,
 }
 
 impl ReportMember<'_> {
@@ -455,6 +459,7 @@ pub fn report_members(input: &ReportInput) -> Vec<ReportMember<'_>> {
             governing_check_id: &r.governing_check_id,
             checks: &r.checks,
             verloop: r.verloop.as_ref(),
+            trek_alleen: r.checks.iter().any(|c| c.id == steel_check::TOETS_TREK_ALLEEN),
         });
     }
 
@@ -469,6 +474,7 @@ pub fn report_members(input: &ReportInput) -> Vec<ReportMember<'_>> {
             governing_check_id: &r.governing_check_id,
             checks: &r.checks,
             verloop: r.verloop.as_ref(),
+            trek_alleen: false,
         });
     }
 
@@ -486,6 +492,7 @@ pub fn report_members(input: &ReportInput) -> Vec<ReportMember<'_>> {
             checks: &r.checks,
             // Kruislaaghout kan niet verlopen (ontwerp §9).
             verloop: None,
+            trek_alleen: false,
         });
     }
 
@@ -501,6 +508,7 @@ pub fn report_members(input: &ReportInput) -> Vec<ReportMember<'_>> {
             checks: &r.checks,
             // Een verlopende betonstaaf wordt geweigerd, niet benaderd.
             verloop: None,
+            trek_alleen: false,
         });
     }
 
@@ -522,6 +530,7 @@ pub fn report_members(input: &ReportInput) -> Vec<ReportMember<'_>> {
             // verlopende doorsnede. Ze hier op naam gelijkstellen zou twee
             // ongelijke dingen in één tabel zetten.
             verloop: None,
+            trek_alleen: false,
         });
     }
 
@@ -1028,11 +1037,12 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
         flow.push(Box::new(
             Paragraph::new(
                 format!(
-                    "{}. Beam {} — {} ({})    [{}]",
+                    "{}. Beam {} — {} ({}){}    [{}]",
                     idx + 1,
                     m.beam_id,
                     m.section_label,
                     m.grade_label,
+                    if m.trek_alleen { " — trek-alleen" } else { "" },
                     m.norm_label()
                 ),
                 style_h2(),
@@ -1538,6 +1548,39 @@ impl PageCallback for OpenAecHeaderFooter {
 
 // ── Summary table ─────────────────────────────────────────────────────────────
 
+/// De rijen van de samenvattingstabel, één per staaf: staaf, doorsnede,
+/// materiaal, norm, UC, maatgevende toets en status. Los van de opmaak, zodat
+/// een test de inhoud kan lezen.
+///
+/// Een staaf met status n.v.t. is niet (volledig) getoetst: de UC-kolom toont
+/// dan "—" en nooit een getal — ook niet bij uc_max = 0 of bij de UC van de
+/// toetsen die wél gerekend zijn — want een getal onder 1 leest als "voldoet"
+/// (controle 2026-10, punt B7).
+pub fn samenvattingsrijen(members: &[ReportMember<'_>]) -> Vec<Vec<String>> {
+    members
+        .iter()
+        .map(|m| {
+            vec![
+                m.beam_id.to_string(),
+                if m.trek_alleen {
+                    format!("{} (trek-alleen)", m.section_label)
+                } else {
+                    m.section_label.to_string()
+                },
+                m.grade_label.to_string(),
+                m.norm_label().to_string(),
+                if matches!(m.status, CheckStatus::NotApplicable) {
+                    "—".to_string()
+                } else {
+                    getal_tekst(m.uc_max, 2)
+                },
+                m.governing_check_id.to_string(),
+                status_label(m.status).into(),
+            ]
+        })
+        .collect()
+}
+
 fn build_summary_table(members: &[ReportMember<'_>]) -> Table {
     let headers: Vec<String> = vec![
         "Beam".into(),
@@ -1549,20 +1592,7 @@ fn build_summary_table(members: &[ReportMember<'_>]) -> Table {
         "Status".into(),
     ];
 
-    let body: Vec<Vec<String>> = members
-        .iter()
-        .map(|m| {
-            vec![
-                m.beam_id.to_string(),
-                m.section_label.to_string(),
-                m.grade_label.to_string(),
-                m.norm_label().to_string(),
-                getal_tekst(m.uc_max, 2),
-                m.governing_check_id.to_string(),
-                status_label(m.status).into(),
-            ]
-        })
-        .collect();
+    let body: Vec<Vec<String>> = samenvattingsrijen(members);
 
     let style = TableStyleConfig {
         header_background: Some(C_DEEP),

@@ -38,9 +38,13 @@ try {
     }],
   });
   const html = join(folder, "test.html");
-  const inputStyles = ["src/lib/wind/WindGeneratorDialog.css", "src/components/fem/LoadCaseTabBar.css"]
+  // FemProjectTree.css: de tab Weergave, voor de breedteproef van de rij
+  // Verbindingstolerantie (#55); met de border-box van App.css, alleen voor die tab.
+  const inputStyles = ["src/lib/wind/WindGeneratorDialog.css", "src/components/fem/LoadCaseTabBar.css",
+    "src/components/fem/FemProjectTree.css"]
     .map(path => readFileSync(path, "utf8")).join("\n");
   writeFileSync(html, '<!doctype html><meta charset="utf-8"><style>' + inputStyles +
+    '.explorer-view-section,.explorer-view-section *{box-sizing:border-box}' +
     '.fem-canvas-wrap{width:1000px;height:600px}</style><div id="root"></div><pre id="uitslag"></pre><script>' +
     bundle.outputFiles[0].text.replace(/<\/script/gi, "<\\/script") + "</script>");
   const result = startBrowser(browser, [

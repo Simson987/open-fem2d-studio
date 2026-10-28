@@ -117,6 +117,7 @@ fn staaf2_volledige_afleiding() {
             e0_05_mpa: mat.e0_05,
             beta_c: beta_c(mat.timber_type),
             f_myd_mpa: f_myd,
+            f_mzd_mpa: f_mzd,
             f_c0d_mpa: f_c0d,
         },
         veld,

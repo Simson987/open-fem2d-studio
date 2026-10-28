@@ -3,28 +3,64 @@
 </p>
 
 <p align="center">
-  Open-source 2D-eindige-elementenprogramma voor constructieve berekeningen en normtoetsing.<br>
+  Open-source eindige-elementenprogramma (2D en 3D) voor constructieve berekeningen en normtoetsing.<br>
   Onderdeel van het portfolio van de <a href="https://github.com/OpenAEC-Foundation">OpenAEC Foundation</a>.
 </p>
 
 <p align="center">
-  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-CC--BY--SA--4.0-D97706?style=flat-square" alt="License"></a>
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-AGPL--3.0-D97706?style=flat-square" alt="License"></a>
   <img src="https://img.shields.io/badge/contributions-welcome-D97706?style=flat-square" alt="Contributions welcome">
+  <img src="https://img.shields.io/badge/status-alpha-B91C1C?style=flat-square" alt="Status: alpha">
 </p>
+
+> [!WARNING]
+> **Alpha-versie — niet geschikt voor productieberekeningen.**
+> Open FEM Studio is in volle ontwikkeling. Rekenkern, normtoetsing en rapport kunnen fouten bevatten en
+> kunnen per versie veranderen. Gebruik de uitkomsten niet als grondslag voor constructieve berekeningen in
+> projecten, en controleer ze altijd met een onafhankelijke berekening.
 
 ---
 
 ## Wat het programma doet
 
 - Staven en platen (wandschijven, belast in het vlak) in 2D: lineair, tweede orde en fysisch niet-lineair
-- 3D-raamwerken via de Rust-kern; afzonderlijke experimentele routes voor platen en Tet4-/Hex8-volumes. De volledige gekoppelde 3D-modelworkflow en constructieve validatie zijn nog in ontwikkeling
+- 3D-raamwerken (Open FEM 3D): staven, platen, belastingvlakken, trek-alleen staven en starre schijven, lineair
+  en tweede orde, met normtoetsing en rapport; import van IFC4-analysemodellen
+- Experimenteel: een eigen Rust-FEM-kern (`solve_native_fem`) met afzonderlijke routes voor platen en
+  Tet4-/Hex8-volumes; constructieve validatie daarvan is nog in ontwikkeling
 - Belastinggevallen, belastingcombinaties en omhullenden
 - Normtoetsing per staaf: staal (NEN-EN 1993-1-1, langslassen NEN-EN 1993-1-8), hout en kruislaaghout
   (NEN-EN 1995-1-1), gewapend beton (NEN-EN 1992-1-1), plus een vrije spanningstoets
 - Toetsing van platen per element
 - Rekenrapport als PDF
-- IFC-export; projectbestanden met de extensie `.ifcfem2d`
+- IFC-export; projectbestanden met de extensie `.ifcfem` (oudere `.ifcfem2d`-bestanden openen ook). De installer
+  koppelt beide extensies aan de app: een dubbelklik opent het project, ook in een app die al draait (één venster)
+- Lokale importextensies voor extra bestandsformaten; zie [extensies gebruiken en schrijven](docs/extensies.md)
 - Gebruikersinterface in het Nederlands, Engels, Duits en Frans
+- Bediening door een AI-assistent via de meegeleverde MCP-server (zie hieronder)
+
+## Een AI-assistent koppelen
+
+De installer zet een MCP-server naast de app (`openaec-mcp-server`). Een AI-assistent als Claude Desktop of
+Claude Code rekent en toetst daarmee rechtstreeks, en kan de draaiende app bedienen: modellen bouwen, rekenen,
+toetsen, rapporten maken. Alles staat in de app onder **Instellingen → AI-assistent (MCP)**:
+
+- **Bediening door een AI-assistent toestaan (MCP)** — standaard aan bij een nieuwe installatie. De app luistert
+  alleen op deze computer (127.0.0.1); voor iedere opdracht is de sleutel uit het alleen voor de gebruiker leesbare
+  vindbestand `gui-control.json` nodig. Die sleutel is bij elke start nieuw. Uitzetten geldt meteen en blijft na een
+  update bewaard. Een ongeldig of onleesbaar instellingenbestand houdt het kanaal uit; een geldig bestand zonder keuze
+  gebruikt de standaardwaarde aan.
+  Een assistent kan de app ook zelf starten met de tool `gui_start_app`; het kanaal staat dan alleen voor die
+  sessie aan (het paneel toont dat apart van de bewaarde keuze, met een knop om het meteen uit te zetten). Voor
+  ontwikkelaars werkt `OPENAEC_GUI_CONTROL=1` nog steeds.
+- Drie wegen om de server te koppelen, met het pad dat het paneel toont:
+  1. de knop **Toevoegen aan Claude Desktop** — zet de regel `open-fem-studio` in `claude_desktop_config.json`,
+     laat de rest van het bestand staan, maakt eerst een reservekopie en weigert bij ongeldige JSON; start
+     Claude Desktop daarna opnieuw;
+  2. voor Claude Code de opdracht `claude mcp add --scope user open-fem-studio -- "<pad>"`;
+  3. voor andere MCP-clients een JSON-fragment `{ "mcpServers": { "open-fem-studio": { "command": "<pad>", "args": [] } } }`.
+
+Meer, ook over elke tool: [`src-tauri/crates/openaec-mcp-server/README.md`](src-tauri/crates/openaec-mcp-server/README.md).
 
 ## Schermafbeeldingen
 
@@ -90,6 +126,7 @@ en past zich aan een smal venster aan.
 | `report` | Het PDF-rekenrapport, gebouwd op `openaec-layout` |
 | `toetsbrug` | Normtoetsing als JSON-in/JSON-uit (stdin/stdout) |
 | `openaec-mcp-server` | MCP-server (JSON-RPC over stdio) voor de toetskernen, de solver en de bediening van de app |
+| `appdata-migratie` | Neemt bij de eerste start de app-datamappen van de vorige identifier over (aangeroepen in `src-tauri/src/main.rs`) |
 
 ## Drie wegen naar de rekenkern
 
@@ -118,7 +155,7 @@ npm run tauri:build   # installer; bouwt de frontend, de solverbundel en de MCP-
 Op Linux start `bash scripts/dev-desktop.sh` dezelfde actuele frontend en de Tauri-app
 als één ontwikkelsessie. Het script gebruikt een al draaiende Vite-server op poort 1440
 of start er zelf één, en sluit de eigen server weer af wanneer de app stopt. Start niet
-rechtstreeks `src-tauri/target/debug/open-fem2d-studio`: dat is een eerdere build met
+rechtstreeks `src-tauri/target/debug/open-fem-studio`: dat is een eerdere build met
 ingebouwde, mogelijk verouderde frontend. Voor een Linux-build zijn onder andere de
 ontwikkelpakketten voor Cairo, GTK 3 en WebKitGTK 4.1 nodig.
 
@@ -156,7 +193,7 @@ node scripts/run-tests.mjs            # alle test-*.mjs tegen de bron
 node scripts/run-tests.mjs --bundel   # de adaptertests tegen de sidecarbundel
 
 cd ../src-tauri
-cargo test --workspace --exclude open-fem2d-studio
+cargo test --workspace --exclude open-fem-studio
 ```
 
 Een deel van de `test-*.mjs`-batterij roept `toetsbrug` en `openaec-mcp-server` uit `src-tauri/target/release/` aan;
@@ -170,9 +207,28 @@ Het versienummer staat in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (e
 conceptrelease publiceert. De root-`package.json` levert alleen de Tauri-CLI en de v1-scripts; zijn versienummer
 hoort niet bij deze reeks.
 
+Het programmabestand heet `open-fem-studio.exe` (tot en met 2026.39.0: `open-fem2d-studio.exe`). De NSIS-installer
+ruimt bij een upgrade het oude bestand op en zet snelkoppelingen om; wat de Tauri-installer daarvoor zelf doet en
+wat de haken in `src-tauri/windows/installer-hooks.nsh` aanvullen, staat in de kop van dat bestand.
+
+De identifier is `org.openaec.fem-studio` (tot en met 2026.39.1: `org.openaec.fem2d-studio`). Bij de eerste start
+kopieert de app de app-datamappen van de oude identifier naar de nieuwe (instellingen, recente bestanden,
+localStorage), zie `src-tauri/crates/appdata-migratie`. Projectbestanden dragen het formaat-id `open-fem-studio-v2`;
+oudere bestanden openen gewoon, maar een bestand van deze versie opent niet in 2026.39.1 en ouder.
+
 ## Licentie
 
-CC BY-SA 4.0 — zie [LICENSE.md](LICENSE.md)
+| Onderdeel | Licentie |
+|---|---|
+| Open FEM Studio als geheel: de app (`design-mockup/`, `src-tauri/`), toetsbrug, MCP-server, rapportage en de 3D-kernadapter | **AGPL-3.0-or-later** — zie [LICENSE.md](LICENSE.md) |
+| Normtoetsingsbibliotheken in `src-tauri/crates/`: `nen-en-*`, `*-check`, `section-properties`, `steel-profiles`, `nationale-bijlage`, `mechanics` | **LGPL-3.0-or-later** — zie [LICENSES/LGPL-3.0-or-later.md](LICENSES/LGPL-3.0-or-later.md) |
+| `openaec-layout` | MIT (zie de crate) |
+| Documentatie en afbeeldingen | CC BY-SA 4.0 |
+
+De app is AGPL omdat de 3D-raamwerkberekening een externe rekenkern onder AGPL-3.0 meelinkt (bron en vaste
+revisie: `src-tauri/crates/open-fem-3d/Cargo.toml`). Wie de app aanpast en aanbiedt, ook als netwerkdienst,
+moet de broncode van die versie beschikbaar stellen. De normtoetsingen blijven los bruikbaar als bibliotheek
+onder LGPL-3.0-or-later.
 
 ## Over de OpenAEC Foundation
 

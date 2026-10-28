@@ -72,6 +72,9 @@ fn grootheid(c: &NamedCheck, symbool: &str) -> f64 {
 /// dwarskracht allebei een echte UC hebben.
 fn ligger(kip: bool, positie: LtbLoadPosition, k_cr: f64) -> TimberBeamCheckResult {
     check_timber_beam(TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         beam_id: 1,
         width_mm: B_MM,
@@ -120,6 +123,7 @@ fn ligger(kip: bool, positie: LtbLoadPosition, k_cr: f64) -> TimberBeamCheckResu
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        zijdelingse_knik_in_analyse: None,
     })
 }
 

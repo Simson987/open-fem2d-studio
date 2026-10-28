@@ -198,6 +198,21 @@ function deelBijdragen(d: Catalogusdeel, uit?: DeelUitvoer): Bijdrage[] | string
     }
     case "Rechthoek":
       return [plaat(0, p.h, p.b)];
+    // Massief rond: stroken met de koorde als breedte, zoals de buis
+    // hierboven maar zonder gat.
+    case "RoundBar": {
+      const r = p.h / 2;
+      const dz = p.h / CHS_STROKEN;
+      const uit2: Bijdrage[] = [];
+      for (let k = 0; k < CHS_STROKEN; k += 1) {
+        const van = k * dz;
+        const tot = van + dz;
+        const y = (van + tot) / 2 - r;
+        const breedte = 2 * Math.sqrt(Math.max(0, r * r - y * y));
+        if (breedte > MIN_DIKTE) uit2.push(plaat(van, tot, breedte));
+      }
+      return uit2;
+    }
     // Hoeklijn: van de hiel tot de bovenkant van het korte been is de breedte
     // het volle korte been, daarboven alleen de dikte van het lange been.
     // Twee platen dus, en die verdeling is exact — de walsuitronding en de

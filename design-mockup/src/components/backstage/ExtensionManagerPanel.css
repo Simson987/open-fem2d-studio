@@ -10,6 +10,18 @@
   margin: 0 0 16px;
 }
 
+.ext-manager-hint, .ext-path, .ext-types {
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.ext-manager-hint { margin: 0 0 12px; }
+.ext-path { margin: 5px 0 0; }
+.ext-types { margin: 5px 0 0; }
+.ext-error { color: var(--theme-error, #c64040); font-size: 11px; overflow-wrap: anywhere; }
+.ext-enabled-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--theme-text); }
+
 .ext-tabs {
   display: flex;
   gap: 2px;
@@ -101,7 +113,7 @@
 }
 
 .ext-card.disabled {
-  opacity: 0.55;
+  border-style: dashed;
 }
 
 .ext-card-header {
@@ -151,6 +163,8 @@
 .ext-card-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
 }
 
 /* Toggle switch */

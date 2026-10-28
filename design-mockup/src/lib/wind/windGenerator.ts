@@ -31,8 +31,11 @@ import {
   STANDAARD_GEVOLGKLASSE, type GevalInvoer, type Gevolgklasse, type PsiWaarden,
 } from "../../components/fem/solver/normcombinaties";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../normAanduidingen";
+import { calculateWindReferencePressure, NEDERLANDSE_WINDROUTE, requireWindCodeId,
+  type WindCodeId } from "./windCodeRoute";
+import { createWindSurfacePressurePlan } from "./windSurfacePressurePlan";
 import {
-  berekenE, berekenStuwdruk, handmatigeStuwdruk, cpeWand,
+  berekenE, cpeWand,
   CPE_PLAT_DAK, CPE_PLAT_DAK_BRON, CPI_BRON, CPI_ONBEKEND, CPE10_BRON,
   CPE10_MIN_OPPERVLAK_M2, CSCD_BRON, CSCD_GRENSHOOGTE_M, MELDING_ZONE_I,
   TABEL_71_BRON, ZMAX_M, overkappingCoefficienten,
@@ -56,11 +59,17 @@ export type Windrichting = "links" | "rechts" | "haaks" | "alle";
 
 export interface WindInstellingen {
   // Uit de projectgegevens (ProjectSettingsDialog → Uitgangspunten).
+  /** Bestaande bestanden zonder dit veld gebruiken de historische NL-route. */
+  windCodeId?: WindCodeId;
   windgebied: Windgebied;
   terreincategorie: TerreinCategorie;
-  /** "berekend" = EN 1991-1-4 §4; "handmatig" = waarde uit de NB-tabel. */
+  /** "berekend" = EN 1991-1-4 §4; "handmatig" = opgegeven waarde met optionele bron. */
   stuwdrukBron: "berekend" | "handmatig";
   qpHandmatig_kNm2: number;
+  /** Herkomst van een handmatige q_p, bijvoorbeeld een projectberekening. */
+  qpHandmatigBron?: string;
+  /** Toegepaste constructiefactor c_s·c_d; oude instellingen gebruiken 1,0. */
+  structuralFactor?: number;
 
   // Windrichtingen die belastinggevallen opleveren.
   richtingLinks: boolean;
@@ -71,6 +80,8 @@ export interface WindInstellingen {
   /** Inwendige druk: "beide" = +0,2 én −0,3 als aparte gevallen (§7.2.9). */
   cpiKeuze: "beide" | "plus" | "min" | "handmatig";
   cpiHandmatig: number;
+  /** Herkomst van een handmatig gekozen binnendrukcoëfficiënt. */
+  cpiHandmatigBron?: string;
 
   /** Hart-op-hart-afstand van de spanten in m. */
   hohSpant_m: number;
@@ -155,10 +166,12 @@ export interface WindInstellingen {
 }
 
 export const STANDAARD_WIND_INSTELLINGEN: WindInstellingen = {
+  windCodeId: NEDERLANDSE_WINDROUTE,
   windgebied: "II",
   terreincategorie: "II",
   stuwdrukBron: "berekend",
   qpHandmatig_kNm2: 1.0,
+  structuralFactor: 1,
   richtingLinks: true,
   richtingRechts: true,
   richtingHaaks: false,
@@ -201,6 +214,8 @@ export interface GegenereerdGeval {
   naam: string;
   richting: Windrichting;
   cpi: number;
+  /** Normregel of opgegeven herkomst; ontbreekt bij vrijstaande daken. */
+  cpiBron?: string;
 }
 
 /** Eén gegenereerde lijnlast, nog zonder id en met een case-SLEUTEL. */
@@ -226,6 +241,8 @@ export interface GegenereerdeLast {
    * (lokaal z) — alle andere windlasten, zodat hun uitvoer ongewijzigd blijft.
    */
   richting?: "axiaal";
+  /** Alleen wanneer deze last een andere referentiehoogte dan het windgeval gebruikt. */
+  windStuwdruk?: StuwdrukResultaat;
 }
 
 export interface GegenereerdeCombinatie {
@@ -253,7 +270,7 @@ export interface VlakRegel {
   zone: string;
   cpe: number;
   cpi: number;
-  /** Netto druk w = q_p·(c_pe − c_pi) in kN/m². */
+  /** Netto druk w = q_p·c_s·c_d·(c_pe − c_pi) in kN/m². */
   w_kNm2: number;
   q_kNm: number;
   bron: string;
@@ -274,6 +291,8 @@ export interface WindSamenvatting {
   hOverD: number;
   belastingbreedte_m: number;
   stuwdruk: StuwdrukResultaat;
+  /** Toegepaste constructiefactor op alle gegenereerde windlasten. */
+  structuralFactor?: number;
   /** Per belastinggeval de vlakken met hun vormfactoren. */
   perGeval: {
     sleutel: string; naam: string; regels: VlakRegel[];
@@ -600,12 +619,45 @@ export function genereerWindbelasting(
   model: WindModelInvoer,
   inst: WindInstellingen,
 ): WindGeneratieResultaat {
+  const factor = inst.structuralFactor ?? 1;
+  if (!Number.isFinite(factor) || factor <= 0) {
+    return { ok: false, meldingen: [{ niveau: "fout", tekst: "Vul een constructiefactor c_s·c_d groter dan 0 in." }],
+      gevallen: [], lasten: [], combinaties: [], samenvatting: null, geometrie: null };
+  }
+  const resultaat = genereerWindbelastingBasis(model, inst);
+  if (!resultaat.ok || !resultaat.samenvatting) return resultaat;
+  if (factor === 1) return resultaat;
+  return {
+    ...resultaat,
+    meldingen: [...resultaat.meldingen, { niveau: "info", tekst: `Toegepaste constructiefactor c_s·c_d = ${nl(factor, 3)} op alle windlasten.` }],
+    lasten: resultaat.lasten.map((last) => ({
+      ...last, q: last.q * factor,
+      toelichting: `${last.toelichting}; na c_s·c_d = ${nl(factor, 3)}: q = ${nl(Math.abs(last.q * factor), 3)} kN/m`,
+    })),
+    samenvatting: {
+      ...resultaat.samenvatting,
+      structuralFactor: factor,
+      perGeval: resultaat.samenvatting.perGeval.map((geval) => ({
+        ...geval,
+        regels: geval.regels.map((regel) => ({ ...regel, w_kNm2: regel.w_kNm2 * factor, q_kNm: regel.q_kNm * factor })),
+        ...(geval.resultanten ? { resultanten: geval.resultanten.map((r) => ({ ...r, F_kN: r.F_kN * factor })) } : {}),
+      })),
+    },
+  };
+}
+
+function genereerWindbelastingBasis(
+  model: WindModelInvoer,
+  inst: WindInstellingen,
+): WindGeneratieResultaat {
   const meldingen: WindMelding[] = [];
   let geometrie: WindGeometrie | null = null;
   const fout = (tekst: string): WindGeneratieResultaat => {
     meldingen.push({ niveau: "fout", tekst });
     return { ok: false, meldingen, gevallen: [], lasten: [], combinaties: [], samenvatting: null, geometrie };
   };
+  try { requireWindCodeId(inst.windCodeId); }
+  catch (error) { return fout(error instanceof Error ? error.message : String(error)); }
 
   // ── Geometrie ──────────────────────────────────────────────────────────
   if (model.nodes.length < 2 || model.beams.length === 0) {
@@ -737,8 +789,10 @@ export function genereerWindbelasting(
   // ── Stuwdruk ───────────────────────────────────────────────────────────
   const ze_m = h_m; // referentiehoogte, zie melding hieronder
   const stuwdruk = inst.stuwdrukBron === "handmatig"
-    ? handmatigeStuwdruk(inst.qpHandmatig_kNm2, ze_m)
-    : berekenStuwdruk(inst.windgebied, inst.terreincategorie, ze_m);
+    ? calculateWindReferencePressure({ codeId: inst.windCodeId, source: "manual",
+      pressureKnPerM2: inst.qpHandmatig_kNm2, pressureSource: inst.qpHandmatigBron }, ze_m)
+    : calculateWindReferencePressure({ codeId: inst.windCodeId, source: "calculated",
+      windgebied: inst.windgebied, terreincategorie: inst.terreincategorie }, ze_m);
   if (inst.stuwdrukBron === "handmatig" && !(inst.qpHandmatig_kNm2 > 0)) {
     return fout("Vul een stuwdruk groter dan 0 kN/m² in, of kies “berekenen”.");
   }
@@ -761,9 +815,9 @@ export function genereerWindbelasting(
   if (h_m >= CSCD_GRENSHOOGTE_M) {
     meldingen.push({
       niveau: "waarschuwing",
-      tekst: `De bouwhoogte is ${nl(h_m, 1)} m. De generator rekent met c_s·c_d = 1,0; ` +
-        `dat mag zonder meer alleen onder ${CSCD_GRENSHOOGTE_M} m (${CSCD_BRON}). ` +
-        "Bepaal c_s·c_d volgens §6.3 en verhoog de lasten zo nodig zelf.",
+      tekst: `De bouwhoogte is ${nl(h_m, 1)} m. De generator rekent met c_s·c_d = ${nl(inst.structuralFactor ?? 1, 3)}. ` +
+        `De waarde 1,0 mag zonder meer alleen onder ${CSCD_GRENSHOOGTE_M} m (${CSCD_BRON}). ` +
+        "Controleer de gekozen factor volgens §6.3.",
     });
   }
   if (h_m > inst.gebouwlengte_m) {
@@ -1038,7 +1092,9 @@ export function genereerWindbelasting(
       const basisNaam = `Wind ${RICHTING_LABEL[richting].replace("wind ", "")} (c_pi = ${nl(cpi, 2)})`;
       const sleutel = variant.code ? `${basisSleutel}:${variant.code}` : basisSleutel;
       const naam = variant.naam ? `${basisNaam}, ${variant.naam}` : basisNaam;
-      gevallen.push({ sleutel, naam, richting, cpi });
+      gevallen.push({ sleutel, naam, richting, cpi,
+        ...(inst.cpiKeuze === "handmatig" && inst.cpiHandmatigBron?.trim()
+          ? { cpiBron: inst.cpiHandmatigBron.trim() } : {}) });
       const regels: VlakRegel[] = [];
       const plan = dakPlan(richting, variant);
 
@@ -1052,7 +1108,12 @@ export function genereerWindbelasting(
           nx: number, nz: number, cpiHier: number,
           startFrac?: number, endFrac?: number, omschrijving?: string,
         ) => {
-          const w = stuwdruk.qp_kNm2 * (cpe - cpiHier);
+          const w = createWindSurfacePressurePlan({
+            codeId: inst.windCodeId ?? NEDERLANDSE_WINDROUTE, caseKey: sleutel,
+            surfaceId: String(g.beam.id), zone, source: bron,
+            basis: { kind: "common-reference", referencePressureKnPerM2: stuwdruk.qp_kNm2,
+              externalCoefficient: cpe, internalCoefficient: cpiHier, factor: 1 },
+          }).pressure.inwardKnPerM2;
           const q = drukNaarLokaleLijnlast(w, breedte_m, g, nx, nz);
           const deel = startFrac !== undefined
             ? ` (${nl(startFrac, 2)}–${nl(endFrac ?? 1, 2)} van de staaf)` : "";
@@ -1651,8 +1712,10 @@ function genereerVrijstaandDak(
       "de snelheidsprofielformules van §4.3.2 gelden daar niet meer.");
   }
   const stuwdruk = inst.stuwdrukBron === "handmatig"
-    ? handmatigeStuwdruk(inst.qpHandmatig_kNm2, h_m)
-    : berekenStuwdruk(inst.windgebied, inst.terreincategorie, h_m);
+    ? calculateWindReferencePressure({ codeId: inst.windCodeId, source: "manual",
+      pressureKnPerM2: inst.qpHandmatig_kNm2, pressureSource: inst.qpHandmatigBron }, h_m)
+    : calculateWindReferencePressure({ codeId: inst.windCodeId, source: "calculated",
+      windgebied: inst.windgebied, terreincategorie: inst.terreincategorie }, h_m);
   const qp = stuwdruk.qp_kNm2;
 
   const tabelTekst = `§7.3 tabel ${opz.tabel} (α = ${graden(alpha)}, φ = ${nl(inst.blokkering_phi, 2)})`;
@@ -1671,9 +1734,9 @@ function genereerVrijstaandDak(
   if (h_m >= CSCD_GRENSHOOGTE_M) {
     meldingen.push({
       niveau: "waarschuwing",
-      tekst: `De hoogte is ${nl(h_m, 1)} m. De generator rekent met c_s·c_d = 1,0; ` +
-        `dat mag zonder meer alleen onder ${CSCD_GRENSHOOGTE_M} m (${CSCD_BRON}). ` +
-        "Bepaal c_s·c_d volgens §6.3 en verhoog de lasten zo nodig zelf.",
+      tekst: `De hoogte is ${nl(h_m, 1)} m. De generator rekent met c_s·c_d = ${nl(inst.structuralFactor ?? 1, 3)}. ` +
+        `De waarde 1,0 mag zonder meer alleen onder ${CSCD_GRENSHOOGTE_M} m (${CSCD_BRON}). ` +
+        "Controleer de gekozen factor volgens §6.3.",
     });
   }
   meldingen.push({
@@ -1791,7 +1854,12 @@ function genereerVrijstaandDak(
       const vol = a <= 1e-9 && b >= 1 - 1e-9;
       const n = dakNormaal(s.g);
       // Positieve c = netto neerwaarts = druk tegen de bovenkant van het dak.
-      const w = qp * s.c * s.factor;
+      const w = createWindSurfacePressurePlan({
+        codeId: inst.windCodeId ?? NEDERLANDSE_WINDROUTE, caseKey: sleutel,
+        surfaceId: String(s.g.beam.id), zone: s.zone,
+        source: s.bron, basis: { kind: "common-reference", referencePressureKnPerM2: qp,
+          externalCoefficient: s.c, internalCoefficient: 0, factor: s.factor },
+      }).pressure.inwardKnPerM2;
       const q = drukNaarLokaleLijnlast(w, breedte_m, s.g, n.nx, n.nz);
       const deelTekst = vol ? "" : ` (${nl(a, 2)}–${nl(b, 2)} van de staaf)`;
       regels.push({
@@ -1965,9 +2033,12 @@ function genereerVrijstaandDak(
       for (const g of kolommen) {
         // §7.6(2)/§7.7(3): z_e = de hoogste punt van de kolom boven maaiveld.
         const zTop_m = (Math.max(g.z1, g.z2) - zGrond) / 1000;
-        const qpK = inst.stuwdrukBron === "handmatig"
-          ? inst.qpHandmatig_kNm2
-          : berekenStuwdruk(inst.windgebied, inst.terreincategorie, zTop_m).qp_kNm2;
+        const kolomStuwdruk = inst.stuwdrukBron === "handmatig"
+          ? calculateWindReferencePressure({ codeId: inst.windCodeId, source: "manual",
+            pressureKnPerM2: inst.qpHandmatig_kNm2, pressureSource: inst.qpHandmatigBron }, zTop_m)
+          : calculateWindReferencePressure({ codeId: inst.windCodeId, source: "calculated",
+            windgebied: inst.windgebied, terreincategorie: inst.terreincategorie }, zTop_m);
+        const qpK = kolomStuwdruk.qp_kNm2;
         const w = qpK * cfKolom;
         // Kracht in +x bij wind van links; q in lokale z = F·(e_x · t).
         const q = teken1 * w * (kolomB_mm / 1000) * g.tx;
@@ -1978,6 +2049,7 @@ function genereerVrijstaandDak(
         });
         lasten.push({
           gevalSleutel: sleutel, beamId: g.beam.id, q,
+          windStuwdruk: kolomStuwdruk,
           toelichting:
             `Staaf ${g.beam.id}, kolom: q = q_p(z_e = ${nl(zTop_m, 2)} m)·c_f·b = ${nl(qpK, 3)}·` +
             `${nl(cfKolom, 3)}·${nl(kolomB_mm / 1000, 3)} m = ${nl(Math.abs(q), 4)} kN/m, van ${richting}`,

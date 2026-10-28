@@ -152,10 +152,16 @@ function catalogusDelen(
       ];
     case "Chs":
       return [{ soort: "ring", y: h / 2, z: h / 2, R: h / 2, r: Math.max(0, h / 2 - tw) }];
+    case "RoundBar":
+      // Massief rond: een ring zonder gat.
+      return [{ soort: "ring", y: h / 2, z: h / 2, R: h / 2, r: 0 }];
     case "Angle":
       // Hiel linksonder, het lange been staand (zie `SectionShape` "angle").
       return [rechthoek(0, 0, tw, h), rechthoek(tw, 0, b, tw)];
     case "Rechthoek":
+    case "FlatBar":
+      // Platstaal: een massieve rechthoek, de breedte van de strip (h) langs
+      // z en de dikte (b) langs y — dezelfde stand als in de catalogus.
       return [rechthoek(0, 0, b, h)];
   }
 }

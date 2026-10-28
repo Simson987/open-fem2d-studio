@@ -1,0 +1,87 @@
+/* ── Lastpaneel van een staaf: Lijnlast, Puntlast, Temperatuur ─────────────
+   Zelfde vormtaal als het knooppaneel (OpenFem3DNodeConditions.css) en de rest
+   van het eigenschappenpaneel (FemProperties.css): kop als band, de keuze als
+   knoppenrij, velden als .fem-prop-row met .fem-prop-input, knoppen als
+   .open-fem3d-nc-primary/-secondary. Elk element met tekst krijgt hier of via
+   die klassen de letter van het paneel; niets valt terug op de letter van de
+   pagina of de standaard van de browser (issue #108, bewaakt door
+   test-open-fem3d-lastpaneel-ui.mjs). */
+
+/* Direct onder de vorige sectie, zoals elke sectie van het paneel. */
+.open-fem3d-conditions.open-fem3d-member-loads { margin-top: 0; }
+
+/* Lijnlast | Puntlast | Temperatuur: als de opleggingskeuze van het knooppaneel. */
+.open-fem3d-load-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin: 6px 10px 2px;
+}
+.open-fem3d-load-tabs button {
+  min-width: 0;
+  min-height: 24px;
+  padding: 3px 4px;
+  border: 1px solid var(--theme-border);
+  border-radius: 3px;
+  background: var(--theme-bg-lighter);
+  color: var(--theme-text);
+  font: 500 11px/1.15 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.open-fem3d-load-tabs button:hover { border-color: var(--theme-accent); }
+.open-fem3d-load-tabs button[aria-selected="true"] {
+  border-color: var(--theme-accent);
+  background: var(--theme-accent-soft, var(--theme-hover));
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+.open-fem3d-load-tabs button:focus-visible,
+.open-fem3d-load-more:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 1px; }
+
+/* Titel van de gekozen soort, als de tussenkoppen van het knooppaneel. */
+.open-fem3d-member-loads .open-fem3d-load-title {
+  margin: 10px 10px 2px;
+  font: 600 11px/1.2 "Inter", system-ui, sans-serif;
+  color: var(--theme-text);
+}
+
+/* "+ Nieuwe …" over de breedte van het paneel. */
+.open-fem3d-member-loads .open-fem3d-condition-new {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  text-align: left;
+}
+
+/* Richting en q: twee rijen .fem-prop-row. */
+.open-fem3d-load-quick { margin-top: 2px; }
+
+/* Per projectie bij een globale lijnlast (#80): vinkje met de uitleg eronder. */
+.open-fem3d-member-loads .open-fem3d-load-projection {
+  font: 400 11px/1.3 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.open-fem3d-member-loads .open-fem3d-load-projection + .fem-prop-hint { margin-top: 4px; }
+
+/* "▸ Variabele of gedeeltelijke lijnlast": een tekstknop in de accentkleur. */
+.open-fem3d-load-more {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 4px 10px 0;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--theme-accent);
+  text-align: left;
+  font: 500 11px/1.3 "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.open-fem3d-load-more:hover { text-decoration: underline; }
+
+/* Groepen velden (intensiteit, bereik, kracht en positie, temperatuur). */
+.open-fem3d-member-loads fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.open-fem3d-member-loads legend {
+  padding: 8px 10px 2px;
+  font: 600 10.5px/1.2 "Inter", system-ui, sans-serif;
+  color: var(--theme-text-secondary);
+}

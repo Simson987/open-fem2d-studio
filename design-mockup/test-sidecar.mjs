@@ -167,7 +167,16 @@ log("\n[1] Kanaal: pipelining, volgorde, exitcode en stdout-hygiëne");
   const h = r.antwoorden[0]?.result ?? {};
   ok("protocolversie 1", h.protocol === 1, String(h.protocol));
   ok("node_version gemeld", typeof h.node_version === "string" && h.node_version.startsWith("v"), h.node_version);
-  ok("alle vijf bewerkingen gemeld", Array.isArray(h.ops) && h.ops.length === 5, JSON.stringify(h.ops));
+  // Vijf voor het 2D-raamwerk, twee voor de stalen hal (staalhal_maken,
+  // staalhal_uitwerken; zie test-staalhal-sidecar.mjs), twee voor de import
+  // van IFC-analysemodellen (ifc_importeren, ifc_uitwerken; zie
+  // test-ifc-analyse-sidecar.mjs) en twee voor de API-commando's
+  // (api_catalogus, api_uitvoeren; zie test-api-sidecar.mjs) en de lokale
+  // extensie-import (zie test-extensie-sidecar.mjs).
+  ok("alle twaalf bewerkingen gemeld", Array.isArray(h.ops) && h.ops.length === 12
+    && ["staalhal_maken", "staalhal_uitwerken", "ifc_importeren", "ifc_uitwerken", "api_catalogus", "api_uitvoeren", "extensie_importeren"]
+      .every((op) => h.ops.includes(op)),
+    JSON.stringify(h.ops));
 }
 
 // ─────────────────────────────────────────────────────────────────────────

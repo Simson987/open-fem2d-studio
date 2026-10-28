@@ -786,7 +786,7 @@ async function mcpServer(aanroepen) {
 if (!existsSync(MCP_SERVER)) {
   checkWaar("MCP-server gevonden — bouw hem met `cargo build --release -p openaec-mcp-server` (na `npm run build:sidecar`)", false, MCP_SERVER);
 } else {
-  const map = mkdtempSync(join(tmpdir(), "fem2d-oude-projecten-"));
+  const map = mkdtempSync(join(tmpdir(), "open-fem-oude-projecten-"));
   try {
     const paden = routes.map((r, i) => {
       const pad = join(map, `route-${i + 1}.ifcfem2d`);

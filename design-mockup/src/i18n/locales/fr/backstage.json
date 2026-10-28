@@ -22,7 +22,7 @@
     "github": "GitHub",
     "license": "Licence",
     "stichting": "Stichting OpenAEC Foundation (NL)",
-    "copyright": "© 2026 OpenAEC Foundation. Code : MIT. Contenu : CC BY-SA 4.0."
+    "copyright": "© 2026 OpenAEC Foundation. Code : AGPL-3.0-or-later ; vérifications normatives : LGPL-3.0-or-later. Contenu : CC BY-SA 4.0."
   },
   "importPanel": {
     "title": "Importer",
@@ -53,15 +53,30 @@
     "clearAll": "Tout effacer",
     "noRecent": "Aucun fichier récent pour l'instant",
     "remove": "Retirer",
+    "chooseImporter": "Choisissez l'importateur (numéro) :",
+    "invalidImporter": "Aucun importateur valide sélectionné.",
+    "reportTitle": "Rapport d'importation",
+    "closeReport": "Fermer",
     "justNow": "À l'instant",
     "minutesAgo_one": "il y a {{count}} min",
     "minutesAgo_other": "il y a {{count}} min",
     "hoursAgo_one": "il y a {{count}} h",
     "hoursAgo_other": "il y a {{count}} h",
     "daysAgo_one": "il y a {{count}} jour",
-    "daysAgo_other": "il y a {{count}} jours"
+    "daysAgo_other": "il y a {{count}} jours",
+    "importIfc": "Importer un modèle de calcul IFC...",
+    "importIfcHint": "Lire un modèle d'analyse IFC4 (Structural Analysis View) comme nouveau projet 3D."
   },
   "extensionManager": {
+    "intro": "Installer une archive ZIP ou lier un dossier contenant extension.json. Les extensions importent les fichiers localement.",
+    "trustWarning": "Une extension exécute du code sur cet ordinateur. Ne liez que des extensions créées par vous ou fiables. Continuer ?",
+    "linkFolder": "Lier un dossier…",
+    "reload": "Recharger",
+    "empty": "Aucune extension installée ou liée.",
+    "other": "Autre",
+    "enabled": "Activée",
+    "unlink": "Délier",
+    "remove": "Supprimer",
     "desc": {
       "ifc-importer": "Importer des fichiers IFC4 STEP dans l'application",
       "pdf-export": "Exporter les rapports en PDF avec OpenAEC Report Generator",

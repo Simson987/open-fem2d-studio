@@ -1,0 +1,72 @@
+.open-fem3d-report-shell { height:100%; overflow:auto; background:#e5e7eb; color:#172033; padding:18px; box-sizing:border-box; }
+.open-fem3d-report-toolbar { position:sticky; top:-18px; z-index:3; margin:-18px -18px 18px; padding:10px 18px; display:flex; justify-content:space-between; align-items:center; background:#fff; border-bottom:1px solid #cbd5e1; }
+.open-fem3d-report-toolbar button { border:0; border-radius:4px; padding:7px 13px; background:#d97706; color:#fff; font-weight:650; cursor:pointer; }
+.open-fem3d-report-page { width:min(190mm, calc(100% - 16px)); min-height:267mm; margin:0 auto; padding:16mm 17mm; box-sizing:border-box; background:white; box-shadow:0 5px 22px #0002; font:10pt/1.42 "Segoe UI",Arial,sans-serif; }
+.open-fem3d-report-page header { display:flex; justify-content:space-between; gap:24px; padding-bottom:9mm; border-bottom:2px solid #d97706; }
+.open-fem3d-report-page h1 { margin:1mm 0; font-size:22pt; color:#111827; }
+.open-fem3d-report-page h2 { margin:7mm 0 2.5mm; padding-bottom:1.3mm; border-bottom:1px solid #cbd5e1; font-size:13pt; color:#1f2937; }
+.open-fem3d-report-page h3 { margin:4mm 0 2mm; font-size:10.5pt; }
+.open-fem3d-report-page p { margin:1.5mm 0; }
+.open-fem3d-report-kicker { margin:0!important; color:#d97706; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+.open-fem3d-report-page dl { min-width:58mm; margin:0; font-size:9pt; }
+.open-fem3d-report-page dl div { display:grid; grid-template-columns:18mm 1fr; gap:3mm; padding:1mm 0; }
+.open-fem3d-report-page dt { color:#64748b; }.open-fem3d-report-page dd { margin:0; font-weight:600; }
+.open-fem3d-report-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:2.5mm; }
+.open-fem3d-report-cards div { border:1px solid #dbe2ea; border-radius:3px; padding:2.5mm 3mm; background:#f8fafc; }
+.open-fem3d-report-cards span { display:block; color:#64748b; font-size:8pt; }.open-fem3d-report-cards strong { display:block; margin-top:.7mm; font-size:10pt; }
+.open-fem3d-report-views { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:2.5mm; }
+.open-fem3d-report-projection { margin:0; border:1px solid #dbe2ea; background:#fff; break-inside:avoid; }
+.open-fem3d-report-projection-isometric { grid-column:1 / -1; }
+.open-fem3d-report-projection figcaption { padding:1.2mm 2mm; border-bottom:1px solid #e2e8f0; background:#f8fafc; color:#475569; font-size:8pt; font-weight:700; }
+.open-fem3d-report-projection svg { display:block; width:100%; height:auto; max-height:72mm; }
+.open-fem3d-report-projection:not(.open-fem3d-report-projection-isometric) svg { max-height:47mm; }
+.open-fem3d-report-svg-label { fill:#334155; font:600 11px "Segoe UI",Arial,sans-serif; paint-order:stroke; stroke:#fff; stroke-width:3px; }
+.open-fem3d-report-svg-node { fill:#475569; font:10px "Segoe UI",Arial,sans-serif; paint-order:stroke; stroke:#fff; stroke-width:3px; }
+.open-fem3d-report-axis-key { fill:#475569; font:700 11px "Segoe UI",Arial,sans-serif; }
+.open-fem3d-report-view-legend { grid-column:1 / -1; margin:0!important; color:#64748b; font-size:8pt; }
+.open-fem3d-report-page table { width:100%; border-collapse:collapse; font-size:8.6pt; }
+.open-fem3d-report-page th,.open-fem3d-report-page td { padding:1.35mm 1.7mm; border-bottom:1px solid #e2e8f0; text-align:right; white-space:nowrap; }
+.open-fem3d-report-page th:first-child,.open-fem3d-report-page td:first-child { text-align:left; }.open-fem3d-report-page thead th { background:#f1f5f9; color:#475569; font-weight:700; }
+.open-fem3d-report-page tbody th { width:44mm; color:#475569; font-weight:600; }.open-fem3d-report-page tbody th+td { text-align:left; }
+/* Staven op bedding (#106): tot elf kolommen; de koppen breken af zodat de tabel op de pagina past. */
+.open-fem3d-report-page .open-fem3d-report-bedding thead th { white-space:normal; vertical-align:bottom; }
+.open-fem3d-report-envelope-table { margin:3mm 0; }
+.open-fem3d-report-envelope-table th,.open-fem3d-report-envelope-table td { white-space:normal!important; overflow-wrap:anywhere; }
+.open-fem3d-report-envelope-table td:nth-child(4),.open-fem3d-report-envelope-table td:nth-child(6) { text-align:left; }
+.open-fem3d-report-envelope-table.open-fem3d-report-wide td:nth-child(5),
+.open-fem3d-report-envelope-table.open-fem3d-report-wide td:nth-child(7) { text-align:left; }
+.open-fem3d-report-checks th:nth-child(2),.open-fem3d-report-checks td:nth-child(2),
+.open-fem3d-report-checks th:nth-child(3),.open-fem3d-report-checks td:nth-child(3) { text-align:left; white-space:normal; }
+/* Verlopend profiel (#73): het VerloopBlok van de toetsing, zoals in het 2D-rapport (CHECK_REPORT_CSS, #30).
+   Compact gezet zodat de zeven kolommen binnen de tekstbreedte passen; de kolom Reden van "Doorsnede voor de
+   stabiliteitstoetsen" breekt af: zonder die regel wint de nowrap van `.open-fem3d-report-page td` en loopt de
+   zin voorbij de paginarand. */
+.open-fem3d-report-page .rpt-verloop { margin:1.5mm 0 2mm; }
+.open-fem3d-report-page .rpt-verloop-kop { margin:2mm 0 .8mm; font-weight:600; }
+.open-fem3d-report-page .rpt-verloop-tabel { font-size:8pt; }
+.open-fem3d-report-page .rpt-verloop-tabel th,.open-fem3d-report-page .rpt-verloop-tabel td { padding:1mm 1.2mm; }
+.open-fem3d-report-page .rpt-verloop-tabel tr.rpt-verloop-maatgevend td { background:#fef3c7; font-weight:600; }
+.open-fem3d-report-page .rpt-verloop-tabel th.rpt-verloop-reden,
+.open-fem3d-report-page .rpt-verloop-tabel td.rpt-verloop-reden { text-align:left; white-space:normal; overflow-wrap:anywhere; }
+.open-fem3d-report-page .rpt-verloop-tabel td.rpt-verloop-reden { color:#475569; font-size:8pt; }
+.open-fem3d-report-page .rpt-chk-notes { margin:1mm 0 0; padding-left:0; list-style:none; color:#475569; font-size:8pt; }
+.open-fem3d-report-good { color:#15803d; }.open-fem3d-report-bad { color:#b91c1c; }.open-fem3d-report-note { color:#64748b; font-size:8pt; }
+.open-fem3d-report-empty { margin-top:15mm; padding:10mm; border:1px dashed #94a3b8; background:#f8fafc; }
+/* Tab Views: de aangevinkte views als afbeelding met titel, twee per rij. */
+.open-fem3d-report-viewset { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:2.5mm; }
+.open-fem3d-report-view svg { max-height:58mm; }
+.open-fem3d-report-view-sub { font-weight:500; color:#64748b; }
+.open-fem3d-report-view-leeg { margin:0!important; padding:6mm 3mm; text-align:center; }
+.open-fem3d-report-view .open-fem3d-report-view-legend { display:flex; flex-wrap:wrap; gap:1mm 3mm; padding:1mm 2mm 1.5mm; }
+.open-fem3d-report-view-key { display:inline-flex; align-items:center; gap:1.2mm; }
+.open-fem3d-report-view-key i { display:inline-block; width:3mm; height:2mm; border-radius:.4mm; }
+@media print {
+  .open-fem3d-report-shell { height:auto; overflow:visible; padding:0; background:white; }
+  .open-fem3d-report-toolbar { display:none; }
+  .open-fem3d-report-page { width:auto; min-height:0; margin:0; padding:12mm 14mm; box-shadow:none; }
+  .open-fem3d-report-page section { break-inside:avoid; }
+  .open-fem3d-report-page .open-fem3d-report-envelope { break-inside:auto; }
+  .open-fem3d-report-envelope-table tr { break-inside:avoid; }
+  .open-fem3d-report-page details:not([open]) > :not(summary) { display:block; }
+  @page { size:A4 portrait; margin:0; }
+}

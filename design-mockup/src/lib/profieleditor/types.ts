@@ -22,7 +22,9 @@ export type MotorSoort =
   | "Rhs"
   | "Chs"
   | "Rechthoek"
-  | "Angle";
+  | "Angle"
+  /** Massief rond staal ("RD <d>"): `h` is de diameter. */
+  | "RoundBar";
 
 /** Een catalogusprofiel met de maten die de motor nodig heeft. */
 export interface Basisprofiel {

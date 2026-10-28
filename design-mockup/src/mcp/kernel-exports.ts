@@ -32,6 +32,23 @@ export * from "./sidecar";
 export * from "./fouten";
 export * from "./valideerModel";
 
+// De API-commando's (src/api/): de MCP-server voert ze via `api_uitvoeren`
+// uit, dus hun tests horen ook tegen de BUNDEL te draaien.
+export * from "../api/schema";
+export * from "../api/register";
+export * from "../api/projectDocument";
+export * from "../api/standaardRegister";
+export { MODEL3D_GEOMETRIE_COMMANDOS } from "../api/commands/model3dGeometrie";
+export { MODEL3D_VOORWAARDEN_COMMANDOS } from "../api/commands/model3dVoorwaarden";
+export { MODEL3D_BEWERKEN_COMMANDOS } from "../api/commands/model3dBewerken";
+export { MODEL3D_SELECTIE_COMMANDOS } from "../api/commands/model3dSelectie";
+export { PROJECT_COMMANDOS } from "../api/commands/project";
+export { STRAMIEN_COMMANDOS } from "../api/commands/stramien";
+// Extensies: het contract en het draaien van een extensiescript zonder app.
+export * from "../extensies/manifest";
+export { laadExtensieScript, opExtensieImporteren } from "./extensieSidecar";
+export * from "./apiSidecar";
+
 export * from "../components/fem/solver/engine";
 export * from "../components/fem/solver/combinations";
 // De kritieke lastfactor α_cr en de meldingen erbij (basisaudit nr 27): de
@@ -91,11 +108,49 @@ export * from "../components/fem/femTypes";
 export * from "../core/fem/PlaatMesher";
 export * from "../lib/wind/windGenerator";
 export * from "../lib/wind/windEurocode";
+export * from "../lib/wind/windCodeRoute";
+export * from "../lib/wind/nbc2025StaticWind";
+export * from "../lib/wind/nbc2025ReferenceHeights";
+export * from "../lib/wind/nbc2025RectangularWindPlan";
+export * from "../lib/wind/nbc2025PartialWind";
+export * from "../lib/wind/nbc2025Combinations";
+export * from "../lib/wind/nbc2025Snow";
+export * from "../components/openFem3d/openFem3dNbc2025Wind";
+export * from "../components/openFem3d/openFem3dNbc2025Snow";
+export * from "../components/openFem3d/openFem3dNbc2025ModelPlan";
+export * from "../lib/wind/windPressureBalance";
+export * from "../lib/wind/windSurfacePressurePlan";
+// De stalen hal (MCP-tool `open_fem_3d_staalhal_maken`): de generator van de
+// wizard en de sidecarbewerkingen erachter. De 3D-rekenverzoeken en de
+// toetsinvoer komen uit dezelfde modules als in de app; die worden hier
+// BENOEMD doorgegeven, zodat hun Tauri-glue (de rekenaanroep, de toetsstore)
+// buiten de bundel blijft — het bundelscript zou hem anders afkeuren.
+export * from "../components/openFem3d/wizards/staalhal";
+export * from "./staalhalSidecar";
+// De import van een IFC4-analysemodel (MCP-tool `open_fem_3d_ifc_importeren`):
+// dezelfde pure import als de knop "Rekenmodel importeren" in de app, de
+// STEP-lezer eronder en de sidecarbewerkingen. Tekstverwerking en modelbouw,
+// geen DOM en geen Tauri.
+export * from "../io/stepLezer";
+export * from "../io/ifcAnalyseImport";
+export * from "./ifcImportSidecar";
+export { buildOpenFem3DSolveRequest, openFem3DGlobalForceBalance } from "../components/openFem3d/openFem3dSolver";
+export { buildOpenFem3DSteelCheckInputs } from "../components/openFem3d/openFem3dSteelCheck";
+export { parseOpenFem3DModel, withOpenFem3DSelfWeight } from "../components/openFem3d/openFem3dModel";
 
 // Benoemd, NIET `export *`: dat trekt de Tauri- en DOM-glue mee (gemeten:
 // 4x window., 4x document.createElement). Zo is het exact 0.
 export {
   PROJECT_FORMAT_VERSION,
+  // De hoogste leesbare versie (4: belastingvlakken in het 3D-model). Zonder
+  // deze export rekent de bundelstand van test-checkconfig met `undefined`.
+  PROJECT_FORMAT_VERSION_3D,
+  PROJECT_FORMAT_VERSION_MAX,
+  // Het formaat-id dat geschreven wordt en de oudere id's die de lezer nog
+  // accepteert; de bundeltests controleren er beide richtingen mee.
+  PROJECT_FORMAT_ID,
+  LEGACY_PROJECT_FORMAT_IDS,
+  isProjectFormatId,
   PROJECT_FILE_EXT,
   serializeProject,
   deserializeProject,

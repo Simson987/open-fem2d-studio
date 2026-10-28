@@ -36,7 +36,9 @@ const MELDING_KIP: &str =
     "kip is voor deze samengestelde doorsnede niet geautomatiseerd (monosymmetrie z_j ontbreekt) \
      — beoordeel handmatig of voorkom kip met kipsteunen";
 const MELDING_KLASSE_4: &str =
-    "doorsnede is klasse 4; effectieve breedtes zijn niet geïmplementeerd";
+    "doorsnede is klasse 4 en voor deze doorsnedevorm zijn de effectieve breedtes van \
+     NEN-EN 1993-1-5 4.4 niet uitgewerkt (wel voor de dubbelsymmetrische I en de koker); \
+     alleen trek (6.2.3), dwarskracht (6.2.6) en de doorbuiging zijn getoetst";
 const MELDING_INTERACTIE: &str =
     "6.3.3 (6.61/6.62) deelt door M_b,Rd uit de kipcontrole; die is hierboven geweigerd";
 const MELDING_GESLOTEN_CEL: &str =
@@ -143,6 +145,11 @@ fn invoer(
         staaf_notities: None,
         profile_end: None,
         custom_section_end: None,
+        tension_only: None,
+        a_net_mm2: None,
+        deflection_add_mm: None,
+        deflection_length_m: None,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 
@@ -393,12 +400,14 @@ fn databasepad_blijft_ongewijzigd() {
     assert_eq!(r.status, CheckStatus::Ok);
     assert_eq!(r.classification, CrossSectionClass::Class1);
 
-    // De checklijst is onveranderd: twaalf toetsen plus twee doorbuigingen,
-    // in deze volgorde, en geen enkele D4.3-weigering ertussen.
+    // De checklijst: de trektoets 6.2.3 — sinds oktober 2026 voor elke
+    // doorsnede; hier n.v.t., want er is geen trek — dan de twaalf toetsen
+    // plus twee doorbuigingen, in deze volgorde, en geen enkele
+    // D4.3-weigering ertussen.
     let ids: Vec<&str> = r.checks.iter().map(|c| c.id.as_str()).collect();
-    let verwacht: Vec<&str> = TOETSEN
-        .iter()
-        .copied()
+    let verwacht: Vec<&str> = ["6.2.3_tension"]
+        .into_iter()
+        .chain(TOETSEN.iter().copied())
         .chain(["deflection_w_fin", "deflection_w_add"])
         .collect();
     assert_eq!(ids, verwacht);
@@ -408,6 +417,9 @@ fn databasepad_blijft_ongewijzigd() {
             "{id} zou een UC moeten hebben"
         );
     }
+    let trek = check(&r, "6.2.3_tension");
+    assert_eq!(status_van(trek), CheckStatus::NotApplicable);
+    assert!(uc_van(trek).is_none(), "geen trek, dus geen unity check");
 
     // N_c,Rd = A·f_y/γ_M0 en UC = |N_Ed|/N_c,Rd, uit de catalogusgegevens.
     let n_c_rd = p.area_mm2 * 235.0 / 1.0 * 1e-3;
@@ -431,7 +443,10 @@ fn databasepad_blijft_ongewijzigd() {
         max_relative = 1e-12
     );
     // De doorbuiging hangt niet van de profieldata af: w_fin = 12 mm op
-    // L/333 = 6000/333 = 18,018 mm → 0,666.
+    // ℓ_rep/250 = 6000/250 = 24 mm → 0,5 (NEN-EN 1990:2002/NB:2019 A1.4.3(4),
+    // "bij zowel vloeren als daken"). Tot oktober 2026 was de grens L/333 =
+    // 18,018 mm (UC 0,666), de grens van w2 + w3 in plaats van die van w_max
+    // (controle 2026-10, punt B15).
     //
     // w_add = 8 mm. De grens was de vaste L/150 = 40 mm (UC 0,20); sinds
     // september 2026 volgt de noemer de klasse. `Floor` valt onder het tweede
@@ -440,7 +455,7 @@ fn databasepad_blijft_ongewijzigd() {
     // 3/1 000 deel van ℓ_rep = 18,0 mm → UC = 8/18 = 0,444.
     assert_relative_eq!(
         uc_van(check(&r, "deflection_w_fin")).unwrap(),
-        0.666,
+        12.0 / 24.0,
         max_relative = 1e-12
     );
     assert_relative_eq!(
@@ -537,15 +552,33 @@ fn gelaste_i_levert_handrekenbare_uc_voor_n_v_en_m() {
         max_relative = 1e-3
     );
 
-    // 6.2.9  a = (A − 2·b·t_f)/A = (10 000 − 6000)/10 000 = 0,40 en
-    //        n = 0,2128 ≤ a, dus géén reductie: UC gelijk aan 6.2.5.
+    // 6.2.9  a = (A − 2·b·t_f)/A = (10 000 − 6000)/10 000 = 0,40, dus de
+    //        reductie van (6.36) begint bij n > 0,5·a = 0,20. Hier is
+    //        n = 500/2350 = 0,212766 > 0,20, en de vrijstelling van
+    //        6.2.9.1(4) geldt niet: (6.34) N_Ed ≤ 0,5·h_w·t_w·f_y/γ_M0 =
+    //        0,5·400·10·235 = 470 kN < 500 kN. Dus
+    //        M_N,y,Rd = 386,575·(1 − 0,212766)/(1 − 0,5·0,40) = 380,406 kNm
+    //        UC = 200/380,406 = 0,525754.
+    //        Tot oktober 2026 stond hier 0,517364 (gelijk aan 6.2.5): de oude
+    //        regel reduceerde pas boven n = a, en was daarmee tussen 0,5·a en a
+    //        te gunstig — hier 1,6 %.
     let mn = check(&r, "6.2.9_combined_mn");
     assert_eq!(status_van(mn), CheckStatus::Ok);
-    assert_relative_eq!(uc_van(mn).unwrap(), 0.517364, max_relative = 1e-5);
+    assert_relative_eq!(waarde_van(mn), 380.406, max_relative = 1e-5);
+    assert_relative_eq!(uc_van(mn).unwrap(), 0.525754, max_relative = 1e-5);
+    let CheckKind::Resistance(mn_calc) = &mn.kind else {
+        unreachable!()
+    };
+    let a = mn_calc
+        .deelstappen
+        .iter()
+        .find(|d| d.id == "a")
+        .expect("deelstap a");
+    assert_relative_eq!(a.value.unwrap(), 0.40, max_relative = 1e-12);
     assert!(
-        notities_van(mn).iter().any(|s| s.contains("a = 0.400")),
-        "6.2.9 hoort a = 0,400 te melden; notities: {:?}",
-        notities_van(mn)
+        a.notes[0].contains("a = 0,400"),
+        "6.2.9 hoort a = 0,400 te melden: {:?}",
+        a.notes
     );
 
     // 6.2.8  V_Ed = 150 kN < 0,5·V_pl,Rd = 325,6 kN, dus geen momentreductie.
@@ -555,10 +588,11 @@ fn gelaste_i_levert_handrekenbare_uc_voor_n_v_en_m() {
         max_relative = 1e-5
     );
 
-    // De doorbuigingstoets is puur EI en blijft altijd geldig.
+    // De doorbuigingstoets is puur EI en blijft altijd geldig: 12 mm tegen
+    // ℓ_rep/250 = 24 mm (A1.4.3(4); tot oktober 2026 L/333, UC 0,666).
     assert_relative_eq!(
         uc_van(check(&r, "deflection_w_fin")).unwrap(),
-        0.666,
+        12.0 / 24.0,
         max_relative = 1e-12
     );
 
@@ -707,10 +741,22 @@ fn gelaste_i_krijgt_kip_want_dubbelsymmetrisch() {
         max_relative = 1e-12
     );
 
-    // Met kip is 6.3.3 gewoon te rekenen.
+    // Deze ligger heeft geen druk (N = 0): 6.3.3 geldt voor buiging met DRUK
+    // en is dan niet van toepassing — mét die reden, en niet om de kip.
+    for id in ["6.3.3_eq_6_61", "6.3.3_eq_6_62"] {
+        let c = check(&r, id);
+        assert_eq!(status_van(c), CheckStatus::NotApplicable, "{id}");
+        assert!(
+            notities_van(c)[0].starts_with("Niet van toepassing"),
+            "{id}: {:?}",
+            notities_van(c)
+        );
+    }
+    // Met kip én druk is 6.3.3 gewoon te rekenen.
+    let met_druk = check_beam(invoer("", Some(doorsnede_d41()), -50.0, 0.0, 200.0));
     for id in ["6.3.3_eq_6_61", "6.3.3_eq_6_62"] {
         assert!(
-            uc_van(check(&r, id)).is_some(),
+            uc_van(check(&met_druk, id)).is_some(),
             "{id} hoort hier een UC te hebben"
         );
     }
@@ -823,8 +869,12 @@ fn koker_krijgt_geen_kip() {
 //  Weigering (2) — klasse 4
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Tot oktober 2026 werd deze doorsnede als geheel geweigerd (alle twaalf
+/// toetsen "n.v.t.", uc_max = de doorbuiging). Sinds de effectieve breedtes
+/// van NEN-EN 1993-1-5 4.4 (controle 2026-10, punt B7) rekent de
+/// dubbelsymmetrische gelaste I in klasse 4 met A_eff en W_eff,y.
 #[test]
-fn klasse_4_levert_geen_enkele_weerstands_uc() {
+fn klasse_4_rekent_met_de_effectieve_doorsnede() {
     // Zelfde flenzen, maar een lijf 800×6: c = 815 − 7,5 − 7,5 = 800 mm en
     // c/t = 800/6 = 133,33 > 124ε = 124 ⇒ klasse 4 (D4.2, geval b).
     let klasse4 = CustomSection {
@@ -837,53 +887,148 @@ fn klasse_4_levert_geen_enkele_weerstands_uc() {
     let r = check_beam(invoer("", Some(klasse4), -500.0, -150.0, 200.0));
 
     assert_eq!(r.classification, CrossSectionClass::Class4);
-    assert_eq!(r.status, CheckStatus::NotApplicable);
-    assert_eq!(
-        r.governing_check_id,
-        format!("NIET TOETSBAAR: {MELDING_KLASSE_4}")
-    );
+    // De staaf voldoet niet: (6.62) geeft 1,473 (zie hieronder). Dat oordeel
+    // staat vast, ook al zijn dwarskracht, 6.2.8 en 6.2.10 geweigerd (lijfplooi
+    // bij V_z,Ed = 150 kN); zonder die gerekende overschrijding zou de staaf
+    // NIET VOLLEDIG GETOETST zijn — nooit "voldoet" (controle 2026-10, B7).
+    assert_eq!(r.status, CheckStatus::NotOk, "{}", r.governing_check_id);
+    assert_eq!(r.governing_check_id, "6.3.3_eq_6_62");
 
-    // Geen enkele weerstands- of stabiliteitstoets levert een getal; alle
-    // twaalf blijven mét reden in de lijst staan.
-    for id in TOETSEN {
+    // A_eff onder gelijkmatige druk (4.4, tabel 4.1, ψ = 1, k_σ = 4):
+    //   λ̄_p = 133,33/(28,4·1·2) = 2,34742; ρ = (2,34742 − 0,22)/2,34742² =
+    //   0,386075; A_eff = 10 800 − (1 − 0,386075)·800·6 = 7853,16 mm².
+    //   N_c,Rd = 7853,16·235 = 1845,49 kN (6.11); UC = 500/1845,49 = 0,270930.
+    let druk = check(&r, "6.2.4_compression");
+    assert_relative_eq!(waarde_van(druk), 1845.49, max_relative = 1e-5);
+    assert_relative_eq!(uc_van(druk).unwrap(), 0.270930, max_relative = 1e-5);
+
+    // W_eff,y onder zuivere buiging: flenzen volledig effectief, lijf ψ = −1,
+    //   k_σ = 23,9, λ̄_p = 133,33/(28,4·√23,9) = 0,960332, ρ = (0,960332 −
+    //   0,11)/0,960332² = 0,922031; b_eff = 368,81 mm van b_c = 400 mm, gat
+    //   31,19 mm met zwaartepunt 236,88 mm boven het midden; z_na = −4,177 mm;
+    //   I_eff = 1,241750·10⁹ mm⁴; W_eff,y = I_eff/(415 + 4,177) =
+    //   2 962 354 mm³ (W_el,y = 3 017 952). M_c,Rd = 696,153 kNm (6.15).
+    let buig = check(&r, "6.2.5_bending_y");
+    assert_relative_eq!(waarde_van(buig), 696.153, max_relative = 1e-5);
+    assert_relative_eq!(uc_van(buig).unwrap(), 200.0 / 696.153, max_relative = 1e-5);
+
+    // De lijfplooiweigering blijft: h_w/t_w = 800/6 = 133,3 tegen de grens
+    // 72ε/η = 72/1,2 = 60,0. Dwarskracht, 6.2.8 en 6.2.10 rekenen dus niet;
+    // de reden is nu alleen de lijfplooi.
+    for id in ["6.2.6_shear_z", "6.2.8_combined_mv", "6.2.10_combined_mnv"] {
         let c = check(&r, id);
         assert_eq!(status_van(c), CheckStatus::NotApplicable, "{id}");
-        assert!(uc_van(c).is_none(), "{id} levert toch een UC");
+        assert_eq!(
+            notities_van(c),
+            vec![
+                "lijfplooi onder schuifkracht: h_w/t_w = 133.3 > 72ε/η = 60.0; NEN-EN 1993-1-5 §5 \
+                  (bijdrage van het lijf en de flenzen aan V_b,Rd) is niet geïmplementeerd"
+                    .to_string()
+            ],
+            "{id}"
+        );
+    }
+    // Knik en kip rekenen, met A_eff en W_eff,y en de klasse-4-toelichting.
+    for id in ["6.3.1_buckling", "6.3.2_ltb", "6.2.9_combined_mn"] {
+        let c = check(&r, id);
+        assert!(uc_van(c).is_some(), "{id} hoort te rekenen");
         assert!(
-            notities_van(c).contains(&MELDING_KLASSE_4.to_string()),
-            "{id} mist de klasse-4-melding: {:?}",
+            notities_van(c)
+                .iter()
+                .any(|n| n.starts_with("Klasse 4 (NEN-EN 1993-1-1 6.2.2.5)")),
+            "{id}: {:?}",
             notities_van(c)
         );
     }
 
-    // Bij dit lijf geldt óók de lijfplooiweigering: h_w/t_w = 800/6 = 133,3
-    // tegen de grens 72ε/η = 72/1,2 = 60,0. Beide redenen staan erbij, want
-    // een tweede beletsel mag niet achter het eerste verdwijnen.
-    let v = check(&r, "6.2.6_shear_z");
-    assert_eq!(
-        notities_van(v),
-        vec![
-            MELDING_KLASSE_4.to_string(),
-            "lijfplooi onder schuifkracht: h_w/t_w = 133.3 > 72ε/η = 60.0; NEN-EN 1993-1-5 §5 \
-             (bijdrage van het lijf en de flenzen aan V_b,Rd) is niet geïmplementeerd"
-                .to_string(),
-        ]
+    // KIP MET W_eff,y (art. 6.3.2.1(3)). M_cr hangt alleen van de bruto
+    // stijfheid af (I_z, I_t, I_w en k_red uit de NB) en komt uit de kern; de
+    // rest met de hand, met W_eff,y = 2 962 354 mm³ van hierboven:
+    //   M_y,Rk = W_eff,y·f_y = 696,153 kNm
+    //   λ̄_LT  = √(M_y,Rk/M_cr) = √(696,153/313,96) = 1,48907
+    //   gelaste I, h/b = 830/200 > 2 → kromme d (tabel 6.5), α_LT = 0,76;
+    //   6.3.2.3: λ̄_LT,0 = 0,4, β = 0,75:
+    //   Φ_LT   = 0,5·[1 + 0,76·(1,48907 − 0,4) + 0,75·1,48907²] = 1,74534
+    //   χ_LT   = 1/(Φ_LT + √(Φ_LT² − 0,75·λ̄_LT²)) = 0,34230
+    //   M_b,Rd = χ_LT·W_eff,y·f_y/γ_M1 = 238,29 kNm; UC = 200/238,29 = 0,8393.
+    // Met W_el,y = 3 017 952 mm³ in plaats van W_eff,y kwam er iets anders uit.
+    let kip = check(&r, "6.3.2_ltb");
+    let w_eff_y = 2_962_354.0;
+    let m_y_rk = w_eff_y * 235.0 * 1e-6;
+    let m_cr = tussenwaarde(kip, "M_{cr}");
+    let lambda_lt = (m_y_rk / m_cr).sqrt();
+    let phi_lt = 0.5 * (1.0 + 0.76 * (lambda_lt - 0.4) + 0.75 * lambda_lt * lambda_lt);
+    let chi_lt = (1.0 / (phi_lt + (phi_lt * phi_lt - 0.75 * lambda_lt * lambda_lt).sqrt()))
+        .min(1.0)
+        .min(1.0 / (lambda_lt * lambda_lt));
+    assert_relative_eq!(m_cr, 313.96, max_relative = 1e-4);
+    assert_relative_eq!(
+        tussenwaarde(kip, r"\bar{\lambda}_{LT}"),
+        lambda_lt,
+        max_relative = 1e-5
     );
-    // Deze doorsnede is wél dubbelsymmetrisch, dus de kipweigering speelt hier
-    // niet mee: bij de kipcontrole staat alleen de klasse-4-reden.
-    assert_eq!(
-        notities_van(check(&r, "6.3.2_ltb")),
-        vec![MELDING_KLASSE_4.to_string()]
+    assert_relative_eq!(lambda_lt, 1.48907, max_relative = 1e-4);
+    assert_relative_eq!(tussenwaarde(kip, r"\chi_{LT}"), chi_lt, max_relative = 1e-5);
+    assert_relative_eq!(chi_lt, 0.34230, max_relative = 1e-4);
+    assert_relative_eq!(waarde_van(kip), chi_lt * m_y_rk, max_relative = 1e-5);
+    assert_relative_eq!(waarde_van(kip), 238.29, max_relative = 1e-4);
+    assert_relative_eq!(
+        uc_van(kip).unwrap(),
+        200.0 / (chi_lt * m_y_rk),
+        max_relative = 1e-5
+    );
+    assert_relative_eq!(uc_van(kip).unwrap(), 0.8393, max_relative = 1e-4);
+    // Het rapport noemt het weerstandsmoment naar wat het is.
+    if let CheckKind::Stability(s) = &kip.kind {
+        assert!(
+            s.variables.iter().any(|v| v.symbol == "W_{eff,y}"),
+            "{:?}",
+            s.variables
+        );
+        assert!(!s.formula_latex.contains("W_{el,y}"), "{}", s.formula_latex);
+    }
+
+    // 6.3.3 (TABEL 6.7, KLASSE 4): N_Rk = A_eff·f_y en M_y,Rk = W_eff,y·f_y.
+    //   N_Rk = 7853,16·235 = 1845,49 kN; M_y,Rk = 696,153 kNm.
+    //   (6.61): N_Ed/(χ_y·N_Rk/γ_M1) + k_yy·M_y,Ed/(χ_LT·M_y,Rk/γ_M1)
+    //   (6.62): N_Ed/(χ_z·N_Rk/γ_M1) + k_zy·M_y,Ed/(χ_LT·M_y,Rk/γ_M1)
+    // met χ_y, χ_z uit de kniktoets (met A_eff, (6.51)), χ_LT van hierboven en
+    // k_yy, k_zy uit bijlage B zoals de kern ze rapporteert. Met de bruto
+    // N_Rk = A·f_y = 2538 kN of M_y,Rk = W_el,y·f_y kwam er iets anders uit.
+    let knik = check(&r, "6.3.1_buckling");
+    for id in ["6.3.3_eq_6_61", "6.3.3_eq_6_62"] {
+        let c = check(&r, id);
+        let CheckKind::Stability(s) = &c.kind else {
+            panic!("{id} is een stabiliteitstoets")
+        };
+        let var = |sym: &str| {
+            s.variables
+                .iter()
+                .find(|v| v.symbol == sym)
+                .unwrap_or_else(|| panic!("{id}: {sym}"))
+                .value
+        };
+        assert_relative_eq!(var("N_{Rk}"), 7853.16 * 235.0 * 1e-3, max_relative = 1e-5);
+        assert_relative_eq!(var("M_{y,Rk}"), m_y_rk, max_relative = 1e-5);
+        let (chi, k) = if id == "6.3.3_eq_6_61" {
+            (tussenwaarde(knik, r"\chi_y"), var("k_{yy}"))
+        } else {
+            (tussenwaarde(knik, r"\chi_z"), var("k_{zy}"))
+        };
+        let hand = 500.0 / (chi * 7853.16 * 235.0 * 1e-3) + k * 200.0 / (chi_lt * m_y_rk);
+        assert_relative_eq!(uc_van(c).unwrap(), hand, max_relative = 1e-5);
+    }
+    assert_relative_eq!(
+        uc_van(check(&r, "6.3.3_eq_6_62")).unwrap(),
+        1.4729,
+        max_relative = 1e-4
     );
 
-    // De doorbuiging is puur EI en blijft wél geldig — dat is de enige toets
-    // met een UC. Zelfde verschuiving van de w_add-grens als in
-    // `databasepad_blijft_ongewijzigd`: van de vaste L/150 = 40 mm naar
-    // 3/1 000 · ℓ_rep = 18,0 mm (NEN-EN 1990:2002/NB:2019 A1.4.3(3), tweede
-    // gedachtestreepje) → UC = 8/18 = 0,444.
+    // De doorbuiging is puur EI: w_fin 12 mm tegen ℓ_rep/250 = 24 mm (A1.4.3(4)),
+    // w_add 8 mm tegen 3/1 000 · ℓ_rep = 18,0 mm.
     assert_relative_eq!(
         uc_van(check(&r, "deflection_w_fin")).unwrap(),
-        0.666,
+        0.5,
         max_relative = 1e-12
     );
     assert_relative_eq!(
@@ -891,7 +1036,37 @@ fn klasse_4_levert_geen_enkele_weerstands_uc() {
         8.0 / 18.0,
         max_relative = 1e-12
     );
-    assert_relative_eq!(r.uc_max, 0.666, max_relative = 1e-12);
+}
+
+/// Een klasse 4-doorsnede zonder effectieve doorsnede (hier een
+/// monosymmetrische gelaste I): alleen de toetsen die niet van de klasse
+/// afhangen rekenen, en de staaf leest NOOIT als "voldoet".
+#[test]
+fn klasse_4_zonder_effectieve_doorsnede_is_niet_getoetst() {
+    let mono = CustomSection {
+        naam: "monosymmetrische I met slank lijf".to_string(),
+        lamellen: gelaste_i(300.0, 200.0, 15.0, 800.0, 6.0),
+        gesloten_cellen: vec![],
+        eigenschappen: None,
+        vorm: CustomDoorsnedevorm::Onbekend,
+    };
+    let r = check_beam(invoer("", Some(mono), -500.0, -150.0, 200.0));
+    assert_eq!(r.classification, CrossSectionClass::Class4);
+    assert_eq!(r.status, CheckStatus::NotApplicable);
+    assert_eq!(
+        r.governing_check_id,
+        format!("NIET TOETSBAAR: {MELDING_KLASSE_4}")
+    );
+    for id in TOETSEN {
+        let c = check(&r, id);
+        if id == "6.2.6_shear_y" {
+            // Dwarskracht om y hangt niet van de plooiklasse af: wél getoetst.
+            assert_eq!(status_van(c), CheckStatus::Ok, "{id}");
+            continue;
+        }
+        assert_eq!(status_van(c), CheckStatus::NotApplicable, "{id}");
+        assert!(uc_van(c).is_none(), "{id} levert toch een UC");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -924,6 +1099,16 @@ fn slank_lijf_weigert_de_schuiftoets_maar_niet_de_rest() {
         assert!(uc_van(c).is_none(), "{id} levert toch een UC");
         assert_eq!(notities_van(c), vec![melding.to_string()], "{id}");
     }
+    // De staaf als geheel: alle gerekende UC's blijven onder 1 (uc_max 0,893),
+    // maar bij V_z,Ed = 200 kN zijn de geweigerde toetsen nodig.
+    // Dus NIET VOLLEDIG GETOETST — nooit "voldoet". Tot oktober 2026 kreeg deze
+    // staaf status Ok (controle 2026-10, punt B7).
+    assert!(r.uc_max < 1.0, "{}", r.uc_max);
+    assert_eq!(r.status, CheckStatus::NotApplicable);
+    assert_eq!(
+        r.governing_check_id,
+        format!("NIET VOLLEDIG GETOETST: {melding}")
+    );
 
     // De schuiftoets evenwijdig aan de flenzen blijft geldig: die gaat niet
     // over het lijf.

@@ -44,12 +44,143 @@ import { keurPlaatMateriaal } from "./plaatMateriaal";
 import { vt, type VertaalbareTekst } from "./vertaalbareTekst";
 
 /**
- * Tekentolerantie in mm. Het model rekent in mm en de gebruiker tekent met
- * raster- en objectsnap; alles binnen 1 mm is dezelfde plek. Bewust ruimer dan
- * de exacte-gelijkheidsdrempel die de MCP-poort hanteert: dáár is de invoer
- * machinaal, hier komt hij uit een muis.
+ * Standaard VERBINDINGSTOLERANTIE in mm (issue #55). Binnen deze afstand geldt
+ * een knoop als "op de staaf" (`zoekKnopenOpStaaf`, aansluiten bij plaatsen)
+ * of als "op dezelfde plek" als een andere knoop (`zoekDubbeleKnopen`,
+ * hergebruik bij plaatsen). De gebruiker stelt de waarde in de tab Weergave
+ * in (0,1–25 mm, bewaard met de snapinstellingen); deze constante is de
+ * beginstand en de waarde voor aanroepers zonder instelling (tests, bundel).
+ *
+ * Tot issue #55 was dit een vaste 1 mm. Een kolomvoet die 3 mm naast een
+ * ligger was getekend, gold daarmee als los: geen bevinding, geen aansluiting,
+ * en pas bij het rekenen een singuliere matrix. 5 mm vangt zulke tekenfouten
+ * en blijft ruim onder de kleinste rasterstap van 50 mm.
+ *
+ * Bewust ruimer dan de exacte-gelijkheidsdrempel die de MCP-poort hanteert:
+ * dáár is de invoer machinaal, hier komt hij uit een muis. De plaatranden
+ * volgen deze tolerantie NIET; zie `PLAATRAND_TOL_MM`.
  */
-export const CONTROLE_TOL_MM = 1;
+export const CONTROLE_TOL_MM = 5;
+
+/** Ondergrens van de instelbare verbindingstolerantie (mm). */
+export const VERBINDINGSTOLERANTIE_MIN_MM = 0.1;
+/**
+ * Bovengrens (mm): de HELFT van de kleinste rasterstap van het tekenvlak
+ * (50 mm, instelling "raster", min = 50). Twee naburige rasterpunten liggen
+ * dan altijd verder uit elkaar dan de tolerantie, en een knoop op een
+ * rasterpunt ligt nooit "op" een staaf langs de naburige rasterlijn. Bij de
+ * volle rasterstap als grens (de eerste keuze, 50 mm) werden twee naburige
+ * rasterpunten "dezelfde plek", en een evenwijdige staaf één rasterstap
+ * verderop gold als "op de staaf".
+ */
+export const VERBINDINGSTOLERANTIE_MAX_MM = 25;
+
+/** Begrens een verbindingstolerantie op 0,1–25 mm; geen getal → de standaard. */
+export function begrensVerbindingstolerantie(mm: number): number {
+  if (!Number.isFinite(mm)) return CONTROLE_TOL_MM;
+  return Math.min(VERBINDINGSTOLERANTIE_MAX_MM, Math.max(VERBINDINGSTOLERANTIE_MIN_MM, mm));
+}
+
+/**
+ * Een getypte verbindingstolerantie: komma of punt, desgewenst met "mm" en
+ * spaties. Null voor geen getal, nul of negatief; anders begrensd op 0,1–25.
+ */
+export function leesVerbindingstolerantie(tekst: string): number | null {
+  const schoon = tekst.replace(/\s+/g, "").replace(/mm$/i, "");
+  if (!/^(\d+([.,]\d*)?|[.,]\d+)$/.test(schoon)) return null;
+  const waarde = Number(schoon.replace(",", "."));
+  if (!Number.isFinite(waarde) || waarde <= 0) return null;
+  return begrensVerbindingstolerantie(waarde);
+}
+
+/**
+ * Koppeltolerantie van een staafeinde aan een PLAATRAND (mm), gelijk aan de
+ * knooptolerantie `TOL_MM` van het rekenmesh in de engine. Staat los van de
+ * verbindingstolerantie: de engine koppelt een staafeinde alleen binnen 1 mm
+ * aan een plaatrand, en een ruimere controle zou een staafeinde dat de engine
+ * weigert als "op de rand" goedkeuren. Geldt voor de plaatlastranden, de
+ * openingen, het vrije-uiteinde-oordeel op een plaatrand en de ondergrens
+ * van `zoekStaafeindenBijPlaatrand`.
+ */
+export const PLAATRAND_TOL_MM = 1;
+
+/**
+ * Liggen twee punten op dezelfde plek: is hun AFSTAND hooguit `tolMm`? DE
+ * regel voor samenvallende knopen (`zoekDubbeleKnopen`), voor "dit is het
+ * staafeinde, niet het inwendige" (`puntOpStaaf`) en voor het hergebruiken
+ * van een knoop bij het plaatsen. Eén regel, zodat een knoop nooit tegelijk
+ * een samenvoeg- en een splitsgeval is, en er tussen die twee ook geen stil
+ * gat zit.
+ *
+ * Euclidisch, net als de afstand tot de staafas in `puntOpStaaf`: de
+ * tolerantie is een afstand in elke richting. Eerst gold hij per as; dan
+ * telden twee knopen schuin naast elkaar tot 1,41 × de tolerantie als
+ * dezelfde plek (bij 5 mm: 7 mm uit elkaar).
+ */
+export function opZelfdePlek(
+  a: { x: number; z: number },
+  b: { x: number; z: number },
+  tolMm: number,
+): boolean {
+  return Math.hypot(a.x - b.x, a.z - b.z) <= tolMm;
+}
+
+/**
+ * Het voetpunt van (x, z) op de as van staaf `beam` (loodrechte projectie,
+ * geknipt op de staaf), met de fractie `t` vanaf de beginknoop. Null bij een
+ * ontbrekende eindknoop of een staaf van lengte nul.
+ */
+export function voetpuntOpStaaf(
+  nodes: Pick<Node, "id" | "x" | "z">[],
+  beam: Pick<Beam, "from" | "to">,
+  x: number,
+  z: number,
+): { x: number; z: number; t: number } | null {
+  const a = nodes.find((n) => n.id === beam.from);
+  const b = nodes.find((n) => n.id === beam.to);
+  if (!a || !b) return null;
+  const vx = b.x - a.x, vz = b.z - a.z;
+  const lenSq = vx * vx + vz * vz;
+  if (lenSq < 1e-12) return null;
+  const t = Math.min(1, Math.max(0, ((x - a.x) * vx + (z - a.z) * vz) / lenSq));
+  return { x: a.x + vx * t, z: a.z + vz * t, t };
+}
+
+/**
+ * Waar hoort een TUSSENKNOOP op staaf `beam` bij een punt (x, z) dat op of
+ * vlak naast de staaf ligt (een klik, een rasterpunt)? Op het voetpunt op de
+ * staafas, zodat de staaf na het splitsen recht blijft. Valt dat voetpunt op
+ * dezelfde plek als een uiteinde (`opZelfdePlek`, binnen `tolMm`), dan is het
+ * geen tussenpunt maar dat uiteinde: `eindknoop` is dan zijn id, en splitsen
+ * zou een staaf van (vrijwel) lengte nul opleveren — een samenvoeg-geval,
+ * geen knip. Null bij een ontbrekende eindknoop of een staaf van lengte nul.
+ *
+ * Eén regel voor het subknoop-gereedschap, het aansluiten van een knoop of
+ * oplegging op een staaf onder de muis en `computeBeamSplit`.
+ */
+export function tussenpuntOpStaaf(
+  nodes: Pick<Node, "id" | "x" | "z">[],
+  beam: Pick<Beam, "from" | "to">,
+  x: number,
+  z: number,
+  tolMm: number = CONTROLE_TOL_MM,
+): { x: number; z: number; t: number; eindknoop: number | null } | null {
+  const p = voetpuntOpStaaf(nodes, beam, x, z);
+  if (!p) return null;
+  const a = nodes.find((n) => n.id === beam.from)!;
+  const b = nodes.find((n) => n.id === beam.to)!;
+  const opA = opZelfdePlek(a, p, tolMm);
+  const opB = opZelfdePlek(b, p, tolMm);
+  if (!opA && !opB) return { ...p, eindknoop: null };
+  // Beide (een staaf korter dan twee keer de tolerantie): het dichtstbijzijnde.
+  const naarA = opA && (!opB || Math.hypot(a.x - p.x, a.z - p.z) <= Math.hypot(b.x - p.x, b.z - p.z));
+  return { ...p, eindknoop: naarA ? a.id : b.id };
+}
+
+/** Een maat in mm als tekst: hooguit één decimaal, met een komma. */
+function mmTekst(mm: number): string {
+  return String(Math.round(mm * 10) / 10).replace(".", ",");
+}
 
 /** Soort bevinding — bepaalt de tekst en de aangeboden herstelactie. */
 export type BevindingSoort =
@@ -138,9 +269,12 @@ export interface ControleModel {
  * Ligt punt (x, z) in het INWENDIGE van staaf `beam`? Retourneert de
  * positiefractie t (0..1 vanaf de startknoop) of null.
  *
- * "Inwendig" is strikt: een punt binnen `tolMm` van een van beide eindknopen
- * telt niet mee — dáár zit de knoop al aan de staaf vast en zou splitsen een
- * staaf met lengte nul opleveren.
+ * "Inwendig" is strikt: een punt op dezelfde plek als een van beide
+ * eindknopen (`opZelfdePlek`, dezelfde regel als voor dubbele knopen) telt
+ * niet mee — dat is een samenvoeg-geval, en splitsen zou daar een staaf van
+ * (vrijwel) lengte nul opleveren. Tot issue #55 gold hier de afstand LANGS de
+ * as; bij een schuine staaf gaf dat een knoop die zowel op de staaf als op
+ * het einde lag, en een hoek waar hij nergens lag.
  */
 export function puntOpStaaf(
   nodes: Pick<Node, "id" | "x" | "z">[],
@@ -158,8 +292,9 @@ export function puntOpStaaf(
   if (len <= tolMm) return null; // staaf met lengte nul — niets om op te liggen
   // Loodrechte projectie op de staafas.
   const t = ((x - a.x) * vx + (z - a.z) * vz) / (len * len);
-  // Strikt inwendig: minstens `tolMm` van beide uiteinden vandaan.
-  if (t * len <= tolMm || (1 - t) * len <= tolMm) return null;
+  // Tussen de uiteinden, en niet op dezelfde plek als een van beide.
+  if (t <= 0 || t >= 1) return null;
+  if (opZelfdePlek(a, { x, z }, tolMm) || opZelfdePlek(b, { x, z }, tolMm)) return null;
   // Afstand tot de as (kruisproduct / lengte).
   const afstand = Math.abs((x - a.x) * vz - (z - a.z) * vx) / len;
   if (afstand > tolMm) return null;
@@ -217,7 +352,7 @@ export function zoekPlaatlastFouten(model: ControleModel): Bevinding[] {
     const hoeken = plaat.nodeIds.map((id) => model.nodes.find((n) => n.id === id));
     if (hoeken.some((h) => !h)) continue;       // een ontbrekende hoek meldt de plaat zelf
     const rand = bepaalPlaatlastRand(
-      hoeken.map((h) => ({ x: h!.x, z: h!.z })), plaat.openingen, l, CONTROLE_TOL_MM);
+      hoeken.map((h) => ({ x: h!.x, z: h!.z })), plaat.openingen, l, PLAATRAND_TOL_MM);
     if (!rand.ok) {
       uit.push({
         soort: "plaatlast", ernst: "fout", nodeIds: [...plaat.nodeIds],
@@ -262,7 +397,7 @@ export function zoekOpeningFouten(model: ControleModel): Bevinding[] {
     const fout = valideerPlaatOpeningen(
       hoeken.map((h) => ({ x: h!.x, z: h!.z })),
       p.openingen.map((o) => o.punten),
-      CONTROLE_TOL_MM,
+      PLAATRAND_TOL_MM,
     );
     if (fout) {
       uit.push({
@@ -315,6 +450,24 @@ function knoopGraden(model: ControleModel): Map<number, number> {
  *
  * Deze functie is de enige implementatie van deze regel in de repo;
  * `mcp/valideerModel.ts` gebruikt hem met zijn eigen (exacte) tolerantie.
+ *
+ * TEKST. Liggen de knopen echt op elkaar (minder dan 0,05 mm, wat afgerond
+ * 0 mm is), dan "op dezelfde plek" en "een staaf van lengte nul". Liggen ze
+ * uit elkaar maar binnen de verbindingstolerantie (issue #55), dan noemt de
+ * tekst beide plekken, de echte afstand of staaflengte en de tolerantie,
+ * met de plek waar die in te stellen is: een staaf van 4 mm is geen staaf
+ * van lengte nul.
+ *
+ * WELKE KNOOP BLIJFT (herstel "voeg samen"). De blijvende knoop houdt zijn
+ * plek; de andere verhuist er naartoe. Voorrang, in deze volgorde:
+ *  1. een PLAATHOEK — verschuift die, dan is een asgelijnde rechthoek geen
+ *     rechthoek meer, en een randlast met een benoemde rand ("bovenrand")
+ *     wordt een nieuwe blokkerende fout;
+ *  2. een knoop met een OPLEGGING — die blijft waar hij getekend is;
+ *  3. de laagste id: stabiel en voorspelbaar.
+ * Tot de eerste twee regels er waren, hing de uitkomst bij 5 mm af van de
+ * tekenvolgorde: was de staaf eerder getekend dan de plaat, dan schoof de
+ * plaathoek naar het staafeinde.
  */
 export function zoekDubbeleKnopen(
   model: ControleModel,
@@ -324,32 +477,48 @@ export function zoekDubbeleKnopen(
   for (const b of model.beams) {
     verbonden.add(b.from < b.to ? `${b.from}-${b.to}` : `${b.to}-${b.from}`);
   }
+  const plaathoek = new Set<number>();
+  for (const p of model.plates ?? []) for (const id of p.nodeIds ?? []) plaathoek.add(id);
+  const gesteund = new Set((model.supports ?? []).map((s) => s.nodeId));
+  /** Rangorde voor "blijft staan": lager is sterker. */
+  const rang = (id: number) => (plaathoek.has(id) ? 0 : gesteund.has(id) ? 1 : 2);
   const uit: Bevinding[] = [];
   const { nodes } = model;
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i];
       const b = nodes[j];
-      if (Math.abs(a.x - b.x) > tolMm || Math.abs(a.z - b.z) > tolMm) continue;
+      if (!opZelfdePlek(a, b, tolMm)) continue;
       const sleutel = a.id < b.id ? `${a.id}-${b.id}` : `${b.id}-${a.id}`;
       const zitVast = verbonden.has(sleutel);
+      const afstand = Math.hypot(a.x - b.x, a.z - b.z);
+      const opElkaar = Math.round(afstand * 10) === 0;
+      const plekken = `Knoop ${a.id} (${mmTekst(a.x)}; ${mmTekst(a.z)}) en knoop ${b.id} ` +
+        `(${mmTekst(b.x)}; ${mmTekst(b.z)}) mm`;
+      const tolerantie = `de verbindingstolerantie van ${mmTekst(tolMm)} mm (tab Weergave)`;
+      const bewaarA = rang(a.id) < rang(b.id) || (rang(a.id) === rang(b.id) && a.id < b.id);
       uit.push({
         soort: "dubbeleKnoop",
         ernst: "fout",
         nodeIds: [a.id, b.id],
-        tekst: zitVast
-          ? `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek ` +
-            `(${a.x}, ${a.z}) mm en zijn met een staaf van lengte nul verbonden; ` +
-            "voeg ze samen."
-          : `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek ` +
-            `(${a.x}, ${a.z}) mm. Ze zijn NIET met elkaar verbonden; voeg ze ` +
-            "samen of verplaats er één.",
-        // De laagste id blijft bestaan: stabiel en voorspelbaar, ongeacht in
-        // welke volgorde de knopen zijn getekend.
+        tekst: opElkaar
+          ? (zitVast
+            ? `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek ` +
+              `(${a.x}, ${a.z}) mm en zijn met een staaf van lengte nul verbonden; ` +
+              "voeg ze samen."
+            : `Knoop ${a.id} en knoop ${b.id} liggen op dezelfde plek ` +
+              `(${a.x}, ${a.z}) mm. Ze zijn NIET met elkaar verbonden; voeg ze ` +
+              "samen of verplaats er één.")
+          : (zitVast
+            ? `${plekken} zijn verbonden met een staaf van ${mmTekst(afstand)} mm, korter ` +
+              `dan ${tolerantie}; voeg ze samen.`
+            : `${plekken} liggen ${mmTekst(afstand)} mm uit elkaar, binnen ${tolerantie}, ` +
+              "en gelden dus als dezelfde plek. Ze zijn NIET met elkaar verbonden; voeg ze " +
+              "samen of verplaats er één."),
         herstel: {
           soort: "voegSamen",
-          bewaarId: Math.min(a.id, b.id),
-          verwijderId: Math.max(a.id, b.id),
+          bewaarId: bewaarA ? a.id : b.id,
+          verwijderId: bewaarA ? b.id : a.id,
         },
       });
     }
@@ -421,7 +590,7 @@ export function zoekVrijeUiteinden(model: ControleModel): Bevinding[] {
         ...(p.openingen ?? []).map((o) => o.punten).filter((o) => Array.isArray(o) && o.length >= 3),
       ];
       return lussen.some((lus) => lus.some((a, i) =>
-        puntOpLijnstuk(a, lus[(i + 1) % lus.length], x, z, CONTROLE_TOL_MM)));
+        puntOpLijnstuk(a, lus[(i + 1) % lus.length], x, z, PLAATRAND_TOL_MM)));
     });
 
   const uit: Bevinding[] = [];
@@ -446,8 +615,9 @@ export function zoekVrijeUiteinden(model: ControleModel): Bevinding[] {
 
 /**
  * Staafknopen die BIJNA op een plaatrand liggen: verder dan `tolMm` (daar
- * koppelt de engine) maar dichter dan `STAAFEINDE_BIJ_RAND_MM` (femTypes, met
- * de verantwoording van die 50 mm). Omtrek en openingsranden gelijk.
+ * koppelt de engine; standaard `PLAATRAND_TOL_MM`, dus NIET de instelbare
+ * verbindingstolerantie) maar dichter dan `STAAFEINDE_BIJ_RAND_MM` (femTypes,
+ * met de verantwoording van die 50 mm). Omtrek en openingsranden gelijk.
  *
  * FOUT voor een VRIJ staafeinde (één staaf, geen oplegging) BUITEN het
  * plaatmateriaal — naast de omtrek of in een opening. De engine koppelt het
@@ -461,7 +631,7 @@ export function zoekVrijeUiteinden(model: ControleModel): Bevinding[] {
  */
 export function zoekStaafeindenBijPlaatrand(
   model: ControleModel,
-  tolMm: number = CONTROLE_TOL_MM,
+  tolMm: number = PLAATRAND_TOL_MM,
 ): Bevinding[] {
   const platen = (model.plates ?? []).flatMap((p) => {
     const hoeken = (p.nodeIds ?? []).map((id) => model.nodes.find((k) => k.id === id));
@@ -592,6 +762,139 @@ function teltLastMee(last: Load, loadCases: LoadCase[]): boolean {
   );
 }
 
+/** De velden van een last die `lastWaardeFout` leest. */
+export type LastWaardeVelden = Pick<
+  Load,
+  "id" | "type" | "beamId" | "nodeId" | "plateId" | "q" | "qStart" | "qEnd" | "fx" | "fz" | "my" |
+  "startFrac" | "endFrac"
+>;
+
+/** Velden met een waarde ≠ 0 die dit lasttype niet leest, in vaste volgorde. */
+function nietGelezenVelden(l: LastWaardeVelden, velden: readonly ("fx" | "fz" | "my")[]): string[] {
+  return velden.filter((v) => typeof l[v] === "number" && l[v] !== 0);
+}
+
+/**
+ * Een last zonder waarde, met zijn waarde in een veld dat dit lasttype niet
+ * leest, of (lijnlast) met een leeg of omgekeerd belast deel. `null` = de
+ * waarde staat goed.
+ *
+ * WAAROM APART VAN `teltLastMee`. Die meet alleen OF de mapping een regel
+ * oplevert, niet of die regel iets doet. Een koppel met zijn waarde in `fz` in
+ * plaats van `my` werd een regel `my: 0`, en een puntlast met alleen `my` een
+ * regel `fx: 0, fz: 0`: "telt mee", maar de last zelf was weg (controle 12
+ * oktober 2026, punt K1). Een lijnlast zonder enige waarde gaf alleen de
+ * algemene melding "levert geen invoer voor de solver op" — een programmeurs-
+ * tekst voor iets wat de gebruiker met één getal herstelt (punt K2).
+ *
+ * Eén regel voor de app (`zoekStilleLasten`, rekenpoort en tekenvlak) en de
+ * MCP-weg (`mcp/valideerModel.ts`, ook vóór elke solve en check). Alleen een
+ * veld met een waarde ≠ 0 telt als "verkeerd veld": een 0 laat niets weg.
+ */
+export function lastWaardeFout(
+  l: LastWaardeVelden,
+): { tekst: string; tekstVertaalbaar: VertaalbareTekst } | null {
+  const maak = (sleutel: string, tekst: string, waarden: Record<string, string | number>) => ({
+    tekst, tekstVertaalbaar: vt(`common:canvas.modelCheck.loadValue.${sleutel}`, tekst, waarden),
+  });
+  if (l.type === "lineLoad") {
+    if (l.beamId === undefined || l.plateId !== undefined) return null;
+    const qa = l.qStart ?? l.q;
+    const qb = l.qEnd ?? l.q;
+    const velden = nietGelezenVelden(l, ["fx", "fz", "my"]);
+    const veldenTekst = velden.map((v) => `\`${v}\``).join(", ");
+    if (qa === undefined && qb === undefined) {
+      return velden.length > 0
+        ? maak("lineNoneWrongField",
+          `Lijnlast ${l.id} op staaf ${l.beamId} heeft geen waarde: ${veldenTekst} wordt bij een ` +
+            "lijnlast niet gelezen. Vul `q` in (gelijkmatig verdeeld, kN/m) of `qStart` en `qEnd` " +
+            "(trapezium).",
+          { last: l.id, staaf: l.beamId, velden: veldenTekst })
+        : maak("lineNone",
+          `Lijnlast ${l.id} op staaf ${l.beamId} heeft geen waarde. Vul \`q\` in (gelijkmatig ` +
+            "verdeeld, kN/m) of `qStart` en `qEnd` (trapezium).",
+          { last: l.id, staaf: l.beamId });
+    }
+    if (qa === undefined || qb === undefined) {
+      const heeft = qa === undefined ? "qEnd" : "qStart";
+      const mist = qa === undefined ? "qStart" : "qEnd";
+      return maak("lineHalf",
+        `Lijnlast ${l.id} op staaf ${l.beamId} heeft wel \`${heeft}\` maar geen \`${mist}\` (en ` +
+          `geen \`q\` als terugval). Vul \`${mist}\` in; bij een gelijkmatige last alleen \`q\`.`,
+        { last: l.id, staaf: l.beamId, heeft, mist });
+    }
+    if (velden.length > 0) {
+      return maak("lineWrongField",
+        `Lijnlast ${l.id} op staaf ${l.beamId}: ${veldenTekst} wordt bij een lijnlast niet ` +
+          "gelezen en zou wegvallen. Zet een puntlast of koppel als aparte last.",
+        { last: l.id, staaf: l.beamId, velden: veldenTekst });
+    }
+    // Het belaste deel. De engine klemt startFrac/endFrac op 0..1 en slaat een
+    // leeg of omgekeerd deel daarna over (`BeamForces`: einde ≤ begin): de last
+    // viel dan in zijn geheel weg, zonder melding (controle 12 oktober 2026,
+    // nagekomen bij K2). Getoetst op de geklemde fracties, dus op precies wat
+    // de engine gebruikt; een deel dat maar gedeeltelijk buiten de staaf valt,
+    // blijft een (ingekorte) last en valt hier niet onder.
+    const klem = (f: number) => Math.min(1, Math.max(0, f));
+    const begin = l.startFrac ?? 0;
+    const einde = l.endFrac ?? 1;
+    if (!(klem(begin) < klem(einde))) {
+      return maak("lineRange",
+        `Lijnlast ${l.id} op staaf ${l.beamId}: het belaste deel begint niet vóór zijn einde ` +
+          `(startFrac ${begin}, endFrac ${einde}). Een leeg of omgekeerd deel is geen last en ` +
+          "zou wegvallen. Geef 0 ≤ startFrac < endFrac ≤ 1, gemeten vanaf de startknoop.",
+        { last: l.id, staaf: l.beamId, begin: String(begin), einde: String(einde) });
+    }
+    return null;
+  }
+  if (l.type === "pointMoment") {
+    // Zonder knoop levert de mapping niets op; dat meldt `teltLastMee`.
+    if (l.nodeId === undefined) return null;
+    const velden = nietGelezenVelden(l, ["fx", "fz"]);
+    const veldenTekst = velden.map((v) => `\`${v}\``).join(", ");
+    if (l.my === undefined) {
+      return velden.length > 0
+        ? maak("momentWrongField",
+          `Koppel ${l.id} op knoop ${l.nodeId} heeft geen waarde in \`my\`: ${veldenTekst} wordt bij ` +
+            "een koppel niet gelezen. Een koppel staat in `my` (kNm).",
+          { last: l.id, knoop: l.nodeId, velden: veldenTekst })
+        : maak("momentNone",
+          `Koppel ${l.id} op knoop ${l.nodeId} heeft geen waarde. Een koppel staat in \`my\` ` +
+            "(kNm).",
+          { last: l.id, knoop: l.nodeId });
+    }
+    if (velden.length > 0) {
+      return maak("momentExtraField",
+        `Koppel ${l.id} op knoop ${l.nodeId}: ${veldenTekst} wordt bij een koppel niet gelezen ` +
+          "en zou wegvallen. Zet een kracht als aparte puntlast.",
+        { last: l.id, knoop: l.nodeId, velden: veldenTekst });
+    }
+    return null;
+  }
+  if (l.type === "pointForce") {
+    const velden = nietGelezenVelden(l, ["my"]);
+    if (l.fx === undefined && l.fz === undefined) {
+      return velden.length > 0
+        ? maak("forceWrongField",
+          `Puntlast ${l.id} heeft geen waarde in \`fx\` of \`fz\`: \`my\` wordt bij een puntlast ` +
+            "niet gelezen. Een koppel is een aparte last (pointMoment).",
+          { last: l.id })
+        : maak("forceNone",
+          `Puntlast ${l.id} heeft geen waarde. Vul \`fz\` (verticaal) en/of \`fx\` (horizontaal) ` +
+            "in, in kN.",
+          { last: l.id });
+    }
+    if (velden.length > 0) {
+      return maak("forceExtraField",
+        `Puntlast ${l.id}: \`my\` wordt bij een puntlast niet gelezen en zou wegvallen. Een ` +
+          "koppel is een aparte last (pointMoment).",
+        { last: l.id });
+    }
+    return null;
+  }
+  return null;
+}
+
 /**
  * Lasten die het projectbestand wél draagt maar die bij het rekenen STIL
  * wegvallen (basisaudit ruw 30).
@@ -599,9 +902,12 @@ function teltLastMee(last: Load, loadCases: LoadCase[]): boolean {
  * Drie manieren waarop dat gebeurt, alle drie gemeten in de audit:
  *
  *  1. De if/else-keten van `bouwMultiInput` neemt een lijnlast alleen mee met
- *     `q`, een thermische last alleen met `deltaT`, en herkent alleen exact
- *     gespelde typen. Een trapeziumlast met alleen `qStart`/`qEnd`, of een
- *     tikfout ("lineload"), levert nul regels op.
+ *     een waarde (`q`, of `qStart` en `qEnd`), een thermische last alleen met
+ *     `deltaT`, een koppel alleen met `my`, en herkent alleen exact gespelde
+ *     typen. Een tikfout ("lineload") levert nul regels op. (Tot oktober 2026
+ *     viel ook een trapezium met alleen `qStart`/`qEnd` hier weg.) Een last
+ *     zonder waarde of met de waarde in een verkeerd veld meldt
+ *     `lastWaardeFout` met een eigen tekst.
  *  2. Een verwijzing naar een staaf, knoop of plaat die niet bestaat gaat wél
  *     de mapping in, maar de engine laat hem vallen.
  *  3. Een verwijzing naar een belastinggeval dat niet bestaat maakt het geval
@@ -651,6 +957,19 @@ export function zoekStilleLasten(model: ControleModel): Bevinding[] {
       });
       continue;
     }
+    // Eerst de waarde: een last zonder waarde, of met zijn waarde in een veld
+    // dat het lasttype niet leest, krijgt een melding die zegt wat er mist.
+    const waardeFout = lastWaardeFout(l);
+    if (waardeFout) {
+      uit.push({
+        soort: "stilleLast",
+        ernst: "fout",
+        ...waardeFout,
+        nodeIds: l.nodeId !== undefined ? [l.nodeId] : [],
+        ...(l.beamId !== undefined ? { beamId: l.beamId } : {}),
+      });
+      continue;
+    }
     if (!teltLastMee(l, model.loadCases ?? [{ id: l.caseId, name: "", type: "dead" }])) {
       uit.push({
         soort: "stilleLast",
@@ -658,11 +977,11 @@ export function zoekStilleLasten(model: ControleModel): Bevinding[] {
         tekst:
           `Last ${l.id} (type "${String(l.type)}") levert geen invoer voor de ` +
           "solver op en telt dus niet mee. Controleer of alle velden voor dit " +
-          "lasttype ingevuld zijn: een lijnlast heeft `beamId` en `q` nodig (ook " +
-          "een trapeziumlast, naast `qStart` en `qEnd`), een puntlast `nodeId` of " +
+          "lasttype ingevuld zijn: een lijnlast heeft `beamId` en `q` nodig (of " +
+          "`qStart` en `qEnd` voor een trapezium), een puntlast `nodeId` of " +
           "`beamId` — of op een plaatrand `plateId`, een rand en `posFrac` —, een " +
-          "thermische last `beamId` en `deltaT`, en een randlast `plateId`, een " +
-          "rand en `q`.",
+          "koppel `nodeId` en `my`, een thermische last `beamId` en `deltaT`, en " +
+          "een randlast `plateId`, een rand en `q`.",
         nodeIds: l.nodeId !== undefined ? [l.nodeId] : [],
         ...(l.beamId !== undefined ? { beamId: l.beamId } : {}),
       });
@@ -675,22 +994,33 @@ export function zoekStilleLasten(model: ControleModel): Bevinding[] {
  * De volledige controle: fouten eerst, dan waarschuwingen, binnen elke groep
  * op knoopnummer. Een vrij uiteinde dat óók al als fout is gemeld (de
  * kolomvoet die op een ligger ligt) wordt weggelaten — één oorzaak, één regel.
+ *
+ * `tolMm` is de verbindingstolerantie (issue #55): hij geldt voor knopen op
+ * een staaf en voor samenvallende knopen. De plaatrandregels houden de
+ * koppeltolerantie van de engine (`PLAATRAND_TOL_MM`).
+ *
+ * Een staafeinde dat binnen de verbindingstolerantie van een plaathoek ligt,
+ * is ÉÉN gebrek: het hoort op die hoek. De samenvoeg-bevinding zegt dat en
+ * herstelt het; de fout "staafeinde bij de plaatrand" voor dezelfde knoop
+ * vervalt dan (één oorzaak, één regel).
  */
 export function controleerModel(
   model: ControleModel,
   tolMm: number = CONTROLE_TOL_MM,
 ): Bevinding[] {
   const materiaal = zoekDubbelzinnigMateriaal(model);
-  const bijRand = zoekStaafeindenBijPlaatrand(model, tolMm);
+  const bijRand = zoekStaafeindenBijPlaatrand(model);
+  const dubbel = zoekDubbeleKnopen(model, tolMm);
+  const samenTeVoegen = new Set(dubbel.flatMap((d) => d.nodeIds));
   const fouten = [
     ...zoekKnopenOpStaaf(model, tolMm),
-    ...zoekDubbeleKnopen(model, tolMm),
+    ...dubbel,
     ...zoekPlaatlastFouten(model),
     ...zoekOpeningFouten(model),
     ...zoekPlaatMateriaalFouten(model),
     ...zoekStilleLasten(model),
     ...materiaal.filter((m) => m.ernst === "fout"),
-    ...bijRand.filter((b) => b.ernst === "fout"),
+    ...bijRand.filter((b) => b.ernst === "fout" && !samenTeVoegen.has(b.nodeIds[0])),
   ];
   const alGemeld = new Set<number>();
   for (const f of fouten) for (const id of f.nodeIds) alGemeld.add(id);

@@ -168,21 +168,26 @@ function doorsnedemotor(): Plugin {
   };
 }
 
-/** Dezelfde 3D-Rustadapter als de desktop-app, bereikbaar in de devbrowser. */
-function frame3dSolver(): Plugin {
+/**
+ * Dezelfde 3D-Rustadapter als de desktop-app, bereikbaar in de devbrowser.
+ * Parameters: pluginnaam, URL-route en binarynaam (zonder .exe). Twee kernen:
+ * open-fem-3d (Open FEM 3D, /api/openFem3d/solve) en frame3d-solver
+ * (3D-raamwerkomgeving frame3d, /api/frame3d/solve).
+ */
+function rust3dSolver(pluginNaam: string, route: string, binaryNaam: string): Plugin {
   // Tijdens ontwikkeling kan de debug-kern recenter zijn dan een bestaande
   // release-kern. Gebruik het nieuwste contract; anders vallen nieuwe
   // staafbelastingen in de browser stil terug op een verouderde binary.
   // @ts-expect-error process is a nodejs global
-  const binary = process.platform === "win32" ? "frame3d-solver.exe" : "frame3d-solver";
+  const binary = process.platform === "win32" ? `${binaryNaam}.exe` : binaryNaam;
   const release = resolve(hier, "../src-tauri/target/release", binary);
   const debug = resolve(hier, "../src-tauri/target/debug", binary);
   const exe = existsSync(debug) && (!existsSync(release) || statSync(debug).mtimeMs > statSync(release).mtimeMs)
     ? debug : release;
   return {
-    name: "open-fem-frame3d-solver",
+    name: pluginNaam,
     configureServer(server) {
-      server.middlewares.use("/api/frame3d/solve", (req, res) => {
+      server.middlewares.use(route, (req, res) => {
         res.setHeader("content-type", "application/json");
         if (req.method !== "POST") {
           res.statusCode = 405;
@@ -219,7 +224,11 @@ function frame3dSolver(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), toetsbrug(), doorsnedemotor(), frame3dSolver()],
+  plugins: [
+    react(), toetsbrug(), doorsnedemotor(),
+    rust3dSolver("open-fem-3d-solver", "/api/openFem3d/solve", "open-fem-3d"),
+    rust3dSolver("open-fem-frame3d-solver", "/api/frame3d/solve", "frame3d-solver"),
+  ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
@@ -238,7 +247,7 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // De desktop-app en Codex kunnen in verschillende mount namespaces draaien;
+      // De desktop-app en de editor kunnen in verschillende mount namespaces draaien;
       // polling pikt ook wijzigingen op die geen inotify-event doorgeven.
       usePolling: true,
       interval: 300,

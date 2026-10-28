@@ -19,7 +19,7 @@ Doelapp is de **geïnstalleerde Tauri-app**, niet de browser/dev-modus.
   `OPENAEC_GUI_CONTROL=1` bij het starten. Bindt `127.0.0.1:0`, maakt een
   sessietoken (32 willekeurige bytes, hex), schrijft `gui-control.json`
   (`{pid, poort, token, versie}`) in Tauri's `app_local_data_dir` —
-  `%LOCALAPPDATA%\org.openaec.fem2d-studio\` (de identifier-map, níét de
+  `%LOCALAPPDATA%\org.openaec.fem-studio\` (de identifier-map, níét de
   installatiemap); het bestand verdwijnt bij afsluiten.
   Empirisch geverifieerd vóór de bouw: `PrintWindow` met
   `PW_RENDERFULLCONTENT` levert op de geïnstalleerde 0.3.6 een echte,
@@ -91,7 +91,7 @@ van de app. In `drie_wegen_kruistabel.rs` krijgen `gui_*` een eigen rij-soort
 
 `design-mockup/referentie-gui/wapening-workflow.mjs`:
 
-1. Start de gebouwde app (`target/release/open-fem2d-studio.exe`, of het
+1. Start de gebouwde app (`target/release/open-fem-studio.exe`, of het
    pad uit `OPENAEC_APP`) met `OPENAEC_GUI_CONTROL=1`; wacht op
    `gui-control.json` en `GET /status` gereed.
 2. Loopt via de **MCP-server over stdio** (niet rechtstreeks HTTP — zo wordt

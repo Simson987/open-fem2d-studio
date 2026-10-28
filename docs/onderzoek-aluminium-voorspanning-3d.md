@@ -4,10 +4,10 @@ Status: onderzoeks- en implementatievoorstel met een beperkte, geverifieerde eer
 
 ## Aanleiding en huidige toestand
 
-- [Issue #5](https://github.com/OpenAEC-Foundation/open-fem2d-studio/issues/5) vraagt aluminiumtoetsing volgens EN 1999-1-1, inclusief legering/toestand, lokale plooi, warmte-beïnvloede zone (HAZ), knik, kip en BGT. De issue zegt terecht dat de staaltoets niet met andere sterktegetallen kan worden hergebruikt.
-- [Issue #6](https://github.com/OpenAEC-Foundation/open-fem2d-studio/issues/6) vraagt voorspanning volgens EN 1992-1-1 §5.10, inclusief voorspanstaal, verliezen, equivalente belasting, BGT/UGT en verankering. Voorspanning beïnvloedt het *analysemodel* én de toets, dus een los toetsingsformulier volstaat niet.
+- [Issue #5](https://github.com/OpenAEC-Foundation/open-fem-studio/issues/5) vraagt aluminiumtoetsing volgens EN 1999-1-1, inclusief legering/toestand, lokale plooi, warmte-beïnvloede zone (HAZ), knik, kip en BGT. De issue zegt terecht dat de staaltoets niet met andere sterktegetallen kan worden hergebruikt.
+- [Issue #6](https://github.com/OpenAEC-Foundation/open-fem-studio/issues/6) vraagt voorspanning volgens EN 1992-1-1 §5.10, inclusief voorspanstaal, verliezen, equivalente belasting, BGT/UGT en verankering. Voorspanning beïnvloedt het *analysemodel* én de toets, dus een los toetsingsformulier volstaat niet.
 - De bestaande 2D-keten heeft materiaal- en doorsnedeherkenning (`design-mockup/src/lib/sectionResolver.ts`), per-staaf toetsconfiguratie (`components/fem/femTypes.ts`), afzonderlijke Rust-normcrates en een toetsbrug (`src-tauri/crates/toetsbrug`). `checkStore.ts` voegt staal-, hout-, beton- en vrije spanningstoetsen samen. `concrete-check` ontvangt één getypeerde `ConcreteBeamCheckInput`; kruip volgens bijlage B en gesegmenteerde M-N-κ-stijfheid bestaan al.
-- Het huidige 3D-model (`components/frame3d/frame3dModel.ts`) bewaart knopen, staven, steunvoorwaarden en knooplasten; het heeft nog geen materiaal, doorsnede, lokale assen, staaflasten, belastinggevallen of solver. `docs/verificatie/3d-raamwerk/README.md` bevat referentiegevallen met status *pending*. De 3D-viewer is dus geen bewijs van 3D-rekenkundige dekking.
+- Het huidige 3D-model (`components/openFem3d/openFem3dModel.ts`) bewaart knopen, staven, steunvoorwaarden en knooplasten; het heeft nog geen materiaal, doorsnede, lokale assen, staaflasten, belastinggevallen of solver. `docs/verificatie/3d-raamwerk/README.md` bevat referentiegevallen met status *pending*. De 3D-viewer is dus geen bewijs van 3D-rekenkundige dekking.
 
 ## Beslissing vooraf: normversie als invoer en uitvoer
 
@@ -33,7 +33,7 @@ Leg bij elke toets `normEdition`, `nationalAnnexEdition` en gebruikte nationale 
 
 Maak materiaal- en toetsgegevens **staafgebonden en dimensie-onafhankelijk**; vertaal pas aan de solvergrens. Voor een 3D-staaf zijn minimaal nodig: stabiele staaf-ID, begin-/eindknoop, lokale `x-y-z`-assen met expliciete doorsnederotatie, `E`, `G`, `A`, `I_y`, `I_z` en `J`, plus zes opleg- en staafvrijheidsgraden. Invoer voor pezen en lassen gebruikt lokale staafcoördinaten en een lengtefractie of afstand vanaf de beginknoop. Daardoor blijft deze invoer geldig als de staaf in de ruimte wordt geroteerd. Neem de extra 3D-krachtcomponenten `N, V_y, V_z, T, M_y, M_z` en bemonsterde stations op in een getypeerd resultaatcontract; de 2D-toetsadapter vult alleen de bekende vlakke componenten in en markeert de rest expliciet als niet beschikbaar.
 
-Pas `Frame3DBeam` pas aan wanneer de 3D-solver ook materiaal, profiel, lokale assen en belastinggevallen kan verwerken. Voeg niet nu al een fictieve 3D-aluminium- of beton-UC toe. De bestaande 3D-verificatiegevallen moeten eerst slagen; daarna volgen torsie, tweeassige buiging, lokale assen, staaflasten, excentrische pezen en HAZ-posities. Rapporteer per check of die op 2D-resultaten, geverifieerde 3D-resultaten of alleen een geometrisch model berust.
+Pas `OpenFem3DBeam` pas aan wanneer de 3D-solver ook materiaal, profiel, lokale assen en belastinggevallen kan verwerken. Voeg niet nu al een fictieve 3D-aluminium- of beton-UC toe. De bestaande 3D-verificatiegevallen moeten eerst slagen; daarna volgen torsie, tweeassige buiging, lokale assen, staaflasten, excentrische pezen en HAZ-posities. Rapporteer per check of die op 2D-resultaten, geverifieerde 3D-resultaten of alleen een geometrisch model berust.
 
 ## Uitvoervolgorde en acceptatie
 

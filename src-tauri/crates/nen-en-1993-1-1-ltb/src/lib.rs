@@ -23,6 +23,74 @@ pub mod lambda_chi;
 pub mod nb_annex;
 
 use deelstappen::{kip_deelstappen, Kipgegevens, McrVorm};
+use nen_en_1993_1_1_section::classification::CrossSectionClass;
+
+/// Het weerstandsmoment W_y van de kiptoets — art. 6.3.2.1(3): W_y = W_pl,y
+/// voor doorsneden van klasse 1 of 2, W_y = W_el,y voor klasse 3 (en W_eff,y
+/// voor klasse 4). Het zit op twee plaatsen: in λ̄_LT = √(W_y·f_y/M_cr) en in
+/// M_b,Rd = χ_LT·W_y·f_y/γ_M1 (6.55); via M_b,Rd ook in 6.3.3, waar tabel 6.7
+/// voor M_y,Rk hetzelfde onderscheid maakt.
+///
+/// Tot oktober 2026 rekende de kiptoets voor elke klasse met W_pl,y. Voor een
+/// klasse-3-doorsnede — een HEA in S355 met slanke flenzen, een plaatligger met
+/// een slank lijf — lag M_b,Rd daardoor te hoog, soms zelfs boven de
+/// doorsnedeweerstand M_c,Rd = W_el,y·f_y/γ_M0. Een eigen type, en geen kale
+/// `f64`, zodat elke aanroeper de klasse moet noemen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KipWeerstandsmoment {
+    /// Klasse 1 of 2: W_y = W_pl,y.
+    Plastisch,
+    /// Klasse 3: W_y = W_el,y.
+    Elastisch,
+}
+
+impl KipWeerstandsmoment {
+    /// Klasse 1 en 2 plastisch, klasse 3 elastisch. Klasse 4 vraagt W_eff,y
+    /// uit NEN-EN 1993-1-5, en die rekent deze kern niet: `None`. De
+    /// staaltoets weigert een klasse-4-doorsnede al vóór de kiptoets.
+    pub fn voor_klasse(klasse: CrossSectionClass) -> Option<Self> {
+        match klasse {
+            CrossSectionClass::Class1 | CrossSectionClass::Class2 => Some(Self::Plastisch),
+            CrossSectionClass::Class3 => Some(Self::Elastisch),
+            CrossSectionClass::Class4 => None,
+        }
+    }
+
+    /// W_y in mm³.
+    pub fn mm3(self, p: &SectionProperties) -> f64 {
+        match self {
+            Self::Plastisch => p.wpl_y_mm3,
+            Self::Elastisch => p.wel_y_mm3,
+        }
+    }
+
+    /// Het symbool in LaTeX.
+    pub fn latex(self) -> &'static str {
+        match self {
+            Self::Plastisch => "W_{pl,y}",
+            Self::Elastisch => "W_{el,y}",
+        }
+    }
+
+    /// Waarom deze W_y, in een zin voor het rapport.
+    pub fn toelichting(self) -> &'static str {
+        match self {
+            Self::Plastisch => "W_pl,y omdat de doorsnede in klasse 1 of 2 valt",
+            Self::Elastisch => {
+                "W_el,y omdat de doorsnede in klasse 3 valt: art. 6.3.2.1(3) laat W_pl,y alleen \
+                 toe bij klasse 1 en 2"
+            }
+        }
+    }
+
+    /// De formule van M_b,Rd (6.55) met deze W_y.
+    fn m_b_rd_latex(self) -> String {
+        format!(
+            r"M_{{b,Rd}} = \chi_{{LT}} \cdot {} \cdot f_y / \gamma_{{M1}}",
+            self.latex()
+        )
+    }
+}
 
 /// Kipsteunen, als fracties van de staaflengte.
 ///
@@ -649,9 +717,11 @@ fn nb_waarschuwingen(
 /// bepaald als in [`m_b_rd`]; alleen M_cr krijgt de conservatieve
 /// monosymmetriereductie van [`nb_annex::m_cr_channel_section`] en α_LT komt
 /// niet uit tabel 6.5, die voor U-profielen geen rij heeft (zie onder).
+#[allow(clippy::too_many_arguments)]
 pub fn m_b_rd_channel(
     p: &SectionProperties,
     grade: &SteelGrade,
+    w_y: KipWeerstandsmoment,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -661,6 +731,7 @@ pub fn m_b_rd_channel(
     m_b_rd_channel_met_veld(
         p,
         grade,
+        w_y,
         l_g_mm,
         velden,
         q_equiv_n_per_mm,
@@ -674,9 +745,11 @@ pub fn m_b_rd_channel(
 /// maatgevende kipveld in `velden`. De interactietoets van 6.3.3 heeft die
 /// nodig: C_mLT (bijlage B, tabel B.3) hoort bij het momentenverloop van het
 /// kipveld waaruit χ_LT komt, niet bij dat van de hele staaf.
+#[allow(clippy::too_many_arguments)]
 pub fn m_b_rd_channel_met_veld(
     p: &SectionProperties,
     grade: &SteelGrade,
+    w_y: KipWeerstandsmoment,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -707,7 +780,7 @@ pub fn m_b_rd_channel_met_veld(
         |i| nb_annex::m_cr_channel_section(i.c, l_g_mm, p.iz_mm4, p.it_mm4, k_red),
     );
 
-    let lambda_lt = lambda_chi::lambda_lt(p.wpl_y_mm3, grade.fy_mpa, v.m_cr_knm);
+    let lambda_lt = lambda_chi::lambda_lt(w_y.mm3(p), grade.fy_mpa, v.m_cr_knm);
     // Tabel 6.5 kent geen rij voor U-profielen. Kromme c (α_LT = 0,49) is hier
     // aangehouden: één kromme ongunstiger dan de gewalste I met h/b ≤ 2,
     // passend bij een M_cr die zelf al een grove benadering is (factor 0,7, zie
@@ -729,7 +802,7 @@ pub fn m_b_rd_channel_met_veld(
         lambda_chi::chi_lt(lambda_lt, alpha_lt)
     };
 
-    let m_b_rd_knm = chi_lt * p.wpl_y_mm3 * grade.fy_mpa / grade.gamma_m1 * 1e-6;
+    let m_b_rd_knm = chi_lt * w_y.mm3(p) * grade.fy_mpa / grade.gamma_m1 * 1e-6;
     let m_y_ed_abs = force_state.forces.my_ed.abs();
     let uc = if m_b_rd_knm > 0.0 {
         m_y_ed_abs / m_b_rd_knm
@@ -772,11 +845,11 @@ pub fn m_b_rd_channel_met_veld(
         article: "art. 6.3.2.3 + NB.NB.4/NB.7/NB.11/NB.13, met een M_cr buiten de norm om"
             .to_string(),
         force_state,
-        formula_latex: r"M_{b,Rd} = \chi_{LT} \cdot W_{pl,y} \cdot f_y / \gamma_{M1}".to_string(),
+        formula_latex: w_y.m_b_rd_latex(),
         variables: vec![
             NamedValue {
-                symbol: "W_{pl,y}".to_string(),
-                value: p.wpl_y_mm3,
+                symbol: w_y.latex().to_string(),
+                value: w_y.mm3(p),
                 unit: "mm³".to_string(),
             },
             NamedValue {
@@ -794,6 +867,7 @@ pub fn m_b_rd_channel_met_veld(
         deelstappen: kip_deelstappen(&Kipgegevens {
             p,
             grade,
+            w_y,
             l_g_mm,
             v: &v,
             alle_velden: &alle_velden,
@@ -844,10 +918,22 @@ pub fn m_b_rd_channel_met_veld(
             ];
             n.extend(l_kip_toelichting(&v));
             n.extend(nb_waarschuwingen(l_g_mm, &v, z_a_mm, p.h_mm, p.tf_mm));
+            n.extend(klasse_3_notitie(w_y));
             n
         },
     };
     (calc, v.index)
+}
+
+/// De kanttekening bij een klasse-3-doorsnede: welke W_y, en waarom. Leeg bij
+/// klasse 1 en 2 — daar staat de reden in de λ̄_LT-stap.
+fn klasse_3_notitie(w_y: KipWeerstandsmoment) -> Option<String> {
+    (w_y == KipWeerstandsmoment::Elastisch).then(|| {
+        "Klasse 3: λ̄_LT en M_b,Rd zijn gerekend met W_y = W_el,y (art. 6.3.2.1(3)); W_pl,y \
+         geldt alleen voor klasse 1 en 2. In 6.3.3 is daarmee ook M_y,Rk = W_el,y·f_y (tabel \
+         6.7)."
+            .to_string()
+    })
 }
 
 /// Wat de doorsnedemotor over de monosymmetrie weet — **inclusief of hij het
@@ -898,13 +984,16 @@ pub struct Monosymmetrieinvoer {
 /// unity check in het rapport, mét de reden en met wat de gebruiker eraan kan
 /// doen. Onzichtbaar verdwijnen zou net zo gevaarlijk zijn als een verzonnen
 /// getal.
-fn kip_geweigerd_onbepaalde_monosymmetrie(force_state: ForceStateSnapshot) -> StabilityCalc {
+fn kip_geweigerd_onbepaalde_monosymmetrie(
+    w_y: KipWeerstandsmoment,
+    force_state: ForceStateSnapshot,
+) -> StabilityCalc {
     StabilityCalc {
         id: "6.3.2_ltb_monosymmetrisch".to_string(),
         title: "Kip (monosymmetrische doorsnede) — NIET UITGEVOERD".to_string(),
         article: "art. 6.3.2.2(2)".to_string(),
         force_state,
-        formula_latex: r"M_{b,Rd} = \chi_{LT} \cdot W_{pl,y} \cdot f_y / \gamma_{M1}".to_string(),
+        formula_latex: w_y.m_b_rd_latex(),
         variables: Vec::new(),
         intermediate_values: Vec::new(),
         deelstappen: Vec::new(),
@@ -987,6 +1076,7 @@ fn kip_geweigerd_onbepaalde_monosymmetrie(force_state: ForceStateSnapshot) -> St
 pub fn m_b_rd_monosymmetrisch(
     p: &SectionProperties,
     grade: &SteelGrade,
+    w_y: KipWeerstandsmoment,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -1001,7 +1091,7 @@ pub fn m_b_rd_monosymmetrisch(
         psi_f,
     } = *mono_invoer;
     if !bepaald {
-        return kip_geweigerd_onbepaalde_monosymmetrie(force_state);
+        return kip_geweigerd_onbepaalde_monosymmetrie(w_y, force_state);
     }
     let c3 = en_general::c3_bovengrens(psi_f);
     // EN 1999-1-1 I.1.2(8): z_g meet vanaf het dwarskrachtencentrum, niet vanaf
@@ -1041,7 +1131,7 @@ pub fn m_b_rd_monosymmetrisch(
     let z_j_norm_mm = en_general::z_j_kipveld(z_j_geometrisch_mm, v.momenten_knm);
     let z_j_reken_mm = en_general::z_j_rekenwaarde(z_j_norm_mm);
 
-    let lambda_lt = lambda_chi::lambda_lt(p.wpl_y_mm3, grade.fy_mpa, v.m_cr_knm);
+    let lambda_lt = lambda_chi::lambda_lt(w_y.mm3(p), grade.fy_mpa, v.m_cr_knm);
     let kromme = kipkromme_tabel_6_5(profielsoort, p.h_mm, p.b_mm);
     let alpha_lt = kromme.alpha();
     let chi_lt = if lambda_lt < lambda_chi::LAMBDA_LT_0 {
@@ -1080,7 +1170,7 @@ pub fn m_b_rd_monosymmetrisch(
         }
     };
 
-    let m_b_rd_knm = chi_lt * p.wpl_y_mm3 * grade.fy_mpa / grade.gamma_m1 * 1e-6;
+    let m_b_rd_knm = chi_lt * w_y.mm3(p) * grade.fy_mpa / grade.gamma_m1 * 1e-6;
     let m_y_ed_abs = force_state.forces.my_ed.abs();
     let uc = if m_b_rd_knm > 0.0 {
         m_y_ed_abs / m_b_rd_knm
@@ -1188,11 +1278,11 @@ pub fn m_b_rd_monosymmetrisch(
                   elastische formule, niet volgens bijlage NB.NB"
             .to_string(),
         force_state,
-        formula_latex: r"M_{b,Rd} = \chi_{LT} \cdot W_{pl,y} \cdot f_y / \gamma_{M1}".to_string(),
+        formula_latex: w_y.m_b_rd_latex(),
         variables: vec![
             NamedValue {
-                symbol: "W_{pl,y}".to_string(),
-                value: p.wpl_y_mm3,
+                symbol: w_y.latex().to_string(),
+                value: w_y.mm3(p),
                 unit: "mm³".to_string(),
             },
             NamedValue {
@@ -1210,6 +1300,7 @@ pub fn m_b_rd_monosymmetrisch(
         deelstappen: kip_deelstappen(&Kipgegevens {
             p,
             grade,
+            w_y,
             l_g_mm,
             v: &v,
             alle_velden: &alle_velden,
@@ -1283,6 +1374,7 @@ pub fn m_b_rd_monosymmetrisch(
             }
             n.extend(l_kip_toelichting(&v));
             n.extend(nb_waarschuwingen(l_g_mm, &v, z_a_mm, p.h_mm, p.tf_mm));
+            n.extend(klasse_3_notitie(w_y));
             n
         },
     }
@@ -1301,9 +1393,12 @@ pub fn m_b_rd_monosymmetrisch(
 /// `z_a_mm`: afstand zwaartepunt → aangrijpingspunt van de belasting (mm,
 /// positief = boven het zwaartepunt, destabiliserend).
 /// `profielsoort`: welke rij van tabel 6.5 geldt, zie [`kipkromme_tabel_6_5`].
+/// `w_y`: W_pl,y of W_el,y naar de doorsnedeklasse, zie [`KipWeerstandsmoment`].
+#[allow(clippy::too_many_arguments)]
 pub fn m_b_rd(
     p: &SectionProperties,
     grade: &SteelGrade,
+    w_y: KipWeerstandsmoment,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -1314,6 +1409,7 @@ pub fn m_b_rd(
     m_b_rd_met_veld(
         p,
         grade,
+        w_y,
         l_g_mm,
         velden,
         q_equiv_n_per_mm,
@@ -1330,6 +1426,7 @@ pub fn m_b_rd(
 pub fn m_b_rd_met_veld(
     p: &SectionProperties,
     grade: &SteelGrade,
+    w_y: KipWeerstandsmoment,
     l_g_mm: f64,
     velden: &[Kipveld],
     q_equiv_n_per_mm: f64,
@@ -1361,7 +1458,7 @@ pub fn m_b_rd_met_veld(
         |i| nb_annex::m_cr_i_section(i.c, l_g_mm, p.iz_mm4, p.it_mm4, k_red),
     );
 
-    let lambda_lt = lambda_chi::lambda_lt(p.wpl_y_mm3, grade.fy_mpa, v.m_cr_knm);
+    let lambda_lt = lambda_chi::lambda_lt(w_y.mm3(p), grade.fy_mpa, v.m_cr_knm);
 
     // art. 6.3.2.3 met de NB-waarden λ_LT,0 = 0,4 en β = 0,75.
     let kromme = kipkromme_tabel_6_5(profielsoort, p.h_mm, p.b_mm);
@@ -1407,7 +1504,7 @@ pub fn m_b_rd_met_veld(
         }
     };
 
-    let m_b_rd_knm = chi_lt * p.wpl_y_mm3 * grade.fy_mpa / grade.gamma_m1 * 1e-6;
+    let m_b_rd_knm = chi_lt * w_y.mm3(p) * grade.fy_mpa / grade.gamma_m1 * 1e-6;
 
     let m_y_ed_abs = force_state.forces.my_ed.abs();
     let uc = if m_b_rd_knm > 0.0 {
@@ -1450,11 +1547,11 @@ pub fn m_b_rd_met_veld(
         title: "Kipweerstand".to_string(),
         article: "art. 6.3.2.3 (tabel 6.3/6.5) + NB.NB.2/NB.4/NB.7/NB.11/NB.13".to_string(),
         force_state,
-        formula_latex: r"M_{b,Rd} = \chi_{LT} \cdot W_{pl,y} \cdot f_y / \gamma_{M1}".to_string(),
+        formula_latex: w_y.m_b_rd_latex(),
         variables: vec![
             NamedValue {
-                symbol: "W_{pl,y}".to_string(),
-                value: p.wpl_y_mm3,
+                symbol: w_y.latex().to_string(),
+                value: w_y.mm3(p),
                 unit: "mm³".to_string(),
             },
             NamedValue {
@@ -1472,6 +1569,7 @@ pub fn m_b_rd_met_veld(
         deelstappen: kip_deelstappen(&Kipgegevens {
             p,
             grade,
+            w_y,
             l_g_mm,
             v: &v,
             alle_velden: &alle_velden,
@@ -1487,7 +1585,7 @@ pub fn m_b_rd_met_veld(
             mono: None,
         }),
         // `value` is de UITKOMST van `formula_latex`, en die formule is
-        // M_b,Rd = χ_LT·W_pl,y·f_y/γ_M1. Hier stond χ_LT, en dat liep in beide
+        // M_b,Rd = χ_LT·W_y·f_y/γ_M1. Hier stond χ_LT, en dat liep in beide
         // rapportwegen mis: het rapport zette de afleiding als
         //
         //     M_b,Rd = χ_LT · W_pl,y · f_y / γ_M1
@@ -1548,6 +1646,7 @@ pub fn m_b_rd_met_veld(
             }
             n.extend(l_kip_toelichting(&v));
             n.extend(nb_waarschuwingen(l_g_mm, &v, z_a_mm, p.h_mm, p.tf_mm));
+            n.extend(klasse_3_notitie(w_y));
             n
         },
     };

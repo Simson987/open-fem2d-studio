@@ -108,6 +108,11 @@ fn run() -> &'static BeamCheckResult {
             staaf_notities: None,
             profile_end: None,
             custom_section_end: None,
+            tension_only: None,
+            a_net_mm2: None,
+            deflection_add_mm: None,
+            deflection_length_m: None,
+            zijdelingse_knik_in_analyse: None,
         };
         check_beam(input)
     })
@@ -273,6 +278,33 @@ fn calc2_beam2_governing_not_ok() {
 ///   k_zy = max(1 − 0,1·1,3158·0,4952/0,55; 1 − 0,1·0,4952/0,55) = 0,9100
 ///   (was 0,4145). 6.61 = 1,3865 (ongewijzigd), 6.62 = 0,4952 +
 ///   0,9100·126,67/77,557 = 1,9814 (was 1,1721) → maatgevend.
+/// Oktober 2026 — trek, druk alleen bij druk, (6.36) vanaf 0,5·a en 6.3 per
+/// combinatie. Per veld nagelopen; uc_max blijft 1,98139 op vgl. 6.62.
+///  * 6.2.3 (trek): n.v.t., zonder unity check — nergens trek.
+///  * 6.2.9 en 6.2.10: n = 241,496/1276,05 = 0,18925, tussen 0,5·a = 0,11694
+///    en a = 0,23389. (6.36): M_N,y,Rd = 83,19·(1 − 0,18925)/(1 − 0,11694) =
+///    76,378 kNm < M_Ed = 126,672 kNm; de evenredige overschrijding is
+///    0,18925 + 0,88306·1,52268 = 1,53387 (was 1,52268).
+///  * 6.3.3 per combinatie: combinatie 1 heeft één station (x = 2500 mm,
+///    N = −205,954 kN, M_y = 100,727 kNm), dus een constant moment met
+///    C_my = C_mLT = 1,0; 6.61 = 1,83846 (was 1,38653 uit combinatie 2 met
+///    C_my = 0,6). Kip blijft 1,63328 uit combinatie 2 (combinatie 1 geeft
+///    100,727/70,280 = 1,433), 6.62 blijft 1,98139.
+/// Oktober 2026 (b) — kip en 6.3.3 bij klasse 3 (art. 6.3.2.1(3), tabel 6.7).
+/// Deze staaf (HEB160, S235) is klasse 1: W_y = W_pl,y blijft, en geen enkel
+/// getal verandert. 6.61 en 6.62 tonen nu de karakteristieke weerstanden van
+/// tabel 6.7 als variabelen, met χ_LT van de maatgevende combinatie erbij:
+///   N_Rk = A·f_y = 5430·235 = 1276,050 kN
+///   M_y,Rk = W_pl,y·f_y = 354 000·235 = 83,190 kNm
+///   M_z,Rk = W_pl,z·f_y = 170 000·235 = 39,950 kNm
+/// en de regel "Tabel 6.7, klasse 1: …" in de kanttekeningen.
+/// Oktober 2026 (c) — 6.2.8 op elk station van de omhullende in plaats van
+/// alleen op het buigpunt. Alle 3 punten getoetst; de grootste dwarskracht
+/// is 50,669 kN, onder V_pl,z,Rd/2 = 119,667 kN, dus ρ = 0 op elk punt en is de
+/// maatgevende plaats het punt met het grootste moment (combinatie 2 op x = 2500 mm): UC = 126,672/83,19 = 1,522683,
+/// ongewijzigd. Wat verandert is de weergave: formule M_y,V,Rd = (1 − ρ)·
+/// M_y,c,Rd, de variabelen ρ en M_y,Ed erbij, de afleidingsstappen ρ en
+/// M_y,V,Rd, en Nederlandse kanttekeningen met de plaats.
 #[test]
 fn calc2_beam2_snapshot() {
     insta::assert_json_snapshot!("calc2_beam2", run());

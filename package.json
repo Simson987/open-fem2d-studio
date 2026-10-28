@@ -1,9 +1,9 @@
 {
-  "name": "open-fem2d-studio",
+  "name": "open-fem-studio",
   "version": "1.0.0",
-  "description": "Open FEM Studio — 2D Finite Element Method solver. Part of the OpenAEC Foundation portfolio.",
+  "description": "Open FEM Studio — open-source eindige-elementenprogramma (2D en 3D). Onderdeel van het portfolio van de OpenAEC Foundation.",
   "author": "OpenAEC Foundation",
-  "license": "CC-BY-SA-4.0",
+  "license": "AGPL-3.0-or-later",
   "homepage": "https://github.com/OpenAEC-Foundation",
   "type": "module",
   "scripts": {

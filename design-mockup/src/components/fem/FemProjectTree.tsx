@@ -23,7 +23,7 @@ import { SUPPORTED_TIMBER_GRADES } from "../../lib/timberCheckBuilder";
 import { useCheckStore } from "../../stores/checkStore";
 import { useResultaatInfoStore } from "../../stores/resultaatInfoStore";
 import ExplorerViewTab from "./ExplorerViewTab";
-import type { Frame3DVisibility } from "../frame3d/frame3dVisibility";
+import type { OpenFem3DVisibility } from "../openFem3d/openFem3dVisibility";
 
 interface TreeNodeProps {
   label: string;
@@ -331,7 +331,7 @@ function ResultsTab({
                   <label className="fem-results-subcheck">
                     <input
                       type="checkbox"
-                      checked={displayFlags.plaatMesh !== false}
+                      checked={displayFlags.plaatMesh === true}
                       onChange={(e) => setDisplayFlags(f => ({ ...f, plaatMesh: e.target.checked }))}
                     />
                     <span>{t("tree.mesh")}</span>
@@ -475,8 +475,10 @@ interface FemProjectTreeProps {
   setGridShow: (show: boolean) => void;
   stramienAan: boolean;
   setStramienAan: (show: boolean) => void;
-  frame3dVisibility: Frame3DVisibility;
-  setFrame3DVisibility: (visibility: Frame3DVisibility) => void;
+  openFem3dVisibility: OpenFem3DVisibility;
+  setOpenFem3DVisibility: (visibility: OpenFem3DVisibility) => void;
+  /** Opent het venster Zichtbaarheid (issue #47): het tandwiel in de tab Weergave. */
+  onOpenZichtbaarheid?: () => void;
 }
 
 export default function FemProjectTree(props: FemProjectTreeProps) {
@@ -491,7 +493,7 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
     displayFlags, setDisplayFlags, hasResults,
     activeTab, setActiveTab,
     workspace = "2d", gridShow, setGridShow, stramienAan, setStramienAan,
-    frame3dVisibility, setFrame3DVisibility,
+    openFem3dVisibility, setOpenFem3DVisibility, onOpenZichtbaarheid,
   } = props;
   const { t } = useTranslation("common");
   /** Reden per overgeslagen combinatie-id; leeg = alles wordt doorgerekend. */
@@ -576,9 +578,10 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
               setGridShow={setGridShow}
               stramienAan={stramienAan}
               setStramienAan={setStramienAan}
-              frame3dVisibility={frame3dVisibility}
-              setFrame3DVisibility={setFrame3DVisibility}
+              openFem3dVisibility={openFem3dVisibility}
+              setOpenFem3DVisibility={setOpenFem3DVisibility}
               workspace={workspace}
+              onOpenZichtbaarheid={onOpenZichtbaarheid}
             />
           ) : null
         ) : tab === "project" ? (

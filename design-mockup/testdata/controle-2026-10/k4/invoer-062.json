@@ -1,0 +1,203 @@
+{
+ "tool": "open-fem-studio__solve_open_fem_3d",
+ "omschrijving": "062: als 061, maar 4 elementen per poot (intermediateNodeIds)",
+ "arguments": {
+  "nodes": [
+   {
+    "id": 1,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 2,
+    "x": 4,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 3,
+    "x": 2,
+    "y": 3.4641,
+    "z": 0
+   },
+   {
+    "id": 4,
+    "x": 2,
+    "y": 1.1547,
+    "z": 3
+   },
+   {
+    "id": 11,
+    "x": 0.5,
+    "y": 0.288675,
+    "z": 0.75
+   },
+   {
+    "id": 12,
+    "x": 1,
+    "y": 0.57735,
+    "z": 1.5
+   },
+   {
+    "id": 13,
+    "x": 1.5,
+    "y": 0.866025,
+    "z": 2.25
+   },
+   {
+    "id": 21,
+    "x": 3.5,
+    "y": 0.288675,
+    "z": 0.75
+   },
+   {
+    "id": 22,
+    "x": 3,
+    "y": 0.57735,
+    "z": 1.5
+   },
+   {
+    "id": 23,
+    "x": 2.5,
+    "y": 0.866025,
+    "z": 2.25
+   },
+   {
+    "id": 31,
+    "x": 2,
+    "y": 2.88675,
+    "z": 0.75
+   },
+   {
+    "id": 32,
+    "x": 2,
+    "y": 2.3094,
+    "z": 1.5
+   },
+   {
+    "id": 33,
+    "x": 2,
+    "y": 1.73205,
+    "z": 2.25
+   }
+  ],
+  "materials": [
+   {
+    "id": 1,
+    "name": "staal",
+    "eMpa": 210000,
+    "nu": 0.3
+   }
+  ],
+  "sections": [
+   {
+    "id": 1,
+    "name": "poot",
+    "areaM2": 0.001,
+    "iyM4": 1e-06,
+    "izM4": 1e-06,
+    "torsionJM4": 1e-06
+   }
+  ],
+  "members": [
+   {
+    "id": 1,
+    "startNodeId": 1,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "intermediateNodeIds": [
+     11,
+     12,
+     13
+    ],
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 2,
+    "startNodeId": 2,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "intermediateNodeIds": [
+     21,
+     22,
+     23
+    ],
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 3,
+    "startNodeId": 3,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "intermediateNodeIds": [
+     31,
+     32,
+     33
+    ],
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   }
+  ],
+  "supports": [
+   {
+    "nodeId": 1,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 2,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 3,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   }
+  ],
+  "nodalLoads": [
+   {
+    "id": 1,
+    "nodeId": 4,
+    "fx": 10,
+    "fy": 0,
+    "fz": -60,
+    "mx": 0,
+    "my": 0,
+    "mz": 0
+   }
+  ],
+  "analysis": "linear",
+  "bucklingModes": 2
+ }
+}

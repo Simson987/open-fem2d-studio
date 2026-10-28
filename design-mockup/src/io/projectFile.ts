@@ -1,6 +1,6 @@
 /**
  * projectFile.ts — serialize / deserialize the FEM model to a JSON file
- * (.ifcfem2d extension) + native dialog + IO via Tauri plugins, with a browser
+ * (.ifcfem extension; older .ifcfem2d files open as well) + native dialog + IO via Tauri plugins, with a browser
  * fallback (Blob download / file-input) when running in a plain web context.
  */
 import type {
@@ -15,10 +15,26 @@ import { BIJLAGEN_GEVULD, STANDAARD_BIJLAGE, type NationaleBijlageCode } from ".
 import type { EigenDoorsnede } from "../lib/profieleditor/types";
 import type { KruipInvoerProject } from "../lib/kruipcoefficient";
 import type { EigenCltOpbouw } from "../lib/profieleditor/cltOpbouwenStore";
-import { parseFrame3DModel, type Frame3DModel } from "../components/frame3d/frame3dModel";
-import { parseFrame3DViewSets, type Frame3DViewSet } from "../components/frame3d/frame3dViewSets";
+import { parseOpenFem3DModel, type OpenFem3DModel } from "../components/openFem3d/openFem3dModel";
+import {
+  parseOpenFem3DStandaardViewsUitRapport, parseOpenFem3DViewSets,
+  type OpenFem3DStandaardViewId, type OpenFem3DViewSet,
+} from "../components/openFem3d/openFem3dViewSets";
 
-export const PROJECT_FILE_EXT = "ifcfem2d";
+export const PROJECT_FILE_EXT = "ifcfem";
+/** Oudere extensie: zulke bestanden openen nog steeds; nieuw opslaan gebeurt als .ifcfem. */
+export const LEGACY_PROJECT_FILE_EXTS: readonly string[] = ["ifcfem2d"];
+/** Alle extensies die Openen en de lijst met recente bestanden als project herkennen. */
+export const PROJECT_FILE_EXTS: readonly string[] = [PROJECT_FILE_EXT, ...LEGACY_PROJECT_FILE_EXTS];
+
+/** "Opslaan als" stelt voor een bestand met de oude extensie de nieuwe voor. */
+export function voorgesteldeProjectnaam(pad: string | null | undefined): string {
+  if (!pad) return `project.${PROJECT_FILE_EXT}`;
+  for (const oud of LEGACY_PROJECT_FILE_EXTS) {
+    if (pad.toLowerCase().endsWith(`.${oud}`)) return pad.slice(0, -oud.length) + PROJECT_FILE_EXT;
+  }
+  return pad;
+}
 /**
  * Versiegeschiedenis:
  *  1 — model + loadCases + solver-toggles.
@@ -140,14 +156,98 @@ export const PROJECT_FILE_EXT = "ifcfem2d";
  *      bestand dat werkelijk 3D-geometrie bevat krijgt versie 3, zodat een
  *      oudere app het weigert in plaats van de 3D-geometrie stil te verliezen.
  *      Een zuiver 2D-project blijft versie 2.
+ *      Optioneel binnen `model3d` (oktober 2026, geen versie-bump):
+ *      `tensionOnlyFitAfterPermanent` en `tensionOnlyCrossRule`, de
+ *      modelinstellingen voor trek-alleen staven (alleen `true` wordt
+ *      bewaard). Een oudere uitgave slaat ze over en rekent de verbanden
+ *      spanningsloos in de onvervormde stand en zonder kruisregel.
+ *      Eveneens binnen `model3d` (oktober 2026, issue #80, geen versie-bump):
+ *      een lijnlast in een globale richting, `memberLoads[]` met
+ *      `globalDirection`, `qStart`, `qEnd` en eventueel `perProjection` in
+ *      plaats van qy/qz. Een eerdere uitgave valt daar niet stil overheen: zij
+ *      eist vier eindige lokale componenten en weigert het bestand met een
+ *      melding. Een bestand zonder globale lijnlast is byte-gelijk aan voorheen.
+ *  4 — `model3d.loadPanels`: belastingvlakken die hun oppervlaktelast naar de
+ *      liggers afdragen. Om dezelfde reden als bij 3: een uitgave zonder
+ *      belastingvlakken zou de lijst bij het lezen overslaan en dus rekenen
+ *      ZONDER die lasten. Alleen een bestand dat werkelijk belastingvlakken
+ *      bevat krijgt versie 4; een 3D-project zonder blijft versie 3 en een
+ *      bestand van versie 3 laadt ongewijzigd.
+ *  5 — `model3d.beams[].bedding`: staven op bedding (Winkler, issue #106).
+ *      Om dezelfde reden als bij 4: een uitgave zonder bedding (2026.39.2 en
+ *      ouder) zou het veld bij het lezen stil overslaan en dus rekenen ZONDER
+ *      de grond, of met alleen de grond als oplegging weigeren te rekenen; na
+ *      opslaan was de bedding weg. Alleen een bestand met minstens één staaf
+ *      op bedding krijgt versie 5 (ook met belastingvlakken); een 3D-project
+ *      zonder bedding houdt versie 3 of 4, en bestanden van versie 3 en 4
+ *      laden ongewijzigd.
+ *  6 — `model3d.beams[].profileNameEnd`: verlopende 3D-staven (issue #73).
+ *      Een uitgave zonder verloop leest de staaf veld voor veld en zou het
+ *      eindprofiel stil laten vallen: de staaf rekende dan prismatisch met het
+ *      beginprofiel, en na opslaan was het verloop weg. Alleen een bestand met
+ *      minstens één verlopende staaf krijgt versie 6 (ook met bedding of
+ *      belastingvlakken); de rest houdt versie 3, 4 of 5 en bestanden van die
+ *      versies laden ongewijzigd.
+ *  7 — `model3d.plates[].bedding`: platen op bedding (Winkler, issue #107).
+ *      Om dezelfde reden als bij 5: een uitgave van versie 5 of 6 kent wel de
+ *      staafbedding maar niet die van een plaat; zij zou het veld bij het
+ *      lezen stil overslaan en de vloer rekenen ZONDER de grond (of met alleen
+ *      de grond als oplegging weigeren te rekenen). Alleen een bestand met
+ *      minstens één plaat op bedding krijgt versie 7 (ook met verlopende staven,
+ *      staven op bedding of belastingvlakken); zonder plaatbedding blijft het
+ *      3, 4, 5 of 6.
+ *  8 — `model3d.analysisMaterials`: gekozen E en ν per materiaal voor de
+ *      ruimtelijke analyse (issue #62). Een oudere uitgave zou de instelling
+ *      stil overslaan en met een andere stijfheid rekenen. Alleen een 3D-model
+ *      met zulke instellingen krijgt versie 8; overige bestanden behouden
+ *      hun eerdere versienummer.
  * v1-bestanden blijven leesbaar: de v2-velden zijn optioneel en ontbrekende
  * velden krijgen bij het laden de bestaande defaults (defaultCombinations()
  * en DEFAULT_STRUCTURAL_GRID in useFemStore.loadProjectState).
  */
-/** Versie van zuivere 2D-bestanden (blijft leesbaar door eerdere uitgaven). */
+/**
+ * Het formaat-id dat deze uitgave in elk bestand schrijft (`format`).
+ *
+ * Tot en met uitgave 2026.39.1 schreef de app een ander id, zie
+ * `LEGACY_PROJECT_FORMAT_IDS`. De lezer accepteert beide, dus elk ouder
+ * bestand blijft openen. Andersom niet: 2026.39.1 en ouder kennen dit id niet
+ * en weigeren een bestand van deze uitgave met "Onbekend bestandsformaat",
+ * ook een zuiver 2D-bestand met versie 2.
+ */
+export const PROJECT_FORMAT_ID = "open-fem-studio-v2";
+/** Formaat-id's van eerdere uitgaven die de lezer blijft accepteren. */
+export const LEGACY_PROJECT_FORMAT_IDS = ["open-fem2d-studio-v2"] as const;
+/** Elk formaat-id dat deze uitgave kan lezen. */
+export type ProjectFormatId = typeof PROJECT_FORMAT_ID | (typeof LEGACY_PROJECT_FORMAT_IDS)[number];
+
+/** Kan deze uitgave een bestand met dit formaat-id lezen? */
+export function isProjectFormatId(waarde: unknown): waarde is ProjectFormatId {
+  return waarde === PROJECT_FORMAT_ID
+    || (LEGACY_PROJECT_FORMAT_IDS as readonly unknown[]).includes(waarde);
+}
+
+/**
+ * Versie van zuivere 2D-bestanden. Binnen dezelfde formaat-id las een eerdere
+ * uitgave zo'n bestand; sinds het nieuwe formaat-id (hierboven) geldt dat niet
+ * meer voor 2026.39.1 en ouder.
+ */
 export const PROJECT_FORMAT_VERSION = 2;
 /** 3D-data vereist een versie die eerdere uitgaven weigeren. */
 export const PROJECT_FORMAT_VERSION_3D = 3;
+/** Belastingvlakken in het 3D-model: eerdere uitgaven moeten weigeren, niet stil overslaan. */
+export const PROJECT_FORMAT_VERSION_3D_LOAD_PANELS = 4;
+/** Staven op bedding in het 3D-model: eerdere uitgaven moeten weigeren, niet de grond stil laten vallen. */
+export const PROJECT_FORMAT_VERSION_3D_BEDDING = 5;
+/** Verlopende 3D-staven: eerdere uitgaven moeten weigeren, niet het verloop stil laten vallen. */
+export const PROJECT_FORMAT_VERSION_3D_TAPERED = 6;
+/** Platen op bedding in het 3D-model (#107): een uitgave van versie 5 of 6 moet weigeren, niet de vloer zonder grond rekenen. */
+export const PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING = 7;
+/** Afwijkende analyse-E of ν per 3D-materiaal: oude lezers moeten weigeren. */
+export const PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS = 8;
+/** Gevel- en dakpanelen zonder stijfheid; oudere lezers mogen ze niet stil negeren. */
+export const PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS = 9;
+/** De hoogste versie die deze uitgave kan lezen. */
+export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS;
 
 /** JSON-vorm van één belastingcombinatie: `factors` als { caseId: factor }. */
 export interface ProjectFileCombination {
@@ -281,7 +381,12 @@ export function combinationsFromFile(
 }
 
 export interface ProjectFile {
-  format: "open-fem2d-studio-v2";
+  /**
+   * Formaat-id. `serializeProject` schrijft altijd `PROJECT_FORMAT_ID`;
+   * `deserializeProject` laat staan wat er in het bestand stond (ook het id
+   * van een eerdere uitgave).
+   */
+  format: ProjectFormatId;
   version: number;
   savedAt: string;          // ISO timestamp
   /** Eén gezaghebbende modeldimensie. Ontbreekt alleen in oudere bestanden. */
@@ -415,24 +520,45 @@ export interface ProjectFile {
    */
   eigenCltOpbouwen?: EigenCltOpbouw[];
   /** Geometrie van een 3D-model; gezaghebbend wanneer modelDimension = "3d". */
-  model3d?: Frame3DModel;
+  model3d?: OpenFem3DModel;
   /** Benoemde camera-, resultaat- en zichtbaarheidsstanden van de 3D-werkruimte. */
-  frame3dViewSets?: Frame3DViewSet[];
+  openFem3dViewSets?: OpenFem3DViewSet[];
+  /**
+   * De standaardviews van de 3D-werkruimte (tab Views) die NIET in het
+   * berekeningsrapport komen; ontbrekend = alle standaardviews erin. De
+   * rapportkeuze van een eigen view staat bij die view (`inRapport`).
+   */
+  openFem3dStandaardViewsUitRapport?: OpenFem3DStandaardViewId[];
 }
 
 export function serializeProject(state: Omit<ProjectFile, "format" | "version" | "savedAt">): string {
   const modelDimension = state.modelDimension ?? (state.model3d !== undefined ? "3d" : "2d");
+  // Canonieke bestanden dragen nooit een tweede actief modeltype. De oude
+  // 2D-lijsten blijven bij 3D alleen als controle- en compatibiliteitsspoor.
+  const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : undefined;
   const file: ProjectFile = {
-    format: "open-fem2d-studio-v2",
-    version: modelDimension === "3d" ? PROJECT_FORMAT_VERSION_3D : PROJECT_FORMAT_VERSION,
+    format: PROJECT_FORMAT_ID,
+    version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
+      : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0)
+        ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS
+      : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS
+      : model3d?.plates?.some((plate) => plate.bedding !== undefined) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING
+      : model3d?.beams.some((beam) => beam.profileNameEnd !== undefined) ? PROJECT_FORMAT_VERSION_3D_TAPERED
+      : model3d?.beams.some((beam) => beam.bedding !== undefined) ? PROJECT_FORMAT_VERSION_3D_BEDDING
+      : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: new Date().toISOString(),
     ...state,
     modelDimension,
-    // Canonieke bestanden dragen nooit een tweede actief modeltype. De oude
-    // 2D-lijsten blijven bij 3D alleen als controle- en compatibiliteitsspoor.
-    model3d: modelDimension === "3d" ? parseFrame3DModel(state.model3d) : undefined,
-    frame3dViewSets: modelDimension === "3d" ? parseFrame3DViewSets(state.frame3dViewSets) : undefined,
+    model3d,
+    openFem3dViewSets: modelDimension === "3d" ? parseOpenFem3DViewSets(state.openFem3dViewSets) : undefined,
+    openFem3dStandaardViewsUitRapport: modelDimension === "3d" && state.openFem3dStandaardViewsUitRapport !== undefined
+      ? parseOpenFem3DStandaardViewsUitRapport(state.openFem3dStandaardViewsUitRapport) : undefined,
   };
+  // Een aanroeper van buiten (MCP, tests) kan een volledig geopend bestand
+  // meegeven, met het id van een eerdere uitgave erin; `...state` zou dat
+  // hierboven terugzetten. Geschreven wordt altijd het huidige id (de sleutel
+  // blijft vooraan staan).
+  file.format = PROJECT_FORMAT_ID;
   return JSON.stringify(file, null, 2);
 }
 
@@ -465,7 +591,10 @@ const BEKENDE_TOPVELDEN: readonly string[] = [
   "scheefstandEnabled", "scheefstandNoemer", "scheefstandRichting",
   "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
   "eigenDoorsneden", "eigenCltOpbouwen", "projectInfo", "windInstellingen",
-  "rapport", "modelDimension", "model3d", "frame3dViewSets",
+  "rapport", "modelDimension", "model3d", "openFem3dViewSets", "openFem3dStandaardViewsUitRapport",
+  // Oude veldnaam van de 3D-weergaven (ontwikkelspoor `frame3d`); bij openen
+  // omgezet naar `openFem3dViewSets`, zie deserializeProject.
+  "frame3dViewSets",
 ];
 
 /**
@@ -481,13 +610,13 @@ export function onbekendeTopVelden(parsed: unknown): string[] {
 
 export function deserializeProject(text: string): ProjectFile {
   const parsed = JSON.parse(text);
-  if (parsed.format !== "open-fem2d-studio-v2") {
+  if (!isProjectFormatId(parsed.format)) {
     throw new Error(`Onbekend bestandsformaat: ${parsed.format ?? "(geen format-tag)"}`);
   }
   if (typeof parsed.version !== "number") {
     throw new Error("Bestand mist version-tag");
   }
-  if (parsed.version > PROJECT_FORMAT_VERSION_3D) {
+  if (parsed.version > PROJECT_FORMAT_VERSION_MAX) {
     throw new Error(`Bestand is opgeslagen met nieuwere versie (${parsed.version}) — werk je app bij`);
   }
   const hadExplicitDimension = parsed.modelDimension !== undefined;
@@ -543,14 +672,38 @@ export function deserializeProject(text: string): ProjectFile {
     }
   }
   if (parsed.model3d !== undefined) {
+    // Het ontwikkelspoor `frame3d` bewaarde ook volumes, volumelasten,
+    // plaatrandlasten en een materiaallastpad in `model3d`. Open FEM 3D kent
+    // die niet; het model ermee openen zou ze stil laten vallen.
+    const raw3d = parsed.model3d as Record<string, unknown> | null;
+    const nietOndersteund = raw3d && typeof raw3d === "object"
+      ? ["volumes", "volumeBodyLoads", "volumeFaceLoads", "plateEdgeLoads", "materialLoadPath"]
+        .filter((veld) => Array.isArray(raw3d[veld]) && (raw3d[veld] as unknown[]).length > 0)
+      : [];
+    if (nietOndersteund.length > 0) {
+      throw new ProjectBestandFout([
+        `Het 3D-model bevat ${nietOndersteund.map((v) => `\`${v}\``).join(", ")}; deze uitgave kent die niet `
+          + "en opent het bestand niet, zodat ze niet stil verloren gaan.",
+      ]);
+    }
     try {
-      parsed.model3d = parseFrame3DModel(parsed.model3d);
+      parsed.model3d = parseOpenFem3DModel(parsed.model3d);
     } catch (error) {
       throw new ProjectBestandFout([error instanceof Error ? error.message : String(error)]);
     }
   }
+  // Oude veldnaam (ontwikkelspoor `frame3d`, bestanden van vóór de samenvoeging
+  // met Open FEM 3D): dezelfde weergaven, nu onder `openFem3dViewSets`. Een
+  // bestand met beide velden houdt het nieuwe; het oude veld valt weg.
   if (parsed.frame3dViewSets !== undefined) {
-    parsed.frame3dViewSets = parseFrame3DViewSets(parsed.frame3dViewSets);
+    if (parsed.openFem3dViewSets === undefined) parsed.openFem3dViewSets = parsed.frame3dViewSets;
+    delete parsed.frame3dViewSets;
+  }
+  if (parsed.openFem3dViewSets !== undefined) {
+    parsed.openFem3dViewSets = parseOpenFem3DViewSets(parsed.openFem3dViewSets);
+  }
+  if (parsed.openFem3dStandaardViewsUitRapport !== undefined) {
+    parsed.openFem3dStandaardViewsUitRapport = parseOpenFem3DStandaardViewsUitRapport(parsed.openFem3dStandaardViewsUitRapport);
   }
   if (hadExplicitDimension && parsed.modelDimension === "2d" && parsed.model3d !== undefined) {
     throw new ProjectBestandFout(["Een 2D-project mag geen tweede 3D-model bevatten."]);
@@ -561,7 +714,7 @@ export function deserializeProject(text: string): ProjectFile {
     parsed.modelDimension = parsed.model3d !== undefined ? "3d" : "2d";
   }
   if (parsed.modelDimension === "3d" && parsed.model3d === undefined) {
-    parsed.model3d = parseFrame3DModel(undefined);
+    parsed.model3d = parseOpenFem3DModel(undefined);
   }
   // Combinatietypen en factoren (basisaudit ruw 29): `combinationsFromFile`
   // weigert een onbekend type en een niet-eindige factor. Hier alvast, zodat
@@ -627,26 +780,35 @@ export async function saveProjectTo(path: string, text: string): Promise<void> {
  * file-input. Returns { text, path } — text is the raw JSON, path is the
  * file path (Tauri only) or filename (browser).
  */
-export async function openProject(): Promise<{ text: string; path: string } | null> {
+export async function openProject(importFilters: { name: string; extensions: string[] }[] = []): Promise<
+  { soort: "project"; text: string; path: string } | { soort: "import"; path: string } | null
+> {
   if (isTauri()) {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const { readTextFile } = await import("@tauri-apps/plugin-fs");
     const selected = await open({
       multiple: false,
-      filters: [{ name: "Open FEM Studio project", extensions: [PROJECT_FILE_EXT] }],
+      filters: [
+        { name: "Alle ondersteunde bestanden", extensions: [...new Set([...PROJECT_FILE_EXTS, ...importFilters.flatMap((filter) => filter.extensions)])] },
+        { name: "Open FEM Studio project", extensions: [...PROJECT_FILE_EXTS] },
+        ...importFilters,
+      ],
     });
     if (!selected || Array.isArray(selected)) return null;
-    const text = await readTextFile(selected as string);
-    return { text, path: selected as string };
+    const path = selected as string;
+    const type = path.split(".").pop()?.toLowerCase() ?? "";
+    if (!PROJECT_FILE_EXTS.includes(type)) return { soort: "import", path };
+    const text = await readTextFile(path);
+    return { soort: "project", text, path };
   }
   // Browser: hidden <input type=file>
   return await new Promise(resolve => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = `.${PROJECT_FILE_EXT},application/json`;
+    input.accept = `${PROJECT_FILE_EXTS.map((e) => `.${e}`).join(",")},application/json`;
     input.hidden = true;
     document.body.appendChild(input);
-    const finish = (value: { text: string; path: string } | null) => {
+    const finish = (value: { soort: "project"; text: string; path: string } | null) => {
       input.remove();
       resolve(value);
     };
@@ -654,7 +816,7 @@ export async function openProject(): Promise<{ text: string; path: string } | nu
       const file = input.files?.[0];
       if (!file) { finish(null); return; }
       const text = await file.text();
-      finish({ text, path: file.name });
+      finish({ soort: "project", text, path: file.name });
     };
     input.addEventListener("cancel", () => finish(null), { once: true });
     input.click();

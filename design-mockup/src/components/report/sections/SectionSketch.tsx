@@ -146,8 +146,10 @@ function Leader({ fx, fy, tx, ty, label }: { fx: number; fy: number; tx: number;
 interface LeaderSpec { fx: number; fy: number; tx: number; ty: number; label: string }
 
 export default function SectionSketch({ shape }: { shape: SectionShape }) {
-  const bMm = shape.type === "tube" ? shape.d : shape.b;
-  const hMm = shape.type === "tube" ? shape.d : shape.h;
+  // Buis en massief rond: één maat, de diameter.
+  const rond = shape.type === "tube" || shape.type === "rond";
+  const bMm = rond ? shape.d : shape.b;
+  const hMm = rond ? shape.d : shape.h;
   if (!(bMm > 0) || !(hMm > 0)) return null;
 
   const s = Math.min(DRAW_W / bMm, DRAW_H / hMm);
@@ -233,7 +235,7 @@ export default function SectionSketch({ shape }: { shape: SectionShape }) {
   const halfB = dim(bMm / 2);
   const halfH = dim(hMm / 2);
 
-  const bLabel = shape.type === "tube" ? `d = ${dim(bMm)}` : `b = ${dim(bMm)}`;
+  const bLabel = rond ? `d = ${dim(bMm)}` : `b = ${dim(bMm)}`;
   const hLabel = `h = ${dim(hMm)}`;
 
   return (
@@ -271,7 +273,7 @@ export default function SectionSketch({ shape }: { shape: SectionShape }) {
         n.l.
       </text>
       <DimH x1={x0} x2={x0 + w} y={yDimB} yObj={y0} label={bLabel} />
-      {shape.type !== "tube" && (
+      {!rond && (
         <DimV y1={y0} y2={y0 + h} x={xDimH} xObj={x0} label={hLabel} />
       )}
       {leaders.map((l) => (

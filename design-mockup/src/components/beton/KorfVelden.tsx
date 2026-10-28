@@ -52,6 +52,10 @@ import type { RebarRow } from "../../lib/types/concrete/RebarRow";
 import type { ReinforcementCage } from "../../lib/types/concrete/ReinforcementCage";
 import type { ConcreteCoverResponse } from "../../lib/types/concrete/ConcreteCoverResponse";
 import { toetsDekking } from "./betonKern";
+import InfoTip from "../InfoTip";
+
+/** Eerste letter als hoofdletter, voor een zinsdeel dat als losse uitleg wordt getoond. */
+const hoofdletter = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1);
 import {
   BEUGELDIAMETERS,
   CONSTRUCTIEKLASSEN,
@@ -81,9 +85,12 @@ export function Getal({
   min,
   max,
   stap,
+  info,
 }: {
   id: string;
   label: string;
+  /** Uitleg achter een (i)-icoon naast het label, in plaats van tekst onder het veld. */
+  info?: ReactNode;
   eenheid?: string;
   waarde: number;
   onChange: (v: number) => void;
@@ -93,7 +100,7 @@ export function Getal({
 }) {
   return (
     <label className="beton-rij" htmlFor={id}>
-      <span className="beton-label">{label}</span>
+      <span className="beton-label">{label}{info && <InfoTip id={`${id}-info`}>{info}</InfoTip>}</span>
       <span className="beton-invoer-met-eenheid">
         <input
           id={id}
@@ -134,9 +141,12 @@ export function GetalOptioneel({
   min,
   stap,
   geheel,
+  info,
 }: {
   id: string;
   label: ReactNode;
+  /** Uitleg achter een (i)-icoon naast het label, in plaats van tekst onder het veld. */
+  info?: ReactNode;
   eenheid?: string;
   waarde: number | null | undefined;
   onChange: (v: number | undefined) => void;
@@ -147,7 +157,7 @@ export function GetalOptioneel({
   const { t } = useTranslation("check");
   return (
     <label className="beton-rij" htmlFor={id}>
-      <span className="beton-label">{label}</span>
+      <span className="beton-label">{label}{info && <InfoTip id={`${id}-info`}>{info}</InfoTip>}</span>
       <span className="beton-invoer-met-eenheid">
         <input
           id={id}
@@ -180,6 +190,7 @@ export function Rij({
   rij,
   onChange,
   toelichting,
+  info,
 }: {
   id: string;
   label: string;
@@ -187,11 +198,13 @@ export function Rij({
   onChange: (rij: RebarRow) => void;
   /** Korte uitleg onder het veld, voor een rij die anders leest dan hij is. */
   toelichting?: ReactNode;
+  /** Langere uitleg achter een (i)-icoon naast het label. */
+  info?: ReactNode;
 }) {
   const { t } = useTranslation("check");
   return (
     <div className="beton-rij">
-      <span className="beton-label">{label}</span>
+      <span className="beton-label">{label}{info && <InfoTip id={`${id}-info`}>{info}</InfoTip>}</span>
       <span className="beton-invoer-groep">
         <input
           id={`${id}-aantal`}
@@ -434,7 +447,11 @@ export default function KorfVelden({
   return (
     <>
       <label className="beton-rij" htmlFor={`${idPrefix}-milieuklasse`}>
-        <span className="beton-label">{t("concrete.cage.exposureClass")}</span>
+        <span className="beton-label">{t("concrete.cage.exposureClass")}<InfoTip id={`${idPrefix}-milieuklasse-info`}>
+          {gekozen
+            ? t("concrete.cage.exposureExamples", { omschrijving: gekozen.description, voorbeelden: gekozen.examples.toLowerCase() })
+            : t("concrete.cage.noExposureClassHint")}
+        </InfoTip></span>
         <select
           id={`${idPrefix}-milieuklasse`}
           className="beton-invoer"
@@ -446,19 +463,6 @@ export default function KorfVelden({
           {klasseOpties(t("concrete.cage.choose"))}
         </select>
       </label>
-      {gekozen && (
-        <div className="beton-hint">
-          {t("concrete.cage.exposureExamples", {
-            omschrijving: gekozen.description,
-            voorbeelden: gekozen.examples.toLowerCase(),
-          })}
-        </div>
-      )}
-      {!milieuklasse && (
-        <div className="beton-hint">
-          {t("concrete.cage.noExposureClassHint")}
-        </div>
-      )}
 
       <label className="beton-rij" htmlFor={`${idPrefix}-constructieklasse`}>
         <span className="beton-label">{t("concrete.cage.structuralClass")}</span>
@@ -512,6 +516,10 @@ export default function KorfVelden({
           <span aria-hidden="true">{zijdenOpen ? "▾" : "▸"}</span> {t("concrete.cage.perSide")}
           {!zijdenOpen && heeftAfwijkendeZijde ? ` ${t("concrete.cage.deviating")}` : ""}
         </button>
+        <InfoTip id={`${idPrefix}-zijden-info`}>
+          {t("concrete.cage.perSideHintBefore")} <em>{t("concrete.cage.perSideHintEm")}</em>{" "}
+          {t("concrete.cage.perSideHintAfter")}
+        </InfoTip>
         {zijdenOpen && (
           <div id={`${idPrefix}-zijden`} className="beton-zijden-lijst">
             {ZIJDEN.map((zijde) => {
@@ -567,16 +575,12 @@ export default function KorfVelden({
                 </div>
               );
             })}
-            <div className="beton-hint">
-              {t("concrete.cage.perSideHintBefore")} <em>{t("concrete.cage.perSideHintEm")}</em>{" "}
-              {t("concrete.cage.perSideHintAfter")}
-            </div>
           </div>
         )}
       </div>
 
       <label className="beton-rij" htmlFor={`${idPrefix}-beugel`}>
-        <span className="beton-label">{t("concrete.cage.stirrup")}</span>
+        <span className="beton-label">{t("concrete.cage.stirrup")}<InfoTip id={`${idPrefix}-beugel-info`}>{t("concrete.cage.stirrupAngleHint")}</InfoTip></span>
         <select
           id={`${idPrefix}-beugel`}
           className="beton-invoer"
@@ -624,6 +628,12 @@ export default function KorfVelden({
                 {t("concrete.cage.legSpacing")}<sub>t</sub>
               </>
             }
+            info={<>
+              s<sub>t</sub> {t("concrete.cage.stEmptyAllowed")}{" "}
+              {stAfgeleid?.afgeleid
+                ? t("concrete.cage.stDerived", { st: maat(stAfgeleid.mm) })
+                : t("concrete.cage.stDerivedByEngine")}
+            </>}
             eenheid="mm"
             waarde={korf.stirrup_leg_spacing_mm}
             min={1}
@@ -637,27 +647,23 @@ export default function KorfVelden({
                 {t("concrete.cage.stirrupSteel")}<sub>ywk</sub>
               </>
             }
+            info={<>f<sub>ywk</sub> {t("concrete.cage.fywkEmpty")}</>}
             eenheid="N/mm²"
             waarde={korf.stirrup_fywk_mpa}
             min={1}
             stap={10}
             onChange={(v) => zet({ stirrup_fywk_mpa: v })}
           />
-          <div className="beton-hint">
-            {(korf.stirrup_spacing_mm ?? null) === null || (korf.stirrup_legs ?? null) === null ? (
-              <>
-                <strong>{t("concrete.cage.noShearCheck")}</strong>{" "}
+          {/* Alleen de waarschuwing blijft zichtbaar; de achtergrond staat in de tooltip. */}
+          {(korf.stirrup_spacing_mm ?? null) === null || (korf.stirrup_legs ?? null) === null ? (
+            <div className="beton-waarschuwing" role="note">
+              {t("concrete.cage.noShearCheck")}
+              <InfoTip id={`${idPrefix}-dwarskracht-info`}>
                 A<sub>sw</sub>{t("concrete.cage.undeterminedA")}<sub>w</sub>{" "}
-                {t("concrete.cage.undeterminedB")}{" "}
-              </>
-            ) : null}
-            {t("concrete.cage.stirrupAngleHint")} s<sub>t</sub>{" "}
-            {t("concrete.cage.stEmptyAllowed")}{" "}
-            {stAfgeleid?.afgeleid
-              ? t("concrete.cage.stDerived", { st: maat(stAfgeleid.mm) })
-              : t("concrete.cage.stDerivedByEngine")}{" "}
-            f<sub>ywk</sub> {t("concrete.cage.fywkEmpty")}
-          </div>
+                {t("concrete.cage.undeterminedB")}
+              </InfoTip>
+            </div>
+          ) : null}
         </>
       )}
 
@@ -696,15 +702,13 @@ export default function KorfVelden({
           zijstaafRij(korf).count > 0 ? (
             <>
               {t("concrete.cage.sideBarsCount", { n: zijstaafRij(korf).count })}{" "}
-              <strong>{t("concrete.cage.sideBarsTotal", { n: 2 * zijstaafRij(korf).count })}</strong>
-              {t("concrete.cage.sideBarsHint")}
+              <strong>{t("concrete.cage.sideBarsTotal", { n: 2 * zijstaafRij(korf).count })}</strong>.
             </>
-          ) : (
-            <>
-              {t("concrete.cage.noSideBarsHint")}
-            </>
-          )
+          ) : undefined
         }
+        info={zijstaafRij(korf).count > 0
+          ? hoofdletter(t("concrete.cage.sideBarsHint").replace(/^[,s]+/, ""))
+          : t("concrete.cage.noSideBarsHint")}
       />
 
       {/*

@@ -54,7 +54,11 @@ export const ZICHTBAARHEID: Record<ZichtbaarheidGroep, ZichtbaarheidRij[]> = {
   geometrie: [
     { sleutel: "knopen", label: "zichtbaarheid.knopen", hint: "zichtbaarheid.knopenHint" },
     { sleutel: "staven", label: "zichtbaarheid.staven", hint: "zichtbaarheid.stavenHint" },
+    // Profielen in kleur (lib/profielKleur.ts): direct onder de staven, want
+    // het kleurt de staaflijnen. Onthouden zoals de andere model-lagen.
+    { sleutel: "profielKleur", label: "zichtbaarheid.profielKleur", hint: "zichtbaarheid.profielKleurHint" },
     { sleutel: "platen", label: "zichtbaarheid.platen", hint: "zichtbaarheid.platenHint" },
+    { sleutel: "plaatMesh", label: "zichtbaarheid.mesh", hint: "zichtbaarheid.meshHint" },
     { sleutel: "belastingen", label: "zichtbaarheid.belastingen", hint: "zichtbaarheid.belastingenHint" },
     { sleutel: "assenstelsel", label: "zichtbaarheid.assenstelsel", hint: "zichtbaarheid.assenstelselHint" },
     { sleutel: "aanzicht", label: "tree.rowAanzicht", hint: "tree.rowAanzichtHint" },

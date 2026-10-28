@@ -12,6 +12,8 @@ import type { ExposureClass } from "../../lib/types/concrete/ExposureClass";
 import type { PlaatWapeningInvoer } from "../../lib/types/plaat/PlaatWapeningInvoer";
 import type { StructuralClass } from "../../lib/types/concrete/StructuralClass";
 import type { ConcreteColumnInput } from "../../lib/types/concrete/ConcreteColumnInput";
+import type { StuwdrukResultaat } from "../../lib/wind/windEurocode";
+import type { VlakRegel } from "../../lib/wind/windGenerator";
 // De mesher zelf blijft in de kern; hier alleen zijn typen en drie pure
 // meetkundehulpjes (geen WASM, geen DOM — de sidecarbundel mag ze zien).
 import type { PlaatMeshSoort, PlaatMeshType } from "../../core/fem/PlaatMesher";
@@ -1398,7 +1400,7 @@ export function plaatRandTekst(
  *
  * ONDERGRENS: binnen 1 mm koppelt de engine een staafeinde aan de rand (de
  * knooptolerantie `TOL_MM` van het rekenmesh, dezelfde voor omtrek en
- * openingen, en `CONTROLE_TOL_MM` van de modelcontrole).
+ * openingen, en `PLAATRAND_TOL_MM` van de modelcontrole).
  *
  * BOVENGRENS 50 mm: de kleinste rasterstap die het canvas toelaat is 50 mm
  * (instelling "raster", min = 50). Een afstand tussen 1 en 50 mm tot een
@@ -1649,6 +1651,8 @@ export interface Load {
    * volgende generatie vervangen. Zo blijft handwerk altijd behouden.
    */
   gegenereerdDoor?: "wind";
+  /** Afwijkende druk op een kolom van een vrijstaand dak, op diens eigen z_e. */
+  windStuwdruk?: StuwdrukResultaat;
   /**
    * Vrije omschrijving van de gebruiker: waar komt deze last vandaan?
    * "sneeuw op overstek", "opslag magazijn", "reactie spant 3". Puur
@@ -1707,7 +1711,16 @@ export interface LoadCase {
    * combinaties en de actieve tab niet bij elke regeneratie verspringen.
    * Ontbreekt het veld → handmatig aangemaakt belastinggeval.
    */
-  gegenereerd?: { bron: "wind"; sleutel: string };
+  gegenereerd?: { bron: "wind" | "envelope3d"; sleutel: string; windCodeId?: string;
+    /** Bewaarde basisdruk van de 2D-generator; oudere bestanden missen dit veld. */
+    windStuwdruk?: StuwdrukResultaat;
+    /** Constructiefactor op de bewaarde 2D-windlasten; ontbreekt in oude bestanden. */
+    windStructuralFactor?: number;
+    /** Binnendrukcoëfficiënt en herkomst van het 2D-gebouwgeval. */
+    windInternalPressureCoefficient?: number;
+    windInternalPressureSource?: string;
+    /** Gebruikte zones, vormfactoren en lijnlasten per 2D-windgeval. */
+    windRegels?: VlakRegel[] };
   /**
    * Dit geval draagt het AUTOMATISCHE eigen gewicht (issue #42). De inhoud
    * volgt uit het model (per staaf q = ρ·A·g, per plaat ρ·g·t) via
@@ -1881,7 +1894,11 @@ export interface StructuralGrid {
   xAxes: GridAxisLine[];
   /** 3D-plan axes, varying y; optional in older and purely 2D projects. */
   yAxes?: GridAxisLine[];
-  /** horizontal lines, varying z */
+  /**
+   * horizontal lines, varying z: de LEVELS (peilen), elk een naam en een
+   * hoogte in mm. In 3D kunnen knopen en platen eraan gekoppeld zijn
+   * (`levelId` = id van de as; zie openFem3d/openFem3dLevels.ts).
+   */
   zAxes: GridAxisLine[];
 }
 

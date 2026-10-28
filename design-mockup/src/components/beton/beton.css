@@ -361,3 +361,18 @@
 /* De "−"/"+" naast een rijlabel in de doorsnedetekening: één staaf minder of meer. */
 .beton-rijknop { opacity: 0.55; }
 .beton-rijknop:hover { opacity: 1; }
+
+/* Een korte waarschuwing die zichtbaar moet blijven (bijv. geen dwarskrachttoets
+   zonder beugelgegevens); de achtergrond staat in de InfoTip ernaast. */
+.beton-waarschuwing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 6px;
+  padding: 3px 8px;
+  border-left: 3px solid var(--theme-warning, #d97706);
+  background: var(--theme-accent-soft, var(--theme-hover));
+  color: var(--theme-text);
+  font-size: 11px;
+  line-height: 1.35;
+}

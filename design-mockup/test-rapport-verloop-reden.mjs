@@ -96,6 +96,10 @@ check("de kop van de toelichtingskolom draagt de klasse (en heet Reden)",
   /<th class="rpt-verloop-reden">Reden<\/th>/.test(stabTabel), stabTabel.slice(0, 400));
 check("elke toelichtingscel draagt de klasse",
   (stabTabel.match(/<td class="rpt-verloop-reden">/g) ?? []).length === 2);
+// #113: W_y van de grootste doorsnede (2.194.000 mm³) voluit, niet als "2E6".
+const hoofdTabel = html.split('class="rpt-verloop-tabel"')[1] ?? "";
+check("W_y voluit met duizendtallen, ook boven 10⁶ (#113)",
+  hoofdTabel.includes("<td>2.194.000</td>") && !/\dE\d/.test(hoofdTabel), hoofdTabel.slice(0, 600));
 
 // ── [2] cascade ─────────────────────────────────────────────────────────────
 log("\n[2] cascade met CHECK_REPORT_CSS");

@@ -60,6 +60,7 @@ import { parseConcreteSection } from "./betonCheckBuilder";
 import { parseVrijMateriaal } from "./vrijMateriaal";
 import { isAluminiumMateriaal, parseAluminiumMateriaal } from "./aluminiumMateriaal";
 import { STEEL_GRADES } from "./steelGrades";
+import { profielAliasSleutel } from "./strip";
 
 /** E_0,mean in N/mm² per sterkteklasse — EN 338 (C) en EN 14080 (GL). */
 export const TIMBER_E_MEAN: Record<string, number> = {
@@ -226,8 +227,16 @@ export function parseRechthoek(profiel: string | undefined): { b: number; h: num
   return { b, h };
 }
 
+/**
+ * Sleutel van de gegenereerde profieltabellen. Massief rond geschreven als
+ * "Ø24" of "ROND 24" krijgt de sleutel van "RD 24" (`lib/rondStaal.ts`), en
+ * platstaal als "FL 80x10" die van "Strip 80x10" (`lib/strip.ts`) — de
+ * spiegel van de opzoekregel in de Rust-kern.
+ */
 function normaliseer(naam: string): string {
-  return naam.toUpperCase().split("").filter(c => c !== " " && c !== "-" && c !== ".").join("");
+  return profielAliasSleutel(
+    naam.toUpperCase().split("").filter(c => c !== " " && c !== "-" && c !== ".").join(""),
+  );
 }
 
 /**
@@ -716,6 +725,8 @@ function soortNaam(kind: string): string {
     case "Rhs": return "koker";
     case "Chs": return "buis";
     case "Angle": return "hoeklijn";
+    case "RoundBar": return "massief rond";
+    case "FlatBar": return "platstaal";
     case "Channel": return "U-profiel";
     default: return kind;
   }

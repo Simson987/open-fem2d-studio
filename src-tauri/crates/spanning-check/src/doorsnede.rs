@@ -395,6 +395,33 @@ fn lagen_profiel(p: &SteelProfile) -> Result<Vec<SpanningLaag>, String> {
             }
             Ok(lagen)
         }
+        // Platstaal: één laag. De breedte b van de strip staat langs z (de
+        // hoogte h van het profiel), de dikte t is de laagbreedte (`b_mm`):
+        // buiging om de sterke as, zoals bij elk ander catalogusprofiel.
+        ProfileKind::FlatBar => lagen_rechthoek(b, h),
+        // Massief rond: dezelfde strokenbenadering als de buis, zonder gat —
+        // de breedte op hoogte z is de koorde 2·√(r² − y²).
+        ProfileKind::RoundBar => {
+            let r = h / 2.0;
+            let dz = h / CHS_STROKEN as f64;
+            let lagen: Vec<SpanningLaag> = (0..CHS_STROKEN)
+                .map(|k| {
+                    let z_top = k as f64 * dz;
+                    let z_bot = z_top + dz;
+                    let y = (z_top + z_bot) / 2.0 - r; // afstand tot het hart
+                    SpanningLaag {
+                        z_top_mm: z_top,
+                        z_bot_mm: z_bot,
+                        breedte_mm: 2.0 * (r * r - y * y).max(0.0).sqrt(),
+                    }
+                })
+                .filter(|l| l.breedte_mm > 1e-9)
+                .collect();
+            if lagen.is_empty() {
+                return Err(format!("profiel \"{}\" leverde geen bruikbare stroken op", p.name));
+            }
+            Ok(lagen)
+        }
         // Een hoeklijn past niet in het lagenmodel, en dat is geen tekortkoming
         // van de opbouw maar van de aanname eronder. Het vezelmodel rekent
         // buiging om de y-as uit lagen met een constante breedte, en dat mag
@@ -471,6 +498,12 @@ pub fn maak_doorsnede(d: &SpanningDoorsnede) -> Result<Doorsnedegegevens, String
                 notities.push(format!(
                     "De ronde wand is met {CHS_STROKEN} stroken benaderd; de breedte per strook \
                      is de exacte wandbreedte op het strookmidden."
+                ));
+            }
+            if p.kind == ProfileKind::RoundBar {
+                notities.push(format!(
+                    "De massieve ronde doorsnede is met {CHS_STROKEN} stroken benaderd; de \
+                     breedte per strook is de exacte koorde op het strookmidden."
                 ));
             }
             let (a, iy, bron) = if a > 0.0 && iy > 0.0 {

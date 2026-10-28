@@ -101,7 +101,10 @@ async fn roep(namen: &[&str]) -> Vec<Value> {
 
 #[tokio::test]
 async fn unp_200_en_inp_200_binnen_een_half_procent_van_de_catalogus() {
-    let namen = ["UNP 200", "INP 200", "IPE 200", "SHS 100x100x5"];
+    // RD 24 (massief rond): de catalogus schrijft de gesloten formules weg, de
+    // motor rekent dezelfde cirkel met exacte kwartbogen; alleen I_t is
+    // numeriek (0,26 % onder πd⁴/32).
+    let namen = ["UNP 200", "INP 200", "IPE 200", "SHS 100x100x5", "RD 24"];
     let uit = roep(&namen).await;
     let mut fouten = Vec::new();
     for (naam, sc) in namen.iter().zip(uit.iter()) {

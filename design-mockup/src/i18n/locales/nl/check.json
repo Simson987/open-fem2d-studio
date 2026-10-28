@@ -257,7 +257,9 @@
       "hollowHotFinished": "Koker warmvervaardigd (SHS/RHS, EN 10210)",
       "circularHotFinished": "Buis warmvervaardigd (CHS, EN 10210)",
       "angleEqual": "L gelijkbenig",
-      "angleUnequal": "L ongelijkbenig"
+      "angleUnequal": "L ongelijkbenig",
+      "roundBar": "Rond staal, massief (RD, Ø)",
+      "flatBar": "Platstaal, strip (FL)"
     }
   },
   "connection": {

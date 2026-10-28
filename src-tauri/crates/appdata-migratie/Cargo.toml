@@ -1,0 +1,16 @@
+[package]
+name = "appdata-migratie"
+version = "0.1.0"
+edition = "2021"
+description = "Neemt bij de eerste start de app-datamappen van de vorige identifier over"
+license = "AGPL-3.0-or-later"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+# Dezelfde basismappen als Tauri zelf (tauri::path gebruikt dirs 6).
+dirs = "6"
+
+[dev-dependencies]
+serde_json = { workspace = true }

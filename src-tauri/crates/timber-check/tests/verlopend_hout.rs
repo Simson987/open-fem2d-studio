@@ -38,6 +38,9 @@ fn staaf(
     punten: &[(f64, f64)],
 ) -> TimberBeamCheckInput {
     TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         beam_id: 1,
         width_mm: b_mm,
@@ -86,6 +89,7 @@ fn staaf(
         staaf_notities: None,
         width_end_mm: b_eind,
         height_end_mm: h_eind,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 

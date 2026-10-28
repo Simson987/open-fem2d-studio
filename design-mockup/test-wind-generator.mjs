@@ -569,5 +569,26 @@ log("\n[12] Kap zonder gevel — een kapspant op wanden die niet in het model st
     && zonderCpe.geometrie.hellendDak?.vorm === "zadel" && zonderCpe.geometrie.hellendDak.opzoeking.links?.ok === true);
 }
 
+log("\n[constructiefactor] 2D-windlasten en afleiding");
+{
+  const model = { nodes: portaalNodes, beams: portaalBeams, loadCases: basisGevallen };
+  const normaal = genereerWindbelasting(model, basis);
+  const verhoogd = genereerWindbelasting(model, { ...basis, structuralFactor: 1.25 });
+  checkTrue("generatie met factor 1,25 geslaagd", verhoogd.ok);
+  check("basisdruk blijft fysisch onveranderd", verhoogd.samenvatting.stuwdruk.qp_kNm2, normaal.samenvatting.stuwdruk.qp_kNm2);
+  check("factor opgeslagen in samenvatting", verhoogd.samenvatting.structuralFactor, 1.25);
+  for (let i = 0; i < normaal.lasten.length; i++) {
+    check(`lijnlast ${i + 1} geschaald`, verhoogd.lasten[i].q, normaal.lasten[i].q * 1.25);
+  }
+  for (let i = 0; i < normaal.samenvatting.perGeval[0].regels.length; i++) {
+    const oud = normaal.samenvatting.perGeval[0].regels[i];
+    const nieuw = verhoogd.samenvatting.perGeval[0].regels[i];
+    check(`nettodruk zone ${i + 1} geschaald`, nieuw.w_kNm2, oud.w_kNm2 * 1.25);
+    check(`rapportlijnlast zone ${i + 1} geschaald`, nieuw.q_kNm, oud.q_kNm * 1.25);
+  }
+  const ongeldig = genereerWindbelasting(model, { ...basis, structuralFactor: 0 });
+  checkTrue("nul-factor geweigerd", !ongeldig.ok && ongeldig.meldingen.some((m) => m.niveau === "fout"));
+}
+
 log(`\n${failed === 0 ? "✅" : "❌"} ${passed} geslaagd, ${failed} gefaald`);
 process.exit(failed === 0 ? 0 : 1);

@@ -5,7 +5,7 @@ use nen_en_1993_1_1_ltb::LateralBracing;
 use nen_en_1995_1_1::stability::{LtbLoadCase, LtbLoadPosition};
 use nen_en_1995_1_1::{LoadDurationClass, ServiceClass};
 use serde::{Deserialize, Serialize};
-use steel_check::CustomSection;
+use steel_check::{CustomSection, ZijdelingseKnikInAnalyse};
 use ts_rs::TS;
 
 use crate::belastingduur::CombinationLoadDuration;
@@ -134,6 +134,13 @@ pub struct TimberBeamCheckInput {
     /// drukterm van de kiptoets.
     #[serde(default)]
     pub buckling_length_z_m: f64,
+    /// Ruimtelijk raamwerk: de berekening ziet knik om beide doorsnedeassen.
+    #[serde(default)]
+    pub ruimtelijk: bool,
+    /// Vrij staafeind: zonder opgegeven kniklengte geldt L_cr = 2 L, behalve om
+    /// een as uit [`Self::zijdelingse_knik_in_analyse`] (dan L).
+    #[serde(default)]
+    pub is_cantilever: bool,
     /// Zijdelingse steunen als fracties van de staaflengte, per rand — dezelfde
     /// vorm als bij staal (`top_flange_positions` = bovenrand,
     /// `bottom_flange_positions` = onderrand).
@@ -220,6 +227,12 @@ pub struct TimberBeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub deflection_quasi_perm_fin_mm: Option<f64>,
+    /// Reden waarom de BGT-zakking niet betrouwbaar kan worden bepaald.
+    /// De sterkte- en stabiliteitstoetsen blijven beschikbaar; w_fin en w_add
+    /// worden expliciet `NotApplicable` zonder UC.
+    #[serde(default)]
+    #[ts(optional)]
+    pub deflection_not_applicable_reason: Option<String>,
     /// Toelichtingen bij de STAAF ALS GEHEEL, letterlijk bij de kolomtoets
     /// (art. 6.3.2), de kiptoets (art. 6.3.3) en de eindzakking gezet; rekenen
     /// nergens mee. De bouwer zet hier wat hij van de staaf weet en de kern
@@ -255,4 +268,20 @@ pub struct TimberBeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub height_end_mm: Option<f64>,
+    /// Om welke assen de globale berekening tweede orde (P-Δ) MET scheefstand
+    /// is en de staaf kan laten uitbuigen. Alleen van belang bij een vrij
+    /// staafeind ([`Self::is_cantilever`]) zonder opgegeven kniklengte: om een
+    /// gedekte as geldt dan de staaflengte, om een niet-gedekte as 2·L.
+    ///
+    /// Alleen zetten als die tweede-orde-berekening voldoet aan NEN-EN 1995-1-1:
+    /// rekenstijfheden E_d = E_mean/γ_M (2.2.2(1)P) en de imperfecties van
+    /// 5.4.4(2), de scheefstand én de boogimperfectie e = 0,0025·l. De app en
+    /// `check_fem_model` zetten het voor hout niet: hun P-Δ rekent met E_mean.
+    /// Zie [`ZijdelingseKnikInAnalyse`].
+    ///
+    /// `None` of weglaten = geen as gedekt, 2·L bij een vrij eind: de veilige
+    /// kant voor wie de berekening niet kent.
+    #[serde(default)]
+    #[ts(optional)]
+    pub zijdelingse_knik_in_analyse: Option<ZijdelingseKnikInAnalyse>,
 }

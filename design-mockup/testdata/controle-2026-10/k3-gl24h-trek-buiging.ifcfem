@@ -1,0 +1,267 @@
+{
+ "format": "open-fem-studio-v2",
+ "version": 2,
+ "savedAt": "2026-10-11T16:39:20.000Z",
+ "nodes": [
+  {
+   "id": 1,
+   "x": 0,
+   "z": 0
+  },
+  {
+   "id": 2,
+   "x": 3000,
+   "z": 0
+  },
+  {
+   "id": 3,
+   "x": 0,
+   "z": 1000
+  },
+  {
+   "id": 4,
+   "x": 3000,
+   "z": 1000
+  }
+ ],
+ "beams": [
+  {
+   "id": 1,
+   "from": 1,
+   "to": 2,
+   "material": "GL24h",
+   "profile": "90x180",
+   "checkConfig": {
+    "performLtbCheck": false,
+    "serviceClass": 1
+   }
+  },
+  {
+   "id": 2,
+   "from": 3,
+   "to": 4,
+   "material": "GL24h",
+   "profile": "90x180",
+   "checkConfig": {
+    "performLtbCheck": false,
+    "serviceClass": 1
+   }
+  }
+ ],
+ "supports": [
+  {
+   "nodeId": 1,
+   "type": "pinned"
+  },
+  {
+   "nodeId": 2,
+   "type": "zRoller"
+  },
+  {
+   "nodeId": 3,
+   "type": "pinned"
+  },
+  {
+   "nodeId": 4,
+   "type": "zRoller"
+  }
+ ],
+ "plates": [],
+ "loads": [
+  {
+   "id": 1,
+   "caseId": 2,
+   "type": "pointForce",
+   "nodeId": 2,
+   "fx": 26.666666666666668,
+   "fz": 0
+  },
+  {
+   "id": 2,
+   "caseId": 2,
+   "type": "pointMoment",
+   "nodeId": 1,
+   "my": -2.0
+  },
+  {
+   "id": 3,
+   "caseId": 2,
+   "type": "pointMoment",
+   "nodeId": 2,
+   "my": 2.0
+  },
+  {
+   "id": 4,
+   "caseId": 2,
+   "type": "pointForce",
+   "nodeId": 4,
+   "fx": 53.333333333333336,
+   "fz": 0
+  },
+  {
+   "id": 5,
+   "caseId": 2,
+   "type": "pointMoment",
+   "nodeId": 3,
+   "my": -4.0
+  },
+  {
+   "id": 6,
+   "caseId": 2,
+   "type": "pointMoment",
+   "nodeId": 4,
+   "my": 4.0
+  }
+ ],
+ "loadCases": [
+  {
+   "id": 1,
+   "name": "Permanent (leeg)",
+   "type": "dead"
+  },
+  {
+   "id": 2,
+   "name": "Q = rekenwaarde / 1,5",
+   "type": "live",
+   "categorie": "A"
+  }
+ ],
+ "activeLoadCaseId": 1,
+ "selfWeightEnabled": false,
+ "nonlinearEnabled": false,
+ "analysetype": "eersteOrde",
+ "betonSegmentLengteMm": 400,
+ "betonKruipcoefficient": null,
+ "betonKruipInvoer": null,
+ "idTellers": {
+  "belastinggeval": 3,
+  "combinatie": 1
+ },
+ "structuralGrid": {
+  "enabled": false,
+  "xAxes": [
+   {
+    "id": "A",
+    "label": "A",
+    "position": 0
+   },
+   {
+    "id": "B",
+    "label": "B",
+    "position": 12000
+   }
+  ],
+  "yAxes": [
+   {
+    "id": "Y-A",
+    "label": "1",
+    "position": 0
+   },
+   {
+    "id": "Y-B",
+    "label": "2",
+    "position": 6000
+   }
+  ],
+  "zAxes": [
+   {
+    "id": "1",
+    "label": "1",
+    "position": 0
+   },
+   {
+    "id": "2",
+    "label": "2",
+    "position": 5000
+   }
+  ]
+ },
+ "scheefstandEnabled": false,
+ "scheefstandNoemer": 200,
+ "scheefstandRichting": 1,
+ "scheefstandBron": "vast",
+ "scheefstandHoogteM": null,
+ "scheefstandAantalElementen": null,
+ "eigenDoorsneden": [],
+ "eigenCltOpbouwen": [],
+ "projectInfo": {
+  "company": "",
+  "date": "",
+  "description": "Controle 2026-10, K3: GL24h 90 x 180, staaf 1 N = +40 kN en M = 3 kNm, staaf 2 N = +80 kN en M = 6 kNm in combinatie 6.10b. Hand (6.17): 0,5480 en 1,0960 (staaf 2 voldoet niet).",
+  "engineer": "",
+  "location": "",
+  "name": "k3-gl24h-trek-buiging",
+  "notes": "",
+  "projectNumber": "",
+  "reportHeader": "",
+  "uitgangspunten": {
+   "en1992": false,
+   "en1993": false,
+   "en1995": false,
+   "gevolgklasse": "CC2",
+   "levensduurklasse": "4",
+   "nationaleBijlage": "NL",
+   "normenHandmatig": [],
+   "terreincategorie": "II",
+   "windgebied": "II"
+  }
+ },
+ "windInstellingen": {
+  "windgebied": "II",
+  "terreincategorie": "II",
+  "stuwdrukBron": "berekend",
+  "qpHandmatig_kNm2": 1,
+  "richtingLinks": true,
+  "richtingRechts": true,
+  "richtingHaaks": false,
+  "cpiKeuze": "beide",
+  "cpiHandmatig": 0.2,
+  "hohSpant_m": 5,
+  "positieSpant": "tussenspant",
+  "belastingbreedteOverride_m": null,
+  "gebouwlengte_m": 30,
+  "afstandTotKopgevel_m": 15,
+  "cpeDakLoef": null,
+  "cpeDakLij": null,
+  "cpeDakHaaks": null,
+  "combinatiesGenereren": true,
+  "gevelhoogte_m": null,
+  "vorm": "gebouw",
+  "vrijstaandDakvorm": "lessenaar",
+  "blokkering_phi": 0,
+  "vrijstaandHoogte_m": null,
+  "wrijving": "geen",
+  "aantalOverkappingen": 1,
+  "positieOverkapping": 1,
+  "kolomDoorsnede": "geen",
+  "kolomBreedte_mm": 200,
+  "kolomDiepte_mm": 200
+ },
+ "rapport": {
+  "margeBoven": 18,
+  "margeOnder": 20,
+  "margeBinnen": 15,
+  "margeBuiten": 15,
+  "basisLettergrootte": 10,
+  "regelafstand": 1.45,
+  "pageSize": "A4",
+  "orientation": "portrait",
+  "hiddenSections": {
+   "nodes": true,
+   "beams": true,
+   "plates": true,
+   "materials": true,
+   "combinations": true,
+   "plateStresses": true,
+   "checkDetail": true,
+   "clt": true,
+   "betonStijfheid": true,
+   "spanning": true
+  },
+  "rapportType": "beperkt",
+  "toetsingDetail": "beknopt",
+  "verborgenToetsStaven": {},
+  "inhoudsopgaveDiepte": 1
+ },
+ "modelDimension": "2d"
+}

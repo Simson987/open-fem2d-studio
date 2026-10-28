@@ -36,28 +36,32 @@
 //   qL³/(24·EI₁) − M_B·L/(3·EI₁) = M_B·L/(3·EI₂) ⇒ M_B = (qL²/8)·EI₂/(EI₁ + EI₂).
 // Zakking van veld 1 (omlaag positief), x vanaf A:
 //   w(x) = q·x·(L³ − 2L·x² + x³)/(24·EI₁) − M_B·x·(L² − x²)/(6·L·EI₁).
-// De app meet het veldmaximum over 21 stations (x = i·L/20) vanaf de koorde;
-// maatgevend is x = 2250 mm. Eindtoestand (2.3.2.2(1), 2.7): EI₁ → EI₁/1,6.
+// Maatgevend is het veldmaximum van w(x), waar θ = 0 (x ≈ 2315 mm; met EI₁/1,6
+// x ≈ 2268 mm). Tot oktober 2026 mat de app het grootste van 21 stations
+// (x = i·L/20, maatgevend 2250 mm) en stond hier dat stationsmaximum; sinds de
+// controle van 12 oktober 2026 (punt C8, issue #193) komt het maximum tussen
+// de stations mee, en is de handwaarde het echte maximum. Eindtoestand
+// (2.3.2.2(1), 2.7): EI₁ → EI₁/1,6.
 //
-//   combinatie           EI₁        M_B [kNm]   w(2250) [mm]
-//   G + Q (w_inst)       E_mean       9,7200      10,3710
-//   G + 0,3Q (w_qp)      E_mean       5,6376       6,0152
-//   G + 0,3Q (w_qp,fin)  E_mean,fin   6,5685       8,7244
-//   G (w₁)               E_mean       3,8880       4,1484
+//   combinatie           EI₁        M_B [kNm]   w_max [mm]   (was w(2250))
+//   G + Q (w_inst)       E_mean       9,7200      10,3803      (10,3710)
+//   G + 0,3Q (w_qp)      E_mean       5,6376       6,0206       (6,0152)
+//   G + 0,3Q (w_qp,fin)  E_mean,fin   6,5685       8,7251       (8,7244)
+//   G (w₁)               E_mean       3,8880       4,1521       (4,1484)
 //
-// 2.2.3(4): w_fin = w_inst + (w_qp,fin − w_qp) = 10,3710 + (8,7244 − 6,0152)
-//                 = 13,0802 mm;  w_add = w_fin − w₁ = 8,9318 mm.
-// 2.2.3(5) (vereenvoudiging): w_fin = 10,3710 + 0,6·6,0152 = 13,9801 mm;
-//   w_add = 9,8317 mm. Naast staal (dat niet kruipt) geeft de vereenvoudiging
+// 2.2.3(4): w_fin = w_inst + (w_qp,fin − w_qp) = 10,3803 + (8,7251 − 6,0206)
+//                 = 13,0848 mm;  w_add = w_fin − w₁ = 8,9327 mm.
+// 2.2.3(5) (vereenvoudiging): w_fin = 10,3803 + 0,6·6,0206 = 13,9926 mm;
+//   w_add = 9,8405 mm. Naast staal (dat niet kruipt) geeft de vereenvoudiging
 //   hier dus een te GROTE zakking: het hout kruipt weg en het staal neemt
 //   last over (w_qp,fin/w_qp = 1,450 in plaats van 1,6).
 //
 // Met beton in veld 2 (C30/37 150 × 250, E_cm = 33 000 (EN 1992-1-1 tabel 3.1),
 // I = 1,953125·10⁸, EI₂ = 6,4453·10¹²) en φ(∞,t₀) = 2,5, dus E_c,eff = E_cm/3,5
 // (EN 1992-1-1 7.4.3(5)), keert dat om, met dezelfde formules:
-//   w_inst = 9,4226   w_qp = 5,4651   w_qp,fin = 10,3129 mm (EI₁/1,6, EI₂/3,5)
-//   2.2.3(4): w_fin = 9,4226 + (10,3129 − 5,4651) = 14,2704 mm
-//   2.2.3(5): w_fin = 9,4226 + 0,6·5,4651 = 12,7017 mm — hier te KLEIN:
+//   w_inst = 9,4234   w_qp = 5,4656   w_qp,fin = 10,3329 mm (EI₁/1,6, EI₂/3,5)
+//   2.2.3(4): w_fin = 9,4234 + (10,3329 − 5,4656) = 14,2908 mm
+//   2.2.3(5): w_fin = 9,4234 + 0,6·5,4656 = 12,7027 mm — hier te KLEIN:
 //   het beton kruipt harder dan het hout en schuift last naar het hout.
 //
 // Draaien met: npx tsx test-hout-bgt-eindtoestand.mjs
@@ -106,16 +110,20 @@ const EI_BETON = 33000 * (150 * 250 ** 3) / 12;
 const KDEF = 0.6;
 /** M_B in N·mm bij q in kN/m (= N/mm) op veld 1. */
 const mB = (q, ei1, ei2) => (q * L * L / 8) * ei2 / (ei1 + ei2);
-/** Veldmaximum van veld 1 over 21 stations, omlaag positief, in mm. */
+/**
+ * Veldmaximum van veld 1, omlaag positief, in mm: het echte maximum van w(x)
+ * op [0, L] (waar θ = 0), met de gulden snede. Tot oktober 2026 was dit het
+ * grootste van 21 stations, omdat de app niet meer zag (punt C8).
+ */
 function wVeld(q, ei1, ei2) {
   const M = mB(q, ei1, ei2);
-  let max = 0;
-  for (let i = 0; i <= 20; i++) {
-    const x = (i * L) / 20;
-    const w = (q * x * (L ** 3 - 2 * L * x * x + x ** 3)) / (24 * ei1) - (M * x * (L * L - x * x)) / (6 * L * ei1);
-    if (Math.abs(w) > Math.abs(max)) max = w;
+  const w = (x) => (q * x * (L ** 3 - 2 * L * x * x + x ** 3)) / (24 * ei1) - (M * x * (L * L - x * x)) / (6 * L * ei1);
+  const g = (Math.sqrt(5) - 1) / 2;
+  let a = 0, b = L, x1 = b - g * (b - a), x2 = a + g * (b - a);
+  for (let k = 0; k < 200; k++) {
+    if (w(x1) < w(x2)) { a = x1; x1 = x2; x2 = a + g * (b - a); } else { b = x2; x2 = x1; x1 = b - g * (b - a); }
   }
-  return max;
+  return w((a + b) / 2);
 }
 const H = {
   inst: wVeld(5, EI_HOUT, EI_STAAL),
@@ -129,14 +137,14 @@ H.finVereenvoudigd = H.inst + KDEF * H.qp;
 
 log("\n[0] De handberekening (zie de kop)");
 dicht("M_B G+Q = 9,7200 kNm", mB(5, EI_HOUT, EI_STAAL) / 1e6, 9.72, 5e-4);
-dicht("w_inst = 10,3710 mm", H.inst, 10.371, 5e-4);
-dicht("w_qp = 6,0152 mm", H.qp, 6.0152, 5e-4);
+dicht("w_inst = 10,3803 mm", H.inst, 10.3803, 5e-4);
+dicht("w_qp = 6,0206 mm", H.qp, 6.0206, 5e-4);
 dicht("M_B G+0,3Q eindtoestand = 6,5685 kNm", mB(2.9, EI_HOUT / 1.6, EI_STAAL) / 1e6, 6.5685, 5e-4);
-dicht("w_qp,fin = 8,7244 mm", H.qpFin, 8.7244, 5e-4);
-dicht("w₁ = 4,1484 mm", H.w1, 4.1484, 5e-4);
-dicht("w_fin (2.2.3(4)) = 13,0802 mm", H.fin, 13.0802, 5e-4);
-dicht("w_add = 8,9318 mm", H.add, 8.9318, 5e-4);
-dicht("w_fin vereenvoudigd (2.2.3(5)) = 13,9801 mm", H.finVereenvoudigd, 13.9801, 5e-4);
+dicht("w_qp,fin = 8,7251 mm", H.qpFin, 8.7251, 5e-4);
+dicht("w₁ = 4,1521 mm", H.w1, 4.1521, 5e-4);
+dicht("w_fin (2.2.3(4)) = 13,0848 mm", H.fin, 13.0848, 5e-4);
+dicht("w_add = 8,9327 mm", H.add, 8.9327, 5e-4);
+dicht("w_fin vereenvoudigd (2.2.3(5)) = 13,9926 mm", H.finVereenvoudigd, 13.9926, 5e-4);
 
 // ── Modellen ────────────────────────────────────────────────────────────────
 const GEVALLEN = [{ id: 1, name: "G", type: "dead" }, { id: 2, name: "Q", type: "live", categorie: "A" }];
@@ -269,12 +277,12 @@ let rStaal;
     Math.abs(rStaal.combinationResults.get(7 + BGT_OFF).elements.get(1).M_end) / 1e6, mB(2.9, EI_HOUT / 1.6, EI_STAAL) / 1e6, 1e-3);
   const h = rStaal.hout.inputs.find((i) => i.beam_id === 1);
   ok("houtstaaf 1 in de invoer", h !== undefined, JSON.stringify(rStaal.hout.skipped));
-  dicht("w_inst = −10,3710 mm", h.deflection_inst_mm, -H.inst, 1e-3);
-  dicht("w_qp = −6,0152 mm", h.deflection_quasi_perm_mm, -H.qp, 1e-3);
-  dicht("w_qp,fin = −8,7244 mm", h.deflection_quasi_perm_fin_mm, -H.qpFin, 1e-3);
-  dicht("w₁ = −4,1484 mm (momentaan, niet uit de eindtoestand)", h.deflection_permanent_mm, -H.w1, 1e-3);
+  dicht("w_inst = −10,3803 mm", h.deflection_inst_mm, -H.inst, 1e-3);
+  dicht("w_qp = −6,0206 mm", h.deflection_quasi_perm_mm, -H.qp, 1e-3);
+  dicht("w_qp,fin = −8,7251 mm", h.deflection_quasi_perm_fin_mm, -H.qpFin, 1e-3);
+  dicht("w₁ = −4,1521 mm (momentaan, niet uit de eindtoestand)", h.deflection_permanent_mm, -H.w1, 1e-3);
   ok("notitie: herkomst van w_qp en w_qp,fin uit dezelfde combinatie, 2.2.3(4)",
-    h.deflection_notes.some((n) => /w_qp,fin = -8,72 mm/.test(n) && /BGT quasi-blijvend 6\.16b \(eindtoestand BGT\)/.test(n) && /2\.2\.3\(4\)/.test(n)));
+    h.deflection_notes.some((n) => /w_qp,fin = -8,73 mm/.test(n) && /BGT quasi-blijvend 6\.16b \(eindtoestand BGT\)/.test(n) && /2\.2\.3\(4\)/.test(n)));
   ok("de oude w_qp-notitie (vereenvoudiging) is vervangen",
     !h.deflection_notes.some((n) => /Kruip volgens EN 1995-1-1 §7\.2: w_fin = w_inst \+ k_def · w_qp/.test(n)));
   ok("beide quasi-blijvende combinaties gemeten, maatgevend de grootste |w_fin|",
@@ -285,19 +293,19 @@ let rStaal;
     const [res] = (await kern("check_timber_beams", [h]));
     const fin = toets(res, "deflection_w_fin");
     const add = toets(res, "deflection_w_add");
-    dicht("kern: w_fin = 13,0802 mm (2.2.3(4))", fin?.uc?.ed, H.fin, 2e-3);
-    dicht("kern: w_add = 8,9318 mm", add?.uc?.ed, H.add, 2e-3);
-    dicht("kern: UC w_fin = 13,0802/(5000/250)", fin?.uc?.uc, H.fin / 20, 1e-4);
+    dicht("kern: w_fin = 13,0848 mm (2.2.3(4))", fin?.uc?.ed, H.fin, 2e-3);
+    dicht("kern: w_add = 8,9327 mm", add?.uc?.ed, H.add, 2e-3);
+    dicht("kern: UC w_fin = 13,0848/(5000/250)", fin?.uc?.uc, H.fin / 20, 1e-4);
     ok("kern: formule en w_qp,fin in de afleiding",
       fin?.formula_latex.includes("w_{qp,fin,z}") && fin.variables.some((v) => v.symbol === "w_{qp,fin}"));
-    ok("kern: vergelijking met de vereenvoudiging (−13,98 mm) in de notitie",
-      fin?.notes.some((n) => /2\.2\.3\(4\)/.test(n) && /-13,98 mm/.test(n)));
+    ok("kern: vergelijking met de vereenvoudiging (−13,99 mm) in de notitie",
+      fin?.notes.some((n) => /2\.2\.3\(4\)/.test(n) && /-13,99 mm/.test(n)));
     ok("kern: w_add-notitie legt w₂ + w₃ uit", add?.notes.some((n) => /w₂ \+ w₃/.test(n)));
     // Dezelfde staaf zonder het veld: de vereenvoudiging, zoals vóór #23.
     const zonder = { ...h };
     delete zonder.deflection_quasi_perm_fin_mm;
     const [oud] = (await kern("check_timber_beams", [zonder]));
-    dicht("kern zonder w_qp,fin: w_fin = 13,9801 mm (vereenvoudiging)", toets(oud, "deflection_w_fin")?.uc?.ed, H.finVereenvoudigd, 2e-3);
+    dicht("kern zonder w_qp,fin: w_fin = 13,9926 mm (vereenvoudiging)", toets(oud, "deflection_w_fin")?.uc?.ed, H.finVereenvoudigd, 2e-3);
   }
 }
 
@@ -313,11 +321,11 @@ log("\n[4] Hout + beton met en zonder φ(∞,t₀)");
   };
   hand.fin = hand.inst + (hand.qpFin - hand.qp);
   hand.vereenvoudigd = hand.inst + KDEF * hand.qp;
-  dicht("hand: w_inst = 9,4226 mm", hand.inst, 9.4226, 5e-4);
-  dicht("hand: w_qp = 5,4651 mm", hand.qp, 5.4651, 5e-4);
-  dicht("hand: w_qp,fin = 10,3129 mm", hand.qpFin, 10.3129, 5e-4);
-  dicht("hand: w_fin (2.2.3(4)) = 14,2704 mm", hand.fin, 14.2704, 5e-4);
-  dicht("hand: w_fin vereenvoudigd = 12,7017 mm", hand.vereenvoudigd, 12.7017, 5e-4);
+  dicht("hand: w_inst = 9,4234 mm", hand.inst, 9.4234, 5e-4);
+  dicht("hand: w_qp = 5,4656 mm", hand.qp, 5.4656, 5e-4);
+  dicht("hand: w_qp,fin = 10,3329 mm", hand.qpFin, 10.3329, 5e-4);
+  dicht("hand: w_fin (2.2.3(4)) = 14,2908 mm", hand.fin, 14.2908, 5e-4);
+  dicht("hand: w_fin vereenvoudigd = 12,7027 mm", hand.vereenvoudigd, 12.7027, 5e-4);
   log(`    hand: w_inst ${hand.inst.toFixed(4)}, w_qp ${hand.qp.toFixed(4)}, w_qp,fin ${hand.qpFin.toFixed(4)}, ` +
     `w_fin ${hand.fin.toFixed(4)}, vereenvoudigd ${hand.vereenvoudigd.toFixed(4)} mm`);
 
@@ -393,8 +401,9 @@ log("\n[6] Geen lekkage naar de andere toetsen");
   ok("staaltoets: invoer gelijk met en zonder BGT-eindtoestand in de lijst",
     JSON.stringify(staalMet) === JSON.stringify(staalZonder) && staalMet.inputs.length === 1);
   // De w₁-bepaling (`blijvendeZakking`) slaat de eindtoestand van "zonder Q"
-  // over: bij [3] is w₁ = −4,1484 mm, de momentane waarde, en niet −6,0168 mm
-  // uit de eindtoestand.
+  // over: bij [3] is w₁ = −4,1521 mm, de momentane waarde, en niet −6,0173 mm
+  // uit de eindtoestand (veldmaxima, zie de kop; over de 21 stations was dat
+  // −4,1484 en −6,0168 mm).
   // De houtinvoer van de gang zonder BGT-eindtoestand (alleen de UGT-varianten)
   // heeft dezelfde w_inst en w₁: de variant telt niet mee als karakteristieke
   // of blijvende combinatie.
@@ -417,7 +426,7 @@ log("\n[7] De MCP-weg");
   const h = (r.timber_check_inputs ?? []).find((i) => i.beam_id === 1);
   ok("sidecar: houtinvoer voor staaf 1", h !== undefined, JSON.stringify(r).slice(0, 300));
   if (h) {
-    dicht("sidecar: w_qp,fin = −8,7244 mm", h.deflection_quasi_perm_fin_mm, -H.qpFin, 1e-3);
+    dicht("sidecar: w_qp,fin = −8,7251 mm", h.deflection_quasi_perm_fin_mm, -H.qpFin, 1e-3);
     ok("sidecar: identiek aan de app-gang", JSON.stringify(h) === JSON.stringify(rStaal.hout.inputs.find((i) => i.beam_id === 1)));
   }
   ok("sidecar: de BGT-melding in `warnings`",
@@ -452,8 +461,8 @@ log("\n[7] De MCP-weg");
     const res = inhoud?.timber_results?.find((t) => t.beam_id === 1);
     ok("MCP: houtresultaat staaf 1", res !== undefined);
     if (res) {
-      dicht("MCP: w_fin = 13,0802 mm (2.2.3(4))", toets(res, "deflection_w_fin")?.uc?.ed, H.fin, 2e-3);
-      dicht("MCP: w_add = 8,9318 mm", toets(res, "deflection_w_add")?.uc?.ed, H.add, 2e-3);
+      dicht("MCP: w_fin = 13,0848 mm (2.2.3(4))", toets(res, "deflection_w_fin")?.uc?.ed, H.fin, 2e-3);
+      dicht("MCP: w_add = 8,9327 mm", toets(res, "deflection_w_add")?.uc?.ed, H.add, 2e-3);
     }
   }
 }

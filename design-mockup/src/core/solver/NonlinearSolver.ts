@@ -63,9 +63,16 @@ export class SingulierStelselFout extends Error {
   readonly richting: 'x' | 'z' | 'rotatie';
   readonly losseKnoop: boolean;
   readonly origineel: string;
+  /**
+   * Er werkt een koppel op een knoop waar alleen scharnierende staafeinden
+   * samenkomen (zie `vrijeKnoopdraaiingen`): de draaiing zelf wordt
+   * vastgezet, maar dat moment kan nergens heen — een echt mechanisme.
+   */
+  readonly koppelOpScharnierknoop: boolean;
   constructor(v: {
     meshKnoopId: number; xMm: number; zMm: number;
     richting: 'x' | 'z' | 'rotatie'; losseKnoop: boolean; origineel: string;
+    koppelOpScharnierknoop?: boolean;
   }) {
     super('');
     this.name = 'SingulierStelselFout';
@@ -75,6 +82,7 @@ export class SingulierStelselFout extends Error {
     this.richting = v.richting;
     this.losseKnoop = v.losseKnoop;
     this.origineel = v.origineel;
+    this.koppelOpScharnierknoop = v.koppelOpScharnierknoop === true;
     this.message = this.tekstVoor('een rekenknoop');
   }
 
@@ -84,7 +92,12 @@ export class SingulierStelselFout extends Error {
       this.richting === 'x' ? 'horizontaal verschuiven (x)'
         : this.richting === 'z' ? 'verticaal verschuiven (z)'
           : 'draaien';
-    const oorzaak = this.losseKnoop
+    const oorzaak = this.koppelOpScharnierknoop
+      ? 'Op deze knoop komen alleen scharnierende staafeinden (release Ry) samen en ' +
+        'geen oplegging houdt de draaiing tegen, maar er werkt een koppel op: dat moment ' +
+        'kan nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star ' +
+        'aansluit, of maak één staafeinde op deze knoop star.'
+      : this.losseKnoop
       ? 'Deze knoop is met geen enkele staaf verbonden (een losse knoop): ' +
         'verwijder hem, of verbind hem met de constructie.'
       : this.richting === 'rotatie'
@@ -821,7 +834,92 @@ function assembleForceVector(mesh: Mesh): number[] {
 }
 
 /**
+ * Knopen waarvan de draaiing van GEEN enkel element stijfheid krijgt: er hangt
+ * minstens één staaf aan, elk staafeinde op de knoop is voor buiging
+ * vrijgegeven (een scharnier, lokaal DOF 2 of 5 in `getReleasedLocalDofs`), en
+ * geen oplegging of rotatieveer houdt de draaiing vast. Schijfelementen geven
+ * in 2D geen draaistijfheid en tellen dus niet mee. Een verend aangesloten
+ * staafeind (`spring` met k > 0) is geen scharnier en geeft wel stijfheid.
+ *
+ * WAAROM (controle 12 oktober 2026, punt B10). In een vakwerk waarin alle
+ * staven aan beide einden scharnieren, is de knoopdraaiing onbepaald: ze
+ * vervormt niets en heeft geen invloed op de rest. De stijfheidsmatrix heeft
+ * daar een rij en kolom van precies nul, en tot oktober 2026 weigerde de kern
+ * zo'n stabiel vakwerk als "singulier: knoop 1 kan vrij draaien", terwijl
+ * `validate_fem_model` het goedkeurde. Hetzelfde gold voor een pendelstaaf op
+ * een scharnieroplegging. De 3D-kern zet zulke draaiingen sinds #96 vast
+ * (`open-fem-3d/src/knoopdraaiing.rs`); dit is dezelfde regel, eenvoudiger
+ * omdat 2D per knoop maar één draaiing kent en geen torsiekoppeling.
+ *
+ * `applyBoundaryConditions` (raamwerkpad) en `solveMixed` (staven + schijven)
+ * zetten die draaiingen vast met een kunstmatige blokkering. Omdat de rij van
+ * K daar nul is, is de reactie van zo'n blokkering precies −F op die draaiing:
+ * nul zolang er geen koppel op de knoop werkt. Er verandert dan niets aan de
+ * translaties, de krachten en de reacties; alleen de onbepaalde knoopdraaiing
+ * ligt op 0. Werkt er wél een koppel, dan is het een echt mechanisme en volgt
+ * een fout (`koppelOpScharnierknoop`) in plaats van een stil weggevallen
+ * moment. Een mechanisme mét translaties (een raamwerk dat zijdelings kan
+ * wegzakken) blijft singulier in de translaties en wordt als zodanig gemeld.
+ */
+export function vrijeKnoopdraaiingen(mesh: Mesh): number[] {
+  const metStaaf = new Set<number>();
+  const draaistijf = new Set<number>();
+  for (const beam of mesh.beamElements.values()) {
+    const [a, b] = beam.nodeIds;
+    const los = getReleasedLocalDofs(beam);
+    metStaaf.add(a);
+    metStaaf.add(b);
+    if (!los.includes(2)) draaistijf.add(a);
+    if (!los.includes(5)) draaistijf.add(b);
+  }
+  const uit: number[] = [];
+  for (const node of mesh.nodes.values()) {
+    if (!metStaaf.has(node.id) || draaistijf.has(node.id)) continue;
+    // Een oplegging die de draaiing vasthoudt (inklemming) of een rotatieveer
+    // (`springRot`): dan is er al een blokkering of stijfheid.
+    if (node.constraints.rotation) continue;
+    uit.push(node.id);
+  }
+  return uit;
+}
+
+/**
+ * Gooit als er een koppel werkt op een vrij draaiende knoop (zie
+ * `vrijeKnoopdraaiingen`). `F` is de krachtvector, `dofVan` geeft per knoop de
+ * index van zijn draaiings-DOF. Een waarde onder 1e-9 maal de grootste
+ * component telt als afrondingsruis.
+ */
+function weigerKoppelOpVrijeDraaiing(
+  mesh: Mesh,
+  F: readonly number[],
+  vrij: readonly number[],
+  dofVan: (knoopId: number) => number | undefined,
+): void {
+  let schaal = 0;
+  for (const f of F) schaal = Math.max(schaal, Math.abs(f));
+  for (const id of vrij) {
+    const dof = dofVan(id);
+    if (dof === undefined) continue;
+    const m = F[dof] ?? 0;
+    if (m === 0 || Math.abs(m) <= 1e-9 * schaal) continue;
+    const knoop = mesh.nodes.get(id)!;
+    throw new SingulierStelselFout({
+      meshKnoopId: id,
+      xMm: knoop.x * 1000,
+      zMm: knoop.y * 1000,
+      richting: 'rotatie',
+      losseKnoop: false,
+      origineel: `koppel van ${(m / 1000).toFixed(3)} kNm op een vrij draaiende knoop`,
+      koppelOpScharnierknoop: true,
+    });
+  }
+}
+
+/**
  * Apply boundary conditions using penalty method
+ *
+ * Ook de knoopdraaiingen zonder stijfheid (`vrijeKnoopdraaiingen`) worden hier
+ * vastgezet en staan in `fixedDofs`; een koppel op zo'n knoop is een fout.
  */
 export function applyBoundaryConditions(
   K: Matrix,
@@ -840,6 +938,21 @@ export function applyBoundaryConditions(
   }
 
   const penalty = 1e20;
+
+  // Knoopdraaiingen zonder stijfheid: vastzetten, en weigeren als er een
+  // koppel op werkt (dan is het een mechanisme, geen onbepaalde draaiing).
+  const vrij = vrijeKnoopdraaiingen(mesh);
+  const draaiDof = (id: number): number | undefined => {
+    const i = nodeIdToIndex.get(id);
+    return i === undefined ? undefined : i * 3 + 2;
+  };
+  weigerKoppelOpVrijeDraaiing(mesh, F, vrij, draaiDof);
+  for (const id of vrij) {
+    const dof = draaiDof(id)!;
+    Kmod.set(dof, dof, Kmod.get(dof, dof) + penalty);
+    Fmod[dof] = 0;
+    fixedDofs.push(dof);
+  }
 
   for (const node of mesh.nodes.values()) {
     const idx = nodeIdToIndex.get(node.id)!;
@@ -1437,6 +1550,12 @@ function solvePlateOrPlane(
   const K = assembleGlobalStiffnessMatrix(mesh, analysisType);
   const F = assembleForceVectorNew(mesh, analysisType);
   const { dofs: constrainedDofs, nodeIdToIndex } = getConstrainedDofs(mesh, analysisType);
+  // GEEN vastzetten van vrije knoopdraaiingen (`vrijeKnoopdraaiingen`) op dit
+  // pad: plane_stress, plane_strain en plate_bending assembleren geen staven,
+  // dus er is geen staafdraaiing om vast te zetten. De DOF-indeling is hier
+  // ook een andere (2 per knoop bij een schijf; bij plaatbuiging is index 2
+  // θy): een index i·3+2 wees naar een translatie van een andere knoop en zette
+  // die stil vast, of viel buiten de matrix (controle 12 oktober 2026, B10).
 
   // Check for sufficient constraints to prevent rigid body motion (need at least 3 DOFs constrained for 2D)
   if (constrainedDofs.length < 3) {
@@ -1878,6 +1997,22 @@ function solveMixed(
   const K = assembleGlobalStiffnessMatrix(mesh, analysisType);
   const F = assembleForceVectorNew(mesh, analysisType);
   const { dofs: constrainedDofs, nodeIdToIndex } = getConstrainedDofs(mesh, analysisType);
+  // Knoopdraaiingen zonder stijfheid (alleen scharnierende staafeinden, geen
+  // draaisteun): vastzetten zoals op het raamwerkpad, zie
+  // `vrijeKnoopdraaiingen`. Een knoop met alleen schijfelementen krijgt al
+  // een kleine draaistijfheid in de assemblage en staat er niet in.
+  {
+    const vrij = vrijeKnoopdraaiingen(mesh).filter((id) => nodeIdToIndex.has(id));
+    const draaiDof = (id: number): number | undefined => {
+      const i = nodeIdToIndex.get(id);
+      return i === undefined ? undefined : i * 3 + 2;
+    };
+    weigerKoppelOpVrijeDraaiing(mesh, F, vrij, draaiDof);
+    for (const id of vrij) {
+      const dof = draaiDof(id)!;
+      if (!constrainedDofs.includes(dof)) constrainedDofs.push(dof);
+    }
+  }
 
   // Check for sufficient constraints to prevent rigid body motion
   if (constrainedDofs.length < 3) {

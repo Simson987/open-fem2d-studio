@@ -13,9 +13,10 @@ interface Props {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  className?: string;
 }
 
-export default function Sheet({ open, title, onClose, children }: Props) {
+export default function Sheet({ open, title, onClose, children, className }: Props) {
   const { t } = useTranslation("common");
   useEffect(() => {
     if (!open) return;
@@ -26,7 +27,7 @@ export default function Sheet({ open, title, onClose, children }: Props) {
 
   if (!open) return null;
   return (
-    <div className="oa-sheet">
+    <div className={`oa-sheet${className ? ` ${className}` : ""}`}>
       <div className="oa-sheet-header">
         <span className="oa-sheet-title">{title}</span>
         <button className="oa-sheet-close" onClick={onClose} aria-label={t("close")}>×</button>

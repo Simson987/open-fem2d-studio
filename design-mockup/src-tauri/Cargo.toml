@@ -1,12 +1,12 @@
 [package]
-name = "open-fem2d-studio"
+name = "open-fem-studio"
 version = "0.1.0"
 description = "Open FEM Studio — Tauri desktop app"
 authors = ["Impertio"]
 edition = "2021"
 
 [lib]
-name = "open_fem2d_studio_lib"
+name = "open_fem_studio_lib"
 crate-type = ["staticlib", "rlib"]
 
 [build-dependencies]

@@ -26,6 +26,7 @@
    ──────────────────────────────────────────────────────────── */
 :root,
 [data-theme="light"] {
+  color-scheme: light;
   /* ─── Core palette ─── */
   --theme-bg: #FAFAF9;
   --theme-bg-lighter: #FFFFFF;
@@ -124,6 +125,14 @@
   --theme-btn-secondary-text: #36363E;
   --theme-btn-secondary-hover-bg: rgba(217, 119, 6, 0.10);
   --theme-btn-secondary-hover-border: rgba(217, 119, 6, 0.30);
+
+  /* ─── Selectiekader (CAD) ─── venster (van links naar rechts) met een
+     doorgetrokken rand; crossing (van rechts naar links) gestippeld, met een
+     lichtere vulling. Zelfde waarden als op het altijd witte 3D-podium. */
+  --theme-select-window-stroke: var(--theme-select-window-stroke-light);
+  --theme-select-window-fill: var(--theme-select-window-fill-light);
+  --theme-select-crossing-stroke: var(--theme-select-crossing-stroke-light);
+  --theme-select-crossing-fill: var(--theme-select-crossing-fill-light);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -131,6 +140,7 @@
    (Was the previous "light" — moved to its own name)
    ──────────────────────────────────────────────────────────── */
 [data-theme="forge"] {
+  color-scheme: dark;
   --theme-bg: #36363E;
   --theme-bg-lighter: #44444C;
   --theme-docbar-bg: #2E2E36;
@@ -138,19 +148,20 @@
   --theme-border: rgba(217, 119, 6, 0.25);
   --theme-border-subtle: rgba(217, 119, 6, 0.15);
   --theme-text: #FAFAF9;
-  --theme-text-secondary: rgba(250, 250, 249, 0.6);
-  --theme-text-muted: rgba(250, 250, 249, 0.5);
-  --theme-text-faint: rgba(250, 250, 249, 0.4);
-  --theme-accent: #D97706;
-  --theme-accent-hover: #EA580C;
+  --theme-text-secondary: rgba(250, 250, 249, 0.85);
+  --theme-text-muted: rgba(250, 250, 249, 0.75);
+  --theme-text-faint: rgba(250, 250, 249, 0.70);
+  --theme-accent: #FBBF24;
+  --theme-accent-hover: #FCD34D;
   --theme-accent-text: #36363E;
   --theme-accent-soft: rgba(217, 119, 6, 0.08);
-  --theme-accent-tint: rgba(217, 119, 6, 0.8);
+  --theme-accent-tint: #FBBF24;
   --theme-hover: rgba(217, 119, 6, 0.10);
   --theme-hover-strong: rgba(217, 119, 6, 0.18);
-  --theme-active: #D97706;
+  --theme-active: #FBBF24;
 
-  --theme-focus-color: #D97706;
+  --theme-focus-color: #FBBF24;
+  --theme-warning: #FBBF24;
   --theme-danger-color: #f87171;
   --theme-danger-hover: #ef4444;
 
@@ -158,74 +169,80 @@
   --theme-panel-shadow: 2px 0 8px rgba(0, 0, 0, 0.20);
   --theme-popover-shadow: 0 8px 24px rgba(0, 0, 0, 0.40);
 
-  --theme-file-tab-bg: #D97706;
-  --theme-file-tab-hover: #EA580C;
+  --theme-file-tab-bg: #FBBF24;
+  --theme-file-tab-hover: #FCD34D;
   --theme-file-tab-text: #36363E;
 
-  --theme-content-bg: #FAFAF9;
-  --theme-placeholder-icon: rgba(217, 119, 6, 0.2);
-  --theme-placeholder-heading: rgba(54, 54, 62, 0.3);
-  --theme-placeholder-text: rgba(54, 54, 62, 0.25);
+  --theme-content-bg: #27272A;
+  --theme-placeholder-icon: rgba(251, 191, 36, 0.55);
+  --theme-placeholder-heading: #FAFAF9;
+  --theme-placeholder-text: #D4D4D8;
 
   --theme-ribbon-btn-hover: rgba(217, 119, 6, 0.15);
   --theme-ribbon-btn-hover-border: rgba(217, 119, 6, 0.30);
   --theme-ribbon-btn-active-bg: rgba(217, 119, 6, 0.20);
   --theme-ribbon-btn-active-border: rgba(217, 119, 6, 0.40);
-  --theme-ribbon-btn-active-text: #D97706;
-  --theme-ribbon-icon-active: #D97706;
-  --theme-ribbon-text-hover: #D97706;
+  --theme-ribbon-btn-active-text: #FBBF24;
+  --theme-ribbon-icon-active: #FBBF24;
+  --theme-ribbon-text-hover: #FBBF24;
   --theme-ribbon-group-separator: rgba(250, 250, 249, 0.15);
-  --theme-ribbon-group-label: rgba(217, 119, 6, 0.8);
+  --theme-ribbon-group-label: #FBBF24;
 
   --theme-status-bg: #36363E;
   --theme-status-border: #27272A;
   --theme-status-text: #A1A1AA;
-  --theme-status-text-label: rgba(161, 161, 170, 0.7);
+  --theme-status-text-label: #D4D4D8;
   --theme-status-hover: rgba(250, 250, 249, 0.1);
   --theme-status-separator: rgba(250, 250, 249, 0.15);
 
-  --theme-backstage-item-shortcut: rgba(250, 250, 249, 0.5);
-  --theme-backstage-item-shortcut-hover: rgba(217, 119, 6, 0.7);
+  --theme-backstage-item-shortcut: rgba(250, 250, 249, 0.75);
+  --theme-backstage-item-shortcut-hover: #FBBF24;
 
   --theme-dialog-overlay: rgba(0, 0, 0, 0.55);
   --theme-dialog-bg: #36363E;
   --theme-dialog-border: rgba(217, 119, 6, 0.2);
   --theme-dialog-header-bg: #44444C;
-  --theme-dialog-header-text: #D97706;
+  --theme-dialog-header-text: #FBBF24;
   --theme-dialog-sidebar-bg: #44444C;
   --theme-dialog-sidebar-border: rgba(217, 119, 6, 0.2);
   --theme-dialog-tab-text: #FAFAF9;
   --theme-dialog-tab-hover: rgba(217, 119, 6, 0.1);
-  --theme-dialog-tab-hover-text: #D97706;
+  --theme-dialog-tab-hover-text: #FBBF24;
   --theme-dialog-tab-active-bg: rgba(217, 119, 6, 0.15);
-  --theme-dialog-tab-active-text: #D97706;
-  --theme-dialog-tab-active-accent: #D97706;
+  --theme-dialog-tab-active-text: #FBBF24;
+  --theme-dialog-tab-active-accent: #FBBF24;
   --theme-dialog-content-bg: #36363E;
   --theme-dialog-content-text: #FAFAF9;
-  --theme-dialog-content-secondary: rgba(250, 250, 249, 0.6);
+  --theme-dialog-content-secondary: rgba(250, 250, 249, 0.85);
   --theme-dialog-input-bg: rgba(217, 119, 6, 0.05);
   --theme-dialog-input-border: rgba(217, 119, 6, 0.2);
   --theme-dialog-input-text: #FAFAF9;
-  --theme-dialog-btn-bg: #D97706;
+  --theme-dialog-btn-bg: #FBBF24;
   --theme-dialog-btn-text: #36363E;
-  --theme-dialog-btn-hover: #EA580C;
+  --theme-dialog-btn-hover: #FCD34D;
   --theme-dialog-section-border: rgba(217, 119, 6, 0.15);
 
-  --theme-btn-primary-bg: #D97706;
+  --theme-btn-primary-bg: #FBBF24;
   --theme-btn-primary-text: #36363E;
-  --theme-btn-primary-border: #D97706;
-  --theme-btn-primary-hover-bg: #EA580C;
+  --theme-btn-primary-border: #FBBF24;
+  --theme-btn-primary-hover-bg: #FCD34D;
   --theme-btn-primary-hover-text: #36363E;
   --theme-btn-secondary-bg: rgba(217, 119, 6, 0.1);
   --theme-btn-secondary-text: #FAFAF9;
   --theme-btn-secondary-hover-bg: rgba(217, 119, 6, 0.2);
   --theme-btn-secondary-hover-border: rgba(217, 119, 6, 0.3);
+
+  --theme-select-window-stroke: #60A5FA;
+  --theme-select-window-fill: rgba(96, 165, 250, 0.16);
+  --theme-select-crossing-stroke: #4ADE80;
+  --theme-select-crossing-fill: rgba(74, 222, 128, 0.08);
 }
 
 /* ────────────────────────────────────────────────────────────
    OpenAEC Theme — Darker Night Build variant
    ──────────────────────────────────────────────────────────── */
 [data-theme="openaec"] {
+  color-scheme: dark;
   --theme-bg: #27272A;
   --theme-bg-lighter: #36363E;
   --theme-docbar-bg: #1C1917;
@@ -233,19 +250,20 @@
   --theme-border: rgba(217, 119, 6, 0.2);
   --theme-border-subtle: rgba(217, 119, 6, 0.15);
   --theme-text: #FAFAF9;
-  --theme-text-secondary: rgba(250, 250, 249, 0.6);
-  --theme-text-muted: rgba(250, 250, 249, 0.5);
-  --theme-text-faint: rgba(250, 250, 249, 0.4);
-  --theme-accent: #D97706;
-  --theme-accent-hover: #EA580C;
+  --theme-text-secondary: rgba(250, 250, 249, 0.85);
+  --theme-text-muted: rgba(250, 250, 249, 0.75);
+  --theme-text-faint: rgba(250, 250, 249, 0.70);
+  --theme-accent: #FBBF24;
+  --theme-accent-hover: #FCD34D;
   --theme-accent-text: #27272A;
   --theme-accent-soft: rgba(217, 119, 6, 0.05);
-  --theme-accent-tint: rgba(217, 119, 6, 0.8);
+  --theme-accent-tint: #FBBF24;
   --theme-hover: rgba(217, 119, 6, 0.1);
   --theme-hover-strong: rgba(217, 119, 6, 0.15);
-  --theme-active: #D97706;
+  --theme-active: #FBBF24;
 
-  --theme-focus-color: #D97706;
+  --theme-focus-color: #FBBF24;
+  --theme-warning: #FBBF24;
   --theme-danger-color: #f87171;
   --theme-danger-hover: #ef4444;
 
@@ -253,74 +271,80 @@
   --theme-panel-shadow: 2px 0 8px rgba(0, 0, 0, 0.25);
   --theme-popover-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 
-  --theme-file-tab-bg: #D97706;
-  --theme-file-tab-hover: #EA580C;
+  --theme-file-tab-bg: #FBBF24;
+  --theme-file-tab-hover: #FCD34D;
   --theme-file-tab-text: #27272A;
 
   --theme-content-bg: #1C1917;
-  --theme-placeholder-icon: rgba(217, 119, 6, 0.2);
-  --theme-placeholder-heading: rgba(250, 250, 249, 0.3);
-  --theme-placeholder-text: rgba(250, 250, 249, 0.25);
+  --theme-placeholder-icon: rgba(251, 191, 36, 0.55);
+  --theme-placeholder-heading: #FAFAF9;
+  --theme-placeholder-text: #D4D4D8;
 
   --theme-ribbon-btn-hover: rgba(217, 119, 6, 0.15);
   --theme-ribbon-btn-hover-border: rgba(217, 119, 6, 0.30);
   --theme-ribbon-btn-active-bg: rgba(217, 119, 6, 0.20);
   --theme-ribbon-btn-active-border: rgba(217, 119, 6, 0.40);
-  --theme-ribbon-btn-active-text: #D97706;
-  --theme-ribbon-icon-active: #D97706;
-  --theme-ribbon-text-hover: #D97706;
+  --theme-ribbon-btn-active-text: #FBBF24;
+  --theme-ribbon-icon-active: #FBBF24;
+  --theme-ribbon-text-hover: #FBBF24;
   --theme-ribbon-group-separator: rgba(217, 119, 6, 0.25);
-  --theme-ribbon-group-label: rgba(217, 119, 6, 0.8);
+  --theme-ribbon-group-label: #FBBF24;
 
   --theme-status-bg: #27272A;
   --theme-status-border: #1C1917;
   --theme-status-text: #A1A1AA;
-  --theme-status-text-label: rgba(161, 161, 170, 0.7);
+  --theme-status-text-label: #D4D4D8;
   --theme-status-hover: rgba(250, 250, 249, 0.1);
   --theme-status-separator: rgba(250, 250, 249, 0.15);
 
-  --theme-backstage-item-shortcut: rgba(250, 250, 249, 0.5);
-  --theme-backstage-item-shortcut-hover: rgba(217, 119, 6, 0.7);
+  --theme-backstage-item-shortcut: rgba(250, 250, 249, 0.75);
+  --theme-backstage-item-shortcut-hover: #FBBF24;
 
   --theme-dialog-overlay: rgba(0, 0, 0, 0.60);
   --theme-dialog-bg: #27272A;
   --theme-dialog-border: rgba(217, 119, 6, 0.2);
   --theme-dialog-header-bg: #36363E;
-  --theme-dialog-header-text: #D97706;
+  --theme-dialog-header-text: #FBBF24;
   --theme-dialog-sidebar-bg: #36363E;
   --theme-dialog-sidebar-border: rgba(217, 119, 6, 0.2);
   --theme-dialog-tab-text: #FAFAF9;
   --theme-dialog-tab-hover: rgba(217, 119, 6, 0.1);
-  --theme-dialog-tab-hover-text: #D97706;
+  --theme-dialog-tab-hover-text: #FBBF24;
   --theme-dialog-tab-active-bg: rgba(217, 119, 6, 0.15);
-  --theme-dialog-tab-active-text: #D97706;
-  --theme-dialog-tab-active-accent: #D97706;
+  --theme-dialog-tab-active-text: #FBBF24;
+  --theme-dialog-tab-active-accent: #FBBF24;
   --theme-dialog-content-bg: #27272A;
   --theme-dialog-content-text: #FAFAF9;
-  --theme-dialog-content-secondary: rgba(250, 250, 249, 0.6);
+  --theme-dialog-content-secondary: rgba(250, 250, 249, 0.85);
   --theme-dialog-input-bg: rgba(217, 119, 6, 0.05);
   --theme-dialog-input-border: rgba(217, 119, 6, 0.2);
   --theme-dialog-input-text: #FAFAF9;
-  --theme-dialog-btn-bg: #D97706;
+  --theme-dialog-btn-bg: #FBBF24;
   --theme-dialog-btn-text: #27272A;
-  --theme-dialog-btn-hover: #EA580C;
+  --theme-dialog-btn-hover: #FCD34D;
   --theme-dialog-section-border: rgba(217, 119, 6, 0.15);
 
-  --theme-btn-primary-bg: #D97706;
+  --theme-btn-primary-bg: #FBBF24;
   --theme-btn-primary-text: #27272A;
-  --theme-btn-primary-border: #D97706;
-  --theme-btn-primary-hover-bg: #EA580C;
+  --theme-btn-primary-border: #FBBF24;
+  --theme-btn-primary-hover-bg: #FCD34D;
   --theme-btn-primary-hover-text: #27272A;
   --theme-btn-secondary-bg: rgba(217, 119, 6, 0.1);
   --theme-btn-secondary-text: #FAFAF9;
   --theme-btn-secondary-hover-bg: rgba(217, 119, 6, 0.2);
   --theme-btn-secondary-hover-border: rgba(217, 119, 6, 0.3);
+
+  --theme-select-window-stroke: #60A5FA;
+  --theme-select-window-fill: rgba(96, 165, 250, 0.16);
+  --theme-select-crossing-stroke: #4ADE80;
+  --theme-select-crossing-fill: rgba(74, 222, 128, 0.08);
 }
 
 /* ────────────────────────────────────────────────────────────
    Blueprint Theme — Cool industrial blue
    ──────────────────────────────────────────────────────────── */
 [data-theme="blueprint"] {
+  color-scheme: dark;
   --theme-bg: #0F1B2D;
   --theme-bg-lighter: #1A2C45;
   --theme-docbar-bg: #0A1320;
@@ -328,14 +352,14 @@
   --theme-border: rgba(96, 165, 250, 0.20);
   --theme-border-subtle: rgba(96, 165, 250, 0.12);
   --theme-text: #E0E7FF;
-  --theme-text-secondary: rgba(224, 231, 255, 0.65);
-  --theme-text-muted: rgba(224, 231, 255, 0.50);
-  --theme-text-faint: rgba(224, 231, 255, 0.35);
+  --theme-text-secondary: rgba(224, 231, 255, 0.85);
+  --theme-text-muted: rgba(224, 231, 255, 0.75);
+  --theme-text-faint: rgba(224, 231, 255, 0.70);
   --theme-accent: #60A5FA;
   --theme-accent-hover: #93C5FD;
   --theme-accent-text: #0F1B2D;
   --theme-accent-soft: rgba(96, 165, 250, 0.08);
-  --theme-accent-tint: rgba(96, 165, 250, 0.85);
+  --theme-accent-tint: #60A5FA;
   --theme-hover: rgba(96, 165, 250, 0.10);
   --theme-hover-strong: rgba(96, 165, 250, 0.18);
   --theme-active: #60A5FA;
@@ -354,8 +378,8 @@
 
   --theme-content-bg: #0A1320;
   --theme-placeholder-icon: rgba(96, 165, 250, 0.25);
-  --theme-placeholder-heading: rgba(224, 231, 255, 0.35);
-  --theme-placeholder-text: rgba(224, 231, 255, 0.30);
+  --theme-placeholder-heading: rgba(224, 231, 255, 0.75);
+  --theme-placeholder-text: rgba(224, 231, 255, 0.70);
 
   --theme-ribbon-btn-hover: rgba(96, 165, 250, 0.12);
   --theme-ribbon-btn-hover-border: rgba(96, 165, 250, 0.30);
@@ -365,17 +389,17 @@
   --theme-ribbon-icon-active: #60A5FA;
   --theme-ribbon-text-hover: #60A5FA;
   --theme-ribbon-group-separator: rgba(96, 165, 250, 0.18);
-  --theme-ribbon-group-label: rgba(96, 165, 250, 0.85);
+  --theme-ribbon-group-label: #60A5FA;
 
   --theme-status-bg: #0F1B2D;
   --theme-status-border: #0A1320;
   --theme-status-text: #9CA3AF;
-  --theme-status-text-label: rgba(156, 163, 175, 0.7);
+  --theme-status-text-label: #C0C7D6;
   --theme-status-hover: rgba(224, 231, 255, 0.10);
   --theme-status-separator: rgba(224, 231, 255, 0.15);
 
-  --theme-backstage-item-shortcut: rgba(224, 231, 255, 0.50);
-  --theme-backstage-item-shortcut-hover: rgba(96, 165, 250, 0.85);
+  --theme-backstage-item-shortcut: rgba(224, 231, 255, 0.75);
+  --theme-backstage-item-shortcut-hover: #60A5FA;
 
   --theme-dialog-overlay: rgba(0, 0, 0, 0.65);
   --theme-dialog-bg: #0F1B2D;
@@ -392,7 +416,7 @@
   --theme-dialog-tab-active-accent: #60A5FA;
   --theme-dialog-content-bg: #0F1B2D;
   --theme-dialog-content-text: #E0E7FF;
-  --theme-dialog-content-secondary: rgba(224, 231, 255, 0.65);
+  --theme-dialog-content-secondary: rgba(224, 231, 255, 0.85);
   --theme-dialog-input-bg: rgba(96, 165, 250, 0.05);
   --theme-dialog-input-border: rgba(96, 165, 250, 0.20);
   --theme-dialog-input-text: #E0E7FF;
@@ -410,12 +434,18 @@
   --theme-btn-secondary-text: #E0E7FF;
   --theme-btn-secondary-hover-bg: rgba(96, 165, 250, 0.20);
   --theme-btn-secondary-hover-border: rgba(96, 165, 250, 0.30);
+
+  --theme-select-window-stroke: #93C5FD;
+  --theme-select-window-fill: rgba(147, 197, 253, 0.16);
+  --theme-select-crossing-stroke: #4ADE80;
+  --theme-select-crossing-fill: rgba(74, 222, 128, 0.08);
 }
 
 /* ────────────────────────────────────────────────────────────
    High Contrast Theme — Accessibility (WCAG AAA)
    ──────────────────────────────────────────────────────────── */
 [data-theme="contrast"] {
+  color-scheme: dark;
   --theme-bg: #000000;
   --theme-bg-lighter: #0A0A0A;
   --theme-docbar-bg: #000000;
@@ -505,6 +535,11 @@
   --theme-btn-secondary-text: #FFFFFF;
   --theme-btn-secondary-hover-bg: rgba(255, 215, 0, 0.25);
   --theme-btn-secondary-hover-border: #FFD700;
+
+  --theme-select-window-stroke: #00E5FF;
+  --theme-select-window-fill: rgba(0, 229, 255, 0.18);
+  --theme-select-crossing-stroke: #7CFC00;
+  --theme-select-crossing-fill: rgba(124, 252, 0, 0.10);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -532,4 +567,33 @@
      ook deze twee zijn materiaalkleuren en geen themakleuren. */
   --theme-materiaal-lijn: #2A2A30;
   --theme-materiaal-beugel: #55555E;
+
+  /* Selectiekader op een wit tekenvlak: het lichte thema, en het 3D-podium,
+     dat in élk thema wit is (de WebGL-scène heeft een witte achtergrond). */
+  --theme-select-window-stroke-light: #2563EB;
+  --theme-select-window-fill-light: rgba(37, 99, 235, 0.12);
+  --theme-select-crossing-stroke-light: #16A34A;
+  --theme-select-crossing-fill-light: rgba(22, 163, 74, 0.07);
+
+  /* View cube (een gebouwtje) rechtsboven op het 3D-podium. Dat podium is in
+     élk thema wit, dus één set kleuren voor het lichte én de donkere thema's,
+     afgestemd op wit: gevels in een lichte steentint, het dak in een lichte
+     pannentint, de vloer grijs, de ribben als iets donkerder hoeklijnen
+     (≥ 3:1 op wit). Hover en toetsenbordfocus hebben elk een eigen donkere
+     rand, ≥ 3:1 tegen elk vlak, de hovertint en het podium: de themakleur
+     voor focus (geel in Contrast, lichtblauw in Blueprint) haalt dat op wit
+     niet. De naam (tekst) haalt op elk vlak ruim 4,5:1. */
+  --theme-view-cube-gevel: #F3EEE6;
+  --theme-view-cube-dak: #E9CFC2;
+  --theme-view-cube-vloer: #E2E8F0;
+  --theme-view-cube-hoeklijn: #8C7B6A;
+  --theme-view-cube-ribbe: rgba(120, 96, 72, 0.06);
+  --theme-view-cube-tekst: #334155;
+  --theme-view-cube-maaiveld: #A8A29E;
+  --theme-view-cube-hover: rgba(217, 119, 6, 0.16);
+  --theme-view-cube-hover-rand: #92400E;
+  --theme-view-cube-focus: #1D4ED8;
+  --theme-view-cube-knop: #FFFFFF;
+  --theme-view-cube-menu-hover: #FFF7ED;
+  --theme-view-cube-menu-focus: #EFF6FF;
 }

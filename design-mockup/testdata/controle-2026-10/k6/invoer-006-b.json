@@ -1,0 +1,217 @@
+{
+ "tool": "check_fem_model",
+ "arguments": {
+  "model": {
+   "nodes": [
+    {
+     "id": 1,
+     "x": 0,
+     "z": 0
+    },
+    {
+     "id": 2,
+     "x": 3000,
+     "z": 0
+    },
+    {
+     "id": 3,
+     "x": 6000,
+     "z": 0
+    },
+    {
+     "id": 4,
+     "x": 9000,
+     "z": 0
+    },
+    {
+     "id": 5,
+     "x": 12000,
+     "z": 0
+    },
+    {
+     "id": 6,
+     "x": 3000,
+     "z": 2000
+    },
+    {
+     "id": 7,
+     "x": 6000,
+     "z": 2000
+    },
+    {
+     "id": 8,
+     "x": 9000,
+     "z": 2000
+    }
+   ],
+   "beams": [
+    {
+     "id": 1,
+     "from": 1,
+     "to": 2,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 2,
+     "from": 2,
+     "to": 3,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 3,
+     "from": 3,
+     "to": 4,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 4,
+     "from": 4,
+     "to": 5,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 5,
+     "from": 1,
+     "to": 6,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 6,
+     "from": 6,
+     "to": 7,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 7,
+     "from": 7,
+     "to": 8,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 8,
+     "from": 8,
+     "to": 5,
+     "profile": "SHS100x100x5",
+     "material": "S355"
+    },
+    {
+     "id": 9,
+     "from": 2,
+     "to": 6,
+     "profile": "SHS80x80x4",
+     "material": "S355",
+     "releases": {
+      "startRy": true,
+      "endRy": true
+     }
+    },
+    {
+     "id": 10,
+     "from": 3,
+     "to": 7,
+     "profile": "SHS80x80x4",
+     "material": "S355",
+     "releases": {
+      "startRy": true,
+      "endRy": true
+     }
+    },
+    {
+     "id": 11,
+     "from": 4,
+     "to": 8,
+     "profile": "SHS80x80x4",
+     "material": "S355",
+     "releases": {
+      "startRy": true,
+      "endRy": true
+     }
+    },
+    {
+     "id": 12,
+     "from": 6,
+     "to": 3,
+     "profile": "SHS80x80x4",
+     "material": "S355",
+     "releases": {
+      "startRy": true,
+      "endRy": true
+     }
+    },
+    {
+     "id": 13,
+     "from": 3,
+     "to": 8,
+     "profile": "SHS80x80x4",
+     "material": "S355",
+     "releases": {
+      "startRy": true,
+      "endRy": true
+     }
+    }
+   ],
+   "supports": [
+    {
+     "nodeId": 1,
+     "type": "pinned"
+    },
+    {
+     "nodeId": 5,
+     "type": "zRoller"
+    }
+   ],
+   "loadCases": [
+    {
+     "id": 1,
+     "name": "Permanent",
+     "type": "dead"
+    }
+   ],
+   "loads": [
+    {
+     "id": 1,
+     "type": "pointForce",
+     "nodeId": 6,
+     "caseId": 1,
+     "fz": -30
+    },
+    {
+     "id": 2,
+     "type": "pointForce",
+     "nodeId": 7,
+     "caseId": 1,
+     "fz": -30
+    },
+    {
+     "id": 3,
+     "type": "pointForce",
+     "nodeId": 8,
+     "caseId": 1,
+     "fz": -30
+    }
+   ],
+   "selfWeightEnabled": false
+  },
+  "beam_ids": [
+   6,
+   7
+  ],
+  "check_config": {
+   "6": {
+    "bucklingLengthY_m": 3,
+    "bucklingLengthZ_m": 3
+   },
+   "7": {
+    "bucklingLengthY_m": 3,
+    "bucklingLengthZ_m": 3
+   }
+  }
+ }
+}

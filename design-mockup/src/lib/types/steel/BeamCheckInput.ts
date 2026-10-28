@@ -7,6 +7,7 @@ import type { LateralBracing } from "./LateralBracing";
 import type { NationaleBijlage } from "../norm/NationaleBijlage";
 import type { Staafeinden } from "./Staafeinden";
 import type { Staafstand } from "./Staafstand";
+import type { ZijdelingseKnikInAnalyse } from "./ZijdelingseKnikInAnalyse";
 
 /**
  * Invoer van één staaltoetsing.
@@ -73,16 +74,19 @@ deflection_limit_numerator: number, deflection_actual_max_mm: number,
  * Tot september 2026 werd dit veld door de kern NERGENS gelezen: alleen
  * [`DeflectionClass::Cantilever`] deed iets, en dan nog uitsluitend via de
  * w_fin-noemer 150 op de staaflengte. Nu bepaalt het samen met de klasse
- * de referentielengte ℓ_rep = 2·L voor de w_add-grens
+ * de referentielengte ℓ_rep = 2·L voor de grens van w_fin én w_add
  * ("ℓ_rep is de lengte van een overspanning of tweemaal de lengte van een
- * uitkraging", NEN-EN 1990:2002/NB:2019 A1.4.3(3)). Eén van beide volstaat;
- * de frontend zet ze allebei.
+ * uitkraging", NEN-EN 1990:2002/NB:2019 A1.4.3). Eén van beide volstaat.
  *
- * Let op de asymmetrie met w_fin: die kant verdubbelt ℓ_rep NIET maar
- * gebruikt noemer 150 op de staaflengte, wat op ℓ_rep/300 neerkomt.
- * Strenger dan de ℓ_rep/250 uit A1.4.3(4), dus veilig — maar het is een
- * andere manier om hetzelfde uit te drukken, en dat staat als notitie in
- * het rapport.
+ * Tot oktober 2026 verdubbelde alleen w_add ℓ_rep; w_fin rekende met
+ * noemer 150 op de staaflengte, zodat één staaf in het rapport twee
+ * referentielengtes had. Nu toetst w_fin tegen ℓ_rep/250 (A1.4.3(4)) met
+ * dezelfde ℓ_rep als w_add.
+ *
+ * Het veld zegt alleen iets over de GRENS. De zakking zelf
+ * (`deflection_actual_max_mm`) moet bij een uitkraging al ten opzichte van
+ * het ingeklemde eind gemeten zijn en niet ten opzichte van de koorde
+ * tussen de verplaatste staafeinden; dat doet de invoerbouwer.
  */
 is_cantilever: boolean, 
 /**
@@ -230,4 +234,85 @@ profile_end?: string,
  * te ontlenen zijn. Zou de kern ze uit de naam moeten raden, dan zou zij
  * rekenen met iets wat niemand heeft opgegeven.
  */
-custom_section_end?: CustomSection, };
+custom_section_end?: CustomSection, 
+/**
+ * Nettodoorsnede A_net (mm²) voor de trektoets §6.2.3: de doorsnede ter
+ * plaatse van gaten of een andere verzwakking. Met A_net is
+ * N_t,Rd = min(A·f_y/γ_M0; 0,9·A_net·f_u/γ_M2), (6.6) en (6.7); zonder is
+ * N_t,Rd = A·f_y/γ_M0 en zegt de toets dat er geen A_net is opgegeven.
+ *
+ * `None`, weglaten of `0` = niet opgegeven. Een negatieve of niet-eindige
+ * waarde, of een A_net groter dan A, is een invoerfout: dan wordt de staaf
+ * met reden geweigerd, net als bij een ongeldige doorbuigingsnoemer — een
+ * tikfout mag niet stil een andere trekweerstand opleveren.
+ */
+a_net_mm2?: number, 
+/**
+ * Trek-alleen staaf (een windverband van strip of rond staal, of een
+ * trekstang): de staaf doet in de berekening alleen mee zolang zij op trek
+ * staat. Dan wordt alleen trek getoetst (6.2.3, en bij massief rond het
+ * draadeind). Druk (6.2.4), buiging, dwarskracht en hun combinaties
+ * (6.2.5–6.2.10), knik (6.3.1), kip (6.3.2), 6.3.3 en de doorbuiging
+ * vallen weg.
+ *
+ * Een drukkracht in de omhullende is bij zo'n staaf speling of
+ * voorspanning (de kruisregel laat één diagonaal per kruis een kleine
+ * druk houden), geen druksterkte; zij wordt niet getoetst, maar wel met de
+ * grootste waarde in een eigen regel van het resultaat gemeld.
+ *
+ * `None` of `false` = een gewone staaf, het gedrag van vóór dit veld.
+ */
+tension_only?: boolean, 
+/**
+ * De bijkomende zakking w_add = w2 + w3 (mm, met teken, negatief =
+ * omlaag), als de invoerbouwer haar per combinatie heeft bepaald: het
+ * grootste verschil |w_c − w₁| over de BGT-combinaties c, met w₁ =
+ * [`Self::deflection_permanent_mm`] (NEN-EN 1990:2002/NB:2019 A1.4.3(2),
+ * figuur NB.1).
+ *
+ * WAAROM. Zonder dit veld rekent de kern w_add = w − w₁ met w =
+ * [`Self::deflection_actual_max_mm`], de zakking van de combinatie met de
+ * grootste |w|. Dat is alleen juist als die combinatie ook het grootste
+ * verschil met w₁ geeft. Bij een overstek dat onder de blijvende last
+ * omhoog gaat en onder de veranderlijke omlaag, is de grootste |w| juist
+ * die van de blijvende last zelf, en werd w_add 0 (controle 2026-10, punt
+ * K5: w_add 0 waar 24,9 mm hoort).
+ *
+ * `None` of weglaten = w − w₁, het gedrag van vóór dit veld. Een niet-
+ * eindige waarde is een invoerfout; de staaf wordt dan met reden geweigerd.
+ */
+deflection_add_mm?: number, 
+/**
+ * De lengte (m) van het DEEL van de staaf waarvan de doorbuiging is
+ * gemeten, als dat niet de hele staaf is; de grenzen van w_fin en w_add
+ * rekenen dan met deze lengte in plaats van [`Self::length_m`], en met
+ * [`Self::is_cantilever`] als dat deel een uitkraging is (ℓ_rep = 2 × deze
+ * lengte).
+ *
+ * WAAROM. Een doorgaande lijn — een staaf die door tussenknopen zonder
+ * oplegging in delen is geknipt — wordt voor knik en kip als één staaf
+ * getoetst. Loopt zo'n lijn over een kolomkop door in een overstek, dan
+ * is ℓ_rep voor de doorbuiging NIET de lijnlengte: het veld heeft de
+ * lengte tot de kolomkop, het overstek tweemaal zijn eigen lengte
+ * (NEN-EN 1990:2002/NB:2019 A1.4.3, verklaring bij ℓ_rep). De invoerbouwer
+ * toetst dan het maatgevende deel en zegt in `deflection_notes` welk.
+ *
+ * `None` of weglaten = de staaflengte, het gedrag van vóór dit veld. Een
+ * lengte die niet groter dan nul is, niet eindig is of langer dan de staaf,
+ * is een invoerfout; de staaf wordt dan met reden geweigerd.
+ */
+deflection_length_m?: number, 
+/**
+ * Om welke assen de globale berekening tweede orde (P-Δ) MET scheefstand
+ * is en de staaf kan laten uitbuigen. Alleen van belang bij een VRIJ
+ * staafeind (zie [`Staafeind::Vrij`]) zonder opgegeven kniklengte: om een
+ * gedekte as geldt dan de staaflengte (NEN-EN 1993-1-1 5.2.2(7)b), om een
+ * niet-gedekte as 2·L. Zie [`ZijdelingseKnikInAnalyse`] voor het waarom.
+ *
+ * Bij een hoekprofiel (assen u en v) telt alleen een berekening die BEIDE
+ * richtingen dekt, want geen van beide hoofdassen valt samen met y of z.
+ *
+ * `None` of weglaten = geen as gedekt, 2·L bij een vrij eind: het gedrag
+ * van vóór dit veld, en de veilige kant voor wie de berekening niet kent.
+ */
+zijdelingse_knik_in_analyse?: ZijdelingseKnikInAnalyse, };

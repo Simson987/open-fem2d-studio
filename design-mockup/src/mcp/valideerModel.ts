@@ -60,7 +60,9 @@ import {
   type PlaatPunt,
 } from "../components/fem/femTypes";
 import { puntInPolygoon, afstandTotLijnstuk } from "../core/fem/PlaatMesher";
-import { zoekDubbeleKnopen, zoekStaafeindenBijPlaatrand } from "../lib/modelControle";
+import {
+  lastWaardeFout, zoekDubbeleKnopen, zoekStaafeindenBijPlaatrand, type LastWaardeVelden,
+} from "../lib/modelControle";
 import { bouwMultiInput, type FemModelInvoer } from "../lib/modelNaarSolverInput";
 import { bepaalVerloop, resolveSection } from "../lib/sectionResolver";
 import { keurPlaatMateriaal, plaatMateriaalSoort } from "../lib/plaatMateriaal";
@@ -1333,6 +1335,14 @@ export interface ValidatieOpties {
   gevolgklasse?: Gevolgklasse;
   /** De nationale bijlage waarmee de standaardset is opgesteld (normnaad). */
   bijlage?: NationaleBijlageCode;
+  /**
+   * Alleen het MODEL keuren, niet de combinatieset. Zo draait de poort vóór
+   * `solve` en `check` (sidecar `rekenDoor`): een fout in het model weigert
+   * de berekening, terwijl de meldingen over de combinaties daar al als
+   * "FOUT: …" in `warnings` komen (dezelfde `meldingenBelastinggevallen`) en
+   * de berekening niet tegenhouden — zoals vóór deze poort.
+   */
+  alleenModel?: boolean;
 }
 
 export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): ValidatieUitkomst {
@@ -1350,6 +1360,7 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
     id: number; from: number; to: number; material?: string; profile?: string;
     checkConfig?: { betonKorf?: unknown };
     profileEnd?: string;
+    releases?: { startRy?: boolean; endRy?: boolean };
   }[];
   const supports = (m.supports ?? []) as { nodeId: number; type: string; k?: number }[];
   const plates = (m.plates ?? []) as {
@@ -1653,6 +1664,33 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
     }
   }
 
+  // Knopen die vrij kunnen draaien: minstens één staaf, alle staafeinden
+  // daar scharnierend (release Ry; een veer op een los einde telt niet, net
+  // als in de engine) en geen oplegging die de draaiing vasthoudt. Dezelfde
+  // regel als `vrijeKnoopdraaiingen` in de kern.
+  const vrijDraaiendeKnopen = new Set<number>();
+  {
+    const eindenPerKnoop = new Map<number, boolean[]>();
+    for (const b of beams) {
+      const rel = b.releases ?? {};
+      const voeg = (knoop: number, scharnier: boolean) => {
+        const lijst = eindenPerKnoop.get(knoop) ?? [];
+        lijst.push(scharnier);
+        eindenPerKnoop.set(knoop, lijst);
+      };
+      voeg(b.from, rel.startRy === true);
+      voeg(b.to, rel.endRy === true);
+    }
+    const draaiVast = new Set(
+      supports
+        .filter((s) => (VASTGEZET[s.type] ?? []).includes("ry") || s.type === "rotSpring")
+        .map((s) => s.nodeId),
+    );
+    for (const [knoop, einden] of eindenPerKnoop) {
+      if (einden.every((scharnier) => scharnier) && !draaiVast.has(knoop)) vrijDraaiendeKnopen.add(knoop);
+    }
+  }
+
   // Lasten: verwijzingen en stille wegval.
   for (const l of loads) {
     const id = l.id;
@@ -1750,14 +1788,37 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
         );
       }
     }
-    if (!teltLastMee(l, loadCases)) {
+    // De waarde: dezelfde regel als de modelcontrole van de app
+    // (`lastWaardeFout`). Een koppel met zijn waarde in `fz` leverde wél een
+    // invoerregel op (`my: 0`) en kwam zo door `teltLastMee` heen.
+    const waardeFout = lastWaardeFout(l as unknown as LastWaardeVelden);
+    if (waardeFout) {
+      errors.push(waardeFout.tekst);
+    } else if (!teltLastMee(l, loadCases)) {
       errors.push(
         `Last ${id} (type "${String(l.type)}") levert geen invoer voor de ` +
           "solver op en telt dus niet mee. Controleer of alle velden voor dit " +
-          "lasttype ingevuld zijn (een lijnlast heeft `beamId` en `q` nodig, " +
-          "een puntlast `nodeId` of `beamId` — of op een plaatrand `plateId`, een " +
-          "rand en `posFrac` —, een thermische last `beamId` en `deltaT`, een " +
+          "lasttype ingevuld zijn (een lijnlast heeft `beamId` en `q` nodig, of " +
+          "`qStart` en `qEnd` voor een trapezium, een puntlast `nodeId` of " +
+          "`beamId` — of op een plaatrand `plateId`, een rand en `posFrac` —, een " +
+          "koppel `nodeId` en `my`, een thermische last `beamId` en `deltaT`, een " +
           "randlast `plateId`, een rand en `q`).",
+      );
+    }
+    // Een koppel op een knoop die vrij kan draaien: alle staafeinden daar
+    // scharnieren en geen oplegging houdt de draaiing tegen. De kern zet zo'n
+    // knoopdraaiing vast (zie `vrijeKnoopdraaiingen` in NonlinearSolver.ts),
+    // maar een koppel erop kan nergens heen: een echt mechanisme, dat de
+    // solve weigert. De droogloop hoort dat ook te zeggen.
+    if (
+      l.type === "pointMoment" && typeof l.my === "number" && l.my !== 0 &&
+      typeof l.nodeId === "number" && vrijDraaiendeKnopen.has(l.nodeId)
+    ) {
+      errors.push(
+        `Koppel ${id} op knoop ${l.nodeId}: op deze knoop komen alleen scharnierende ` +
+          "staafeinden samen en geen oplegging houdt de draaiing tegen. Een koppel kan daar " +
+          "nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star " +
+          "aansluit, of maak één staafeinde op deze knoop star.",
       );
     }
   }
@@ -1777,6 +1838,8 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
       }
     }
   }
+
+  if (opties.alleenModel) return { ok: errors.length === 0, errors, warnings };
 
   if (opties.combinaties === undefined) {
     for (const lc of loadCases) {

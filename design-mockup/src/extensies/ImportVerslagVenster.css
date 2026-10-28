@@ -1,0 +1,27 @@
+.ext-report-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 50%);
+}
+
+.ext-report {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(70vh, 700px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--theme-border-subtle);
+  border-radius: 8px;
+  background: var(--theme-dialog-bg, var(--theme-bg));
+  color: var(--theme-text);
+  box-shadow: 0 15px 40px rgb(0 0 0 / 25%);
+}
+
+.ext-report h2 { margin: 0 0 12px; font-size: 18px; }
+.ext-report p, .ext-report li { color: var(--theme-text-secondary); }
+.ext-report ul { padding-left: 20px; }
+.ext-report li { margin: 6px 0; overflow-wrap: anywhere; }
+.ext-report .ext-report-warning { color: var(--theme-warning-text, #b77200); }
+.ext-report button { margin-top: 12px; padding: 7px 14px; cursor: pointer; }

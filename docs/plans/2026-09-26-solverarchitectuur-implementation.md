@@ -4,7 +4,7 @@
 
 - Voeg neutrale TypeScript-typen toe voor voorkeuren, capaciteiten, descriptors en requests.
 - Implementeer een deterministisch solverregister en capability-router.
-- Registreer de bestaande Open FEM 2D-engine en een Dedaliano-descriptor met gecontroleerde beschikbaarheid.
+- Registreer de bestaande Open FEM-engine (2D) en een descriptor voor de externe 3D-kern met gecontroleerde beschikbaarheid.
 - Test automatische selectie, handmatige selectie en foutmeldingen bij ongeschikte engines.
 
 ## Stap 2 — bewaarde instelling
@@ -23,7 +23,7 @@
 ## Stap 4 — Rust-grens
 
 - Voeg een Tauri-commandocontract toe dat engines en capaciteiten kan opvragen.
-- Houd Dedaliano achter een adapter met een geversioneerd JSON-contract.
+- Houd de externe kern achter een adapter met een geversioneerd JSON-contract.
 - Pin de geteste upstream-commit en lever bron- en licentieverwijzingen mee.
 
 ## Stap 5 — verificatie

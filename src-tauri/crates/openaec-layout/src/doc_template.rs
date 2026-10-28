@@ -413,6 +413,48 @@ impl DocTemplate {
         Pt(text.chars().count() as f32 * size * 0.55)
     }
 
+    /// De stukken waarin `text` met lettertype `font_name` gezet wordt (zie
+    /// [`crate::tekstruns`]). Zonder geregistreerd lettertype: de tekst als één
+    /// gewoon stuk, zoals voorheen.
+    fn tekstruns(&self, font_name: &str, text: &str) -> Vec<(crate::tekstruns::Positie, String)> {
+        if !text.is_ascii() {
+            if let Ok(mut reg) = self.fonts.lock() {
+                let font_id = reg.get(font_name).or_else(|| reg.get(&camel_to_hyphen(font_name)));
+                if let Some(id) = font_id {
+                    return reg.tekstruns(id, text);
+                }
+            }
+        }
+        vec![(crate::tekstruns::Positie::Gewoon, text.to_string())]
+    }
+
+    /// Schrijft `text` in een geopende tekstsectie, stuk voor stuk: gewone
+    /// tekst op de basislijn, super- en subschrift dat het lettertype mist
+    /// kleiner en met tekstverhoging (Ts).
+    fn schrijf_tekst(
+        &self,
+        layer: &printpdf::PdfLayerReference,
+        font: &printpdf::IndirectFontRef,
+        font_name: &str,
+        size: f32,
+        text: &str,
+    ) {
+        use crate::tekstruns::{Positie, DALING_ONDER, SCHAAL, STIJGING_BOVEN};
+        for (positie, stuk) in self.tekstruns(font_name, text) {
+            match positie {
+                Positie::Gewoon => layer.write_text(stuk, font),
+                Positie::Boven | Positie::Onder => {
+                    let verschuiving = if positie == Positie::Boven { STIJGING_BOVEN } else { DALING_ONDER };
+                    layer.set_font(font, size * SCHAAL);
+                    layer.set_line_offset(size * verschuiving);
+                    layer.write_text(stuk, font);
+                    layer.set_font(font, size);
+                    layer.set_line_offset(0.0);
+                }
+            }
+        }
+    }
+
     /// Render a draw list to a printpdf layer.
     fn render_draw_list(
         &self,
@@ -474,7 +516,7 @@ impl DocTemplate {
                         layer.begin_text_section();
                         layer.set_font(font, current_font_size);
                         layer.set_text_cursor(to_pdf_mm(*x), to_pdf_mm(Pt(pdf_y)));
-                        layer.write_text(text, font);
+                        self.schrijf_tekst(layer, font, &current_font_name, current_font_size, text);
                         layer.end_text_section();
                     }
                 }
@@ -488,7 +530,7 @@ impl DocTemplate {
                         layer.begin_text_section();
                         layer.set_font(font, current_font_size);
                         layer.set_text_cursor(to_pdf_mm(adjusted_x), to_pdf_mm(Pt(pdf_y)));
-                        layer.write_text(text, font);
+                        self.schrijf_tekst(layer, font, &current_font_name, current_font_size, text);
                         layer.end_text_section();
                     }
                 }
@@ -502,7 +544,7 @@ impl DocTemplate {
                         layer.begin_text_section();
                         layer.set_font(font, current_font_size);
                         layer.set_text_cursor(to_pdf_mm(adjusted_x), to_pdf_mm(Pt(pdf_y)));
-                        layer.write_text(text, font);
+                        self.schrijf_tekst(layer, font, &current_font_name, current_font_size, text);
                         layer.end_text_section();
                     }
                 }

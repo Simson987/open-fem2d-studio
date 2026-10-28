@@ -64,6 +64,8 @@ export function basisVorm(b: Basisprofiel): SectionShape {
       return { type: "tube", d: b.h, t: b.tw };
     case "Rechthoek":
       return { type: "rect", h: b.h, b: b.b };
+    case "RoundBar":
+      return { type: "rond", d: b.h };
     case "Angle":
       // Twee stralen: `r` in de holle hoek, `r2` aan de teen van elk been.
       // Draagt het basisprofiel geen `r2` (een profiel dat niet uit de

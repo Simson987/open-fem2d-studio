@@ -7,8 +7,8 @@ import SettingsTab from "./SettingsTab";
 import InsightsTab from "./InsightsTab";
 import IfcTab from "./IfcTab";
 import ReportTab from "./ReportTab";
-import type { Frame3DTool, Frame3DView } from "../frame3d/frame3dCommands";
-import type { Frame3DSupportPreset } from "../frame3d/frame3dModel";
+import type { OpenFem3DSpringAxis, OpenFem3DTool, OpenFem3DView } from "../openFem3d/openFem3dCommands";
+import type { OpenFem3DSupportPreset } from "../openFem3d/openFem3dModel";
 import "./Ribbon.css";
 
 interface RibbonProps {
@@ -21,10 +21,14 @@ interface RibbonProps {
   onThemeSelect?: (theme: string) => void;
   /** Open de alleen-lezen bibliotheek-dialoog (profielen / materialen). */
   onOpenLibrary?: (tab: "sections" | "materials") => void;
+  /** Open Instellingen op het tabblad AI-assistent (MCP) (issue #109). */
+  onOpenAiAssistant?: () => void;
   activeView: string;
   onViewChange: (view: string) => void;
   modelDimension?: "2d" | "3d";
   onConvertTo3D?: () => void;
+  /** Opent de wizard "Stalen hal…" (een complete hal als 3D-model). */
+  onOpenSteelHall?: () => void;
   /** Active FEM canvas tool. Routed into HomeTab so draw buttons can highlight + dispatch. */
   femTool?: import("../fem/femTypes").Tool;
   onFemToolChange?: (t: import("../fem/femTypes").Tool) => void;
@@ -79,32 +83,49 @@ interface RibbonProps {
   onValidateIfc?: () => void;
   /** Schakelt naar het IFC-tabblad (boomstructuur / STEP / statistieken). */
   onOpenIfcView?: () => void;
+  /** Importeert een IFC4-analysemodel als nieuw 3D-project. */
+  onImportIfcAnalysisModel?: () => void;
   /** File-menu actions (Home tab + Backstage). */
   onNewProject?: () => void;
   onOpenProject?: () => void;
   onSaveProject?: () => void;
   onSaveProjectAs?: () => void;
   /** 3D-gereedschap voor hetzelfde modellint wanneer het project 3D is. */
-  frame3dTool?: Frame3DTool;
-  availableFrame3DTools?: readonly Frame3DTool[];
-  onFrame3DToolChange?: (tool: Frame3DTool) => void;
-  canFrame3DDelete?: boolean;
-  canFrame3DTransform?: boolean;
-  onFrame3DFit?: () => void;
-  onFrame3DViewChange?: (view: Frame3DView) => void;
-  frame3dView?: Frame3DView;
+  openFem3dTool?: OpenFem3DTool;
+  availableOpenFem3DTools?: readonly OpenFem3DTool[];
+  onOpenFem3DToolChange?: (tool: OpenFem3DTool) => void;
+  canOpenFem3DDelete?: boolean;
+  onOpenFem3DFit?: () => void;
+  onOpenFem3DViewChange?: (view: OpenFem3DView) => void;
+  openFem3dView?: OpenFem3DView;
   onToggle3DVisibility?: () => void;
   visibility3DOpen?: boolean;
-  hasFrame3DNodeSelection?: boolean;
-  hasFrame3DBeamSelection?: boolean;
-  hasFrame3DPlateSelection?: boolean;
-  onFrame3DSupportPreset?: (preset: Frame3DSupportPreset) => void;
-  onFrame3DRequestSpring?: (axis: "kx" | "ky" | "kz" | "krx" | "kry" | "krz") => void;
-  onFrame3DRequestNodalLoad?: (kind: "force" | "moment") => void;
-  onFrame3DRequestMemberLoad?: () => void;
-  onFrame3DRequestMemberPointLoad?: () => void;
-  onFrame3DRequestThermalLoad?: () => void;
-  onFrame3DRequestSurfaceLoad?: () => void;
+  /** Plaatweergave in 3D (issue #78): volume, vlak of mesh. */
+  openFem3dPlateDisplay?: import("../openFem3d/openFem3dPlateDisplay").OpenFem3DPlateDisplay;
+  onOpenFem3DPlateDisplayChange?: (display: import("../openFem3d/openFem3dPlateDisplay").OpenFem3DPlateDisplay) => void;
+  /** Section box in 3D (issue #86): aan (de knop licht op) en aan/uit zetten. */
+  openFem3dSectionBox?: boolean;
+  onOpenFem3DSectionBoxToggle?: () => void;
+  openFem3dExploded?: boolean;
+  onOpenFem3DExplodeToggle?: () => void;
+  hasOpenFem3DNodeSelection?: boolean;
+  hasOpenFem3DBeamSelection?: boolean;
+  hasOpenFem3DPlateSelection?: boolean;
+  onOpenFem3DSupportPreset?: (preset: OpenFem3DSupportPreset) => void;
+  /** 3D: veergereedschap in deze richting (een geselecteerde knoop krijgt de veer meteen). */
+  onOpenFem3DSpringTool?: (axis: OpenFem3DSpringAxis) => void;
+  onOpenFem3DRequestNodalLoad?: (kind: "force" | "moment") => void;
+  onOpenFem3DRequestMemberLoad?: () => void;
+  onOpenFem3DRequestMemberPointLoad?: () => void;
+  onOpenFem3DRequestThermalLoad?: () => void;
+  onOpenFem3DRequestSurfaceLoad?: () => void;
+  onOpenFem3DConvertPlateToLoadPanel?: () => void;
+  /** 3D: liggers scharnierend op kolommen (de selectie, of alle staven). */
+  onOpenFem3DPinBeamsToColumns?: () => void;
+  /** 3D: knopen op staven aansluiten (de selectie, of het hele model), issue #63. */
+  onOpenFem3DConnectNodes?: () => void;
+  /** 3D: samenvallende knopen samenvoegen (de selectie, of het hele model), issue #75. */
+  onOpenFem3DMergeNodes?: () => void;
   /** @deprecated — read from useReportStore in the Report tab/preview. Kept for prop-compat. */
   pageSize?: "A4" | "A3";
   /** @deprecated */
@@ -131,21 +152,22 @@ type TabId = (typeof TABS)[number];
 
 export default function Ribbon({
   onFileTabClick, onSettingsClick, onProjectSettingsClick, activeView, onViewChange,
-  modelDimension = "2d", onConvertTo3D,
-  theme, onThemeSelect, onOpenLibrary,
+  modelDimension = "2d", onConvertTo3D, onOpenSteelHall,
+  theme, onThemeSelect, onOpenLibrary, onOpenAiAssistant,
   femTool, onFemToolChange, onSolve, hasResults,
   onDelete, onUndo, onRedo, canUndo, canRedo, onOpenGrids,
   onOpenLoadCases, onOpenLoadCombinations, onOpenWindGenerator, onOpenWaterAccumulation, onNewProject, onOpenProject,
   onSaveProject, onSaveProjectAs,
-  frame3dTool, availableFrame3DTools, onFrame3DToolChange, canFrame3DDelete, canFrame3DTransform,
-  onFrame3DFit, onFrame3DViewChange, frame3dView,
-  onToggle3DVisibility, visibility3DOpen, hasFrame3DNodeSelection, hasFrame3DBeamSelection, hasFrame3DPlateSelection,
-  onFrame3DSupportPreset, onFrame3DRequestSpring, onFrame3DRequestNodalLoad, onFrame3DRequestMemberLoad,
-  onFrame3DRequestMemberPointLoad, onFrame3DRequestThermalLoad, onFrame3DRequestSurfaceLoad,
+  openFem3dTool, availableOpenFem3DTools, onOpenFem3DToolChange, canOpenFem3DDelete,
+  onOpenFem3DFit, onOpenFem3DViewChange, openFem3dView,
+  onToggle3DVisibility, visibility3DOpen, openFem3dPlateDisplay, onOpenFem3DPlateDisplayChange, openFem3dSectionBox, onOpenFem3DSectionBoxToggle, openFem3dExploded, onOpenFem3DExplodeToggle, hasOpenFem3DNodeSelection, hasOpenFem3DBeamSelection, hasOpenFem3DPlateSelection,
+  onOpenFem3DSupportPreset, onOpenFem3DSpringTool, onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad,
+  onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
+  onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns, onOpenFem3DConnectNodes, onOpenFem3DMergeNodes,
   onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
-  onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView,
+  onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView, onImportIfcAnalysisModel,
   tableDataset, onTableDataset, onTableExportCsv, onTableCopy, onTableFocusFilter,
 }: RibbonProps) {
   const { t, i18n } = useTranslation("ribbon");
@@ -202,7 +224,7 @@ export default function Ribbon({
     else if (newTab === "report") onViewChange("report");
     else if (newTab === "insights") onViewChange("insights");
     else if (newTab === "table") onViewChange("table");
-    else onViewChange(modelDimension === "3d" ? "frame3d" : "default");
+    else onViewChange(modelDimension === "3d" ? "openFem3d" : "default");
   }, [activeTab, modelDimension, onViewChange]);
 
   // Houd de ribbon-tab in sync wanneer App de hoofdview programmatisch
@@ -217,7 +239,7 @@ export default function Ribbon({
       activeTab !== activeView
     ) {
       switchTab(activeView as TabId);
-    } else if (activeView === "frame3d" && activeTab !== "home") {
+    } else if (activeView === "openFem3d" && activeTab !== "home") {
       switchTab("home");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,26 +291,36 @@ export default function Ribbon({
           onSaveProjectAs={onSaveProjectAs}
           modelDimension={modelDimension}
           onConvertTo3D={onConvertTo3D}
-          frame3dTool={frame3dTool}
-          availableFrame3DTools={availableFrame3DTools}
-          onFrame3DToolChange={onFrame3DToolChange}
-          canFrame3DDelete={canFrame3DDelete}
-          canFrame3DTransform={canFrame3DTransform}
-          onFrame3DFit={onFrame3DFit}
-          onFrame3DViewChange={onFrame3DViewChange}
-          frame3dView={frame3dView}
+          onOpenSteelHall={onOpenSteelHall}
+          openFem3dTool={openFem3dTool}
+          availableOpenFem3DTools={availableOpenFem3DTools}
+          onOpenFem3DToolChange={onOpenFem3DToolChange}
+          canOpenFem3DDelete={canOpenFem3DDelete}
+          onOpenFem3DFit={onOpenFem3DFit}
+          onOpenFem3DViewChange={onOpenFem3DViewChange}
+          openFem3dView={openFem3dView}
           onToggle3DVisibility={onToggle3DVisibility}
           visibility3DOpen={visibility3DOpen}
-          hasFrame3DNodeSelection={hasFrame3DNodeSelection}
-          hasFrame3DBeamSelection={hasFrame3DBeamSelection}
-          hasFrame3DPlateSelection={hasFrame3DPlateSelection}
-          onFrame3DSupportPreset={onFrame3DSupportPreset}
-          onFrame3DRequestSpring={onFrame3DRequestSpring}
-          onFrame3DRequestNodalLoad={onFrame3DRequestNodalLoad}
-          onFrame3DRequestMemberLoad={onFrame3DRequestMemberLoad}
-          onFrame3DRequestMemberPointLoad={onFrame3DRequestMemberPointLoad}
-          onFrame3DRequestThermalLoad={onFrame3DRequestThermalLoad}
-          onFrame3DRequestSurfaceLoad={onFrame3DRequestSurfaceLoad}
+          openFem3dPlateDisplay={openFem3dPlateDisplay}
+          onOpenFem3DPlateDisplayChange={onOpenFem3DPlateDisplayChange}
+          openFem3dSectionBox={openFem3dSectionBox}
+          onOpenFem3DSectionBoxToggle={onOpenFem3DSectionBoxToggle}
+          openFem3dExploded={openFem3dExploded}
+          onOpenFem3DExplodeToggle={onOpenFem3DExplodeToggle}
+          hasOpenFem3DNodeSelection={hasOpenFem3DNodeSelection}
+          hasOpenFem3DBeamSelection={hasOpenFem3DBeamSelection}
+          hasOpenFem3DPlateSelection={hasOpenFem3DPlateSelection}
+          onOpenFem3DSupportPreset={onOpenFem3DSupportPreset}
+          onOpenFem3DSpringTool={onOpenFem3DSpringTool}
+          onOpenFem3DRequestNodalLoad={onOpenFem3DRequestNodalLoad}
+          onOpenFem3DRequestMemberLoad={onOpenFem3DRequestMemberLoad}
+          onOpenFem3DRequestMemberPointLoad={onOpenFem3DRequestMemberPointLoad}
+          onOpenFem3DRequestThermalLoad={onOpenFem3DRequestThermalLoad}
+          onOpenFem3DRequestSurfaceLoad={onOpenFem3DRequestSurfaceLoad}
+          onOpenFem3DConvertPlateToLoadPanel={onOpenFem3DConvertPlateToLoadPanel}
+          onOpenFem3DPinBeamsToColumns={onOpenFem3DPinBeamsToColumns}
+          onOpenFem3DConnectNodes={onOpenFem3DConnectNodes}
+          onOpenFem3DMergeNodes={onOpenFem3DMergeNodes}
         />;
       case "table":
         return <TableTab
@@ -305,6 +337,7 @@ export default function Ribbon({
           theme={theme}
           onThemeSelect={onThemeSelect}
           onOpenLibrary={onOpenLibrary}
+          onOpenAiAssistant={onOpenAiAssistant}
         />;
       case "insights":
         return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} onOpenPrestressedBeam={onOpenPrestressedBeam} onOpenVolumeWorkbench={onOpenVolumeWorkbench} />;
@@ -314,6 +347,7 @@ export default function Ribbon({
           onExportIfcStructural={onExportIfcStructural}
           onValidateIfc={onValidateIfc}
           onOpenIfcView={onOpenIfcView}
+          onImportAnalysisModel={onImportIfcAnalysisModel}
         />;
       case "report":
         return <ReportTab
@@ -346,6 +380,8 @@ export default function Ribbon({
           <div
             className={`ribbon-content-panel ribbon-panel-exit-${direction}`}
             key={`prev-${prevTab}`}
+            inert
+            aria-hidden="true"
           >
             {renderContent(prevTab)}
           </div>

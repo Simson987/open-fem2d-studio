@@ -31,6 +31,17 @@ mod fem_tools;
 /// Ruimtelijke raamwerken: dezelfde versievaste Rust-adapter als de app.
 mod frame3d_tools;
 mod native_fem_tools;
+mod open_fem_3d_tools;
+
+/// De stalen hal (`open_fem_3d_staalhal_maken`): de generator van de wizard in
+/// de sidecar, rekenen met de 3D-kern hierboven en toetsen met `steel_check`.
+mod staalhal_tools;
+
+/// De import van een IFC4-analysemodel (`open_fem_3d_ifc_importeren`): de
+/// import van de app in de sidecar, rekenen met de 3D-kern en toetsen met
+/// `steel_check`, langs dezelfde keten als de stalen hal.
+mod ifc_import_tools;
+mod extensie_tools;
 
 /// De acht betontools (NEN-EN 1992-1-1). Ze roepen dezelfde `concrete_check`
 /// aan als het Tauri-command en de toetsbrug — de derde weg naar één
@@ -38,7 +49,9 @@ mod native_fem_tools;
 mod concrete_tools;
 
 /// De GUI-tools: bedienen de DRAAIENDE desktop-app over haar bedieningskanaal
-/// (`OPENAEC_GUI_CONTROL=1`). Geen rekenkern-opdrachten en dus buiten de
+/// (Instellingen → AI-assistent (MCP), of `OPENAEC_GUI_CONTROL=1`), en
+/// `gui_start_app` start de geïnstalleerde app met dat kanaal aan. Geen
+/// rekenkern-opdrachten en dus buiten de
 /// drie-wegen-regel — zij zíjn de weg naar de GUI. Zie `gui_tools.rs`.
 mod gui_tools;
 
@@ -53,6 +66,11 @@ mod timber_tools;
 /// dezelfde `plaat_check::check_all_plates` aan als het Tauri-command en de
 /// toetsbrug. Zie `plate_tools.rs`.
 mod plate_tools;
+
+/// De API-commando's van de app (het commandoregister in `design-mockup/src/api/`):
+/// één tool per commando, uit de ingebakken catalogus. Met `project` zonder app op
+/// een bestand (via de sidecar), anders in de draaiende app. Zie `api_tools.rs`.
+mod api_tools;
 #[cfg(test)]
 mod report_tests;
 
@@ -359,7 +377,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "check_steel_beam",
-            "description": "Run the full EN 1993-1-1 steel check (cross-section resistance §6.2, member stability §6.3, deflection SLS) on a single beam. Input is a BeamCheckInput (profile name, grade, length, force envelope, lateral bracing, etc.). Returns BeamCheckResult with full derivation trace.",
+            "description": "Run the full EN 1993-1-1 steel check (cross-section resistance §6.2, member stability §6.3, deflection SLS) on a single beam. Input is a BeamCheckInput (profile name, grade, length, force envelope, lateral bracing, etc.). Returns BeamCheckResult with full derivation trace. Bending and shear (§6.2.8) uses eq. (6.30) for doubly symmetric I/H sections and reports UC = M_y,Ed/M_y,V,Rd. A class 4 section is checked with the effective cross-section of EN 1993-1-5 4.4 (A_eff, W_eff; doubly symmetric I and hollow box); for any other class 4 shape only tension, shear and deflection are checked and the status is NotApplicable ('NIET TOETSBAAR: ...'), never Ok. A web with h_w/t_w > 72 eps/eta needs the shear buckling check of EN 1993-1-5 section 5, which is not implemented: shear (z), 6.2.8 and 6.2.10 are then refused, and with V_z,Ed > 0 the member is NotApplicable ('NIET VOLLEDIG GETOETST: ...') unless a computed check fails; V_z,Ed > V_pl,z,Rd (an upper bound) always gives NotOk. In 6.2.10 with only M_y and shear (N = 0, M_z = 0) the UC is M_y,Ed/M_y,V,Rd, as in 6.2.8. A 'Doorlopend' member end (see 'staafeinden') whose buckling or lateral-torsional check cannot be determined also gives NotApplicable ('NIET VOLLEDIG GETOETST: ...'), unless a computed check fails. A 'Vrij' member end without a given buckling length uses 2*L, or L about an axis listed in 'zijdelingse_knik_in_analyse' (second-order analysis with sway imperfection, 5.2.2(7)b).",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -390,12 +408,13 @@ fn tool_definitions() -> Value {
                         "description": "Kniklengte om de zwakke z-as in m: knik UIT het vlak van het model, een richting die de raamwerkberekening nooit ziet. 0 (of weglaten) = niet opgegeven; de kern leidt L_cr,z dan af uit 'lateral_bracing', maar ALLEEN op plaatsen waar een kipsteun aan de boven- EN aan de onderflens zit (binnen 1 mm): de grootste afstand tussen zulke plaatsen, de staafeinden meegeteld. Een steun aan een flens verkort L_cr,z NIET (NEN-EN 1993-1-1 6.3.5.2(2) en 6.3.1.4(5)). Zonder zulke paren geldt de staaflengte. De gebruikte waarde en haar herkomst ('opgegeven', 'uit de kipsteunen', 'staaflengte (terugval)') staan in de toets." },
                     "deflection_limit_class": { "type": "string",
                         "enum": ["Floor", "FloorBrittlePartitions", "Roof", "Cantilever", "Custom"],
-                        "description": "Doorbuigingsklasse. Bepaalt de noemer voor w_fin, en de NB-categorie uit NEN-EN 1990:2002/NB:2019 A1.4.3(3) voor w_add: 'Floor' = 3/1000 van l_rep (overige vloeren en daken die intensief door personen worden gebruikt), 'FloorBrittlePartitions' = l_rep/500 (vloeren die scheurgevoelige scheidingswanden dragen), 'Roof' = l_rep/250 (overige daken), 'Cantilever' = dezelfde categorie als 'Floor' maar met l_rep = tweemaal de uitkraaglengte. De noemer uit 'deflection_limit_numerator' telt alleen bij 'Custom'." },
+                        "description": "Doorbuigingsklasse. w_fin (w_max) wordt bij elke klasse behalve 'Custom' getoetst tegen l_rep/250 (NEN-EN 1990:2002/NB:2019 A1.4.3(4), vloeren en daken). De klasse bepaalt de NB-categorie uit NEN-EN 1990:2002/NB:2019 A1.4.3(3) voor w_add: 'Floor' = 3/1000 van l_rep (overige vloeren en daken die intensief door personen worden gebruikt), 'FloorBrittlePartitions' = l_rep/500 (vloeren die scheurgevoelige scheidingswanden dragen), 'Roof' = l_rep/250 (overige daken), 'Cantilever' = dezelfde categorie als 'Floor' maar met l_rep = tweemaal de uitkraaglengte. De noemer uit 'deflection_limit_numerator' telt alleen bij 'Custom'." },
                     "deflection_limit_numerator": { "type": "integer",
                         "description": "Noemer x in de eis L/x; alleen gebruikt bij klasse 'Custom', en dan voor w_fin en w_add samen. Bij 'Custom' moet x groter dan nul zijn: 0 of negatief is een invoerfout, de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id. Bij de andere klassen wordt het getal niet gelezen." },
                     "deflection_actual_max_mm": { "type": "number",
-                        "description": "Gerekende veldzakking in mm, met teken (negatief = omlaag)." },
-                    "is_cantilever": { "type": "boolean" },
+                        "description": "Gerekende zakking in mm, met teken (negatief = omlaag): bij een ligger het veldmaximum ten opzichte van de koorde tussen de staafeinden, bij een uitkraging ten opzichte van het ingeklemde eind." },
+                    "is_cantilever": { "type": "boolean",
+                        "description": "Uitkraging: l_rep = 2 x de staaflengte voor w_fin EN w_add (NEN-EN 1990:2002/NB:2019 A1.4.3); hetzelfde als klasse 'Cantilever'. 'deflection_actual_max_mm' hoort dan de zakking ten opzichte van het ingeklemde eind te zijn, niet ten opzichte van de koorde tussen de verplaatste staafeinden." },
                     "consequence_class": { "type": "string", "enum": ["CC1", "CC2", "CC3"],
                         "description": "Gevolgklasse, ALLEEN TER VERMELDING: deze toetsing past K_FI niet toe en verandert geen enkele UC. Volgens NEN-EN 1990:2002/NB:2019 zit de gevolgklasse in de partiële belastingsfactoren (tabel NB.4 voor CC2, NB.5 voor CC1 en CC3); lever dus krachten in `forces_envelope` die met die factoren zijn bepaald. `solve_fem_model` en `check_fem_model` doen dat al met hun veld `gevolgklasse`." },
                     "pre_camber_mm": { "type": "number", "default": 0,
@@ -419,7 +438,7 @@ fn tool_definitions() -> Value {
                         "type": "object",
                         "additionalProperties": false,
                         "required": ["begin", "eind"],
-                        "description": "Wat er aan de twee staafeinden zit, in de referentierichting (begin = x = 0). 'Gaffel' = oplegging of aansluiting: zijdelings gesteund en torsievast, de aanname van vóór dit veld. 'Vrij' = geen oplegging en geen aansluitende staaf (uitkraging, vrijstaande kolom): de kniklengte-terugval wordt 2*L en de kiptoets rekent met de vervangende ligger van tabel NB.NB.1 geval 5 (L_g = L_st = L_kip = 2*L, C1 = 1,0, C2 = 0). 'Doorlopend' = de staaf loopt zonder oplegging door in een staaf met een andere doorsnede: kip (en 6.3.3) wordt geweigerd met reden, en de kniktoets alleen uitgevoerd als beide kniklengtes zijn opgegeven. Weglaten = beide 'Gaffel'. `check_fem_model` en de app vullen dit uit het model.",
+                        "description": "Wat er aan de twee staafeinden zit, in de referentierichting (begin = x = 0). 'Gaffel' = oplegging of aansluiting: zijdelings gesteund en torsievast, de aanname van vóór dit veld. 'Vrij' = geen oplegging en geen aansluitende staaf (uitkraging, vrijstaande kolom): de kniklengte-terugval wordt 2*L (of L om een as uit 'zijdelingse_knik_in_analyse') en de kiptoets rekent met de vervangende ligger van tabel NB.NB.1 geval 5 (L_g = L_st = L_kip = 2*L, C1 = 1,0, C2 = 0). 'Doorlopend' = de staaf loopt zonder oplegging door in een staaf met een andere doorsnede, een ander materiaal of een verlopend profiel: kip (en 6.3.3) wordt geweigerd met reden, en de kniktoets alleen uitgevoerd als beide kniklengtes zijn opgegeven; ontbreekt zo de kniktoets bij druk of de kiptoets bij buiging, dan is de status NotApplicable (niet volledig getoetst), tenzij een andere toets boven 1 uitkomt (NotOk). Weglaten = beide 'Gaffel'. `check_fem_model` en de app vullen dit uit het model.",
                         "properties": {
                             "begin": { "type": "string", "enum": ["Gaffel", "Vrij", "Doorlopend"] },
                             "eind":  { "type": "string", "enum": ["Gaffel", "Vrij", "Doorlopend"] }
@@ -428,7 +447,25 @@ fn tool_definitions() -> Value {
                     "staaf_notities": { "type": "array", "items": { "type": "string" }, "default": [],
                         "description": "Toelichtingen bij de staaf als geheel; rekenen nergens mee en komen letterlijk in de 'notes' van de kniktoets (6.3.1), de kiptoets (6.3.2) en de eindzakking. `check_fem_model` en de app zetten hier dat een door tussenknopen geknipte staaf als één doorgaande lijn is getoetst, over welke lengte, en welke tussenknopen niet als steun tellen. Weglaten = niets te melden." },
                     "profile_end": { "type": "string",
-                        "description": "Profiel aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'profile_name' is dan het profiel aan het begin (x = 0). De maten h, b, t_w en t_f verlopen lineair en de doorsnede telt over de hele staaf als GELAST I-profiel zonder afrondingsstraal (knikkromme tabel 6.2 en kipkromme tabel 6.5 voor gelaste profielen). De kern toetst elke doorsnedetoets (6.2.x) op elk rekenpunt met de plaatselijke doorsnede en rekent de stabiliteitstoetsen (6.3.x) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Beide profielen moeten I/H-profielen uit de catalogus zijn; een koker, buis, hoeklijn, U-profiel, een I-profiel met toelopende flenzen of een eigen doorsnede wordt geweigerd met reden. Weglaten, leeg of gelijk aan 'profile_name' = prismatisch." }
+                        "description": "Profiel aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'profile_name' is dan het profiel aan het begin (x = 0). De maten h, b, t_w en t_f verlopen lineair en de doorsnede telt over de hele staaf als GELAST I-profiel zonder afrondingsstraal (knikkromme tabel 6.2 en kipkromme tabel 6.5 voor gelaste profielen). De kern toetst elke doorsnedetoets (6.2.x) op elk rekenpunt met de plaatselijke doorsnede en rekent de stabiliteitstoetsen (6.3.x) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Beide profielen moeten I/H-profielen uit de catalogus zijn; een koker, buis, hoeklijn, U-profiel, een I-profiel met toelopende flenzen of een eigen doorsnede wordt geweigerd met reden. Weglaten, leeg of gelijk aan 'profile_name' = prismatisch." },
+                    "a_net_mm2": { "type": "number", "minimum": 0,
+                        "description": "Nettodoorsnede A_net (mm²) voor de trektoets 6.2.3: de doorsnede ter plaatse van gaten of een andere verzwakking. Met A_net is N_t,Rd = min(A·f_y/γ_M0; 0,9·A_net·f_u/γ_M2), vergelijking (6.6) en (6.7); zonder rekent de kern N_t,Rd = A·f_y/γ_M0 en zegt de toets dat er geen A_net is opgegeven. Weglaten of 0 = niet opgegeven; een A_net groter dan A is een invoerfout en de staaf wordt dan met reden geweigerd." },
+                    "tension_only": { "type": "boolean", "default": false,
+                        "description": "Trek-alleen staaf (windverband van strip of rond staal, trekstang): de staaf doet in de berekening alleen mee zolang zij op trek staat. Dan toetst de kern alleen trek (6.2.3, en bij massief rond het draadeind); druk, buiging, dwarskracht en hun combinaties, knik, kip, 6.3.3 en de doorbuiging vallen weg. Een drukkracht in de omhullende geldt als speling of voorspanning en wordt niet getoetst; de grootste staat als informatieve regel ('trek_alleen') in het resultaat. Weglaten of false = een gewone staaf." },
+                    "deflection_add_mm": { "type": "number",
+                        "description": "De bijkomende zakking w_add = w2 + w3 in mm (met teken, negatief = omlaag), als de aanroeper haar per BGT-combinatie heeft bepaald: het grootste verschil |w_c − w1| met w1 = 'deflection_permanent_mm' (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1). Weglaten = w_add = 'deflection_actual_max_mm' − 'deflection_permanent_mm'; dat klopt alleen als de combinatie met de grootste |w| ook het grootste verschil met w1 geeft (niet bij een overstek dat onder de blijvende last omhoog en onder de veranderlijke omlaag gaat). `check_fem_model` en de app vullen het veld alleen als het verschilt." },
+                    "deflection_length_m": { "type": "number", "exclusiveMinimum": 0,
+                        "description": "Lengte in m van het DEEL van de staaf waarvan de doorbuiging gemeten is, als dat niet de hele staaf is: de grenzen van w_fin en w_add rekenen dan met deze lengte (en met ℓ_rep = 2 × deze lengte als 'is_cantilever' of klasse 'Cantilever'). Bedoeld voor een doorgaande lijn die over een kolomkop doorloopt in een overstek: het veld en het overstek hebben elk hun eigen ℓ_rep (NEN-EN 1990:2002/NB:2019 A1.4.3). Weglaten = 'length_m'. Groter dan 'length_m' is een invoerfout; de staaf wordt dan met reden geweigerd." },
+                    "zijdelingse_knik_in_analyse": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["y", "z"],
+                        "description": "Om welke doorsnedeassen de globale berekening tweede orde (P-Δ) MET scheefstand (NEN-EN 1993-1-1 5.3.2) is en de staaf kan laten uitbuigen. Alleen van belang bij een 'Vrij' staafeind in 'staafeinden' zonder opgegeven kniklengte: om een gedekte as geldt dan de staaflengte (5.2.2(7)b: de zijdelingse knik zit al in de krachten), om een niet-gedekte as 2*L. In een vlak model is hooguit 'y' waar. Zet het alleen voor een staaf waarvan de scheefstand de zijdelingse knikvorm aanstoot: een overwegend verticale staaf (kolom); de scheefstand is een horizontale kracht bij de verticale last, en een liggende uitkraging met druk krijgt er geen imperfectie in haar knikvorm door. Bij een hoekprofiel telt alleen y EN z samen. Zet het bovendien alleen als de scheefstand φ in de berekening minstens de eigen φ van die kolom is: EN 1993-1-1 (5.5) met h = haar lengte en m = 1 (een kolom met een vrije kop hangt nergens aan; de φ van een heel model middelt over al zijn kolommen). Bij L houdt de kern C_m = 0,9 als ondergrens (tabel B.3, knikvorm met verplaatsbare knopen). Weglaten = geen as gedekt (2*L). `check_fem_model` en de app vullen dit uit het analysetype, de scheefstand en φ.",
+                        "properties": {
+                            "y": { "type": "boolean" },
+                            "z": { "type": "boolean" }
+                        }
+                    }
                 },
                 "required": [
                     "beam_id", "profile_name", "steel_grade", "length_m",
@@ -494,10 +531,15 @@ fn tool_definitions() -> Value {
     lijst.extend(fem_tools::tool_definitions());
     lijst.extend(frame3d_tools::tool_definitions());
     lijst.extend(native_fem_tools::tool_definitions());
+    lijst.extend(open_fem_3d_tools::tool_definitions());
+    lijst.extend(staalhal_tools::tool_definitions());
+    lijst.extend(ifc_import_tools::tool_definitions());
+    lijst.extend(extensie_tools::tool_definitions());
     lijst.extend(concrete_tools::tool_definitions());
     lijst.extend(timber_tools::tool_definitions());
     lijst.extend(plate_tools::tool_definitions());
     lijst.extend(gui_tools::tool_definitions());
+    lijst.extend(api_tools::tool_definitions());
     tools
 }
 
@@ -558,6 +600,12 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         native if native_fem_tools::is_native_fem_tool(native) => {
             native_fem_tools::dispatch(native, args).await
         }
+        open_fem_3d if open_fem_3d_tools::is_open_fem_3d_tool(open_fem_3d) => {
+            open_fem_3d_tools::dispatch(open_fem_3d, args).await
+        }
+        hal if staalhal_tools::is_staalhal_tool(hal) => staalhal_tools::dispatch(hal, args).await,
+        ifc if ifc_import_tools::is_ifc_import_tool(ifc) => ifc_import_tools::dispatch(ifc, args).await,
+        extensie if extensie_tools::is_extensie_tool(extensie) => extensie_tools::dispatch(extensie, args).await,
         // De betontools. Ze roepen `concrete_check` aan — dezelfde functies die
         // `src-tauri/src/lib.rs` en `crates/toetsbrug` aanroepen. Zie
         // `concrete_tools.rs` en `tests/drie_wegen_beton.rs`.
@@ -577,6 +625,7 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         // De GUI-tools: geen rekenwerk, maar opdrachten aan de draaiende app
         // over haar bedieningskanaal. Zie `gui_tools.rs`.
         gui if gui_tools::is_gui_tool(gui) => gui_tools::dispatch(gui, args).await,
+        api if api_tools::is_api_tool(api) => api_tools::dispatch(api, args).await,
         other => Err(RpcError::method_not_found(other)),
     }
 }
@@ -604,6 +653,13 @@ fn compute_section_props(
         ProfileKind::Shs => "Shs",
         ProfileKind::Chs => "Chs",
         ProfileKind::Angle => "Angle",
+        // Massief rond staal: de motor rekent dezelfde cirkel als de
+        // catalogus (exacte kwartbogen; I_t numeriek).
+        ProfileKind::RoundBar => "RoundBar",
+        // Platstaal: een massieve rechthoek met h = de breedte b van de strip
+        // (langs z) en b = de dikte t. De motor geeft daarbij ook de kleine
+        // welvingsconstante van een rechthoek; de catalogus zet I_w op 0.
+        ProfileKind::FlatBar => "Rechthoek",
     };
     let invoer: section_properties::opdracht::Invoer = serde_json::from_value(json!({
         "naam": profile.name,
@@ -716,14 +772,18 @@ async fn run_stdio() -> std::io::Result<()> {
     let stdout = Arc::new(Mutex::new(stdout));
 
     let mut reader = BufReader::new(stdin).lines();
+    // Elk verzoek draait als eigen taak. Sluit de client stdin direct na zijn
+    // verzoeken (een pijp, een script), dan maakt de server die taken eerst af:
+    // anders eindigt main en vallen de antwoorden weg.
+    let mut lopend = tokio::task::JoinSet::new();
     while let Some(line) = reader.next_line().await? {
         let line = line.trim().to_string();
-        if line.is_empty() {
-            continue;
-        }
+        if line.is_empty() { continue; }
+        // Afgeronde taken opruimen, zodat de set in een lange sessie niet groeit.
+        while lopend.try_join_next().is_some() {}
 
         let stdout = stdout.clone();
-        tokio::spawn(async move {
+        lopend.spawn(async move {
             let resp = match serde_json::from_str::<Request>(&line) {
                 Ok(req) => handle_request(req).await,
                 Err(e) => {
@@ -755,6 +815,7 @@ async fn run_stdio() -> std::io::Result<()> {
             }
         });
     }
+    while lopend.join_next().await.is_some() {}
     Ok(())
 }
 

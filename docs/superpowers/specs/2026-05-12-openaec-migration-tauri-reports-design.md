@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-12
 **Status**: Approved (sections 1-5)
-**Scope**: Major multi-phase refactor of Open-FEM2D-Studio
+**Scope**: Major multi-phase refactor of Open FEM Studio
 **Source-of-truth references**:
 - [OpenAEC Style Book](https://github.com/OpenAEC-Foundation/OpenAEC-style-book)
 - `brandbook/DESIGN-SYSTEM.md` v0.4 (March 2026)
@@ -13,14 +13,14 @@
 
 ## 1. Goal
 
-Transform Open-FEM2D-Studio from its current state (Electron + GitHub-dark palette + 3BM branding + Dutch teal/purple reports) into a fully OpenAEC-Foundation-compliant desktop application: Tauri v2 wrapper, OpenAEC design tokens, modernized A4 reports per OpenAEC §4.3 spec, and proper organizational identity.
+Transform Open FEM Studio from its current state (Electron + GitHub-dark palette + 3BM branding + Dutch teal/purple reports) into a fully OpenAEC-Foundation-compliant desktop application: Tauri v2 wrapper, OpenAEC design tokens, modernized A4 reports per OpenAEC §4.3 spec, and proper organizational identity.
 
 ## 2. End State
 
 After this project completes:
 
-- App named **"Open FEM2D Studio"**, positioned as part of the **OpenAEC Foundation** portfolio
-- `package.json`: `name: "open-fem2d-studio"`, `author: "OpenAEC Foundation"`, license `CC-BY-SA-4.0`
+- App named **"Open FEM Studio"**, positioned as part of the **OpenAEC Foundation** portfolio
+- `package.json`: `name: "open-fem-studio"`, `author: "OpenAEC Foundation"`, license `CC-BY-SA-4.0`
 - README header with OpenAEC logo + badges (license, contributions welcome, build status)
 - Full OpenAEC visual design system, no GitHub-dark palette
 - Tauri v2 desktop wrapper instead of Electron
@@ -56,7 +56,7 @@ After this project completes:
 |----------|--------|
 | Project structure | One spec, one big plan, sequential execution A → B → D → C |
 | Branding scope | Full OpenAEC product adoption |
-| App name | "Open FEM2D Studio" (OpenAEC Foundation = org) |
+| App name | "Open FEM Studio" (OpenAEC Foundation = org) |
 | Tauri migration | Hard cutover (Electron deleted in same PR) |
 | Report tech | Restructure HTML output per §4.3, browser-print stays |
 | Verification | Self-tested by Claude before PR |
@@ -71,7 +71,7 @@ After this project completes:
 | NEW | `src/styles/themes.css` | `:root` + `[data-theme="openaec"]` semantic theme vars + legacy aliases |
 | NEW | `src/styles/canvas-tokens.css` | Canvas-specific tokens aligned with OpenAEC palette |
 | REWRITE | `src/index.css` | Imports tokens.css + themes.css, base body, h1-h6 typography |
-| MODIFY | `index.html` | Google Fonts link, title "Open FEM2D Studio" |
+| MODIFY | `index.html` | Google Fonts link, title "Open FEM Studio" |
 
 ### 5.2 Token taxonomy
 
@@ -186,7 +186,7 @@ In `index.html` `<head>`:
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<title>Open FEM2D Studio</title>
+<title>Open FEM Studio</title>
 ```
 
 ### 5.7 3BM removal
@@ -417,9 +417,9 @@ User installs **Rust toolchain** (rustup-init.exe). Document in README. Tauri v2
 
 ```json
 {
-  "productName": "Open FEM2D Studio",
+  "productName": "Open FEM Studio",
   "version": "1.0.0",
-  "identifier": "org.openaec.fem2d-studio",
+  "identifier": "org.openaec.fem-studio",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -428,7 +428,7 @@ User installs **Rust toolchain** (rustup-init.exe). Document in README. Tauri v2
   },
   "app": {
     "windows": [{
-      "title": "Open FEM2D Studio",
+      "title": "Open FEM Studio",
       "width": 1400, "height": 900,
       "minWidth": 1024, "minHeight": 600,
       "decorations": false,
@@ -518,7 +518,7 @@ export const fileApi = {
 <div className="title-bar" data-tauri-drag-region>
   <div className="title-bar-left" data-tauri-drag-region>
     <OpenAECSymbol size={14} />
-    <span>Open FEM2D Studio</span>
+    <span>Open FEM Studio</span>
     <QuickAccess /> {/* Save/Undo/Redo */}
   </div>
   <div className="title-bar-center" data-tauri-drag-region>{projectName}</div>
@@ -544,8 +544,8 @@ Window controls 46×32px each (Windows-style). Close hover bg = `#DC2626`.
 | `npm run preview` | Vite preview (browser) |
 
 Artifacts in `src-tauri/target/release/bundle/`:
-- `msi/Open FEM2D Studio_1.0.0_x64_en-US.msi`
-- `nsis/Open FEM2D Studio_1.0.0_x64-setup.exe`
+- `msi/Open FEM Studio_1.0.0_x64_en-US.msi`
+- `nsis/Open FEM Studio_1.0.0_x64-setup.exe`
 
 ### 8.8 Phase C verification
 

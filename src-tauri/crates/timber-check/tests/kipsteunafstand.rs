@@ -59,6 +59,9 @@ fn uc_kip(r: &TimberBeamCheckResult) -> f64 {
 /// (6.33) de maatgevende vorm is en l_ef als enige aan de knop zit.
 fn ligger(segment_m: f64, l_ef_override_m: f64) -> TimberBeamCheckResult {
     check_timber_beam(TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         beam_id: 1,
         width_mm: B_MM,
@@ -97,6 +100,7 @@ fn ligger(segment_m: f64, l_ef_override_m: f64) -> TimberBeamCheckResult {
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        zijdelingse_knik_in_analyse: None,
     })
 }
 

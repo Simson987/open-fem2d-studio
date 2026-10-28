@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Open FEM Studio",
-  "version": "0.3.15",
-  "identifier": "org.openaec.fem2d-studio",
+  "version": "2026.44.0",
+  "identifier": "org.openaec.fem-studio",
   "build": {
     "frontendDist": "../design-mockup/dist",
     "devUrl": "http://localhost:1440",
@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://nominatim.openstreetmap.org http://localhost:* ws://localhost:1440 ws://127.0.0.1:1440 ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; img-src 'self' data: https://*.tile.openstreetmap.org; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' https://nominatim.openstreetmap.org http://localhost:* ws://localhost:1440 ws://127.0.0.1:1440 ipc: http://ipc.localhost"
     }
   },
   "bundle": {
@@ -39,6 +39,12 @@
       "dmg"
     ],
     "windows": {
+      "wix": {
+        "version": "26.42.0"
+      },
+      "nsis": {
+        "installerHooks": "./windows/installer-hooks.nsh"
+      },
       "webviewInstallMode": {
         "type": "embedBootstrapper",
         "silent": true
@@ -46,6 +52,32 @@
     },
     "resources": [
       "WebView2Loader.dll"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["ifcfem"],
+        "name": "OpenFEMStudio.Project",
+        "description": "Open FEM Studio-project",
+        "role": "Editor",
+        "rank": "Owner",
+        "mimeType": "application/x-ifcfem",
+        "exportedType": {
+          "identifier": "org.openaec.fem-studio.ifcfem",
+          "conformsTo": ["public.json"]
+        }
+      },
+      {
+        "ext": ["ifcfem2d"],
+        "name": "OpenFEMStudio.Project2D",
+        "description": "Open FEM Studio 2D-project (oudere extensie)",
+        "role": "Editor",
+        "rank": "Owner",
+        "mimeType": "application/x-ifcfem2d",
+        "exportedType": {
+          "identifier": "org.openaec.fem-studio.ifcfem2d",
+          "conformsTo": ["public.json"]
+        }
+      }
     ],
     "icon": [
       "icons/32x32.png",
@@ -55,10 +87,10 @@
       "icons/icon.ico"
     ],
     "publisher": "OpenAEC Foundation",
-    "copyright": "© 2026 OpenAEC Foundation. CC BY-SA 4.0",
+    "copyright": "© 2026 OpenAEC Foundation. AGPL-3.0-or-later",
     "category": "Productivity",
-    "shortDescription": "2D Finite Element Method solver",
-    "longDescription": "Open FEM Studio — open-source 2D Finite Element Method solver for structural analysis. Part of the OpenAEC Foundation portfolio."
+    "shortDescription": "Eindige-elementenprogramma voor constructies (2D en 3D)",
+    "longDescription": "Open FEM Studio — open-source eindige-elementenprogramma (2D en 3D) voor constructieve berekeningen en normtoetsing. Onderdeel van het portfolio van de OpenAEC Foundation."
   },
   "plugins": {}
 }

@@ -34,6 +34,9 @@ const ASSETS_DIR = join(
 );
 const BUNDEL = join(ASSETS_DIR, "fem-kernel.mjs");
 const HASHBESTAND = join(ASSETS_DIR, "fem-kernel.sha256");
+// De catalogus van de API-commando's, uit DEZE bundel: de MCP-server bakt hem in
+// en bouwt er zijn toollijst mee, ook zonder Node.
+const CATALOGUS = join(ASSETS_DIR, "api-catalogus.json");
 
 /**
  * Strings die niet in de bundel mogen voorkomen. Elk van deze treffers betekent
@@ -84,6 +87,10 @@ const resultaat = await build({
   format: "esm",
   target: "node20",
   write: false,
+  // Een worktree met een junction naar node_modules: zonder deze optie komt
+  // het opgeloste pad achter de junction in de padcommentaren van de bundel,
+  // en verschilt de bundel van die uit een gewone checkout.
+  preserveSymlinks: true,
   banner: {
     js: [
       "// GEGENEREERD BESTAND — niet met de hand aanpassen.",
@@ -152,9 +159,17 @@ for (const naam of ["solveAllCases", "solveAllCasesNonlinear", "bouwMultiInput"]
   }
 }
 
+// --- De API-catalogus uit de geladen bundel -------------------------------
+if (typeof kernel.opApiCatalogus !== "function") {
+  faal("de bundel exporteert `opApiCatalogus` niet als functie.");
+}
+const catalogus = kernel.opApiCatalogus();
+writeFileSync(CATALOGUS, `${JSON.stringify(catalogus, null, 2)}\n`);
+
 const duurMs = Number(process.hrtime.bigint() - start) / 1e6;
 
 console.log("Sidecarbundel gebouwd.");
+console.log(`  api-catalogus  : ${catalogus.commands.length} commando's (${CATALOGUS})`);
 console.log(`  bestand        : ${BUNDEL}`);
 console.log(`  grootte        : ${bytes.length} bytes (${(bytes.length / 1024).toFixed(1)} kB)`);
 console.log(`  sha256         : ${hash}`);

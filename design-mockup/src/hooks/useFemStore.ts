@@ -22,8 +22,9 @@ import { STANDAARD_SEGMENTLENGTE_MM } from "../lib/betonStijfheid";
 // "liggen deze twee knopen op elkaar", gedeeld door de controle in het canvas
 // en door de herstelbewerkingen hieronder.
 import {
-  CONTROLE_TOL_MM, controleerModel, puntOpStaaf,
+  CONTROLE_TOL_MM, controleerModel, opZelfdePlek, puntOpStaaf, tussenpuntOpStaaf,
 } from "../lib/modelControle";
+import { nederlands, vertaalWaarde, vt, type VertaalbareTekst } from "../lib/vertaalbareTekst";
 import type { SolverResult } from "../components/fem/solver/types";
 import type {
   LoadCombination, Envelope,
@@ -41,6 +42,7 @@ import {
   vervangDoorStandaard, vervangVerouderdeCombinaties, verwijderBelastinggeval, verwijderCombinatie,
   voegBelastinggevalToe, voegCombinatieToe, volgendVrijId, wijzigBelastinggeval, wijzigCombinatie,
   zetBijlage, zetGevolgklasse, bijlageUitKenmerk, verplaatsEigenGewichtNaarEigenGeval,
+  zorgVoorBelastinggevallen as zorgVoorGevallenInStaat,
   type CombinatieAfwijking, type CombinatieStaat, type CombinatieVervanging, type GevalMelding,
 } from "../lib/combinatieBeheer";
 import { BIJLAGEN_GEVULD, STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../lib/normAanduidingen";
@@ -400,6 +402,19 @@ function meldGeenHandmatigeLast(naam: string): void {
 }
 
 /**
+ * Zet de modelref METEEN op de nieuwe stand, niet pas na de render. Het
+ * tekenvlak doet in één klik soms twee bewerkingen na elkaar: een knoop
+ * plaatsen (die een staaf kan splitsen) en daarna een staaf of oplegging op
+ * die knoop. Las de tweede bewerking de oude stand, dan schreef hij de
+ * splitsing weer weg: een kolom getekend tot op een ligger stond er los op
+ * (gevonden bij issue #55). Het effect in de hook zet na de render dezelfde
+ * waarden.
+ */
+function werkBij<T extends object>(ref: { current: T }, deel: Partial<T>): void {
+  ref.current = { ...ref.current, ...deel };
+}
+
+/**
  * Snapshot zoals de undo-historie hem bewaart: het model PLUS het stramien.
  * Het stramien zit bewust in de historie sinds een as-verplaatsing de knopen
  * op die as meeneemt (zie `verplaatsStramienAs`): as en knopen horen dan bij
@@ -523,6 +538,60 @@ function meldSplitsing(meldingen: string[]): void {
 }
 
 /**
+ * Eén staaf die op een knoop in twee delen is gesplitst (issue #55): wat de
+ * gebruiker na verbinden, plaatsen of herstellen te horen krijgt.
+ */
+export interface Splitsing {
+  /** De oorspronkelijke staaf; hij bestaat na het splitsen niet meer. */
+  staafId: number;
+  /** De knoop waarop gesplitst is. */
+  knoopId: number;
+  /** De twee nieuwe delen: van de beginknoop naar de knoop, en verder. */
+  delen: [number, number];
+  /**
+   * Afstand (mm) van de knoop tot de as van de oorspronkelijke staaf. Niet
+   * nul: de twee delen maken op de knoop een knik. Ontbreekt = op de as.
+   */
+  afwijkingMm?: number;
+}
+
+/**
+ * "Knoop 3 verbonden met staaf 1: die is gesplitst in staaf 5 en staaf 6."
+ * Lag de knoop naast de staafas (afgerond minstens 0,1 mm), dan zegt een
+ * tweede zin hoe ver: daar zit nu een knik in de staaf (issue #55).
+ */
+export function splitsingRegel(s: Splitsing): VertaalbareTekst {
+  const basis = `Knoop ${s.knoopId} verbonden met staaf ${s.staafId}: die is gesplitst in staaf ${s.delen[0]} en staaf ${s.delen[1]}.`;
+  const waarden = { knoop: s.knoopId, staaf: s.staafId, deel1: s.delen[0], deel2: s.delen[1] };
+  const afwijking = Math.round((s.afwijkingMm ?? 0) * 10) / 10;
+  if (afwijking <= 0) return vt("common:canvas.modelCheck.splitLine", basis, waarden);
+  const mm = String(afwijking).replace(".", ",");
+  return vt("common:canvas.modelCheck.splitLineOffset",
+    `${basis} De knoop lag ${mm} mm naast de staafas; daar zit nu een knik.`,
+    { ...waarden, mm });
+}
+
+/** "Knoop 3 samengevoegd met knoop 2." */
+export function samenvoegRegel(bewaarId: number, verwijderId: number): VertaalbareTekst {
+  return vt("common:canvas.modelCheck.mergeLine",
+    `Knoop ${verwijderId} samengevoegd met knoop ${bewaarId}.`,
+    { verwijderd: verwijderId, bewaard: bewaarId });
+}
+
+/**
+ * Meld in de gekozen taal wat er gesplitst of samengevoegd is. Een regel is
+ * een vertaalbare tekst, of een (Nederlandse) melding over het hermappen van
+ * de toetsconfiguratie, direct onder zijn splitsing. Niets te melden = geen
+ * toast.
+ */
+function meldVerbonden(titel: string, regels: (VertaalbareTekst | string)[]): void {
+  if (regels.length === 0) return;
+  const t = (sleutel: string, waarden?: Record<string, string | number>) => i18next.t(sleutel, waarden);
+  const tekst = regels.map((r) => vertaalWaarde(t, r)).join("\n");
+  void import("../io/notify").then(({ notifyInfo }) => notifyInfo(titel, tekst));
+}
+
+/**
  * Pure splitslogica voor `splitBeamAt` — losgetrokken uit de hook zodat hij
  * unit-testbaar is (zie design-mockup/test-splitsen.mjs).
  *
@@ -545,16 +614,31 @@ function meldSplitsing(meldingen: string[]): void {
  *    lasttype dat hier niet bekend is wordt behoudend ongewijzigd gelaten.
  *
  * Retourneert null wanneer de staaf of zijn eindknopen niet bestaan.
+ *
+ * Met `tolMm` (de verbindingstolerantie, issue #55; het subknoop-gereedschap
+ * geeft hem mee) komt de nieuwe knoop op het voetpunt op de staafas, zodat de
+ * staaf recht blijft, en wordt er NIET gesplitst (null) wanneer dat voetpunt
+ * binnen de tolerantie van een uiteinde valt: daar staat al een knoop, en
+ * splitsen gaf een staaf van (vrijwel) lengte nul — zie `tussenpuntOpStaaf`.
+ * Zonder `tolMm`: splitsen op (x, z) zelf, zoals vóór issue #55 (bestaande
+ * aanroepers en tests, o.a. test-splitsen).
  */
 export function computeBeamSplit(
   cur: Pick<Snapshot, "nodes" | "beams" | "loads">,
   beamId: number, x: number, z: number,
+  tolMm?: number,
 ): { nodes: Node[]; beams: Beam[]; loads: Load[]; newNodeId: number; meldingen: string[] } | null {
   const beam = cur.beams.find(b => b.id === beamId);
   if (!beam) return null;
   const nodeA = cur.nodes.find(n => n.id === beam.from);
   const nodeB = cur.nodes.find(n => n.id === beam.to);
   if (!nodeA || !nodeB) return null;
+  if (tolMm !== undefined) {
+    const p = tussenpuntOpStaaf(cur.nodes, beam, x, z, tolMm);
+    if (!p || p.eindknoop !== null) return null;
+    x = p.x;
+    z = p.z;
+  }
 
   const newNodeId = cur.nodes.length === 0 ? 1 : Math.max(...cur.nodes.map(n => n.id)) + 1;
   const nodes = [...cur.nodes, { id: newNodeId, x, z }];
@@ -579,11 +663,18 @@ export function computeBeamSplit(
  * Retourneert null wanneer de staaf, de knoop of een eindknoop ontbreekt, of
  * wanneer de knoop zélf al een uiteinde van de staaf is (splitsen zou dan een
  * staaf met lengte nul opleveren).
+ *
+ * `delen` zijn de ids van de twee nieuwe staven (begin → knoop, knoop →
+ * eind), en `afwijkingMm` de afstand van de knoop tot de oorspronkelijke
+ * staafas (de knik die het splitsen maakt), voor de melding aan de
+ * gebruiker (issue #55).
  */
 export function computeBeamSplitOpKnoop(
   cur: Pick<Snapshot, "nodes" | "beams" | "loads">,
   beamId: number, knoopId: number,
-): { beams: Beam[]; loads: Load[]; meldingen: string[] } | null {
+): {
+  beams: Beam[]; loads: Load[]; meldingen: string[]; delen: [number, number]; afwijkingMm: number;
+} | null {
   const beam = cur.beams.find(b => b.id === beamId);
   if (!beam) return null;
   const nodeA = cur.nodes.find(n => n.id === beam.from);
@@ -600,6 +691,10 @@ export function computeBeamSplitOpKnoop(
   const t = len > 1e-9
     ? Math.min(1, Math.max(0, Math.hypot(x - nodeA.x, z - nodeA.z) / len))
     : 0.5;
+  // Afstand van de knoop tot de staafas (kruisproduct / lengte).
+  const afwijkingMm = len > 1e-9
+    ? Math.abs((x - nodeA.x) * (nodeB.z - nodeA.z) - (z - nodeA.z) * (nodeB.x - nodeA.x)) / len
+    : 0;
 
   const maxBeamId = Math.max(...cur.beams.map(b => b.id));
   const rel = beam.releases;
@@ -706,7 +801,7 @@ export function computeBeamSplitOpKnoop(
       loads.push(l);
     }
   }
-  return { beams, loads, meldingen };
+  return { beams, loads, meldingen, delen: [beam1.id, beam2.id], afwijkingMm };
 }
 
 /**
@@ -824,12 +919,24 @@ export function splitsCheckConfig(
  * uiteinde zijn dat de staaf niet raakt: geometrisch goed, constructief een
  * mechanisme, en de solver meldt alleen "singuliere matrix".
  *
- * Ligt er al een knoop binnen `tolMm`, dan wordt DIE hergebruikt (er komt
- * nooit een tweede knoop op dezelfde plek) en worden staven die er doorheen
- * lopen alsnog op hem gesplitst.
+ * Ligt er al een knoop binnen `tolMm` (`opZelfdePlek`), dan wordt de
+ * DICHTSTBIJZIJNDE daarvan hergebruikt (er komt nooit een tweede knoop op
+ * dezelfde plek, en de uitkomst hangt niet af van de volgorde van de knopen)
+ * en worden staven die er doorheen lopen alsnog op hem gesplitst.
+ *
+ * `tolMm` is de verbindingstolerantie (issue #55): de app geeft de instelling
+ * mee. Bestaande knopen verschuiven nooit. Een NIEUWE knoop die op precies
+ * één staaf valt, komt op het voetpunt op de staafas: zo blijft die staaf
+ * recht, ook als het punt bijvoorbeeld door ortho of een getypte lengte tot
+ * de volle tolerantie naast de as lag. Valt dat voetpunt op dezelfde plek als
+ * een bestaande knoop (bij een schuine staaf vlak bij zijn einde), dan wordt
+ * die knoop hergebruikt. Een hergebruikte knoop, of een nieuwe op een
+ * kruising van staven, splitst op zijn eigen plek; ligt die naast een
+ * staafas, dan zegt de melding hoeveel mm (`Splitsing.afwijkingMm`).
  *
  * `gewijzigd` is false wanneer er niets te doen viel — de aanroeper kan dan
- * een history-push overslaan.
+ * een history-push overslaan. `splitsingen` zegt welke staaf op welke knoop
+ * in welke delen is gesplitst, voor de melding.
  */
 export function computeKnoopMetSplitsing(
   cur: Pick<Snapshot, "nodes" | "beams" | "loads">,
@@ -838,19 +945,41 @@ export function computeKnoopMetSplitsing(
 ): {
   nodes: Node[]; beams: Beam[]; loads: Load[];
   nodeId: number; gesplitsteStaven: number[]; gewijzigd: boolean;
+  splitsingen: Splitsing[];
   /** Wat er bij het hermappen van de toetsconfiguratie is gewist (zie `splitsCheckConfig`). */
   meldingen: string[];
 } {
-  const bestaand = cur.nodes.find(n =>
-    Math.abs(n.x - x) <= tolMm && Math.abs(n.z - z) <= tolMm);
+  /** De dichtstbijzijnde knoop op dezelfde plek als (px, pz), of undefined. */
+  const dichtstbij = (px: number, pz: number): Node | undefined => {
+    let best: { n: Node; d: number } | undefined;
+    for (const n of cur.nodes) {
+      if (!opZelfdePlek(n, { x: px, z: pz }, tolMm)) continue;
+      const d = Math.hypot(n.x - px, n.z - pz);
+      if (!best || d < best.d) best = { n, d };
+    }
+    return best?.n;
+  };
+  let bestaand = dichtstbij(x, z);
+  let nx = x, nz = z;
+  if (!bestaand) {
+    const onder = cur.beams.filter(b => puntOpStaaf(cur.nodes, b, x, z, tolMm) !== null);
+    if (onder.length === 1) {
+      const p = tussenpuntOpStaaf(cur.nodes, onder[0], x, z, tolMm);
+      if (p) {
+        nx = p.x;
+        nz = p.z;
+        bestaand = dichtstbij(nx, nz);
+      }
+    }
+  }
   const nodeId = bestaand
     ? bestaand.id
     : (cur.nodes.length === 0 ? 1 : Math.max(...cur.nodes.map(n => n.id)) + 1);
   // Bij hergebruik telt de positie van de BESTAANDE knoop, niet de klik: zo
   // blijft de splitsing exact op de knoop liggen die we aansluiten.
-  const px = bestaand ? bestaand.x : x;
-  const pz = bestaand ? bestaand.z : z;
-  let nodes = bestaand ? cur.nodes : [...cur.nodes, { id: nodeId, x, z }];
+  const px = bestaand ? bestaand.x : nx;
+  const pz = bestaand ? bestaand.z : nz;
+  let nodes = bestaand ? cur.nodes : [...cur.nodes, { id: nodeId, x: px, z: pz }];
   let beams = cur.beams;
   let loads = cur.loads;
 
@@ -858,6 +987,7 @@ export function computeKnoopMetSplitsing(
   // delen die tijdens het splitsen ontstaan hebben het punt als eindknoop en
   // komen dus per definitie niet opnieuw in aanmerking.
   const gesplitsteStaven: number[] = [];
+  const splitsingen: Splitsing[] = [];
   const meldingen: string[] = [];
   for (const b of cur.beams) {
     if (b.from === nodeId || b.to === nodeId) continue;
@@ -867,10 +997,11 @@ export function computeKnoopMetSplitsing(
     beams = deel.beams;
     loads = deel.loads;
     gesplitsteStaven.push(b.id);
+    splitsingen.push({ staafId: b.id, knoopId: nodeId, delen: deel.delen, afwijkingMm: deel.afwijkingMm });
     meldingen.push(...deel.meldingen);
   }
   return {
-    nodes, beams, loads, nodeId, gesplitsteStaven,
+    nodes, beams, loads, nodeId, gesplitsteStaven, splitsingen,
     gewijzigd: !bestaand || gesplitsteStaven.length > 0,
     meldingen,
   };
@@ -955,18 +1086,32 @@ export function computeKnopenSamenvoegen(
  * opnieuw gecontroleerd. De ronde-limiet is een vangnet tegen een bewerking
  * die zijn eigen bevinding niet opheft; hij hoort nooit bereikt te worden.
  *
+ * `tolMm` is de verbindingstolerantie (issue #55): de app geeft de instelling
+ * mee. Herstellen verschuift geen knoop: verbinden splitst de staaf op de
+ * knoop waar hij staat, samenvoegen houdt de plek van de blijvende knoop
+ * (welke dat is, staat bij `zoekDubbeleKnopen`: een plaathoek of oplegging
+ * gaat voor).
+ *
+ * `stappen` zijn de Nederlandse regels (ook voor tests en logboek); `regels`
+ * zijn dezelfde stappen voor de melding in de gekozen taal: per splitsing
+ * welke staaf op welke knoop in welke delen is gesplitst, en hoeveel mm de
+ * knoop naast de staafas lag (de knik).
+ *
  * Retourneert null wanneer er niets te herstellen viel.
  */
 export function computeModelHerstel(
   cur: Pick<Snapshot, "nodes" | "beams" | "supports" | "plates" | "loads">,
   tolMm: number = CONTROLE_TOL_MM,
   maxRondes = 200,
-): { nodes: Node[]; beams: Beam[]; supports: Support[]; plates: Plate[]; loads: Load[]; stappen: string[] } | null {
+): {
+  nodes: Node[]; beams: Beam[]; supports: Support[]; plates: Plate[]; loads: Load[];
+  stappen: string[]; regels: (VertaalbareTekst | string)[];
+} | null {
   let staat = {
     nodes: cur.nodes, beams: cur.beams, supports: cur.supports,
     plates: cur.plates, loads: cur.loads,
   };
-  const stappen: string[] = [];
+  const regels: (VertaalbareTekst | string)[] = [];
   for (let ronde = 0; ronde < maxRondes; ronde++) {
     const bevinding = controleerModel(staat, tolMm).find(b => b.herstel);
     if (!bevinding?.herstel) break;
@@ -975,16 +1120,19 @@ export function computeModelHerstel(
       const deel = computeBeamSplitOpKnoop(staat, h.beamId, h.nodeId);
       if (!deel) break;
       staat = { ...staat, beams: deel.beams, loads: deel.loads };
-      stappen.push(`Knoop ${h.nodeId} verbonden met staaf ${h.beamId}.`);
-      stappen.push(...deel.meldingen);
+      regels.push(splitsingRegel({
+        staafId: h.beamId, knoopId: h.nodeId, delen: deel.delen, afwijkingMm: deel.afwijkingMm,
+      }));
+      regels.push(...deel.meldingen);
     } else {
       const r = computeKnopenSamenvoegen(staat, h.bewaarId, h.verwijderId);
       if (!r) break;
       staat = r;
-      stappen.push(`Knoop ${h.verwijderId} samengevoegd met knoop ${h.bewaarId}.`);
+      regels.push(samenvoegRegel(h.bewaarId, h.verwijderId));
     }
   }
-  return stappen.length > 0 ? { ...staat, stappen } : null;
+  const stappen = regels.map(nederlands);
+  return regels.length > 0 ? { ...staat, stappen, regels } : null;
 }
 
 // ── Pure transformatielogica ───────────────────────────────────────────────
@@ -1129,10 +1277,14 @@ export function computeSelectionMirror(
  * Retourneert null wanneer de selectie niets kopieerbaars bevat. De functie
  * muteert `cur` niet — de aanroepende mutatie pusht het resultaat als één
  * history-snapshot, zodat één Ctrl+Z de hele kopie ongedaan maakt.
+ * `cur` is de bron op het moment van kopiëren; `into` is het huidige doelmodel
+ * bij plakken. Daardoor blijft Ctrl+V werken als het origineel intussen is
+ * verwijderd, en krijgen alle gekopieerde onderdelen vrije doel-id's.
  */
 export function computeSelectionCopy(
   cur: Snapshot,
   sel: Selection, dx: number, dz: number,
+  into: Snapshot = cur,
 ): {
   nodes: Node[]; beams: Beam[]; supports: Support[]; plates: Plate[]; loads: Load[];
   nodeIdMap: Map<number, number>; beamIdMap: Map<number, number>;
@@ -1148,10 +1300,10 @@ export function computeSelectionCopy(
     sel.plateIds.forEach(id => copyPlateIds.add(id));
   }
 
-  let nextNodeId  = cur.nodes.length  === 0 ? 1 : Math.max(...cur.nodes.map(n => n.id)) + 1;
-  let nextBeamId  = cur.beams.length  === 0 ? 1 : Math.max(...cur.beams.map(b => b.id)) + 1;
-  let nextPlateId = cur.plates.length === 0 ? 1 : Math.max(...cur.plates.map(p => p.id)) + 1;
-  let nextLoadId  = cur.loads.length  === 0 ? 1 : Math.max(...cur.loads.map(l => l.id)) + 1;
+  let nextNodeId  = into.nodes.length  === 0 ? 1 : Math.max(...into.nodes.map(n => n.id)) + 1;
+  let nextBeamId  = into.beams.length  === 0 ? 1 : Math.max(...into.beams.map(b => b.id)) + 1;
+  let nextPlateId = into.plates.length === 0 ? 1 : Math.max(...into.plates.map(p => p.id)) + 1;
+  let nextLoadId  = into.loads.length  === 0 ? 1 : Math.max(...into.loads.map(l => l.id)) + 1;
 
   // Knopen — itereren over cur.nodes (niet over de Set) zodat kopieën in
   // modelvolgorde ontstaan en dangling ids in de selectie stil vervallen.
@@ -1215,11 +1367,11 @@ export function computeSelectionCopy(
   }
 
   return {
-    nodes: [...cur.nodes, ...newNodes],
-    beams: [...cur.beams, ...newBeams],
-    supports: [...cur.supports, ...newSupports],
-    plates: [...cur.plates, ...newPlates],
-    loads: [...cur.loads, ...newLoads],
+    nodes: [...into.nodes, ...newNodes],
+    beams: [...into.beams, ...newBeams],
+    supports: [...into.supports, ...newSupports],
+    plates: [...into.plates, ...newPlates],
+    loads: [...into.loads, ...newLoads],
     nodeIdMap, beamIdMap,
   };
 }
@@ -1613,18 +1765,27 @@ export interface FemStore {
   removeLoad: (id: number) => void;
   removePlate: (id: number) => void;
   deleteSelected: () => void;
-  splitBeamAt: (beamId: number, x: number, z: number) => void;
+  /**
+   * Subknoop: splits `beamId` op een nieuwe knoop bij (x, z). Met `tolMm` (de
+   * verbindingstolerantie, issue #55) op het voetpunt op de staafas, en niet
+   * binnen de tolerantie van een uiteinde — zie `computeBeamSplit`.
+   */
+  splitBeamAt: (beamId: number, x: number, z: number, tolMm?: number) => void;
   /**
    * Knoop plaatsen op (x, z) en meteen aansluiten op elke staaf waar hij
    * middenop ligt (die staaf wordt daar gesplitst) — zie
    * `computeKnoopMetSplitsing`. Retourneert het knoop-id, ook wanneer een
    * bestaande knoop is hergebruikt. Eén history-stap voor knoop + splitsingen.
+   * `tolMm` is de verbindingstolerantie (issue #55; standaard
+   * `CONTROLE_TOL_MM`). Is er gesplitst, dan meldt de app welke staaf op
+   * welke knoop in welke delen.
    */
-  addNodeMetSplitsing: (x: number, z: number) => number;
+  addNodeMetSplitsing: (x: number, z: number, tolMm?: number) => number;
   /**
    * Herstelactie uit de modelcontrole: splits `beamId` op de bestaande knoop
    * `nodeId`, zodat een knoop die alleen maar ÓP een staaf lag er ook echt aan
-   * vastzit. Retourneert false wanneer dat niet kan.
+   * vastzit, en meld welke delen er zijn ontstaan. Retourneert false wanneer
+   * dat niet kan.
    */
   verbindKnoopMetStaaf: (nodeId: number, beamId: number) => boolean;
   /**
@@ -1634,14 +1795,17 @@ export interface FemStore {
   voegKnopenSamen: (bewaarId: number, verwijderId: number) => boolean;
   /**
    * Voer alle automatisch herstelbare bevindingen van de modelcontrole uit in
-   * ÉÉN history-stap. Retourneert de uitgevoerde stappen (leeg = niets te doen).
+   * ÉÉN history-stap, en meld de stappen (welke staaf op welke knoop is
+   * gesplitst, welke knopen zijn samengevoegd). `tolMm` is de
+   * verbindingstolerantie (issue #55). Retourneert de uitgevoerde stappen in
+   * het Nederlands (leeg = niets te doen).
    */
-  herstelModel: () => string[];
+  herstelModel: (tolMm?: number) => string[];
   // Transformaties — multi-selectie-bewust. Retourneren `false` wanneer de
   // selectie niets transformeerbaars bevat (lege selectie / lastselectie),
   // zodat de aanroeper feedback kan tonen in plaats van een stille no-op.
   translateSelection: (sel: Selection, dx: number, dz: number) => boolean;
-  copySelection: (sel: Selection, dx: number, dz: number) => boolean;
+  copySelection: (sel: Selection, dx: number, dz: number, source?: Snapshot) => boolean;
   rotateSelection: (sel: Selection, cx: number, cz: number, angleRad: number) => boolean;
   mirrorSelection: (sel: Selection, x1: number, z1: number, x2: number, z2: number) => boolean;
   /**
@@ -1670,6 +1834,13 @@ export interface FemStore {
    * het nieuwe geval, of null als er niets te verplaatsen viel.
    */
   verplaatsEigenGewicht: () => number | null;
+  /**
+   * Zorg dat deze gevallen bestaan (hergebruik op naam en type, het
+   * gekenmerkte eigen-gewichtgeval op zijn kenmerk) en geef hun id's in
+   * dezelfde volgorde. Voor generatoren die een heel model maken, zoals de
+   * wizard "Stalen hal". Zie `zorgVoorBelastinggevallen` in combinatieBeheer.
+   */
+  zorgVoorBelastinggevallen: (gevallen: readonly Pick<LoadCase, "name" | "type" | "eigenGewicht">[]) => number[];
 
   /**
    * Vervang in ÉÉN stap alles wat een generator (vandaag: de windbelasting-
@@ -1705,6 +1876,22 @@ export interface FemStore {
    * Retourneert het aantal meegeschoven knopen (null = as onbekend of delta 0).
    */
   verplaatsStramienAs: (as: "x" | "z", axisId: string, nieuwePositie: number) => number | null;
+
+  /**
+   * Gevallen, combinaties en id-tellers uit een API-document overnemen, met de
+   * 2D-lasten, het actieve geval en het eigen gewicht die erbij horen. De
+   * API-commando's (src/api/commands/project.ts) rekenen ze uit met dezelfde
+   * lib/combinatieBeheer als de mutatoren hieronder; dit zet de uitkomst in
+   * de store langs dezelfde `pasCombiStaatToe`.
+   */
+  zetGevallenUitDocument: (p: {
+    loadCases: LoadCase[];
+    combinations: LoadCombination[];
+    idTellers?: { belastinggeval: number; combinatie: number };
+    loads: Load[];
+    activeLoadCaseId: number;
+    selfWeightEnabled: boolean;
+  }) => void;
 
   /** Solver options. */
   selfWeightEnabled: boolean;
@@ -2186,6 +2373,8 @@ export function useFemStore(opties?: {
   useEffect(() => {
     latestRef.current = { nodes, beams, supports, plates, loads };
   }, [nodes, beams, supports, plates, loads]);
+  // Bewerkingen die het tekenvlak in één klik na elkaar aanroept, zetten
+  // `latestRef` daarnaast meteen bij: zie `werkBij`.
 
   // Zelfde truc voor het stramien: `verplaatsStramienAs` en `setStructuralGrid`
   // hebben de verse waarde nodig binnen één event, vóór de re-render.
@@ -2208,8 +2397,13 @@ export function useFemStore(opties?: {
     const snap: HistorieSnapshot = next.structuralGrid
       ? next
       : { ...next, structuralGrid: gridRef.current };
+    // Uitgaan van de ref, niet van de state uit de closure: slaat één klik twee
+    // stappen op (een staaf naar een nieuw eindpunt: knoop, dan staaf), dan moet
+    // de tweede op de eerste volgen. Met de oude state kapten beide op dezelfde
+    // plek af en schoof de index voorbij het einde; Ctrl+Z liep dan vast (#102).
+    const basis = historyIdxRef.current;
     setHistory((prev) => {
-      const truncated = prev.slice(0, historyIdx + 1);
+      const truncated = prev.slice(0, basis + 1);
       const updated = [...truncated, snap];
       // Cap memory usage
       const trimmed = updated.length > HISTORY_LIMIT
@@ -2217,11 +2411,12 @@ export function useFemStore(opties?: {
         : updated;
       return trimmed;
     });
-    setHistoryIdx((i) => Math.min(i + 1, HISTORY_LIMIT - 1));
-    // Direct bijwerken: een setStructuralGrid later in hetzelfde event moet de
-    // ZOJUIST gepushte snapshot bijwerken, niet de vorige.
-    historyIdxRef.current = Math.min(historyIdx + 1, HISTORY_LIMIT - 1);
-  }, [historyIdx]);
+    const volgende = Math.min(basis + 1, HISTORY_LIMIT - 1);
+    setHistoryIdx(volgende);
+    // Direct bijwerken: een setStructuralGrid of een tweede push later in
+    // hetzelfde event moet de ZOJUIST gepushte snapshot als basis nemen.
+    historyIdxRef.current = volgende;
+  }, []);
 
   // Helper: produce next snapshot from a partial change
   const applySnapshot = useCallback((next: HistorieSnapshot) => {
@@ -2243,6 +2438,7 @@ export function useFemStore(opties?: {
     const newId = cur.nodes.length === 0 ? 1 : Math.max(...cur.nodes.map(n => n.id)) + 1;
     const nextNodes = [...cur.nodes, { id: newId, x, z }];
     setNodes(nextNodes);
+    werkBij(latestRef, { nodes: nextNodes });
     pushHistory({ ...cur, nodes: nextNodes });
     return newId;
   }, [pushHistory]);
@@ -2275,6 +2471,7 @@ export function useFemStore(opties?: {
       { id: newId, from: fromId, to: toId, material: "S235", profile: "HEA160" },
     ];
     setBeams(nextBeams);
+    werkBij(latestRef, { beams: nextBeams });
     pushHistory({ ...cur, beams: nextBeams });
     return newId;
   }, [pushHistory]);
@@ -2340,6 +2537,7 @@ export function useFemStore(opties?: {
     const without = cur.supports.filter(s => s.nodeId !== nodeId);
     const nextSupports = [...without, { nodeId, type, k }];
     setSupports(nextSupports);
+    werkBij(latestRef, { supports: nextSupports });
     pushHistory({ ...cur, supports: nextSupports });
   }, [pushHistory]);
 
@@ -2545,12 +2743,12 @@ export function useFemStore(opties?: {
 
   /**
    * Volwaardige kopie van de selectie op offset (dx, dz): alle staafvelden,
-   * opleggingen en lasten gaan mee (zie computeSelectionCopy). Eén history-
-   * push, dus één Ctrl+Z maakt de hele kopie ongedaan.
+   * opleggingen en lasten gaan mee (zie computeSelectionCopy). `source` is
+   * optioneel een bewaarde Ctrl+C-snapshot. Eén history-push per plakactie.
    */
-  const copySelection = useCallback((sel: Selection, dx: number, dz: number): boolean => {
+  const copySelection = useCallback((sel: Selection, dx: number, dz: number, source?: Snapshot): boolean => {
     const cur = latestRef.current;
-    const r = computeSelectionCopy(cur, sel, dx, dz);
+    const r = computeSelectionCopy(source ?? cur, sel, dx, dz, cur);
     if (!r) return false;
     setNodes(r.nodes);
     setBeams(r.beams);
@@ -2618,9 +2816,9 @@ export function useFemStore(opties?: {
    * the beam with two. Materiaal/profiel/releases/lijnlasten gaan netjes mee —
    * zie computeBeamSplit voor de precieze regels.
    */
-  const splitBeamAt = useCallback((beamId: number, x: number, z: number) => {
+  const splitBeamAt = useCallback((beamId: number, x: number, z: number, tolMm?: number) => {
     const cur = latestRef.current;
-    const split = computeBeamSplit(cur, beamId, x, z);
+    const split = computeBeamSplit(cur, beamId, x, z, tolMm);
     if (!split) return;
     setNodes(split.nodes);
     setBeams(split.beams);
@@ -2634,14 +2832,19 @@ export function useFemStore(opties?: {
    * snapshot: de knoop en de splitsingen die hij veroorzaakt horen bij elkaar
    * en gaan met één Ctrl+Z samen terug.
    */
-  const addNodeMetSplitsing = useCallback((x: number, z: number) => {
+  const addNodeMetSplitsing = useCallback((x: number, z: number, tolMm: number = CONTROLE_TOL_MM) => {
     const cur = latestRef.current;
-    const r = computeKnoopMetSplitsing(cur, x, z);
+    const r = computeKnoopMetSplitsing(cur, x, z, tolMm);
     if (!r.gewijzigd) return r.nodeId;
     setNodes(r.nodes);
     setBeams(r.beams);
     setLoads(r.loads);
+    werkBij(latestRef, { nodes: r.nodes, beams: r.beams, loads: r.loads });
     pushHistory({ ...cur, nodes: r.nodes, beams: r.beams, loads: r.loads });
+    meldVerbonden(
+      i18next.t("common:canvas.modelCheck.splitTitle", { count: r.splitsingen.length }),
+      r.splitsingen.map(splitsingRegel),
+    );
     meldSplitsing(r.meldingen);
     return r.nodeId;
   }, [pushHistory]);
@@ -2654,6 +2857,10 @@ export function useFemStore(opties?: {
     setBeams(deel.beams);
     setLoads(deel.loads);
     pushHistory({ ...cur, beams: deel.beams, loads: deel.loads });
+    meldVerbonden(
+      i18next.t("common:canvas.modelCheck.splitTitle", { count: 1 }),
+      [splitsingRegel({ staafId: beamId, knoopId: nodeId, delen: deel.delen, afwijkingMm: deel.afwijkingMm })],
+    );
     meldSplitsing(deel.meldingen);
     return true;
   }, [pushHistory]);
@@ -2675,9 +2882,9 @@ export function useFemStore(opties?: {
   }, [pushHistory]);
 
   /** Herstel alles in één stap — zie FemStore.herstelModel. */
-  const herstelModel = useCallback(() => {
+  const herstelModel = useCallback((tolMm: number = CONTROLE_TOL_MM) => {
     const cur = latestRef.current;
-    const r = computeModelHerstel(cur);
+    const r = computeModelHerstel(cur, tolMm);
     if (!r) return [];
     setNodes(r.nodes);
     setBeams(r.beams);
@@ -2689,6 +2896,7 @@ export function useFemStore(opties?: {
       plates: r.plates, loads: r.loads,
     });
     setSelection(null);
+    meldVerbonden(i18next.t("common:canvas.modelCheck.repaired"), r.regels);
     return r.stappen;
   }, [pushHistory]);
 
@@ -2733,6 +2941,13 @@ export function useFemStore(opties?: {
     setActiveLoadCaseId(r.id);
     return r.id;
   }, [pasCombiStaatToe, pushHistory]);
+
+  const zorgVoorBelastinggevallen = useCallback(
+    (gevallen: readonly Pick<LoadCase, "name" | "type" | "eigenGewicht">[]): number[] => {
+      const r = zorgVoorGevallenInStaat(combiRef.current, gevallen);
+      pasCombiStaatToe(r.staat);
+      return r.ids;
+    }, [pasCombiStaatToe]);
 
   /**
    * Zie de documentatie bij FemStore.vervangGegenereerdeBelasting. Één
@@ -2945,7 +3160,7 @@ export function useFemStore(opties?: {
     setPlateMeshCache,
     addSupport, removeSupport, addLoad, updateLoad,
     removeNode, removeBeam, removeLoad, removePlate,
-    deleteSelected, splitBeamAt, addLoadCase, verplaatsEigenGewicht, vervangGegenereerdeBelasting,
+    deleteSelected, splitBeamAt, addLoadCase, verplaatsEigenGewicht, zorgVoorBelastinggevallen, vervangGegenereerdeBelasting,
     addNodeMetSplitsing, verbindKnoopMetStaaf, voegKnopenSamen, herstelModel,
     translateSelection, copySelection, rotateSelection, mirrorSelection,
     plakLasten,
@@ -2972,6 +3187,19 @@ export function useFemStore(opties?: {
     // standaardcombinaties volgen elke wijziging aan de gevallen, en een
     // verwijderd geval verdwijnt uit ELKE factortabel (bevinding 14 van de
     // basisaudit: voorheen erfde het volgende geval de wees-factoren).
+    zetGevallenUitDocument: (p) => {
+      const huidig = combiRef.current;
+      pasCombiStaatToe({
+        ...huidig,
+        loadCases: p.loadCases,
+        combinations: p.combinations,
+        volgendGevalId: p.idTellers?.belastinggeval ?? huidig.volgendGevalId,
+        volgendCombinatieId: p.idTellers?.combinatie ?? huidig.volgendCombinatieId,
+      });
+      setLoads(p.loads);
+      setActiveLoadCaseId(p.activeLoadCaseId);
+      setSelfWeightEnabled(p.selfWeightEnabled);
+    },
     updateLoadCase: (id, patch) => {
       const voor = combiRef.current;
       const na = wijzigBelastinggeval(voor, id, patch);
@@ -3094,6 +3322,8 @@ export function useFemStore(opties?: {
         gevolgklasse: klasse,
         bijlage,
         idTellers: p.idTellers,
+        // Voor de melding over wees-factoren: stond er een last in zo'n geval?
+        loads: p.loads,
       });
       pasCombiStaatToe(geopend);
       setCombinatieAfwijking(afwijking);

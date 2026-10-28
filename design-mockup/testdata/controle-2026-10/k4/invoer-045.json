@@ -1,0 +1,179 @@
+{
+ "tool": "open-fem-studio__solve_open_fem_3d",
+ "omschrijving": "045: geschoord frame 4x3 m, scharnierstaven, trek-alleen kruis, H=10 kN",
+ "arguments": {
+  "nodes": [
+   {
+    "id": 1,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 2,
+    "x": 4,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 3,
+    "x": 0,
+    "y": 0,
+    "z": 3
+   },
+   {
+    "id": 4,
+    "x": 4,
+    "y": 0,
+    "z": 3
+   }
+  ],
+  "materials": [
+   {
+    "id": 1,
+    "name": "staal",
+    "eMpa": 210000,
+    "nu": 0.3
+   }
+  ],
+  "sections": [
+   {
+    "id": 1,
+    "name": "frame",
+    "areaM2": 0.01,
+    "iyM4": 1e-05,
+    "izM4": 1e-05,
+    "torsionJM4": 1e-06
+   },
+   {
+    "id": 2,
+    "name": "diagonaal",
+    "areaM2": 0.0005,
+    "iyM4": 1e-08,
+    "izM4": 1e-08,
+    "torsionJM4": 1e-08
+   }
+  ],
+  "members": [
+   {
+    "id": 1,
+    "startNodeId": 1,
+    "endNodeId": 3,
+    "materialId": 1,
+    "sectionId": 1,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 2,
+    "startNodeId": 2,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 3,
+    "startNodeId": 3,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 1,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 4,
+    "startNodeId": 1,
+    "endNodeId": 4,
+    "materialId": 1,
+    "sectionId": 2,
+    "tensionOnly": true,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   },
+   {
+    "id": 5,
+    "startNodeId": 2,
+    "endNodeId": 3,
+    "materialId": 1,
+    "sectionId": 2,
+    "tensionOnly": true,
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true
+    }
+   }
+  ],
+  "supports": [
+   {
+    "nodeId": 1,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 2,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 3,
+    "ux": false,
+    "uy": true,
+    "uz": false,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 4,
+    "ux": false,
+    "uy": true,
+    "uz": false,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   }
+  ],
+  "nodalLoads": [
+   {
+    "id": 1,
+    "nodeId": 3,
+    "fx": 10,
+    "fy": 0,
+    "fz": 0,
+    "mx": 0,
+    "my": 0,
+    "mz": 0
+   }
+  ],
+  "analysis": "linear",
+  "bucklingModes": 3
+ }
+}

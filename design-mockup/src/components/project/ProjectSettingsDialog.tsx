@@ -6,6 +6,7 @@ import {
   WINDGEBIEDEN, TERREIN_CATEGORIEEN,
   type Windgebied, type TerreinCategorie,
 } from "../../lib/wind/windEurocode";
+import { NEDERLANDSE_WINDROUTE, type WindCodeId } from "../../lib/wind/windCodeRoute";
 import {
   normOordelen, normStanden, normenUitToetsen, zetNormStand,
   type NormOordeel, type NormSleutel, type NormStand,
@@ -17,7 +18,9 @@ import {
 } from "../fem/solver/normcombinaties";
 import InfoTip from "../InfoTip";
 import "./ProjectSettingsDialog.css";
-import { aanduidingen, BIJLAGEN_GEVULD, STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../../lib/normAanduidingen";
+import { aanduidingen, BIJLAGEN_GEVULD, type NationaleBijlageCode } from "../../lib/normAanduidingen";
+import { DEFAULT_UITGANGSPUNTEN } from "../../lib/projectBasisDefaults";
+export { DEFAULT_UITGANGSPUNTEN } from "../../lib/projectBasisDefaults";
 
 interface ProjectSettingsDialogProps {
   open: boolean;
@@ -93,6 +96,8 @@ export interface Uitgangspunten {
   levensduurklasse: Levensduurklasse;
   /** Nationale bijlage — vandaag alleen de Nederlandse. */
   nationaleBijlage: NationaleBijlageCode;
+  /** Windnormroute; ontbreekt alleen in projecten van vóór issue #69. */
+  windCodeId?: WindCodeId;
   /**
    * Windgebied volgens NEN-EN 1991-1-4/NB tabel NB.1 — bepaalt v_b,0.
    * Ontbreekt bij projecten van vóór de windgenerator → default "II".
@@ -104,25 +109,6 @@ export interface Uitgangspunten {
    */
   terreincategorie?: TerreinCategorieId;
 }
-
-/**
- * De stand van een project waar niemand iets aan heeft gekozen. `normenHandmatig`
- * is leeg, dus alle drie de normen staan op "volgt het model" — staal in het
- * model levert EN 1993, hout levert EN 1995. De drie booleans staan op false
- * omdat ze in die stand toch niet meetellen; een `true` zou alleen maar
- * verwarrend in het projectbestand staan.
- */
-export const DEFAULT_UITGANGSPUNTEN: Uitgangspunten = {
-  en1993: false,
-  en1995: false,
-  en1992: false,
-  normenHandmatig: [],
-  gevolgklasse: "CC2",
-  levensduurklasse: "4",
-  nationaleBijlage: STANDAARD_BIJLAGE,
-  windgebied: "II",
-  terreincategorie: "II",
-};
 
 export interface ProjectInfo {
   name: string;
@@ -314,7 +300,11 @@ export default function ProjectSettingsDialog({ open, onClose }: ProjectSettings
   };
 
   const handleSave = async () => {
-    await setSetting("projectInfo", project);
+    await setSetting("projectInfo", {
+      ...project,
+      uitgangspunten: { ...(project.uitgangspunten ?? DEFAULT_UITGANGSPUNTEN),
+        windCodeId: project.uitgangspunten?.windCodeId ?? NEDERLANDSE_WINDROUTE },
+    });
     await setSetting("erpNextUrl", erpUrl);
     await setSetting("erpNextEnabled", erpEnabled);
     onClose();
@@ -575,6 +565,17 @@ export default function ProjectSettingsDialog({ open, onClose }: ProjectSettings
               {/* Wind — windgebied en terreincategorie horen bij de
                   uitgangspunten van het project; de windbelastinggenerator
                   leest ze hier uit. */}
+              <div className="proj-field">
+                <label htmlFor={veldId("windCodeId")}>{t("projectSettingsDialog.windCode")}</label>
+                <select id={veldId("windCodeId")} value={uitgangspunten.windCodeId ?? NEDERLANDSE_WINDROUTE}
+                  onChange={(e) => updateUitgangspunt("windCodeId", e.target.value as WindCodeId)}>
+                  {uitgangspunten.windCodeId && uitgangspunten.windCodeId !== NEDERLANDSE_WINDROUTE &&
+                    <option value={uitgangspunten.windCodeId} disabled>
+                      {t("projectSettingsDialog.windCodeUnavailable", { code: uitgangspunten.windCodeId })}
+                    </option>}
+                  <option value={NEDERLANDSE_WINDROUTE}>{t("projectSettingsDialog.windCodeDutchLegacy")}</option>
+                </select>
+              </div>
               <div className="proj-row proj-row-breed">
                 <div className="proj-field">
                   <label htmlFor={veldId("windgebied")}>

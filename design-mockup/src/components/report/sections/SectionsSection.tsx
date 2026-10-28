@@ -185,7 +185,17 @@ export default function SectionsSection() {
           const kopRijen: EnkelRij[] = [
             { label: t("report.propMaterial", "Materiaal"), value: material },
           ];
-          if (steelDims) {
+          if (steelDims && steelDims.kind === "RoundBar") {
+            // Massief rond: alleen de diameter. Er is geen wand, en h, b, t_w
+            // en t_f zijn in de database allemaal d — die vier tonen zou een
+            // maatvoering suggereren die er niet is.
+            kopRijen.push({ label: "d [mm]", value: fmtMaat(steelDims.h) });
+          } else if (steelDims && steelDims.kind === "FlatBar") {
+            // Platstaal: breedte en dikte. In de database is h de breedte van
+            // de strip en b de dikte; lijf en flens bestaan niet.
+            kopRijen.push({ label: "b [mm]", value: fmtMaat(steelDims.h) });
+            kopRijen.push({ label: "t [mm]", value: fmtMaat(steelDims.b) });
+          } else if (steelDims) {
             // Eén wanddikte in plaats van lijf en flens: bij een koker en een
             // buis is dat de wand, bij een hoeklijn de beendikte — die is voor
             // beide benen gelijk.

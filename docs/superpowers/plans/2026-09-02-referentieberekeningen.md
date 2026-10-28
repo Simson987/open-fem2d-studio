@@ -1,4 +1,4 @@
-# Werkdossier referentieberekeningen — validatiecampagne Open FEM2D Studio
+# Werkdossier referentieberekeningen — validatiecampagne Open FEM Studio
 
 Opgesteld: 2026-09-02
 Narekenen afgerond: 2026-09-03
@@ -119,7 +119,7 @@ aangepast en geen referentiewaarde bijgesteld.**
 
 ---
 
-## B. Gevonden problemen in Open FEM2D Studio
+## B. Gevonden problemen in Open FEM Studio
 
 Dit is de belangrijkste uitkomst van de campagne. De volgorde is naar zwaarte:
 eerst wat een constructie ten onrechte goedkeurt, dan wat invoer onmogelijk maakt, dan wat
@@ -857,7 +857,7 @@ dus vastgesteld op de *invoer* van de NB-route, niet op de NB-route zelf.
 ### 1.1 Wat dit dossier is
 
 Dit is het werkdossier voor de validatiecampagne. Het bevat gepubliceerde 2D-constructies
-met bekende uitkomsten, die stuk voor stuk in Open FEM2D Studio worden nagebouwd en
+met bekende uitkomsten, die stuk voor stuk in Open FEM Studio worden nagebouwd en
 doorgerekend. De uitkomsten van de app worden naast de referentiewaarde gelegd.
 
 Elk geval heeft een kenmerk (R01, R02, ...). De zwakkere gevallen staan apart onder
@@ -2008,7 +2008,7 @@ elementbelasting wordt exact verwerkt.
 **Nationale bijlage.** N.v.t.
 
 **Aannames en aandachtspunten.**
-- **Belangrijkste aanname:** als Open FEM2D Studio geen dwarskrachtvervorming kent
+- **Belangrijkste aanname:** als Open FEM Studio geen dwarskrachtvervorming kent
   (Euler-Bernoulli), is alleen de tweede waarde (−0,9962 · 10^-3 m) vergelijkbaar. Noteer
   dat expliciet; een afwijking van 26 % ten opzichte van de eerste waarde is dan
   `AANNAME`, geen `ONS`.

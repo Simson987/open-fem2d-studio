@@ -1,0 +1,332 @@
+{
+ "format": "open-fem-studio-v2",
+ "version": 2,
+ "savedAt": "2026-10-09T12:43:40.880Z",
+ "nodes": [
+  {
+   "id": 1,
+   "x": 0,
+   "z": 0
+  },
+  {
+   "id": 2,
+   "x": 6000,
+   "z": 0
+  }
+ ],
+ "beams": [
+  {
+   "id": 1,
+   "from": 1,
+   "to": 2,
+   "material": "S235",
+   "profile": "IPE300"
+  }
+ ],
+ "supports": [
+  {
+   "nodeId": 1,
+   "type": "pinned"
+  },
+  {
+   "nodeId": 2,
+   "type": "zRoller"
+  }
+ ],
+ "plates": [],
+ "loads": [
+  {
+   "id": 1,
+   "type": "lineLoad",
+   "beamId": 1,
+   "caseId": 1,
+   "q": -10
+  },
+  {
+   "id": 2,
+   "type": "pointForce",
+   "beamId": 1,
+   "posFrac": 0.5,
+   "caseId": 2,
+   "fz": -20
+  }
+ ],
+ "loadCases": [
+  {
+   "id": 1,
+   "name": "Permanent",
+   "type": "dead"
+  },
+  {
+   "id": 2,
+   "name": "Variabel",
+   "type": "live"
+  }
+ ],
+ "activeLoadCaseId": 1,
+ "selfWeightEnabled": false,
+ "nonlinearEnabled": false,
+ "analysetype": "eersteOrde",
+ "betonSegmentLengteMm": 400,
+ "betonKruipcoefficient": null,
+ "betonKruipInvoer": null,
+ "combinations": [
+  {
+   "id": 1,
+   "name": "UGT 6.10a",
+   "type": "uls",
+   "formula": "1,35·G + 1,5·0,4·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 1.35,
+    "2": 0.6
+   },
+   "standaard": {
+    "sleutel": "6.10a",
+    "soort": "6.10a",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  },
+  {
+   "id": 2,
+   "name": "UGT 6.10a — zonder Variabel",
+   "type": "uls",
+   "formula": "1,35·G   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 1.35
+   },
+   "standaard": {
+    "sleutel": "6.10a|zonder:2",
+    "soort": "6.10a",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  },
+  {
+   "id": 3,
+   "name": "UGT 6.10b — Variabel leidend",
+   "type": "uls",
+   "formula": "1,2·G + 1,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 1.2,
+    "2": 1.5
+   },
+   "standaard": {
+    "sleutel": "6.10b|Q:A",
+    "soort": "6.10b",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  },
+  {
+   "id": 4,
+   "name": "UGT 6.10b — Variabel leidend, blijvend gunstig",
+   "type": "uls",
+   "formula": "0,9·G + 1,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 0.9,
+    "2": 1.5
+   },
+   "standaard": {
+    "sleutel": "6.10b-gunstig|Q:A",
+    "soort": "6.10b",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  },
+  {
+   "id": 5,
+   "name": "BGT karakteristiek 6.14b — Variabel leidend",
+   "type": "sls",
+   "formula": "G + Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 1,
+    "2": 1
+   },
+   "standaard": {
+    "sleutel": "6.14b|Q:A",
+    "soort": "6.14b",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  },
+  {
+   "id": 6,
+   "name": "BGT frequent 6.15b — Variabel leidend",
+   "type": "sls",
+   "formula": "G + 0,5·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 1,
+    "2": 0.5
+   },
+   "standaard": {
+    "sleutel": "6.15b|Q:A",
+    "soort": "6.15b",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  },
+  {
+   "id": 7,
+   "name": "BGT quasi-blijvend 6.16b",
+   "type": "sls",
+   "formula": "G + 0,3·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 1,
+    "2": 0.3
+   },
+   "standaard": {
+    "sleutel": "6.16b",
+    "soort": "6.16b",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  },
+  {
+   "id": 8,
+   "name": "BGT quasi-blijvend 6.16b — zonder Variabel",
+   "type": "sls",
+   "formula": "G   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+   "factors": {
+    "1": 1
+   },
+   "standaard": {
+    "sleutel": "6.16b|zonder:2",
+    "soort": "6.16b",
+    "gevolgklasse": "CC2",
+    "bijlage": "NL"
+   }
+  }
+ ],
+ "idTellers": {
+  "belastinggeval": 3,
+  "combinatie": 9
+ },
+ "structuralGrid": {
+  "enabled": true,
+  "xAxes": [
+   {
+    "id": "A",
+    "label": "A",
+    "position": 0
+   },
+   {
+    "id": "B",
+    "label": "B",
+    "position": 12000
+   }
+  ],
+  "yAxes": [
+   {
+    "id": "Y-A",
+    "label": "1",
+    "position": 0
+   },
+   {
+    "id": "Y-B",
+    "label": "2",
+    "position": 6000
+   }
+  ],
+  "zAxes": [
+   {
+    "id": "1",
+    "label": "1",
+    "position": 0
+   },
+   {
+    "id": "2",
+    "label": "2",
+    "position": 5000
+   }
+  ]
+ },
+ "scheefstandEnabled": false,
+ "scheefstandNoemer": 200,
+ "scheefstandRichting": 1,
+ "scheefstandBron": "vast",
+ "scheefstandHoogteM": null,
+ "scheefstandAantalElementen": null,
+ "eigenDoorsneden": [],
+ "eigenCltOpbouwen": [],
+ "projectInfo": {
+  "company": "",
+  "date": "",
+  "description": "Controle 2026-10, B15: IPE300 S235 vloerligger 6000 mm. Hand: w_fin 14,75 mm tegen L/250 = 24 mm (UC 0,614).",
+  "engineer": "",
+  "location": "",
+  "name": "b15-ipe300-vloerligger",
+  "notes": "",
+  "projectNumber": "",
+  "reportHeader": "",
+  "uitgangspunten": {
+   "en1992": false,
+   "en1993": false,
+   "en1995": false,
+   "gevolgklasse": "CC2",
+   "levensduurklasse": "4",
+   "nationaleBijlage": "NL",
+   "normenHandmatig": [],
+   "terreincategorie": "II",
+   "windgebied": "II"
+  }
+ },
+ "windInstellingen": {
+  "windgebied": "II",
+  "terreincategorie": "II",
+  "stuwdrukBron": "berekend",
+  "qpHandmatig_kNm2": 1,
+  "richtingLinks": true,
+  "richtingRechts": true,
+  "richtingHaaks": false,
+  "cpiKeuze": "beide",
+  "cpiHandmatig": 0.2,
+  "hohSpant_m": 5,
+  "positieSpant": "tussenspant",
+  "belastingbreedteOverride_m": null,
+  "gebouwlengte_m": 30,
+  "afstandTotKopgevel_m": 15,
+  "cpeDakLoef": null,
+  "cpeDakLij": null,
+  "cpeDakHaaks": null,
+  "combinatiesGenereren": true,
+  "gevelhoogte_m": null,
+  "vorm": "gebouw",
+  "vrijstaandDakvorm": "lessenaar",
+  "blokkering_phi": 0,
+  "vrijstaandHoogte_m": null,
+  "wrijving": "geen",
+  "aantalOverkappingen": 1,
+  "positieOverkapping": 1,
+  "kolomDoorsnede": "geen",
+  "kolomBreedte_mm": 200,
+  "kolomDiepte_mm": 200
+ },
+ "rapport": {
+  "margeBoven": 18,
+  "margeOnder": 20,
+  "margeBinnen": 15,
+  "margeBuiten": 15,
+  "basisLettergrootte": 10,
+  "regelafstand": 1.45,
+  "pageSize": "A4",
+  "orientation": "portrait",
+  "hiddenSections": {
+   "nodes": true,
+   "beams": true,
+   "plates": true,
+   "materials": true,
+   "combinations": true,
+   "plateStresses": true,
+   "checkDetail": true,
+   "clt": true,
+   "betonStijfheid": true,
+   "spanning": true
+  },
+  "rapportType": "beperkt",
+  "toetsingDetail": "beknopt",
+  "verborgenToetsStaven": {},
+  "inhoudsopgaveDiepte": 1
+ },
+ "modelDimension": "2d"
+}

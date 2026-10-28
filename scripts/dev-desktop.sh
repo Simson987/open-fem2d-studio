@@ -10,6 +10,7 @@ URL="http://127.0.0.1:1440"
 if ! command -v node >/dev/null 2>&1 && [[ -x "$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node" ]]; then
   export PATH="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH"
 fi
+# Een lokale Rust-toolchain buiten de gewone PATH.
 if ! command -v cargo >/dev/null 2>&1 && [[ -x /tmp/open-fem-cargo/bin/cargo ]]; then
   export PATH="/tmp/open-fem-cargo/bin:$PATH"
   export CARGO_HOME="${CARGO_HOME:-/tmp/open-fem-cargo}"
@@ -23,7 +24,7 @@ for program in node cargo pkg-config curl pgrep flock; do
   fi
 done
 
-if pgrep -f '^target/debug/open-fem2d-studio$' >/dev/null 2>&1; then
+if pgrep -f '^target/debug/open-fem-studio$' >/dev/null 2>&1; then
   echo "Open FEM Studio draait al. Het bestaande venster blijft gekoppeld aan $URL."
   exit 0
 fi
@@ -57,7 +58,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if curl --fail --silent "$URL/@vite/client" >/dev/null; then
-  if ! curl --fail --silent "$URL/src/App.tsx" | grep 'Frame3DEditor' >/dev/null; then
+  if ! curl --fail --silent "$URL/src/App.tsx" | grep -E 'OpenFem3DEditor|Frame3DEditor' >/dev/null; then
     echo "Poort 1440 bedient niet de frontend van dit project." >&2
     exit 1
   fi

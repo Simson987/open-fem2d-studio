@@ -65,6 +65,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import InfoTip from "../InfoTip";
 import i18next from "i18next";
 import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { STEEL_SECTIONS } from "../../lib/steelSections.generated";
@@ -415,8 +416,13 @@ export default function ProfielKiezer({
   const huidigEind = huidig?.profileEnd?.trim() ?? "";
   const [verlopend, setVerlopend] = useState(huidigEind !== "");
   const huidigEindRect = parseRechthoek(huidig?.profileEnd);
+  // De keuzelijst draagt de catalogussleutels ("IPE300"); een eindprofiel dat
+  // als "IPE 300" op de staaf staat (een 3D-model uit de API of een bestand,
+  // #73), staat er anders niet in, en dan opende de kiezer zonder eindprofiel.
   const [staalProfielEind, setStaalProfielEind] = useState(
-    huidigEind !== "" && !huidigEindRect ? huidigEind : "",
+    huidigEind !== "" && !huidigEindRect
+      ? STEEL_SECTION_DIMS[profileLookupKey(huidigEind)] ? profileLookupKey(huidigEind) : huidigEind
+      : "",
   );
 
   // Hout-stap: massief b×h of een CLT-opbouw
@@ -1313,8 +1319,20 @@ export default function ProfielKiezer({
             {dims && (
               <div className="pk-eigenschappen">
                 <div className="pk-kolom-kop">{t("profilePicker.properties")}</div>
-                <div className="pk-eig-rij"><span>h × b</span><code>{dims.h} × {dims.b} mm</code></div>
-                <div className="pk-eig-rij"><span>t_w / t_f</span><code>{dims.tw} / {dims.tf} mm</code></div>
+                {dims.kind === "RoundBar" ? (
+                  // Massief rond: één maat. h, b, t_w en t_f zijn in de
+                  // database allemaal d; ze los tonen zou een wand suggereren.
+                  <div className="pk-eig-rij"><span>d</span><code>{dims.h} mm</code></div>
+                ) : dims.kind === "FlatBar" ? (
+                  // Platstaal: breedte × dikte. In de database is h de breedte
+                  // en b = t_w = t_f de dikte; lijf en flens bestaan niet.
+                  <div className="pk-eig-rij"><span>b × t</span><code>{dims.h} × {dims.b} mm</code></div>
+                ) : (
+                  <>
+                    <div className="pk-eig-rij"><span>h × b</span><code>{dims.h} × {dims.b} mm</code></div>
+                    <div className="pk-eig-rij"><span>t_w / t_f</span><code>{dims.tw} / {dims.tf} mm</code></div>
+                  </>
+                )}
                 {sectie && <div className="pk-eig-rij"><span>A</span><code>{nlGetal(sectie.A)} mm²</code></div>}
                 {sectie && <div className="pk-eig-rij"><span>I_y</span><code>{nlGetal(sectie.Iy / 1e4)} cm⁴</code></div>}
               </div>
@@ -1871,7 +1889,7 @@ export default function ProfielKiezer({
               )}
               {betonDoorsnedeGeldig && (
                 <div className="pk-eigenschappen">
-                  <div className="pk-eig-rij"><span>A_c</span><code>{nlGetal(betonSectie.A)} mm²</code></div>
+                  <div className="pk-eig-rij"><span>A_c<InfoTip id="pk-ongescheurd-info">A<sub>c</sub>, I<sub>y,c</sub> {t("profilePicker.and")} E<sub>cm</sub>{" "}{t("profilePicker.uncrackedHint")}</InfoTip></span><code>{nlGetal(betonSectie.A)} mm²</code></div>
                   <div className="pk-eig-rij"><span>I_y,c</span><code>{nlGetal(betonSectie.I / 1e4)} cm⁴</code></div>
                   <div className="pk-eig-rij"><span>E_cm</span><code>{CONCRETE_E_CM[betonKlasse] ?? "—"} N/mm²</code></div>
                 </div>
@@ -1883,12 +1901,6 @@ export default function ProfielKiezer({
                   I_y als de buigstijfheid waarmee straks gerekend wordt,
                   terwijl de toetsing met de gescheurde doorsnede en de
                   wapening erin werkt (M-N-κ bij de staafeigenschappen). */}
-              {betonDoorsnedeGeldig && (
-                <div className="pk-hint">
-                  A<sub>c</sub>, I<sub>y,c</sub> {t("profilePicker.and")} E<sub>cm</sub>{" "}
-                  {t("profilePicker.uncrackedHint")}
-                </div>
-              )}
               {betonHeeftFlens && (
                 <div className="pk-hint">
                   {t("profilePicker.effWidthHintBefore")} b<sub>eff</sub>{" "}

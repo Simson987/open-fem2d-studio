@@ -135,7 +135,9 @@ async function run() {
     ok(el, "geen invoerveld na de klik");
     gelijk(el!.value, "5000", "voorgevuld met het huidige niveau in mm");
     ok(document.activeElement === el, "de invoer heeft de focus");
-    ok(document.querySelector("[data-niveau-invoer]")!.textContent!.includes("2 knopen op dit niveau schuiven mee"), "hint knopen");
+    // De horizontale stramienassen heten sinds "Stramienen en levels" in het
+    // Nederlands levels (zoals al in en/de/fr): de hint zegt "dit level".
+    ok(document.querySelector("[data-niveau-invoer]")!.textContent!.includes("2 knopen op dit level schuiven mee"), "hint knopen");
     ok(peilmaat("2", "links")!.classList.contains("actief"), "peilmaat niet gemarkeerd terwijl de invoer open is");
     typ(el!, "5500");
     toets(el!, "Enter");

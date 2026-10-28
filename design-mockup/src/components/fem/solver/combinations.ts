@@ -35,6 +35,7 @@ import type {
   PlateResult, PlateElementStress,
 } from "./types";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
+import { momentExtremen } from "./veldExtremen";
 import {
   getScheefstandRichtingen,
   getSecondOrderState,
@@ -78,6 +79,13 @@ export interface LoadCombination {
    * draagt de ononvouwen lijst.
    */
   scheefstandRichting?: 1 | -1;
+  /**
+   * Alleen in 3D: de globale as van de scheefstand (`scheefstandRichting`
+   * geeft het teken). Gezet door `metScheefstandRichtingen3D`, dat een
+   * UGT-combinatie in +X, −X, +Y en −Y ontvouwt; ontbreekt = x. Wordt niet
+   * opgeslagen.
+   */
+  scheefstandAs?: "x" | "y";
   /**
    * Aanwezig = een EINDTOESTANDVARIANT van een UGT-combinatie: dezelfde
    * factoren, maar doorgerekend met de eindstijfheid van het hout
@@ -751,6 +759,17 @@ function staafExtremen(ef: ElementForces): {
     // station, zodat de gemelde positie niet van afrondruis afhangt.
     const a = Math.abs(mx);
     if (a > mAbs) { mAbs = a; mPos_mm = ef.stations_mm[i] ?? 0; }
+  }
+  // HET VELDMAXIMUM TUSSEN DE STATIONS (controle 12 oktober 2026, punt C8):
+  // waar V = 0 ligt, valt zelden op een station. `momentExtremen` vindt het
+  // exact uit M en V = dM/dx (Hermite, zie solver/veldExtremen.ts). Gemeten
+  // vóór deze regel: 25,200 kNm waar 9qL²/128 = 25,3125 kNm hoort.
+  const veld = momentExtremen(ef);
+  if (veld) {
+    if (veld.max.M > M_max) M_max = veld.max.M;
+    if (veld.min.M < M_min) M_min = veld.min.M;
+    if (Math.abs(veld.max.M) > mAbs) { mAbs = Math.abs(veld.max.M); mPos_mm = veld.max.x; }
+    if (Math.abs(veld.min.M) > mAbs) { mAbs = Math.abs(veld.min.M); mPos_mm = veld.min.x; }
   }
   return { N_min, N_max, V_min, V_max, M_min, M_max, mAbs, mPos_mm };
 }

@@ -257,7 +257,9 @@
       "hollowHotFinished": "Hollow section, hot-finished (SHS/RHS, EN 10210)",
       "circularHotFinished": "Circular hollow section, hot-finished (CHS, EN 10210)",
       "angleEqual": "L equal-leg",
-      "angleUnequal": "L unequal-leg"
+      "angleUnequal": "L unequal-leg",
+      "roundBar": "Round bar, solid (RD, Ø)",
+      "flatBar": "Flat bar, strip (FL)"
     }
   },
   "connection": {

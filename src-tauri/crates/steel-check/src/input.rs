@@ -3,6 +3,7 @@
 use mechanics::{ForcePoint, Staafstand};
 use nen_en_1990::ConsequenceClass;
 use nen_en_1993_1_1_ltb::LateralBracing;
+pub use nen_en_1993_1_1_stability::kniklengte::ZijdelingseKnikInAnalyse;
 use section_properties::composite::{CompositeSection, GeslotenCel, Lamella};
 use section_properties::SectionProperties;
 use serde::{Deserialize, Serialize};
@@ -10,10 +11,12 @@ use ts_rs::TS;
 
 /// Doorbuigingsklasse van een staaf.
 ///
-/// De klasse bepaalt twee dingen: de noemer voor de eindzakking `w_fin`
-/// ([`crate::deflection::default_numerator`]) en de noemer plus de
-/// referentielengte ℓ_rep voor de bijkomende zakking `w_add`
-/// ([`crate::deflection::w_add_grens`]).
+/// De klasse bepaalt de referentielengte ℓ_rep (de overspanning, of tweemaal
+/// de uitkraaglengte) voor beide doorbuigingstoetsen, en de noemer voor de
+/// bijkomende zakking `w_add` ([`crate::deflection::w_add_grens`]). De
+/// eindzakking `w_fin` (w_max) toetst elke klasse behalve `Custom` tegen
+/// 1/250 deel van ℓ_rep, A1.4.3(4) "bij zowel vloeren als daken"
+/// ([`crate::deflection::w_fin_grens`]).
 ///
 /// De indeling volgt de vier gedachtestreepjes van NEN-EN 1990:2002/NB:2019
 /// A1.4.3(3), die de grenswaarden voor w2 + w3 (= de bijkomende doorbuiging)
@@ -63,11 +66,14 @@ pub enum DeflectionClass {
 ///    kreeg L_st = 3000 mm (UC_kip 0,406) waar tabel NB.NB.1 geval 5 de
 ///    vervangende ligger van 2·L = 6000 mm voorschrijft (UC_kip 0,720);
 ///  * een **doorlopend** eind — de staaf loopt zonder oplegging in het
-///    verlengde door in een staaf met een ándere doorsnede of een ander
-///    materiaal. Delen met dezelfde doorsnede voegt de invoerbouwer al samen
-///    tot één staaf; bij een wisselende doorsnede kan dat niet, en dan kan de
-///    kern de kipvelden en de kniklengte niet per deel bepalen. Hij weigert
-///    dan met reden in plaats van het eind stil als gaffel te nemen.
+///    verlengde door in een staaf met een ándere doorsnede, een ander
+///    materiaal of een verlopend profiel. Delen met dezelfde doorsnede voegt
+///    de invoerbouwer al samen tot één staaf (ook over een scharnier of veer
+///    heen); bij een wisselende doorsnede kan dat niet, en dan kan de kern de
+///    kipvelden en de kniklengte niet per deel bepalen. Hij weigert dan met
+///    reden in plaats van het eind stil als gaffel te nemen, en ontbreekt
+///    daardoor de kniktoets bij druk of de kiptoets bij buiging, dan is de
+///    status van de staaf NotApplicable (niet volledig getoetst) en niet Ok.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
 pub enum Staafeind {
@@ -75,7 +81,8 @@ pub enum Staafeind {
     Gaffel,
     /// Geen oplegging en geen aansluitende staaf.
     Vrij,
-    /// Loopt zonder oplegging door in een staaf met een andere doorsnede.
+    /// Loopt zonder oplegging door in een staaf met een andere doorsnede, een
+    /// ander materiaal of een verlopend profiel.
     Doorlopend,
 }
 
@@ -155,16 +162,19 @@ pub struct BeamCheckInput {
     /// Tot september 2026 werd dit veld door de kern NERGENS gelezen: alleen
     /// [`DeflectionClass::Cantilever`] deed iets, en dan nog uitsluitend via de
     /// w_fin-noemer 150 op de staaflengte. Nu bepaalt het samen met de klasse
-    /// de referentielengte ℓ_rep = 2·L voor de w_add-grens
+    /// de referentielengte ℓ_rep = 2·L voor de grens van w_fin én w_add
     /// ("ℓ_rep is de lengte van een overspanning of tweemaal de lengte van een
-    /// uitkraging", NEN-EN 1990:2002/NB:2019 A1.4.3(3)). Eén van beide volstaat;
-    /// de frontend zet ze allebei.
+    /// uitkraging", NEN-EN 1990:2002/NB:2019 A1.4.3). Eén van beide volstaat.
     ///
-    /// Let op de asymmetrie met w_fin: die kant verdubbelt ℓ_rep NIET maar
-    /// gebruikt noemer 150 op de staaflengte, wat op ℓ_rep/300 neerkomt.
-    /// Strenger dan de ℓ_rep/250 uit A1.4.3(4), dus veilig — maar het is een
-    /// andere manier om hetzelfde uit te drukken, en dat staat als notitie in
-    /// het rapport.
+    /// Tot oktober 2026 verdubbelde alleen w_add ℓ_rep; w_fin rekende met
+    /// noemer 150 op de staaflengte, zodat één staaf in het rapport twee
+    /// referentielengtes had. Nu toetst w_fin tegen ℓ_rep/250 (A1.4.3(4)) met
+    /// dezelfde ℓ_rep als w_add.
+    ///
+    /// Het veld zegt alleen iets over de GRENS. De zakking zelf
+    /// (`deflection_actual_max_mm`) moet bij een uitkraging al ten opzichte van
+    /// het ingeklemde eind gemeten zijn en niet ten opzichte van de koorde
+    /// tussen de verplaatste staafeinden; dat doet de invoerbouwer.
     pub is_cantilever: bool,
     /// Gevolgklasse van het project — in deze kern ALLEEN ter vermelding.
     /// NEN-EN 1990:2002/NB:2019 verwerkt K_FI in de partiële belastingsfactoren
@@ -304,7 +314,96 @@ pub struct BeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub custom_section_end: Option<CustomSection>,
+    /// Nettodoorsnede A_net (mm²) voor de trektoets §6.2.3: de doorsnede ter
+    /// plaatse van gaten of een andere verzwakking. Met A_net is
+    /// N_t,Rd = min(A·f_y/γ_M0; 0,9·A_net·f_u/γ_M2), (6.6) en (6.7); zonder is
+    /// N_t,Rd = A·f_y/γ_M0 en zegt de toets dat er geen A_net is opgegeven.
+    ///
+    /// `None`, weglaten of `0` = niet opgegeven. Een negatieve of niet-eindige
+    /// waarde, of een A_net groter dan A, is een invoerfout: dan wordt de staaf
+    /// met reden geweigerd, net als bij een ongeldige doorbuigingsnoemer — een
+    /// tikfout mag niet stil een andere trekweerstand opleveren.
+    #[serde(default)]
+    #[ts(optional)]
+    pub a_net_mm2: Option<f64>,
+    /// Trek-alleen staaf (een windverband van strip of rond staal, of een
+    /// trekstang): de staaf doet in de berekening alleen mee zolang zij op trek
+    /// staat. Dan wordt alleen trek getoetst (6.2.3, en bij massief rond het
+    /// draadeind). Druk (6.2.4), buiging, dwarskracht en hun combinaties
+    /// (6.2.5–6.2.10), knik (6.3.1), kip (6.3.2), 6.3.3 en de doorbuiging
+    /// vallen weg.
+    ///
+    /// Een drukkracht in de omhullende is bij zo'n staaf speling of
+    /// voorspanning (de kruisregel laat één diagonaal per kruis een kleine
+    /// druk houden), geen druksterkte; zij wordt niet getoetst, maar wel met de
+    /// grootste waarde in een eigen regel van het resultaat gemeld.
+    ///
+    /// `None` of `false` = een gewone staaf, het gedrag van vóór dit veld.
+    #[serde(default)]
+    #[ts(optional)]
+    pub tension_only: Option<bool>,
+    /// De bijkomende zakking w_add = w2 + w3 (mm, met teken, negatief =
+    /// omlaag), als de invoerbouwer haar per combinatie heeft bepaald: het
+    /// grootste verschil |w_c − w₁| over de BGT-combinaties c, met w₁ =
+    /// [`Self::deflection_permanent_mm`] (NEN-EN 1990:2002/NB:2019 A1.4.3(2),
+    /// figuur NB.1).
+    ///
+    /// WAAROM. Zonder dit veld rekent de kern w_add = w − w₁ met w =
+    /// [`Self::deflection_actual_max_mm`], de zakking van de combinatie met de
+    /// grootste |w|. Dat is alleen juist als die combinatie ook het grootste
+    /// verschil met w₁ geeft. Bij een overstek dat onder de blijvende last
+    /// omhoog gaat en onder de veranderlijke omlaag, is de grootste |w| juist
+    /// die van de blijvende last zelf, en werd w_add 0 (controle 2026-10, punt
+    /// K5: w_add 0 waar 24,9 mm hoort).
+    ///
+    /// `None` of weglaten = w − w₁, het gedrag van vóór dit veld. Een niet-
+    /// eindige waarde is een invoerfout; de staaf wordt dan met reden geweigerd.
+    #[serde(default)]
+    #[ts(optional)]
+    pub deflection_add_mm: Option<f64>,
+    /// De lengte (m) van het DEEL van de staaf waarvan de doorbuiging is
+    /// gemeten, als dat niet de hele staaf is; de grenzen van w_fin en w_add
+    /// rekenen dan met deze lengte in plaats van [`Self::length_m`], en met
+    /// [`Self::is_cantilever`] als dat deel een uitkraging is (ℓ_rep = 2 × deze
+    /// lengte).
+    ///
+    /// WAAROM. Een doorgaande lijn — een staaf die door tussenknopen zonder
+    /// oplegging in delen is geknipt — wordt voor knik en kip als één staaf
+    /// getoetst. Loopt zo'n lijn over een kolomkop door in een overstek, dan
+    /// is ℓ_rep voor de doorbuiging NIET de lijnlengte: het veld heeft de
+    /// lengte tot de kolomkop, het overstek tweemaal zijn eigen lengte
+    /// (NEN-EN 1990:2002/NB:2019 A1.4.3, verklaring bij ℓ_rep). De invoerbouwer
+    /// toetst dan het maatgevende deel en zegt in `deflection_notes` welk.
+    ///
+    /// `None` of weglaten = de staaflengte, het gedrag van vóór dit veld. Een
+    /// lengte die niet groter dan nul is, niet eindig is of langer dan de staaf,
+    /// is een invoerfout; de staaf wordt dan met reden geweigerd.
+    #[serde(default)]
+    #[ts(optional)]
+    pub deflection_length_m: Option<f64>,
+    /// Om welke assen de globale berekening tweede orde (P-Δ) MET scheefstand
+    /// is en de staaf kan laten uitbuigen. Alleen van belang bij een VRIJ
+    /// staafeind (zie [`Staafeind::Vrij`]) zonder opgegeven kniklengte: om een
+    /// gedekte as geldt dan de staaflengte (NEN-EN 1993-1-1 5.2.2(7)b), om een
+    /// niet-gedekte as 2·L. Zie [`ZijdelingseKnikInAnalyse`] voor het waarom.
+    ///
+    /// Bij een hoekprofiel (assen u en v) telt alleen een berekening die BEIDE
+    /// richtingen dekt, want geen van beide hoofdassen valt samen met y of z.
+    ///
+    /// `None` of weglaten = geen as gedekt, 2·L bij een vrij eind: het gedrag
+    /// van vóór dit veld, en de veilige kant voor wie de berekening niet kent.
+    #[serde(default)]
+    #[ts(optional)]
+    pub zijdelingse_knik_in_analyse: Option<ZijdelingseKnikInAnalyse>,
 }
+
+/// Het id van de informatieve regel bij een trek-alleen staaf (zie
+/// [`BeamCheckInput::tension_only`]): de grootste drukkracht, niet getoetst.
+pub const TOETS_TREK_ALLEEN: &str = "trek_alleen";
+
+/// De vaste tekst van die regel.
+pub const MELDING_TREK_ALLEEN: &str =
+    "trek-alleen staaf: drukkracht geldt als speling/voorspanning, niet getoetst";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  D4.3 — inline (samengestelde) doorsnede
@@ -328,11 +427,15 @@ pub const REDEN_KIP_NIET_DUBBELSYMMETRISCH: &str =
     "kip is voor deze samengestelde doorsnede niet geautomatiseerd (monosymmetrie z_j ontbreekt) \
      — beoordeel handmatig of voorkom kip met kipsteunen";
 
-/// Geweigerd: alle weerstands- en stabiliteitstoetsen bij klasse 4. Er is geen
-/// effectieve-doorsnedeberekening volgens NEN-EN 1993-1-5; een W_el-benadering
-/// zou de plooireductie stilzwijgend weglaten.
+/// Geweigerd: de toetsen die van de doorsnedeklasse afhangen, bij een klasse 4-
+/// doorsnede waarvoor de effectieve doorsnede volgens NEN-EN 1993-1-5 4.4 hier
+/// niet is uitgewerkt (alles behalve de dubbelsymmetrische I en de koker); een
+/// W_el-benadering zou de plooireductie stilzwijgend weglaten. Trek,
+/// dwarskracht en doorbuiging hangen niet van de klasse af en worden getoetst.
 pub const REDEN_KLASSE_4: &str =
-    "doorsnede is klasse 4; effectieve breedtes zijn niet geïmplementeerd";
+    "doorsnede is klasse 4 en voor deze doorsnedevorm zijn de effectieve breedtes van \
+     NEN-EN 1993-1-5 4.4 niet uitgewerkt (wel voor de dubbelsymmetrische I en de koker); \
+     alleen trek (6.2.3), dwarskracht (6.2.6) en de doorbuiging zijn getoetst";
 
 /// Geweigerd: 6.3.3 zodra de kipcontrole is geweigerd — vergelijking 6.61/6.62
 /// deelt door `M_b,Rd`, en dat getal bestaat dan niet.
@@ -420,6 +523,144 @@ pub const MELDING_AANSLUITING_HOEKPROFIEL: &str =
      drukweerstand de aanvullende regels van NEN-EN 1993-1-8 3.10.3 (NEN-EN 1993-1-1 6.2.3(5)); \
      die excentriciteit zit niet in deze toets. Wordt het hoekprofiel als wandstaaf van een \
      vakwerk gebruikt, zie dan bijlage BB.1.2 voor de effectieve slankheid.";
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Massief rond staal (reeks "RD") — wat er anders gaat, en waarom
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Een ronde staaf is meestal een trekstaaf (windverband, trekstang). Vier
+// dingen gaan daardoor anders dan bij een I of een koker, en ze staan hier als
+// tekst omdat ze BIJ de toets in het rapport horen:
+//
+//  * trek is een eigen toets (6.2.3) naast het draadeind (NEN-EN 1993-1-8
+//    tabel 3.4) — de kleinste weerstand is maatgevend;
+//  * knik (6.3.1) en de interactie 6.3.3 rekenen met de grootste DRUKkracht en
+//    zijn niet van toepassing zonder druk: een slanke staaf op trek knikt niet;
+//  * kip (6.3.2) treedt niet op en staat als "n.v.t." met reden in de lijst;
+//  * buiging om twee assen is buiging om de resultante, en de combinaties met
+//    N en V volgen de plastische interactie van een volle cirkel.
+
+/// Kip 6.3.2 bij massief rond: niet van toepassing, mét reden. Geen weigering:
+/// 6.3.3 wordt gewoon getoetst, met χ_LT = 1,0.
+pub const REDEN_KIP_NVT_RONDSTAAL: &str =
+    "Niet van toepassing: kip treedt bij massief rond staal niet op. De doorsnede is \
+     rotatiesymmetrisch (I_y = I_z): er is geen zwakke as waarom de gedrukte zijde zijdelings kan \
+     uitwijken, en de torsiestijfheid I_t = πd⁴/32 is die van een volle cirkel. NEN-EN 1993-1-1 \
+     6.3.2.1(2) noemt al vierkante en ronde buisprofielen als niet gevoelig voor kip; een massieve \
+     cirkel is dat a fortiori. In 6.3.3 geldt daarom χ_LT = 1,0, dus M_b,Rd = W_pl·f_y/γ_M1.";
+
+/// Melding bij de trektoets 6.2.3 van massief rond.
+pub const MELDING_TREK_RONDSTAAL: &str =
+    "Massief rond: bij een trekstaaf van rond staal is het draadeind de nettodoorsnede van \
+     §6.2.3(2)(b); dat staat als eigen toets ernaast (id \"6.2.3_threaded_end\"), en de toets met \
+     de hoogste unity check is maatgevend voor trek. Voor tabel 3.1 geldt bij een massieve ronde \
+     staaf de diameter als nominale dikte (t = d); vanaf Ø42 geldt dus de kolom van 40 tot en met \
+     80 mm.";
+
+/// Melding bij de buigingstoetsen 6.2.5 van massief rond.
+pub const MELDING_BUIGING_RONDSTAAL: &str =
+    "Massief rond: klasse 1 — tabel 5.2 classificeert plaatdelen, en een massieve cirkel heeft er \
+     geen die plaatselijk kan plooien — dus plastisch met W_pl = d³/6. De weerstand is om elke as \
+     gelijk; buiging om beide assen tegelijk is als resulterend moment √(M_y,Ed² + M_z,Ed²) \
+     getoetst in 6.2.9 (en 6.2.8, 6.2.10), op elk punt van de omhullende.";
+
+/// Melding bij de afschuiftoetsen 6.2.6 van massief rond.
+pub const MELDING_AFSCHUIVING_RONDSTAAL: &str =
+    "Massief rond: NEN-EN 1993-1-1 6.2.6(3) geeft voor een massieve ronde doorsnede geen A_v — \
+     rij (g) gaat over de ronde buis. A_v is onder 6.2.6(2) bepaald als 0,75·A: de elastische \
+     schuifspanning van een cirkel is het grootst op de neutrale lijn, τ_max = 4V/(3A), dus \
+     V = τ·0,75·A. Dat ligt aan de veilige kant van een volledig plastische verdeling (A_v = A). \
+     De resulterende dwarskracht √(V_y,Ed² + V_z,Ed²) staat in 6.2.8 en 6.2.10.";
+
+/// Melding bij de kolomknik 6.3.1 van massief rond.
+pub const MELDING_KNIK_RONDSTAAL: &str =
+    "Massief rond: knikkromme c om beide assen (tabel 6.2, massieve doorsneden); i_y = i_z = d/4.";
+
+/// Melding bij 6.3.3 van massief rond, als de toets gerekend is.
+pub const MELDING_INTERACTIE_RONDSTAAL: &str =
+    "Massief rond: kip is niet van toepassing (zie 6.3.2), dus χ_LT = 1,0 en M_b,Rd = \
+     W_pl·f_y/γ_M1; de interactiefactoren komen uit tabel B.1 (niet gevoelig voor vervormingen door \
+     torsie).";
+
+/// Reden waarom 6.3.1 niet van toepassing is: de omhullende bevat geen druk.
+/// Geldt voor elke doorsnede: een staaf op trek knikt niet, en met de grootste
+/// |N| als "drukkracht" zou een slanke trekstaaf op zijn trekkracht afkeuren.
+pub fn reden_knik_geen_druk(n_max_druk_kn: f64) -> String {
+    format!(
+        "Niet van toepassing: de omhullende bevat geen drukkracht (kleinste N_Ed = {} kN, N is \
+         trek-positief). Een staaf op trek knikt niet; de trek is getoetst in 6.2.3.",
+        format!("{n_max_druk_kn:.2}").replace('.', ",")
+    )
+}
+
+/// Reden waarom 6.3.3 niet van toepassing is: geen combinatie met druk, en
+/// ook geen combinatie met buiging om beide assen.
+pub const REDEN_INTERACTIE_GEEN_DRUK: &str =
+    "Niet van toepassing: 6.3.3 geldt voor staven op buiging en DRUK, en geen enkele \
+     belastingcombinatie in de omhullende bevat drukkracht. Buiging samen met trek is als \
+     doorsnedetoets in 6.2.9 getoetst, en de kip van de staaf in 6.3.2.";
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Platstaal (reeks "Strip <b>x<t>") — wat er anders gaat, en waarom
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Een strip is in een staalhal meestal een windverband: een trekstaaf. Net als
+// bij massief rond rekenen druk, knik en 6.3.3 met de grootste DRUKkracht en
+// zijn ze zonder druk niet van toepassing. Anders dan rond is een strip NIET
+// rotatiesymmetrisch: de breedte b staat langs z, dus I_y = t·b³/12 is de
+// sterke as. Kip is uitknikken bij buiging om die sterke as; zonder zo'n
+// moment treedt zij niet op, mét zo'n moment wordt zij niet gerekend (geen
+// M_cr voor een massieve rechthoek in de NB) en zegt de toets dat.
+
+/// Kip 6.3.2 bij platstaal zonder buiging om de sterke as: niet van
+/// toepassing, mét reden. 6.3.3 draait dan door met χ_LT = 1,0.
+pub const REDEN_KIP_NVT_STRIP: &str =
+    "Niet van toepassing: de strip buigt nergens om haar sterke as (M_y = 0 in de hele \
+     omhullende; de breedte b staat langs z). Kip is het zijdelings uitknikken van een staaf die \
+     om de sterke as buigt; buiging om de zwakke as en zuivere normaalkracht geven geen kip. In \
+     6.3.3 geldt daarom χ_LT = 1,0.";
+
+/// Kip 6.3.2 bij platstaal MÉT buiging om de sterke as: niet gerekend, met
+/// reden; 6.3.3 vervalt dan ook.
+pub const REDEN_KIP_STRIP_STERKE_AS: &str =
+    "kip 6.3.2 is voor platstaal dat om de sterke as buigt (M_y ≠ 0) niet gerekend: een strip op \
+     zijn kant is kipgevoelig (kleine I_z en I_t), en de formules voor M_cr in bijlage NB.NB gelden \
+     voor I-profielen, niet voor een massieve rechthoek — beoordeel de kip handmatig of voorkom \
+     haar met kipsteunen";
+
+/// Melding bij de trektoets 6.2.3 van platstaal. Ze moet kloppen met en
+/// zonder opgegeven nettodoorsnede: de toets zelf zegt welke van de twee.
+pub const MELDING_TREK_STRIP: &str =
+    "Platstaal: getoetst met de grootste TREKkracht uit de omhullende; N_pl,Rd op de \
+     brutodoorsnede A = b·t (6.6), er is geen draadeind. Gaten in de aansluiting tellen alleen \
+     mee als de nettodoorsnede A_net is opgegeven (6.7); zonder A_net vallen ze buiten deze \
+     toets. Voor tabel 3.1 geldt de dikte t.";
+
+/// Melding bij de buigings- en afschuiftoetsen van platstaal.
+pub const MELDING_DOORSNEDE_STRIP: &str =
+    "Platstaal: de breedte b staat langs de z-as, dus de y-as is de sterke as (W_y = t·b²/6 \
+     elastisch, t·b²/4 plastisch) en de z-as de zwakke. A_v = ⅔·A in beide richtingen: \
+     NEN-EN 1993-1-1 6.2.6(3) heeft geen rij voor een massieve rechthoek, en onder 6.2.6(2) volgt \
+     A_v uit de elastische schuifspanning τ_max = 1,5·V/A; dat ligt aan de veilige kant van een \
+     volledig plastische verdeling (A_v = A).";
+
+/// Melding bij de kolomknik 6.3.1 van platstaal.
+pub const MELDING_KNIK_STRIP: &str =
+    "Platstaal: knikkromme c om beide assen (tabel 6.2, massieve doorsneden); i_y = b/√12 en \
+     i_z = t/√12, dus de strip knikt vrijwel altijd om de zwakke z-as.";
+
+/// Melding bij 6.3.3 van platstaal, als de toets gerekend is.
+pub const MELDING_INTERACTIE_STRIP: &str =
+    "Platstaal zonder buiging om de sterke as: kip is niet van toepassing (zie 6.3.2), dus \
+     χ_LT = 1,0; de interactiefactoren komen uit tabel B.1.";
+
+/// Het begin van `governing_check_id` bij een staaf die NIET VOLLEDIG is
+/// getoetst: een toets die bij deze krachten nodig is, is geweigerd (de
+/// lijfplooi onder schuifkracht bij V_z,Ed ≠ 0, of de knik bij druk en de kip
+/// bij buiging aan een doorlopend staafeind), terwijl geen gerekende toets
+/// faalt. De status is dan `NotApplicable`, nooit `Ok`; de reden volgt na de
+/// dubbele punt.
+pub const NIET_VOLLEDIG_GETOETST: &str = "NIET VOLLEDIG GETOETST";
 
 /// Weigering van de schuiftoets wegens lijfplooi (NEN-EN 1993-1-5 §5.1(2)).
 pub fn reden_lijfplooi(hw_over_tw: f64, grens: f64) -> String {
@@ -598,6 +839,56 @@ impl CustomSection {
             return false;
         }
         true
+    }
+
+    /// Is dit een **dubbelsymmetrische gelaste koker**: precies vier lamellen,
+    /// twee gelijke liggende flenzen en twee gelijke staande lijven, de
+    /// flenzen spiegelsymmetrisch om één horizontale lijn en de lijven om één
+    /// verticale lijn, en het midden van de flenzen en van de lijven op
+    /// hetzelfde punt? Dan gelden de kokerbenaderingen van §6.2.9.1(5)
+    /// ((6.39), (6.40)) voor "gelaste kokers met gelijke flenzen en gelijke
+    /// lijven".
+    ///
+    /// Of de vier platen een gesloten cel vormen, beslist deze functie niet —
+    /// dat is een zaak van de torsie (zie [`Self::heeft_ongedeclareerde_gesloten_cel`]).
+    pub fn is_dubbelsymmetrische_koker(&self) -> bool {
+        if self.lamellen.len() != 4 {
+            return false;
+        }
+        let schaal = self.lamellen.iter().fold(1.0_f64, |m, l| m.max(l.b_mm));
+        let tol = 1e-6 * schaal;
+        let liggend: Vec<&CustomLamella> = self
+            .lamellen
+            .iter()
+            .filter(|l| l.alpha_rad.sin().abs() < 1e-9)
+            .collect();
+        let staand: Vec<&CustomLamella> = self
+            .lamellen
+            .iter()
+            .filter(|l| l.alpha_rad.cos().abs() < 1e-9)
+            .collect();
+        if liggend.len() != 2 || staand.len() != 2 {
+            return false;
+        }
+        let (f1, f2, w1, w2) = (liggend[0], liggend[1], staand[0], staand[1]);
+        let gelijk = |a: f64, b: f64| (a - b).abs() <= tol;
+        // Gelijke flenzen, gelijke lijven.
+        if !(gelijk(f1.b_mm, f2.b_mm) && gelijk(f1.t_mm, f2.t_mm)) {
+            return false;
+        }
+        if !(gelijk(w1.b_mm, w2.b_mm) && gelijk(w1.t_mm, w2.t_mm)) {
+            return false;
+        }
+        // De flenzen op één verticale hartlijn, de lijven op één horizontale,
+        // elk paar aan weerszijden van hetzelfde middelpunt.
+        let y_m = 0.5 * (w1.y_mm + w2.y_mm);
+        let z_m = 0.5 * (f1.z_mm + f2.z_mm);
+        gelijk(f1.y_mm, y_m)
+            && gelijk(f2.y_mm, y_m)
+            && gelijk(w1.z_mm, z_m)
+            && gelijk(w2.z_mm, z_m)
+            && !gelijk(f1.z_mm, f2.z_mm)
+            && !gelijk(w1.y_mm, w2.y_mm)
     }
 
     /// Grootste `h_w/t_w` over de lamellen die meer staand dan liggend zijn —

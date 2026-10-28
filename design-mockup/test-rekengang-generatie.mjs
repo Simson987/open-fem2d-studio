@@ -221,7 +221,8 @@ test('late stabiliteitsmelding hoort niet bij een nieuw model',async()=>{
 
 test('late foutmelding van synchrone voorronde hoort niet bij nieuw model',async()=>{
   const f=fixture('notify',false);
-  Object.assign(f.c,{gemeldeRekenfoutRef:{current:null},controleerVoorRekenen(){throw Error('Model ongeldig');}});
+  Object.assign(f.c,{gemeldeRekenfoutRef:{current:null},controleerVoorRekenen(){throw Error('Model ongeldig');},
+    leesSnapInstellingen:()=>({verbindingsTolerantie:5})});
   const run=vm.runInContext(callback('computeAndStoreSolverOutputs'),vm.createContext(f.c));
   assert.equal(run(),null);await tick();f.c.rekenGeneratieRef.current++;
   const before=f.events.length;f.barrier.resolve();await tick();

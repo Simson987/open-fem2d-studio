@@ -1,6 +1,5 @@
 import { Children, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
-import ExplorerViewTab from "../fem/ExplorerViewTab";
 import type { DisplayFlags } from "../fem/FemResultsOverlay";
 import type { StructuralGrid } from "../fem/femTypes";
 import type { LoadCombination } from "../fem/solver/combinations";
@@ -255,12 +254,10 @@ export default function Frame3DExplorer(props: Props) {
             onClick={(event) => select(event, { type: "volume", id: load.volumeId })} />)}
         </Branch>
       </>}
-      {tab === "view" && <ExplorerViewTab
-        displayFlags={props.displayFlags} setDisplayFlags={props.setDisplayFlags}
-        gridShow={props.gridShow} setGridShow={props.setGridShow}
-        stramienAan={props.structuralGrid.enabled} setStramienAan={props.setStructuralGridEnabled}
-        frame3dVisibility={props.visibility} setFrame3DVisibility={props.setVisibility} workspace="3d"
-      />}
+      {/* Sinds de samenvoeging met release 2026.42 toont de app de 3D-omgeving
+          uit components/openFem3d; ExplorerViewTab kent alleen nog diens
+          zichtbaarheid. Deze frame3d-verkenner wordt niet meer gemount en houdt
+          hier geen Weergave-tab tot de native Rust-route is overgezet. */}
       {tab === "results" && <div className="fem-results-tab" data-frame3d-results-tab>
         <div className="fem-results-section-title">{t("tree.resultsTab")}</div>
         {props.result ? <div className="fem-results-hint">

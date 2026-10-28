@@ -481,8 +481,8 @@ log("\n[10] Gebouwgevallen bit-identiek aan de generator van vóór het vrijstaa
   // resultaat (meldingen, gevallen, lasten, combinaties, samenvatting,
   // geometrie). De referentiehashes zijn vastgelegd met de generator van
   // master d257219, vóór deze uitbreiding, met dezelfde scenario's. Een
-  // andere hash betekent dat er in de gebouwroute iets is veranderd — ook een
-  // extra veld of een andere volgorde.
+  // andere hash betekent dat er in de gebouwroute iets is veranderd, behalve
+  // de later toegevoegde expliciete drukmethode in de opgeslagen afleiding.
   const portaal = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 12000, z: 0 }, { id: 3, x: 0, z: 6000 }, { id: 4, x: 12000, z: 6000 }],
     beams: [{ id: 1, from: 1, to: 3 }, { id: 2, from: 2, to: 4 }, { id: 3, from: 3, to: 4 }] };
   const zadel = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 12000, z: 0 }, { id: 3, x: 0, z: 5000 }, { id: 4, x: 6000, z: 7000 }, { id: 5, x: 12000, z: 5000 }, { id: 6, x: -800, z: 4733.33 }],
@@ -512,7 +512,8 @@ log("\n[10] Gebouwgevallen bit-identiek aan de generator van vóór het vrijstaa
       checkTrue(`${naam}: geometrie.hellendDak aanwezig (issue #49)`, r.geometrie.hellendDak.vorm !== undefined);
       delete r.geometrie.hellendDak;
     }
-    checkExact(`${naam}: sha256 ongewijzigd`, createHash("sha256").update(JSON.stringify(r)).digest("hex"), hash);
+    checkExact(`${naam}: sha256 ongewijzigd`, createHash("sha256").update(JSON.stringify(r,
+      (key, value) => key === "drukmethode" ? undefined : value)).digest("hex"), hash);
   }
   // "zadel zonder cpe" weigerde tot issue #49 (hash c0e11cd6…); nu vult de
   // generator tabel 7.4a/7.4b zelf in. Dezelfde invoer slaagt daarom, met de
@@ -525,7 +526,26 @@ log("\n[10] Gebouwgevallen bit-identiek aan de generator van vóór het vrijstaa
   // Instellingen van vóór de keuze (zonder `vorm`) rekenen als gebouw.
   const { vorm: _v, ...oud } = S;
   const r = genereerWindbelasting({ ...portaal, loadCases: gevallen }, oud);
-  checkExact("instellingen zonder 'vorm' ⇒ gebouw, zelfde hash", createHash("sha256").update(JSON.stringify(r)).digest("hex"), scenarios[0][3]);
+  checkExact("instellingen zonder 'vorm' ⇒ gebouw, zelfde hash", createHash("sha256").update(JSON.stringify(r,
+    (key, value) => key === "drukmethode" ? undefined : value)).digest("hex"), scenarios[0][3]);
+}
+
+log("\n[11] Constructiefactor schaalt ook vrijstaande daken en resultanten");
+{
+  const model = { nodes: nodesL, beams: beamsL, loadCases: gevallenG };
+  const normaal = genereerWindbelasting(model, instL);
+  const geschaald = genereerWindbelasting(model, { ...instL, structuralFactor: 1.3 });
+  checkTrue("generatie met factor 1,3 geslaagd", normaal.ok && geschaald.ok);
+  check("stuwdruk blijft onveranderd", geschaald.samenvatting.stuwdruk.qp_kNm2, normaal.samenvatting.stuwdruk.qp_kNm2);
+  for (let i = 0; i < normaal.lasten.length; i++) {
+    check(`vrijstaande lijnlast ${i + 1}`, geschaald.lasten[i].q, normaal.lasten[i].q * 1.3);
+  }
+  const resOud = normaal.samenvatting.perGeval.flatMap((g) => g.resultanten ?? []);
+  const resNieuw = geschaald.samenvatting.perGeval.flatMap((g) => g.resultanten ?? []);
+  checkTrue("resultanten aanwezig", resOud.length > 0 && resOud.length === resNieuw.length);
+  for (let i = 0; i < resOud.length; i++) {
+    check(`vrijstaande resultante ${i + 1}`, resNieuw[i].F_kN, resOud[i].F_kN * 1.3);
+  }
 }
 
 log(`\n${passed} geslaagd, ${failed} mislukt`);

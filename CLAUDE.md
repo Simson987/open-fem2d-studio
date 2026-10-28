@@ -73,6 +73,7 @@ niet meer gebouwd door `src-tauri/tauri.conf.json` of de release-workflow. Nieuw
 | `src-tauri/crates/openaec-mcp-server/assets/fem-kernel.mjs` | Gebundelde solver voor de MCP-server; `.sha256` wordt in `build.rs` gecontroleerd |
 | `src-tauri/src/lib.rs` | Tauri-commando's (`generate_handler!`) |
 | `design-mockup/scripts/run-tests.mjs` | Testrunner (`BUNDEL_TESTS` / `ALLEEN_BRON`) |
+| `design-mockup/src/api/` | Commandoregister van de API: elk commando wordt een MCP-tool en werkt in de draaiende app; `dekking.ts` koppelt elke 3D-functie aan een commando |
 
 ### Drie wegen naar de rekenkern
 Rekengang in de bibliotheek van de crate; alle drie roepen dezelfde functie aan:
@@ -82,6 +83,13 @@ Rekengang in de bibliotheek van de crate; alle drie roepen dezelfde functie aan:
    (doorsnedegrootheden: `doorsnedemotor`, `POST /api/doorsnede`)
 3. `crates/openaec-mcp-server`; FEM-berekeningen lopen via de Node-sidecar `fem-kernel.mjs`
 Nieuwe invoervelden: ook het MCP-schema en `design-mockup/src/mcp/valideerModel.ts` bijwerken (strikte schema's: `tests/schema_strikt.rs`).
+
+### API: elke functie een commando
+Een nieuwe modelfunctie krijgt een commando in `design-mockup/src/api/commands/` dat dezelfde zuivere functie aanroept
+als de GUI (geen tweede rekenregel). Na `npm run build:sidecar` staat het in `assets/api-catalogus.json` en is het een
+MCP-tool (headless met `project`, anders in de draaiende app). Elke 3D-functie staat in `src/api/dekking.ts`, met
+een commando of een latere fase: voor gereedschappen en modelvelden bewaakt `npx tsc --noEmit` dat (`satisfies`), voor
+lintknoppen, paneelknoppen en sneltoetsen `test-api-dekking.mjs`.
 
 ### Knoopnummering
 - Reguliere knopen: `Mesh.addNode`, teller vanaf 1
@@ -95,7 +103,7 @@ cd src-tauri && cargo build --release -p toetsbrug -p openaec-mcp-server
 cd design-mockup && npx tsc --noEmit
 cd design-mockup && node scripts/run-tests.mjs                      # alle test-*.mjs tegen de bron
 cd design-mockup && node scripts/run-tests.mjs --bundel             # adaptertests tegen de bundel
-cd src-tauri && cargo test --workspace --exclude open-fem2d-studio
+cd src-tauri && cargo test --workspace --exclude open-fem-studio
 ```
 - Solvertests zijn analytisch opgezet (`design-mockup/test-*.mjs`); nieuwe test registreren in `run-tests.mjs`.
 - Geen snapshot, gouden fixture of referentiewaarde blind bijwerken: elk veranderd getal verantwoorden.
@@ -104,7 +112,7 @@ cd src-tauri && cargo test --workspace --exclude open-fem2d-studio
 1. **Oude binaries**: `run-tests.mjs` bouwt `toetsbrug`/`openaec-mcp-server` niet; zonder herbouw test je een oude kern.
 2. **Oude sidecar**: na een wijziging aan de kern of `engine.ts` rekent de MCP-server met de vorige bundel tot `npm run build:sidecar` gedraaid is. `build.rs` vergelijkt alleen bundel en hashbestand, niet de TypeScript-bron.
 3. **Normaalkrachtteken**: de kern rekent N druk-positief, `engine.ts` (`convertResult`) zet om naar trek-positief. Nooit een tweede omkering toevoegen (`test-n-teken.mjs`).
-4. **Vergrendelde DLL**: een draaiende debug-app vergrendelt `WebView2Loader.dll`; test met `--exclude open-fem2d-studio`.
+4. **Vergrendelde DLL**: een draaiende debug-app vergrendelt `WebView2Loader.dll`; test met `--exclude open-fem-studio`.
 5. **ts-rs-typen**: `cargo test` herschrijft `design-mockup/src/lib/types/`; alleen regeleinden veranderd → `git checkout`.
 6. **Versienummer** staat in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (+ `Cargo.lock`) en `design-mockup/package.json`; release bouwen vanuit de root (`npm run tauri:build`), niet vanuit `design-mockup/` (daar staat een oude `src-tauri/`-sjabloonmap).
 7. **Windows-crate-type**: de app-crate blijft `crate-type = ["lib"]` (64K-exportlimiet van PE/COFF).

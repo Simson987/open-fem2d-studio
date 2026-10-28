@@ -21,11 +21,13 @@ export default function RibbonButton({
     <button
       className={`ribbon-btn${size === "small" ? " small" : ""}${size === "medium" ? " medium" : ""}${active ? " active" : ""}`}
       title={title || label}
+      aria-label={label}
       disabled={disabled}
       onClick={onClick}
     >
       <div
         className="ribbon-btn-icon"
+        aria-hidden="true"
         dangerouslySetInnerHTML={{ __html: icon }}
       />
       <span className="ribbon-btn-label">{label}</span>

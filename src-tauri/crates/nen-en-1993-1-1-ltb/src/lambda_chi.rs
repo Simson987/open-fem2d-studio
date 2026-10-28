@@ -82,12 +82,15 @@ pub fn phi_lt(lambda_lt: f64, alpha_lt: f64) -> f64 {
     0.5 * (1.0 + alpha_lt * (lambda_lt - LAMBDA_LT_0) + BETA_LT * lambda_lt.powi(2))
 }
 
-pub fn lambda_lt(wpl_y_mm3: f64, fy_mpa: f64, m_cr_knm: f64) -> f64 {
+/// λ̄_LT = √(W_y·f_y/M_cr), art. 6.3.2.2(1). `w_y_mm3` is W_pl,y bij klasse 1
+/// en 2 en W_el,y bij klasse 3 (art. 6.3.2.1(3)); zie
+/// [`crate::KipWeerstandsmoment`].
+pub fn lambda_lt(w_y_mm3: f64, fy_mpa: f64, m_cr_knm: f64) -> f64 {
     if m_cr_knm <= 0.0 {
         return f64::INFINITY;
     }
     let m_cr_nmm = m_cr_knm * 1e6;
-    (wpl_y_mm3 * fy_mpa / m_cr_nmm).sqrt()
+    (w_y_mm3 * fy_mpa / m_cr_nmm).sqrt()
 }
 
 /// EN 1993-1-1 vgl. (6.57) — de kipreductiefactor voor gewalste profielen en

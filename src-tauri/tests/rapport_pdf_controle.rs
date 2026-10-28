@@ -7,7 +7,7 @@
 //! manifest, zie build.rs en testbinary_laadt.rs) en staat daarom uit
 //! (`[lib] test = false`). Integratietest-doelen krijgen het manifest wél.
 
-use open_fem2d_studio_lib::gui_control::rapport::*;
+use open_fem_studio_lib::gui_control::rapport::*;
 use serde_json::json;
 
 /// Een minimale PDF zoals Chromium hem schrijft: losse objecten, een
@@ -60,10 +60,7 @@ fn controle_eist_pdf_kop_en_een_pagina_per_vel() {
 
 #[test]
 fn dynamisch_3d_rapport_gebruikt_werkelijk_paginatal() {
-    assert_eq!(
-        controleer_pdf_met_verwacht_aantal(&pdf_met(7, " "), None),
-        Ok(7)
-    );
+    assert_eq!(controleer_pdf_met_verwacht_aantal(&pdf_met(7, " "), None), Ok(7));
     let geen_pdf = controleer_pdf_met_verwacht_aantal(b"geen pdf", None).unwrap_err();
     assert!(geen_pdf.contains("%PDF-"), "{geen_pdf}");
 }

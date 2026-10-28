@@ -257,7 +257,9 @@
       "hollowHotFinished": "Profil creux fini à chaud (SHS/RHS, EN 10210)",
       "circularHotFinished": "Tube rond fini à chaud (CHS, EN 10210)",
       "angleEqual": "L à ailes égales",
-      "angleUnequal": "L à ailes inégales"
+      "angleUnequal": "L à ailes inégales",
+      "roundBar": "Rond plein (RD, Ø)",
+      "flatBar": "Plat (fer plat, FL)"
     }
   },
   "connection": {

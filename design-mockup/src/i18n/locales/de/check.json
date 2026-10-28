@@ -257,7 +257,9 @@
       "hollowHotFinished": "Hohlprofil, warmgefertigt (SHS/RHS, EN 10210)",
       "circularHotFinished": "Rundrohr, warmgefertigt (CHS, EN 10210)",
       "angleEqual": "L gleichschenklig",
-      "angleUnequal": "L ungleichschenklig"
+      "angleUnequal": "L ungleichschenklig",
+      "roundBar": "Rundstahl, massiv (RD, Ø)",
+      "flatBar": "Flachstahl (FL)"
     }
   },
   "connection": {

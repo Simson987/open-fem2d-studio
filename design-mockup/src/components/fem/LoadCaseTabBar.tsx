@@ -106,6 +106,8 @@ interface Props {
   /** Richting van de equivalente horizontale krachten: +1 = +x, −1 = −x. */
   scheefstandRichting?: 1 | -1;
   setScheefstandRichting?: (v: 1 | -1) => void;
+  /** 3D: de scheefstand werkt om de beurt in +X, −X, +Y en −Y; geen primaire richting. */
+  scheefstandIn3D?: boolean;
   /**
    * Waar φ vandaan komt: `"vast"` (de noemer hierboven, en de stand van elk
    * bestaand project) of een van de drie normen — zie `lib/scheefstandNorm.ts`.
@@ -131,6 +133,15 @@ interface Props {
   scheefstandToelichting?: string;
   /** Wat er mis kan zijn met de afleiding; leeg = niets. */
   scheefstandWaarschuwingen?: string[];
+  /**
+   * 3D: trek-alleen staven gemonteerd na de permanente belasting, en de
+   * kruisregel. Alleen zichtbaar als de setter er is (een 3D-model met
+   * trek-alleen staven).
+   */
+  trekAlleenMontage?: boolean;
+  setTrekAlleenMontage?: (v: boolean) => void;
+  kruisregel?: boolean;
+  setKruisregel?: (v: boolean) => void;
   /** Model-view tab: when false, no LC loads are drawn on the canvas. */
   showLoads?: boolean;
   setShowLoads?: (v: boolean) => void;
@@ -173,7 +184,8 @@ export default function LoadCaseTabBar({
   betonKruipcoefficient = null, setBetonKruipcoefficient, heeftBetonstaaf = false,
   betonKruipInvoer = null, setBetonKruipInvoer,
   aantalBetonstaven = 0, segmentWaarschuwing = null,
-  scheefstandEnabled, setScheefstandEnabled,
+  scheefstandEnabled, setScheefstandEnabled, scheefstandIn3D,
+  trekAlleenMontage, setTrekAlleenMontage, kruisregel, setKruisregel,
   scheefstandNoemer, setScheefstandNoemer,
   scheefstandRichting,
   scheefstandBron = "vast", setScheefstandBron,
@@ -898,10 +910,43 @@ export default function LoadCaseTabBar({
       {setScheefstandEnabled && scheefstandEnabled && (
         <span
           className="lc-tab-phi"
-          title={t("loadCases.swayDirectionTitle", { richting: (scheefstandRichting ?? 1) === 1 ? "+x" : "−x" })}
+          title={scheefstandIn3D
+            ? t("loadCases.swayDirectionTitle3d")
+            : t("loadCases.swayDirectionTitle", { richting: (scheefstandRichting ?? 1) === 1 ? "+x" : "−x" })}
         >
-          <span className="lc-tab-phi-label">±x</span>
+          <span className="lc-tab-phi-label">{scheefstandIn3D ? "±X ±Y" : "±x"}</span>
         </span>
+      )}
+
+      {/* 3D, trek-alleen staven: montage na de permanente belasting en de
+          kruisregel. Modelinstellingen; zelfde toggle-patroon. */}
+      {setTrekAlleenMontage && (
+        <label
+          className={`lc-tab-toggle${trekAlleenMontage ? " active" : ""}`}
+          title={t("loadCases.tensionOnlyFitTitle")}
+          data-trek-alleen-montage
+        >
+          <input
+            type="checkbox"
+            checked={!!trekAlleenMontage}
+            onChange={(e) => setTrekAlleenMontage(e.target.checked)}
+          />
+          <span>{t("loadCases.tensionOnlyFit")}</span>
+        </label>
+      )}
+      {setKruisregel && (
+        <label
+          className={`lc-tab-toggle${kruisregel ? " active" : ""}`}
+          title={t("loadCases.crossRuleTitle")}
+          data-kruisregel
+        >
+          <input
+            type="checkbox"
+            checked={!!kruisregel}
+            onChange={(e) => setKruisregel(e.target.checked)}
+          />
+          <span>{t("loadCases.crossRule")}</span>
+        </label>
       )}
     </div>
   );

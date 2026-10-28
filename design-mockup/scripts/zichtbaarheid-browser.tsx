@@ -20,6 +20,9 @@ import "../src/themes.css";
 import "../src/App.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
 import { ResultatenTab } from "../src/components/fem/FemProjectTree";
+// De modellagen staan in de verkenner in de tab Weergave, de resultaatlagen in de tab Resultaten.
+import ExplorerViewTab from "../src/components/fem/ExplorerViewTab";
+import { OPEN_FEM_3D_RESULT_LAYERS, OPEN_FEM_3D_VISIBILITY_FLAGS, DEFAULT_OPEN_FEM_3D_VISIBILITY } from "../src/components/openFem3d/openFem3dVisibility";
 import ZichtbaarheidVenster from "../src/components/fem/ZichtbaarheidVenster";
 import InsightsTab from "../src/components/ribbon/InsightsTab";
 import { DEFAULT_DISPLAY_FLAGS, type DisplayFlags } from "../src/components/fem/FemResultsOverlay";
@@ -66,10 +69,16 @@ function Proef({ begin = DEFAULT_DISPLAY_FLAGS, venster = true, lijst = true, te
     <div style={{ display: "flex", gap: 8 }}>
       {lijst && (
         <aside className="fem-verkenner-proef" style={{ width: 240 }}>
+          <ExplorerViewTab
+            displayFlags={f} setDisplayFlags={setF} workspace="2d"
+            gridShow={false} setGridShow={noop}
+            stramienAan={grid.enabled} setStramienAan={(aan) => setGrid((g) => ({ ...g, enabled: aan }))}
+            openFem3dVisibility={DEFAULT_OPEN_FEM_3D_VISIBILITY} setOpenFem3DVisibility={noop}
+            onOpenZichtbaarheid={() => { geopend++; }}
+          />
           <ResultatenTab
             loadCases={[]} combinations={[]} activeLoadCaseId={1} activeCombinationId={null} envelopeView={false}
             hasResults={false} displayFlags={f} setDisplayFlags={setF}
-            onOpenZichtbaarheid={() => { geopend++; }}
           />
         </aside>
       )}
@@ -188,11 +197,10 @@ async function run() {
       }
     }
     ok(vergeleken >= 12, `maar ${vergeleken} rijen in beide gevonden`);
-    // Het subvinkje Profielbreedte in de verkenner (onder Aanzicht).
+    // De subregel Profielbreedte in de verkenner (onder Aanzicht).
     klik(vensterKnop("aanzicht")!);
-    const sub = [...container.querySelectorAll<HTMLInputElement>(".fem-verkenner-proef .fem-results-subcheck input")]
-      .find((i) => i.parentElement?.textContent?.includes("Profielbreedte"));
-    ok(sub, "subvinkje Profielbreedte ontbreekt");
+    const sub = verkennerKnop(t("zichtbaarheid.aanzichtBreedte"));
+    ok(sub, "subregel Profielbreedte ontbreekt");
     klik(sub!);
     gelijk(flags.aanzichtBreedte, true, "verkenner zet aanzichtBreedte");
     gelijk(vensterKnop("aanzichtBreedte")!.getAttribute("aria-checked"), "true", "venster volgt");
@@ -303,12 +311,13 @@ async function run() {
     gelijk(flags.M, false, "resultaatlaag ongemoeid");
   });
 
-  await test("bereikbaar: tandwiel bij Weergave op canvas en de knop Zichtbaarheid in de tab Inzicht", async () => {
+  await test("bereikbaar: tandwiel in de tab Weergave van de verkenner en de knop Zichtbaarheid in de tab Inzicht", async () => {
     geopend = 0;
     mount(<Proef venster={false} tekenvlak={false} />);
     const tandwiel = container.querySelector('[data-actie="zichtbaarheid"]');
     ok(tandwiel, "tandwiel ontbreekt");
-    ok(tandwiel!.closest(".fem-results-section-title")?.textContent?.includes("Weergave op canvas"), "tandwiel niet bij de titel");
+    ok(tandwiel!.closest('.explorer-view-section[data-workspace="2d"] .fem-results-section-title')?.textContent?.includes(t("zichtbaarheid.view2d")),
+      "tandwiel niet bij de titel van de 2D-weergave");
     klik(tandwiel!);
     gelijk(geopend, 1, "tandwiel opent het venster");
     let lint = 0;
@@ -317,6 +326,65 @@ async function run() {
     ok(knop, "lintknop ontbreekt");
     klik(knop!);
     gelijk(lint, 1, "lintknop opent het venster");
+  });
+
+  await test("3D: de tab Weergave toont de modellagen, de resultaatlagen staan alleen onder Resultaten", async () => {
+    mount(<ExplorerViewTab
+      displayFlags={DEFAULT_DISPLAY_FLAGS} setDisplayFlags={noop} workspace="3d"
+      gridShow={false} setGridShow={noop} stramienAan setStramienAan={noop}
+      openFem3dVisibility={DEFAULT_OPEN_FEM_3D_VISIBILITY} setOpenFem3DVisibility={noop}
+    />);
+    const labels = [...container.querySelectorAll('.explorer-view-section[data-workspace="3d"] .fem-results-toggle-label')]
+      .map((el) => el.textContent);
+    for (const laag of OPEN_FEM_3D_RESULT_LAYERS) {
+      ok(!labels.includes(t(`openFem3dVisibility.${laag}`)), `resultaatlaag ${laag} staat nog onder Weergave`);
+    }
+    for (const laag of ["nodes", "beams", "supports", "loads", "grid"] as const) {
+      ok(labels.includes(t(`openFem3dVisibility.${laag}`)), `modellaag ${laag} ontbreekt onder Weergave`);
+    }
+    // De grootte van knopen en opleggingen (issue #82) is geen laag maar een
+    // regelaar onder zijn laag: geen eigen schakelaar.
+    gelijk(labels.length, OPEN_FEM_3D_VISIBILITY_FLAGS.length - OPEN_FEM_3D_RESULT_LAYERS.length,
+      "aantal rijen = alle aan/uit-lagen min de resultaatlagen");
+    gelijk([...container.querySelectorAll('.explorer-view-section[data-workspace="3d"] [data-open-fem3d-symbol-scale]')]
+      .map((el) => (el as HTMLElement).dataset.openFem3dSymbolScale), ["nodes", "supports"], "regelaars Grootte onder Knopen en Opleggingen");
+  });
+
+  await test("lijnlast: in- en uitzoomen verandert het aantal pijlen niet (#101)", async () => {
+    mount(<Proef venster={false} lijst={false} />);
+    const svg = container.querySelector<SVGSVGElement>("svg.fem-canvas-svg")!;
+    const pijlen = () => container.querySelectorAll("svg.fem-canvas-svg .fem-load-vec").length;
+    // Het aantal hangt bewust af van de maat van het tekenvlak (passend beeld).
+    // De ResizeObserver meldt die maat pas bij een tekenmoment, en in de
+    // headless browser met virtuele tijd komt dat niet vanzelf. Een kleine
+    // stijlwijziging per ronde dwingt het af, zonder te zoomen. Tel pas als maat
+    // en telling drie keer gelijk zijn.
+    let vorige = "", gelijkTeller = 0;
+    for (let i = 0; i < 40 && gelijkTeller < 3; i++) {
+      document.body.style.setProperty("--proef-tik", String(i));
+      void document.body.offsetHeight;
+      await wacht(100);
+      const r = svg.getBoundingClientRect();
+      const nu = `${pijlen()}|${Math.round(r.width)}x${Math.round(r.height)}`;
+      gelijkTeller = nu === vorige ? gelijkTeller + 1 : 0;
+      vorige = nu;
+    }
+    ok(gelijkTeller >= 3, `het tekenvlak kwam niet tot rust: ${vorige}`);
+    const zoom = async (deltaY: number, keer: number) => {
+      const r = svg.getBoundingClientRect();
+      for (let i = 0; i < keer; i++) {
+        svg.dispatchEvent(new WheelEvent("wheel", {
+          deltaY, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true, cancelable: true,
+        }));
+      }
+      await wacht(120);
+    };
+    const begin = pijlen();
+    ok(begin > 0, "geen lastpijlen op het tekenvlak");
+    await zoom(-100, 3);
+    gelijk(pijlen(), begin, "na inzoomen");
+    await zoom(100, 6);
+    gelijk(pijlen(), begin, "na uitzoomen");
   });
 
   await test("thema: het venster gebruikt de tokens, licht en donker verschillend", async () => {

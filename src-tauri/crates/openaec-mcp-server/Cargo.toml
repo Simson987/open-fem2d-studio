@@ -3,7 +3,7 @@ name = "openaec-mcp-server"
 version = "0.1.0"
 edition = "2021"
 description = "MCP (Model Context Protocol) server exposing the OpenAEC steel-check engine"
-license = "CC-BY-SA-4.0"
+license = "AGPL-3.0-or-later"
 
 # Bouwpoort op de ingebakken solverbundel: de build faalt als
 # `assets/fem-kernel.mjs` niet bij `assets/fem-kernel.sha256` hoort.
@@ -73,7 +73,9 @@ nen-en-1995-1-1 = { path = "../nen-en-1995-1-1" }
 # `check_fem_model`. Dezelfde functie als het Tauri-command en de toetsbrug.
 plaat-check = { path = "../plaat-check" }
 # Ruimtelijke raamwerken: exact dezelfde neutrale adapter en vastgezette
-# Dedaliano-kern als het Tauri-command `solve_frame3d`.
+# externe 3D-kern als het Tauri-command `solve_open_fem_3d`.
+open-fem-3d = { path = "../open-fem-3d" }
+# Dedaliano-kern onder de oude cratenaam, als het Tauri-command `solve_frame3d`.
 frame3d-solver = { path = "../frame3d-solver" }
 openaec-native-fem = { path = "../native-fem" }
 

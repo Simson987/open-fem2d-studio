@@ -109,7 +109,8 @@ const graad = Math.PI / 180;
 const som = (a) => a.reduce((x, y) => x + y, 0);
 const lastenVan = (res, sleutel, beamId) =>
   res.lasten.filter((l) => l.gevalSleutel === sleutel && (beamId === undefined || l.beamId === beamId));
-const sha = (x) => createHash("sha256").update(JSON.stringify(x)).digest("hex");
+const sha = (x) => createHash("sha256").update(JSON.stringify(x,
+  (key, value) => key === "drukmethode" ? undefined : value)).digest("hex");
 const fouten = (res) => res.meldingen.filter((m) => m.niveau === "fout").map((m) => m.tekst).join(" | ");
 
 const gevallenG = [{ id: 1, name: "Eigen gewicht", type: "dead" }];
@@ -306,6 +307,9 @@ log("\n[5] Wind op de kolommen — handberekening K");
   checkExact("kolommen 1 en 2 belast, dak niet", kl.map((l) => l.beamId).join(","), "1,2");
   // Kolom 1 loopt omhoog: lokale +z wijst naar −x; kracht in +x ⇒ q negatief.
   check("kolom 1 van links: q = −0,280855 kN/m (kracht +x)", kl[0].q, -0.280855, 0.01);
+  check("kolomdruk bewaart eigen z_e", kl[0].windStuwdruk.ze_m, 2.5);
+  check("kolomdruk bewaart gebruikte q_p", kl[0].windStuwdruk.qp_kNm2, 0.70214, 0.01);
+  checkTrue("kolomdruk bewaart herleidingsregels", kl[0].windStuwdruk.afleiding.length > 0);
   check("kolom 2 van links: q = −0,280855 kN/m", kl[1].q, -0.280855, 0.01);
   check("kolom 1 van rechts: +0,280855", lastenVan(scherp, "luifel:horizontaal:rechts", 1)[0].q, 0.280855, 0.01);
   checkTrue("loodrecht op de staaf (geen richting-veld)", kl.every((l) => l.richting === undefined));
@@ -329,8 +333,15 @@ log("\n[5] Wind op de kolommen — handberekening K");
   check("h = 6,00 m: z_e kolom 4,9282 m ⇒ q = −0,350078", lastenVan(hoog, "luifel:horizontaal:links", 1)[0].q, -0.350078, 0.01);
 
   const hand = genereerWindbelasting({ nodes: nodesZ, beams: beamsZ, loadCases: gevallenG },
-    { ...instZ, stuwdrukBron: "handmatig", qpHandmatig_kNm2: 0.9, kolomDoorsnede: "scherphoekig", kolomBreedte_mm: 150 });
+    { ...instZ, stuwdrukBron: "handmatig", qpHandmatig_kNm2: 0.9,
+      qpHandmatigBron: "Projectberekening dak en kolommen W-42",
+      kolomDoorsnede: "scherphoekig", kolomBreedte_mm: 150 });
   check("handmatige q_p 0,90: q = −0,9·2,0·0,15", lastenVan(hand, "luifel:horizontaal:links", 1)[0].q, -0.27);
+  checkExact("handmatige bron bij dakdruk", hand.samenvatting.stuwdruk.afleiding[0].bron,
+    "Projectberekening dak en kolommen W-42");
+  checkExact("handmatige bron bij kolomdruk",
+    lastenVan(hand, "luifel:horizontaal:links", 1)[0].windStuwdruk.afleiding[0].bron,
+    "Projectberekening dak en kolommen W-42");
 
   const zonderB = genereerWindbelasting({ nodes: nodesZ, beams: beamsZ, loadCases: gevallenG },
     { ...instZ, kolomDoorsnede: "rechthoekig", kolomBreedte_mm: 200, kolomDiepte_mm: 0 });

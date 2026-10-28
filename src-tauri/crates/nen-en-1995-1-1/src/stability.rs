@@ -101,7 +101,16 @@ pub fn check_column_stability(
     force_state: ForceStateSnapshot,
 ) -> StabilityCalc {
     let n_ed = force_state.forces.n_ed;
-    let sigma_c = sigma_axial_mpa(n_ed, section.a_mm2);
+    // Alleen DRUK: bij trek is kolomknik niet van toepassing, en een
+    // trekspanning hoort niet als σ_c,0,d in (6.23)/(6.24). Tot oktober 2026
+    // stond hier |N|/A; een trekstaaf kreeg zo een "kolomknik"-UC van 1,67
+    // (status n.v.t., maar wel in het rapport — controle 2026-10, punt K3).
+    let druk = n_ed < 0.0;
+    let sigma_c = if druk {
+        sigma_axial_mpa(n_ed, section.a_mm2)
+    } else {
+        0.0
+    };
     let sigma_my = sigma_m_mpa(force_state.forces.my_ed, section.w_y_mm3);
     let sigma_mz = sigma_m_mpa(force_state.forces.mz_ed, section.w_z_mm3);
     let l_cr_y_mm = input.kniklengte_y.l_cr_mm;
@@ -371,9 +380,10 @@ pub fn check_column_stability(
             },
         ],
         deelstappen,
-        value: uc,
+        value: if druk { uc } else { 0.0 },
         unit: "-".to_string(),
-        uc: Some(UnityCheck {
+        // Zonder druk geen unity check: geen getal dat als knik-UC oogt.
+        uc: druk.then(|| UnityCheck {
             ed: uc,
             rd: 1.0,
             uc,
@@ -878,6 +888,7 @@ pub struct BeamStabilityInput {
     pub e0_05_mpa: f64,
     pub beta_c: f64,
     pub f_myd_mpa: f64,
+    pub f_mzd_mpa: f64,
     pub f_c0d_mpa: f64,
 }
 
@@ -893,6 +904,7 @@ pub fn check_beam_stability(
 ) -> StabilityCalc {
     let n_ed = force_state.forces.n_ed;
     let sigma_m = sigma_m_mpa(force_state.forces.my_ed, section.w_y_mm3);
+    let sigma_mz = sigma_m_mpa(force_state.forces.mz_ed, section.w_z_mm3);
     let sigma_c = if n_ed < 0.0 {
         sigma_axial_mpa(n_ed, section.a_mm2)
     } else {
@@ -922,22 +934,30 @@ pub fn check_beam_stability(
     } else {
         0.0
     };
+    // Eigen uitbreiding van (6.33)/(6.35): Mz vergroot de druk in de
+    // kipgevoelige hoek. Zonder Mz blijft de normformule exact gelijk.
+    let weak_axis_ratio = if input.f_mzd_mpa > 0.0 {
+        sigma_mz / input.f_mzd_mpa
+    } else {
+        0.0
+    };
     let has_compression = sigma_c > 0.0;
     let (uc, formula, uc_formula) = if has_compression {
         (
-            bending_ratio * bending_ratio + sigma_c / (k_c_z * input.f_c0d_mpa),
-            r"\left(\frac{\sigma_{m,d}}{k_{crit} f_{m,d}}\right)^2 + \frac{\sigma_{c,d}}{k_{c,z} f_{c,0,d}} \le 1".to_string(),
+            bending_ratio * bending_ratio + sigma_c / (k_c_z * input.f_c0d_mpa) + weak_axis_ratio,
+            r"\left(\frac{\sigma_{m,y,d}}{k_{crit} f_{m,y,d}}\right)^2 + \frac{\sigma_{c,d}}{k_{c,z} f_{c,0,d}} + \frac{\sigma_{m,z,d}}{f_{m,z,d}} \le 1".to_string(),
             r"(6.35)".to_string(),
         )
     } else {
         (
-            bending_ratio,
-            r"\sigma_{m,d} \le k_{crit} \cdot f_{m,d}".to_string(),
+            bending_ratio + weak_axis_ratio,
+            r"\frac{\sigma_{m,y,d}}{k_{crit} f_{m,y,d}} + \frac{\sigma_{m,z,d}}{f_{m,z,d}} \le 1"
+                .to_string(),
             r"\sigma_{m,d} / (k_{crit} f_{m,d})".to_string(),
         )
     };
 
-    let status = if sigma_m <= 0.0 && !has_compression {
+    let status = if sigma_m <= 0.0 && sigma_mz <= 0.0 && !has_compression {
         CheckStatus::NotApplicable
     } else if uc <= 1.0 {
         CheckStatus::Ok
@@ -962,6 +982,11 @@ pub fn check_beam_stability(
                 unit: "N/mm²".to_string(),
             },
             NamedValue {
+                symbol: r"\sigma_{m,z,d}".to_string(),
+                value: sigma_mz,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
                 symbol: r"\sigma_{c,0,d}".to_string(),
                 value: sigma_c,
                 unit: "N/mm²".to_string(),
@@ -969,6 +994,11 @@ pub fn check_beam_stability(
             NamedValue {
                 symbol: r"f_{m,y,d}".to_string(),
                 value: input.f_myd_mpa,
+                unit: "N/mm²".to_string(),
+            },
+            NamedValue {
+                symbol: r"f_{m,z,d}".to_string(),
+                value: input.f_mzd_mpa,
                 unit: "N/mm²".to_string(),
             },
             NamedValue {
@@ -1025,7 +1055,11 @@ pub fn check_beam_stability(
             formula_latex: uc_formula,
         }),
         status,
-        notes: vec![],
+        notes: if sigma_mz > 0.0 {
+            vec!["Eigen uitbreiding van (6.33)/(6.35), geen normregel: M_z telt lineair mee zonder k_m. De houtnorm geeft geen vergrotingsfactor voor M_z door kipgevoeligheid.".into()]
+        } else {
+            vec![]
+        },
     }
 }
 
@@ -1442,6 +1476,7 @@ mod tests {
             e0_05_mpa: 7400.0,
             beta_c: 0.2,
             f_myd_mpa: 14.769,
+            f_mzd_mpa: 14.769,
             f_c0d_mpa: 12.923,
         };
         let r = check_beam_stability(&sectie(), &invoer, snap(-57.64, 72.170));
@@ -1467,6 +1502,7 @@ mod tests {
             e0_05_mpa: 7400.0,
             beta_c: 0.2,
             f_myd_mpa: 14.769,
+            f_mzd_mpa: 14.769,
             f_c0d_mpa: 12.923,
         };
         let r = check_beam_stability(&sectie(), &invoer, snap(0.0, 72.170));
@@ -1476,5 +1512,30 @@ mod tests {
             max_relative = 1e-3
         );
         assert!(r.article.contains("6.33"));
+    }
+
+    #[test]
+    fn kip_met_mz_gebruikt_de_explicit_benoemde_uitbreiding() {
+        let section = sectie();
+        let invoer = BeamStabilityInput {
+            l_ef_mm: 1268.0,
+            l_cr_z_mm: 1268.0,
+            f_mk_mpa: 24.0,
+            f_c0k_mpa: 21.0,
+            e0_05_mpa: 7400.0,
+            beta_c: 0.2,
+            f_myd_mpa: 14.769,
+            f_mzd_mpa: 16.149,
+            f_c0d_mpa: 12.923,
+        };
+        let mut state = snap(0.0, 0.0);
+        state.forces.mz_ed = 0.5 * section.w_z_mm3 * invoer.f_mzd_mpa / 1e6;
+        let result = check_beam_stability(&section, &invoer, state);
+        assert_relative_eq!(result.uc.unwrap().uc, 0.5, max_relative = 1e-12);
+        assert_eq!(result.status, CheckStatus::Ok);
+        assert!(result
+            .notes
+            .iter()
+            .any(|note| note.contains("Eigen uitbreiding")));
     }
 }

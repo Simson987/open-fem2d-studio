@@ -1,8 +1,9 @@
 /**
- * Tweelettercommando's op het tekenvlak, zoals in CAD: de eerste letter zet
- * een prefix klaar, de tweede letter binnen `VENSTER_MS` kiest het gereedschap.
+ * Toetscommando's op het tekenvlak, zoals in CAD. Een tweelettercommando
+ * zet met de eerste letter een prefix klaar; de tweede letter binnen
+ * `VENSTER_MS` kiest het gereedschap. Een direct commando kiest het meteen.
  *
- *   MV — verplaatsen
+ *   M  — verplaatsen (direct); MV blijft werken, de V valt dan weg
  *   CO — kopiëren (neemt de selectie mee, met de lasten die erop staan)
  */
 export type CommandoTool = "move" | "copy";
@@ -10,6 +11,11 @@ export type CommandoTool = "move" | "copy";
 export const COMMANDO_REEKSEN: Record<string, Record<string, CommandoTool>> = {
   m: { v: "move" },
   c: { o: "copy" },
+};
+
+/** Eén letter is genoeg; ze blijft ook als prefix staan, zodat MV niet dubbel werkt. */
+export const DIRECTE_COMMANDO_S: Record<string, CommandoTool> = {
+  m: "move",
 };
 
 export const VENSTER_MS = 1200;
@@ -29,6 +35,8 @@ export function verwerkToets(prefix: Prefix, toets: string, nu: number): { prefi
     if (tool) return { prefix: null, tool, verbruikt: true };
     // andere tweede toets: prefix vervalt, de toets zelf kan een nieuw prefix zijn
   }
+  const direct = DIRECTE_COMMANDO_S[k];
+  if (direct) return { prefix: { key: k, t: nu }, tool: direct, verbruikt: true };
   if (k in COMMANDO_REEKSEN) return { prefix: { key: k, t: nu }, verbruikt: true };
   return { prefix: null, verbruikt: false };
 }

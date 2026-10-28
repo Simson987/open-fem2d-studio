@@ -43,6 +43,9 @@ fn punt(x_mm: f64, n: f64, vz: f64, my: f64) -> ForcePoint {
 
 fn basis(beam_id: u32) -> TimberBeamCheckInput {
     TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         beam_id,
         width_mm: 96.0,
@@ -75,12 +78,16 @@ fn basis(beam_id: u32) -> TimberBeamCheckInput {
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        zijdelingse_knik_in_analyse: None,
     }
 }
 
 /// Staaf 2 — de ligger (knoop 2 → 3), envelopkrachten van combinatie 1.2.
 fn ligger() -> TimberBeamCheckResult {
     let input = TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         length_m: 6.342,
         forces_envelope: vec![
@@ -112,6 +119,9 @@ fn ligger() -> TimberBeamCheckResult {
 /// Staaf 1 — de schuine kolom (knoop 1 → 2), combinatie 1.2.
 fn kolom() -> TimberBeamCheckResult {
     let input = TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         length_m: 3.313,
         forces_envelope: vec![
@@ -218,6 +228,9 @@ fn trektoets_niet_van_toepassing_in_dit_raamwerk() {
 #[test]
 fn onbekende_sterkteklasse_geeft_foutresultaat() {
     let input = TimberBeamCheckInput {
+        ruimtelijk: false,
+        is_cantilever: false,
+        deflection_not_applicable_reason: None,
         bijlage: Default::default(),
         strength_class: "X99".to_string(),
         length_m: 1.0,

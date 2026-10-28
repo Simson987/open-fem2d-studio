@@ -35,7 +35,7 @@ profiel selecteerde staaf 3 en de twee eindknopen in 0,4 ms; de camerapositie
 bleef gelijk. Een klik net naast de ligger maakte de selectie leeg, terwijl een
 klik op het stalen profiel de eigenschappen van staaf 3 opende (picking 1,7 ms,
 selectie 0,9 ms). De geometrieproef
-[`test-frame3d-box-selection.mjs`](../../../design-mockup/test-frame3d-box-selection.mjs)
+[`test-open-fem3d-box-selection.mjs`](../../../design-mockup/test-open-fem3d-box-selection.mjs)
 toetst ook de doorsnede in plaats van uitsluitend de hartlijn, en de
 profielbatches die grote modellen gebruiken.
 Een batch met 235 profielvolumes werd in de zelfstandige geometrieproef in
@@ -142,6 +142,6 @@ een driehoek van het werkelijk gemeshte plaatvlak. In een schoon geladen
 proefmodel met een gebogen buitenrand en opening stond de lastpijl zichtbaar
 op het materiaal en was hij afzonderlijk selecteerbaar (1,4 ms hit-test).
 De geometrieproef in
-[`test-frame3d-plates-views.mjs`](../../../design-mockup/test-frame3d-plates-views.mjs)
+[`test-open-fem3d-plates-views.mjs`](../../../design-mockup/test-open-fem3d-plates-views.mjs)
 controleert met raycasting dat de lastpositie ook bij een gebogen opening
 op de plaat ligt.

@@ -1,7 +1,7 @@
 # EN 1993-1-1 Steel Check — Verification Comparison Report
 
 **Generated:** 2026-05-15  
-**Engine:** Open FEM2D Studio Rust steel-check (commit `265a413`)  
+**Engine:** Open FEM Studio Rust steel-check (commit `265a413`)  
 **Reference:** external reference calculation — Calc 2.pdf + portal-frame.pdf  
 **Acceptance test source:** `src-tauri/crates/steel-check/tests/`  
 **Snapshot source:** `src-tauri/crates/steel-check/tests/snapshots/`

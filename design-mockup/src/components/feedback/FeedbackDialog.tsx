@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, type ClipboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import html2canvas from "html2canvas";
+import { maakKleurenCompatibel } from "../../lib/html2canvasKleuren";
+import { openExternal } from "../../lib/tauri";
 import Modal from "../Modal";
 import "./FeedbackDialog.css";
 
@@ -8,7 +10,7 @@ import "./FeedbackDialog.css";
 // Issues worden geopend in de browser met een vooringevulde titel + body.
 // Doelrepo = deze app zelf (niet langer het style-book/template-repo).
 const GITHUB_OWNER = "OpenAEC-Foundation";
-const GITHUB_REPO = "Open-FEM2D-Studio";
+const GITHUB_REPO = "open-fem-studio";
 
 async function getAppVersion(): Promise<string> {
   try {
@@ -28,15 +30,6 @@ async function getOsInfo(): Promise<string> {
     return `${osType} ${osVer} (${arch})`.replace(/\s+/g, " ").trim();
   } catch {
     return navigator.platform || "Unknown";
-  }
-}
-
-async function openExternal(url: string) {
-  try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-  } catch {
-    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 
@@ -167,6 +160,8 @@ export default function FeedbackDialog({
         backgroundColor: null,
         logging: false,
         scale: window.devicePixelRatio || 1,
+        // html2canvas kent color() (van color-mix) niet; zie lib/html2canvasKleuren (#100).
+        onclone: maakKleurenCompatibel,
       });
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob((b) => resolve(b), "image/png")

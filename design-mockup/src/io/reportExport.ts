@@ -22,6 +22,7 @@ import {
   sectionLabel,
   type MemberCheckResult,
 } from "../lib/checkTypes";
+import { momentExtremen } from "../components/fem/solver/veldExtremen";
 
 interface ReportInput {
   projectName?: string;
@@ -105,7 +106,9 @@ export function buildReportHtml(input: ReportInput): string {
       const dir = l.qDir === "x" ? "horizontaal" : "verticaal";
       const q = l.qStart !== undefined && l.qEnd !== undefined && l.qStart !== l.qEnd
         ? `${fmt(l.qStart ?? l.q ?? 0, 2)} → ${fmt(l.qEnd ?? 0, 2)}`
-        : fmt(l.q ?? 0, 2);
+        // qStart = qEnd zonder `q` is een gelijkmatige last van die waarde
+        // (punt K2); `q ?? 0` gaf hier 0,00.
+        : fmt(l.qStart ?? l.q ?? 0, 2);
       return `<tr><td>Lijnlast</td><td>staaf ${l.beamId}</td><td>q = ${q} kN/m (${dir})</td></tr>`;
     }
     if (l.type === "pointForce")
@@ -148,7 +151,9 @@ export function buildReportHtml(input: ReportInput): string {
         <tr><th>Staaf</th><th>N (kN)</th><th>V (kN)</th><th>M_start (kNm)</th><th>M_eind (kNm)</th><th>|M|max (kNm)</th></tr>
         ${Array.from(result.elements.entries()).map(([bid, ef]) => {
           let mMax = Math.max(Math.abs(ef.M_start), Math.abs(ef.M_end));
-          if (ef.bendingMoment?.length) for (const m of ef.bendingMoment) if (Math.abs(m) > mMax) mMax = Math.abs(m);
+          // Ook tussen de stations, waar V = 0 (`momentExtremen`, punt C8).
+          const veld = ef.bendingMoment?.length ? momentExtremen(ef) : null;
+          if (veld) mMax = Math.max(mMax, Math.abs(veld.max.M), Math.abs(veld.min.M));
           return `<tr><td>${bid}</td><td>${fmt(ef.N / 1000, 2)}</td><td>${fmt(ef.V / 1000, 2)}</td><td>${fmt(ef.M_start / 1e6, 2)}</td><td>${fmt(ef.M_end / 1e6, 2)}</td><td><strong>${fmt(mMax / 1e6, 2)}</strong></td></tr>`;
         }).join("")}
       </table>
@@ -166,16 +171,19 @@ export function buildReportHtml(input: ReportInput): string {
           <tr><th>Staaf</th><th>Doorsnede</th><th>Materiaal</th><th>Maatgevende toets</th><th>Artikel</th><th>UC</th><th>Status</th></tr>
           ${checks.map(r => {
             const g = r.checks.find(c => c.id === r.governing_check_id)?.kind.data;
-            const voldoet = r.uc_max <= 1.0;
+            // Status n.v.t. = niet (volledig) getoetst: nooit "✓ OK", ook niet
+            // bij uc_max = 0 (controle 2026-10, punt B7).
+            const nietGetoetst = r.status === "NotApplicable";
+            const voldoet = !nietGetoetst && r.uc_max <= 1.0;
             return `
-            <tr class="${voldoet ? "ok" : "fail"}">
+            <tr class="${nietGetoetst ? "na" : voldoet ? "ok" : "fail"}">
               <td>${r.beam_id}</td>
               <td>${esc(sectionLabel(r))}</td>
               <td>${esc(gradeLabel(r))}</td>
               <td>${esc(g?.title ?? r.governing_check_id)}</td>
               <td>${esc(g?.article ?? "")}</td>
-              <td><strong>${fmt(r.uc_max, 3)}</strong></td>
-              <td>${voldoet ? "✓ OK" : "✗ NIET OK"}</td>
+              <td><strong>${nietGetoetst ? "—" : fmt(r.uc_max, 3)}</strong></td>
+              <td>${nietGetoetst ? "— NIET GETOETST" : voldoet ? "✓ OK" : "✗ NIET OK"}</td>
             </tr>`;
           }).join("")}
         </table>
@@ -206,6 +214,7 @@ export function buildReportHtml(input: ReportInput): string {
   th { background: #f5f5f5; font-weight: 600; }
   tr.ok td { background: #f0fdf4; }
   tr.fail td { background: #fef2f2; font-weight: 600; }
+  tr.na td { background: #f1f5f9; color: #475569; }
   .meta { color: #666; font-size: 11.5px; margin-bottom: 24px; }
   .small { color: #666; font-size: 11.5px; }
   @media print {

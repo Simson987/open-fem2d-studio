@@ -76,6 +76,18 @@ const KOPIE_PREFIX = ".bundelrun-";
 
 /** Tijdslimiet per test. Ruim: `test-tweede-orde` start zelf drie subtests. */
 const TIJDSLIMIET_MS = 300_000;
+// De 3D-selectie-UI doorloopt vijftien aparte SwiftShader-browsers. In CI
+// slaagden alle 87 controles, maar de test had 322 s nodig en werd daarna
+// door de algemene grens afgebroken. Houd ook deze langzame test begrensd.
+const SELECTIE_UI_TIJDSLIMIET_MS = 600_000;
+// De P-Δ-test van de staalhal rekent 104 berekeningen met de debugbouw van de
+// 3D-kern, die gedrukte staven voor de knik en de tweede orde in delen rekent
+// (controle oktober 2026, K4). Alleen: 75 s; naast de rest van de batterij
+// liep hij tot 228 s op, driekwart van de algemene grens. Eigen ruimere grens.
+const STAALHAL_PDELTA_TIJDSLIMIET_MS = 600_000;
+/** De tijdslimiet van één test: ruimer voor de bekende langzame tests. */
+const tijdslimietVan = (naam) => naam === "open-fem3d-selectie-ui" ? SELECTIE_UI_TIJDSLIMIET_MS
+  : naam === "open-fem3d-staalhal-pdelta" ? STAALHAL_PDELTA_TIJDSLIMIET_MS : TIJDSLIMIET_MS;
 
 /**
  * De tests die tegen de bundel kunnen draaien: ze praten uitsluitend met de
@@ -84,6 +96,35 @@ const TIJDSLIMIET_MS = 300_000;
  * ontsluit.
  */
 const BUNDEL_TESTS = new Set([
+  // De API-commando's (src/api/) en hun weg door de sidecar (`api_catalogus`,
+  // `api_uitvoeren`): de MCP-server voert ze zonder app uit via de bundel, dus
+  // alles hoort ook daartegen te slagen.
+  "api-schema", "api-document", "api-register", "api-model3d", "api-model3d-voorwaarden",
+  "api-model3d-bewerken", "api-project", "api-stramien", "api-sidecar",
+  "api-model3d-envelope-loads", "api-model3d-nbc2025-preview",
+  // Plaatsen op een object (#76, #77): model3d.support.place en model3d.load.placePoint.
+  "api-model3d-plaatsen",
+  // Staaf op bedding in 3D (issue #106): beam.add/update en beam.setBedding.
+  "api-model3d-bedding",
+  "api-model3d-panelen",
+  // Plaat op bedding in 3D (issue #107): plate.add/update en plate.setBedding.
+  "api-model3d-plaatbedding",
+  // Selectiefilter (issue #94): model3d.selection.filter, id's in en uit, en `select` met een nagebootste app.
+  "api-model3d-selectie",
+  // Lijnlast in een globale richting (issue #80): model3d.load.member.add/update met globalDirection,
+  // qStart/qEnd en perProjection, van lokaal naar globaal en terug.
+  "api-model3d-globale-lijnlast",
+  // Knopen op staven aansluiten (issue #63): model3d.beam.connectNodes, op knopen, staven of het hele model.
+  "api-model3d-aansluiten",
+  // Knopen samenvoegen (issue #75): model3d.nodes.merge, op knopen of het hele model, met een dubbele staaf en een weigering.
+  "api-model3d-samenvoegen",
+  // Verlopende 3D-staaf (issue #73): beam.add/update met profileNameEnd (null = prismatisch), de keuring van
+  // bepaalVerloop, en splitsen: de gelaste tussendoorsnede reist met het document mee (eigenDoorsneden).
+  "api-model3d-verlopend",
+  // Het contract van extensies (manifest, importresultaat) en het draaien van
+  // een extensiescript in Node: de MCP-server importeert zonder app via de bundel.
+  "extensie-contract",
+  "extensie-sidecar",
   // Belastinggevallen en combinaties tegen de NB-tabellen en de hand: de
   // afleiding van de standaardset (`normcombinaties`), het bijhouden bij
   // toevoegen/wijzigen/verwijderen (`combinatieBeheer`), de zijdelingse toets
@@ -91,6 +132,15 @@ const BUNDEL_TESTS = new Set([
   // en juist de sidecar gebruikt deze afleiding voor zijn standaardset — dus
   // hoort hij ook tegen de bundel te bewijzen dat die dezelfde factoren geeft.
   "belastingcombinaties",
+  // De stalen hal langs de MCP-weg: `staalhal_maken` en `staalhal_uitwerken`
+  // in de sidecar, met de 3D-kern ertussen. Importeert alleen de barrel en
+  // hoort juist tegen de bundel: die voert de MCP-server uit.
+  "staalhal-sidecar",
+  // De import van een IFC4-analysemodel langs de MCP-weg: `ifc_importeren` en
+  // `ifc_uitwerken` in de sidecar, met de 3D-kern ertussen. Importeert alleen
+  // de barrel; tegen de bundel bewijst hij dat de MCP-server hetzelfde model
+  // inleest als de knop "Rekenmodel importeren" in de app.
+  "ifc-analyse-sidecar",
   // w₁, de zakking onder alleen de blijvende belasting (NEN-EN 1990:2002/NB:2019
   // A1.4.3(2), figuur NB.1), voor hout en staal: de bouwers vullen
   // `deflection_permanent_mm` uit de BGT-combinatie met alleen G, melden het
@@ -126,6 +176,21 @@ const BUNDEL_TESTS = new Set([
   // te draaien, want juist de MCP-weg toetste tot september 2026 elk deel los
   // en nam de tussenknoop als gaffel.
   "doorgaande-lijn",
+  // De controle van oktober 2026 (K3, K5, B6, B7, B15) langs de app-route:
+  // model uit testdata/controle-2026-10, engine, combinaties uit het bestand,
+  // de twee bouwers en de echte kern via de toetsbrug, tegen de handwaarden.
+  // Raakt alleen de barrel; hoort óók tegen de bundel, want juist de MCP-weg
+  // (`check_fem_model`) mat de uitkraging vanaf de koorde.
+  "controle-2026-10",
+  // Doorgaande lijn met de knik per vak (controle oktober 2026, K6, #188, en de
+  // review): de rand van een vakwerk met L_cr = knoopafstand (UC 0,278 tegen de
+  // hand), kip en doorbuiging over de hele lijn (ligger met paal), een
+  // scharnier, veer of plaat op de tussenknoop, hout, de UC van de kern, en
+  // `check_fem_model` via de MCP-server. Praat met engine, combinations,
+  // `bouwMultiInput` en de bouwers — alles in de barrel — en start toetsbrug en
+  // de MCP-server; hoort juist óók tegen de bundel, want de MCP-weg bouwt de
+  // toetsinvoer met dezelfde functies als de app.
+  "vakwerk-kniklengte",
   // Scheefstand in beide richtingen: solveAllCases levert elk geval tweemaal,
   // metScheefstandRichtingen ontvouwt de combinaties en de omhullende neemt
   // de ongunstigste richting. Raakt alleen engine en combinations; de
@@ -341,6 +406,20 @@ const BUNDEL_TESTS = new Set([
   "tweede-orde",
   "v2-stations",
   "validatie-mcp",
+  // De controle van 12 oktober 2026 (issues #183, #184, #191, #193), elk tegen
+  // de handberekening en met een slotblok tegen de gebouwde MCP-server:
+  // `solve`/`check` weigeren met de modelcontrole van `validate` (K1), een
+  // lijnlast met alleen qStart/qEnd is een trapezium (K2), een vakwerk met
+  // alleen scharnierende staafeinden rekent (B10) en het veldmaximum van M en w
+  // ligt tussen de stations (C8). Praten met `sidecar`, `valideerModel`,
+  // `engine`, `combinations`, `combinatieBeheer`, `modelNaarSolverInput`,
+  // `sectionResolver` en de staalbouwer — alles in de barrel. Horen juist óók
+  // tegen de bundel: de MCP-weg rekent met de bundel, en precies daar viel een
+  // last stil weg.
+  "last-verwijzing-mcp",
+  "trapeziumlast-zonder-q",
+  "vakwerk-scharnieren",
+  "veldmaximum",
   "veldzakking",
   // Verlopende profielen (deel 1): doorsnede op positie x, segmenten met A
   // en I, eigen gewicht per segment, de poorten en de in-proces sidecar.
@@ -360,6 +439,14 @@ const BUNDEL_TESTS = new Set([
   "verlopend-toetsing",
   "veren",
   "wind-generator",
+  "wind-code-route",
+  "wind-nbc2025-static",
+  "wind-nbc2025-combinations",
+  "wind-nbc2025-snow",
+  "wind-nbc2025-heights",
+  "wind-nbc2025-rectangular-plan",
+  "wind-nbc2025-partial",
+  "wind-pressure-balance",
   "wind-eurocode",
   // Vrijstaand dak (§7.3, tabel 7.6/7.7): praat alleen met de windmodules en
   // `engine` — alles in de barrel. Hoort óók tegen de bundel: de sidecar moet
@@ -384,6 +471,160 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["vrij-eind-tweede-orde", "vrij staafeind, 2·L of L bij P-Δ met scheefstand: de 3D-houtbouwer (openFem3dTimberCheck) staat buiten de barrel; de MCP-weg (check_fem_model) rekent in deze test al met de bundel, via de MCP-server"],
+  ["niet-getoetst-weergave", "B7: de weergave van een niet getoetste staaf zit in het HTML-rapport, de React-panelen en het 3D-rapport; die staan buiten de headless sidecarbundel (de MCP-kant toetst drie_wegen_controle_2026_10.rs)"],
+  ["controle-2026-10-3d", "K5 in 3D: de houttoets en de verplaatsingsstations van de 3D-staaf (openFem3dTimberCheck, openFem3dDisplacement) staan buiten de barrel; de staaltoets in 3D en de 2D-bouwers lopen in de bundelstand mee via test-controle-2026-10"],
+  ["open-fem3d-nbc2025-transfer", "de 3D-overdrachtsproef start de afzonderlijke Rust-kern"],
+  ["wind-zone-report-2d", "React-rapportweergave en projectbestandsopslag staan buiten de headless sidecarbundel"],
+  ["wind-pressure-report-2d", "2D-rapportherkomst staat buiten de headless sidecarbundel"],
+  ["wind-2d3d-parity", "de 3D-schilgeometrie staat buiten de headless sidecarbundel"],
+  ["wind-roof-2d3d-parity", "de 3D-dakzonering staat buiten de headless sidecarbundel"],
+  ["wind-pitched-2d3d-parity", "de 3D-zadeldakzonering staat buiten de headless sidecarbundel"],
+  // Een Web Worker bestaat alleen in de browser, niet in de MCP-sidecar.
+  ["extensie-worker-ui", "de echte browser-worker met tijdslimiet en foutafhandeling"],
+  ["extensie-beheer", "de winkel van de desktop-app met nagebootste Tauri-commando's en lokale voorkeuren"],
+  // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
+  // Deze modules zitten niet in de 2D-sidecarbundel.
+  ...[
+    "open-fem3d-analysis-mode", "open-fem3d-analysemodulus", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-staalgewicht", "open-fem3d-opleggingsteken", "open-fem3d-model-api", "open-fem3d-eigen-doorsnede", "open-fem3d-gedraaide-hoofdassen", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
+    // Belastingvlakken: afdracht en vlakmeetkunde, en de browsertest (tekenen
+    // op het werkvlak, doorzichtig vlak, klikken door het vlak heen).
+    "open-fem3d-belastingvlak", "open-fem3d-belastingvlak-ui",
+    "open-fem3d-schilpanelen", // IFC, Three en 3D-weergave zitten buiten de sidecarbundel.
+    // Schillastgeneratoren en zonering (#68) gebruiken 3D-geometrie buiten de MCP-barrel;
+    // het API-pad wordt afzonderlijk in beide standen getest.
+    "open-fem3d-binnendruk", "open-fem3d-daklasten", "open-fem3d-generatie-toepassen",
+    "open-fem3d-nbc2025-wind", // Toepasser, modelparser en 3D-vlakkrachten zitten buiten de sidecarbundel.
+    "open-fem3d-gevelwind", "open-fem3d-hellend-dakwind", "open-fem3d-platdakwind",
+    "open-fem3d-portaal-2d-wind", "open-fem3d-schilzones", "open-fem3d-sneeuwcoefficienten",
+    "open-fem3d-windgenerator", "open-fem3d-windzones",
+    "open-fem3d-wind-pressure-report", // React-rapport en 3D-herkomsthelper zitten buiten de headless sidecarbundel.
+    "open-fem3d-concrete-check", "open-fem3d-conditions", "open-fem3d-conversion",
+    // Momentvast en Scharnierend voor de eindscharnieren van een staaf.
+    "open-fem3d-eindscharnieren",
+    // Scharnier aan één staafeind, liggers scharnierend op kolommen en waar
+    // de scharnierbolletjes komen (issue #93).
+    "open-fem3d-staafeinden",
+    "open-fem3d-current", "open-fem3d-displacement", "open-fem3d-force-stations",
+    "open-fem3d-history", "open-fem3d-knoopgereedschap", "open-fem3d-large-frame", "open-fem3d-layers", "open-fem3d-levels", "open-fem3d-member-load", "open-fem3d-mm-invoer",
+    // Peilmaten bij de levels in 3D (issue #92): tekst, plaats, dunning en de
+    // zichtbaarheid los van het stramien; en het echte tekenvlak in de browser
+    // (hoek per kijkrichting, niet over staven, in beeld na passend beeld).
+    "open-fem3d-peilmaten", "open-fem3d-peilmaten-ui",
+    "open-fem3d-plates-views", "open-fem3d-platen", "open-fem3d-profile-geometry", "open-fem3d-report-views",
+    "open-fem3d-selectie", "open-fem3d-selectie-ui", "open-fem3d-momentlijn",
+    // Trek-alleen en schijven in de echte onderdelen (headless browser).
+    "open-fem3d-trek-schijf-ui",
+    // Knikfactor met staven in vier delen (controle oktober 2026, K4, #186): de
+    // modellen van de controle langs de rekenweg van de app naar de aparte
+    // Rust-kern, en de MCP-aanroepen naar de MCP-server.
+    "open-fem3d-knik-onderverdeling",
+    // Montage van trek-alleen staven na de permanente belasting, kruisregel en
+    // kabelwerking van hun eigen gewicht (verzoekopbouw, Rust-kern, bediening).
+    "open-fem3d-montage",
+    "open-fem3d-steel-check", "open-fem3d-transform", "open-fem3d-utilization", "open-fem3d-vervormd",
+    // Kopiëren met basispunt en doelpunt: de stap (bronpunt, doelpunt, tolerantie, eindige getallen) met de
+    // kopie zelf; en het echte tekenvlak en lint in de browser (uitleg per stap, rubberband, één stap, aansluiten
+    // op de doelknoop, Esc, eerst kiezen zonder selectie, en het lint Start compact als het met namen niet past).
+    "open-fem3d-copy-points", "open-fem3d-copy-points-ui",
+    // De tab Views (standaard- en eigen views, rapportbeelden) en zijn browsertest.
+    "open-fem3d-views", "open-fem3d-views-ui",
+    // De view cube: doelen, lintconventie, CSS-matrix en slepen (issue #85).
+    "open-fem3d-view-cube",
+    // Perspectief of parallel (issue #85, deel B): omrekening, schaal, raycastafstand, wielstap, pannen,
+    // knopen achter elkaar (de voorste wint) en de muisstraal op het werkvlak.
+    "open-fem3d-projectie",
+    // Waarden bij de snedekrachtlijnen (issue #95): de standen weinig … veel, stand 3 = de oude regel,
+    // monotoon, selectie, Waarden uit, views en de bedrading (de browserproef zit in open-fem3d-selectie-ui).
+    "open-fem3d-diagram-labels",
+    // Grootte van knopen en opleggingen (issue #82): begrenzen, standaard, oude opslag en views, maat × schaal,
+    // rapportbeeld en bedieningskanaal; en het echte tekenvlak in de browser (200 % = twee keer zo groot, kiezen).
+    "open-fem3d-symboolschaal", "open-fem3d-symboolschaal-ui",
+    // Plaatweergave volume, vlak of mesh (issue #78): overname van de oude schakelaar mesh in opslag en views,
+    // geometrie per stand, elementlijnen op het middenvlak, kanaal en MCP-schema, en het echte tekenvlak in de
+    // browser (dikte per stand, kiezen, snel pad ook met plaatbatches, keuzegroep en lint).
+    "open-fem3d-plaatweergave", "open-fem3d-plaatweergave-ui",
+    // Plaatsen op een object (issues #76 en #77): oplegging, veer en puntlast op een knoop (snapzone), staaf
+    // (splitsen; puntlast op de plek) of plaat (knoop in het middenvlak, rekennet), één stap ongedaan maken; en het
+    // echte tekenvlak in de browser (klikken naast een knoop, midden op een staaf, op een plaat; lint en paneel).
+    "open-fem3d-plaatsen", "open-fem3d-plaatsen-ui",
+    // Tekenhulpen van het 3D-tekenvlak (issue #84): objectspoor (uitlijnen, snijpunt, verlengen, loodrecht,
+    // parallel), voorrang, Alt, Shift als ortho, directe lengte-invoer, de snapinstelling Objectspoor en de
+    // prestatie in een hal; en het echte tekenvlak met statusbalk en tab Weergave in de browser.
+    "open-fem3d-tekenhulp", "open-fem3d-tekenhulp-ui",
+    // Staaf op bedding in 3D (issue #106): keuren, zetten en weghalen, het verzoek, de uitkomst (gronddruk,
+    // contact, zakking, rapport, krachtensom), het bedieningskanaal en de echte kern; de eigenschappen, de band
+    // en de laag Gronddruk in de browser; en van eind tot eind een funderingsbalk door de rekenweg van de app en
+    // de echte kern, vergeleken met de vrije balk op bedding (Hetényi), met tekenvlak en rapport in de browser.
+    "open-fem3d-bedding", "open-fem3d-bedding-ui", "open-fem3d-bedding-e2e",
+    // Plaat op bedding in 3D (issue #107): keuren, zetten en weghalen, de versie, het verzoek, het tributaire
+    // oppervlak, de uitkomst (gronddruk en zakking als plaatgrootheid, contact, rapport, krachtensom), de arcering,
+    // het bedieningskanaal en de echte kern door de rekenweg van de app; en de eigenschappen, de arcering in de drie
+    // plaatweergaven, de contour Gronddruk, de keuzelijst en het rapport in de browser.
+    // Van eind tot eind: een vloer op zand door de rekenweg van de app en de echte kern, met de contour, de
+    // stippen zonder contact en het rapport in de browser (een oude bouw van de kern faalt met die melding).
+    // Een begane-grondvloer van 10 × 6 m met twee kolomlasten door de app en de kern, vergeleken met q/k,
+    // het evenwicht en Westergaard + Hertz; ook met een wand zonder opleggingen; contour en rapport in de browser.
+    "open-fem3d-plaatbedding", "open-fem3d-plaatbedding-ui", "open-fem3d-plaatbedding-e2e", "open-fem3d-plaatbedding-vloer",
+    // Section box (issue #86): de doos om model en selectie, binnen/buiten (punt, staaf, plaat, lijn), slepen,
+    // clipping planes en grepen, opslag en views, kanaal en MCP-schema, rapportbeeld en kader; en het echte
+    // tekenvlak in de browser (menu, een vlak slepen, niet zichtbaar en niet kiesbaar buiten de doos, kader, snap).
+    "open-fem3d-section-box", "open-fem3d-section-box-ui",
+    // Explodeweergave (#104): Three.js, rapportbeeld en live app-commando;
+    // de geometrie blijft buiten de reken-sidecar en wordt alleen getekend.
+    "open-fem3d-explode",
+    // Rapporttabellen gebruiken UI-rapportmodules; themacontrast leest CSS.
+    // Beide horen bij de bron en niet bij de reken-sidecar.
+    "open-fem3d-rapport-omhullenden", "thema-tekstcontrast",
+    // Lijnlast in een globale richting (issue #80): keuren, oude bestanden, bewerken, het verzoek, de
+    // versie, krachtensom, scheefstand, de pijlen en de projectielijn, de echte kern; het lastpaneel, de
+    // pijlrichting en het rapport in de browser; en van eind tot eind een schuine spant onder sneeuw per
+    // projectie door de rekenweg van de app en de echte kern: reacties, M, V en de N-lijn tegen de hand.
+    "open-fem3d-globale-lijnlast", "open-fem3d-globale-lijnlast-ui", "open-fem3d-globale-lijnlast-e2e",
+    // Eigen gewicht langs de staafas als verdeelde last (issue #112): een staande kolom, een schuine spant en een
+    // verlopende kolom door de rekenweg van de app en de echte kern; de N-lijn op elk punt tegen de hand.
+    "open-fem3d-eigen-gewicht-e2e",
+    // Tweede orde (P-Δ) van de stalen hal uit de wizard (issue #60): elk geval en elke standaardcombinatie, ook met
+    // scheefstand ±X/±Y, een lessenaarsdak, een plat dak en een balkrooster, door de rekenweg van de app en de echte
+    // kern: convergent, stabiel, ΣR gelijk aan de handsom en de onafhankelijke krachtensom (104 berekeningen; alleen
+    // ongeveer 75 s, in de batterij tot bijna 4 min, eigen grens 600 s). Sinds de kern gedrukte staven in delen rekent
+    // (controle oktober 2026, K4) weigert de stabiliteitspoort bij "Wind langs (W) leidend" in de standaardhal terecht
+    // 3 (met scheefstand 8) berekeningen: de wandverbanden knikken zelf (α_cr < 1); de test eist dat waar de hand het
+    // voorspelt.
+    "open-fem3d-staalhal-pdelta",
+    // Opmaak van het lastpaneel (issue #108): letter, maat, contrast en velden als het eigenschappenpaneel, licht en donker.
+    "open-fem3d-lastpaneel-ui",
+    // Knopen op staven aansluiten (issue #63): de zuivere functie (vier delen, lasten per deel, scharnieren,
+    // knoop naast de as, staafeinde, bereik, automatisch na een bewerking, één stap, modelcontrole, melding,
+    // instelling en bedrading); het echte tekenvlak, de modelcontrole, de tab Weergave en het lint in de
+    // browser; en van eind tot eind een funderingsbalk met losse kolomvoeten: aangesloten tegen met de hand
+    // gesplitst door de rekenweg van de app en de echte kern (op opleggingen en op bedding).
+    "open-fem3d-aansluiten", "open-fem3d-aansluiten-ui", "open-fem3d-aansluiten-e2e",
+    // Knopen samenvoegen (issue #75): de zuivere functie (platen, staven van lengte 0, dubbele staven in beide
+    // richtingen met hun lasten, opleggingen, schijven, levels, 2 × de tolerantie, automatisch na een bewerking,
+    // modelcontrole, melding en bedrading); de kaart, het lint, tekenen en verplaatsen in de browser; en de echte
+    // kern: een dubbele staaf samengevoegd tegen dezelfde staaf dubbel op dezelfde knopen en met de hand overgezet.
+    "open-fem3d-samenvoegen", "open-fem3d-samenvoegen-ui", "open-fem3d-samenvoegen-e2e",
+    // Verlopende profielen in 3D (issue #73): keuren, oude bestanden, versie 6, het verzoek (n en de doorsnede per
+    // deel gelijk aan 2D), eigen gewicht en staalgewicht per deel, kiezer, 2D → 3D, splitsen en samenvoegen,
+    // toetsinvoer, profielkleuring, twee ringen, IFC, veldzakking, de wizard Stalen hal en de echte kern; het volume
+    // met twee ringen, kiezen en de profielkiezer in de browser; en de 3D-staaltoets van een verlopende staaf tegen
+    // de 2D-staaltoets met dezelfde krachten (toetsbrug); en van eind tot eind een verlopende ligger, een verlopend
+    // portaal en de stalen hal uit de wizard door de rekenweg van de app, de echte kern en de toetsbrug, tegen de
+    // 2D-rekenkern en de 2D-toets, met tekenvlak en rapport in de browser.
+    "open-fem3d-verlopend", "open-fem3d-verlopend-ui", "open-fem3d-verlopend-toets", "open-fem3d-verlopend-e2e",
+    // Hout in 3D (#72): dezelfde GL24h-ligger door twee onafhankelijke
+    // rekenwegen, invoerbouwers en de echte EN 1995-toetsbrug.
+    "open-fem3d-hout-pariteit",
+  ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
+  [
+    "selectiefilter",
+    "de zuivere kern van het selectiefilter (issue #94) met de 3D- en 2D-adapter, de 3D-groepsselectie met lasten en het verwijderen ervan: de modules zelf staan niet in de barrel (alleen het commando, dat test-api-model3d-selectie in beide standen bewaakt), en de 2D-adapter hoort bij het tekenvlak",
+  ],
+  [
+    "selectiefilter-ui",
+    "het echte venster Selectiefilter (React, CSS) in een lokale headless browser, in 3D en in 2D: kiezen, telling, Toepassen en Annuleren. React en de DOM bestaan in de sidecarbundel niet",
+  ],
   // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
   // Deze modules zitten niet in de 2D-sidecarbundel.
   ...[
@@ -401,6 +642,8 @@ const ALLEEN_BRON = new Map([
     "frame3d-volume-finite-j2-app-route", "frame3d-volume-finite-j2-truss-3072-app-route",
     "frame3d-volume-finite-j2-truss-app-route", "frame3d-volume-gnl-app-route",
     "frame3d-volume-material-app-route", "frame3d-volumes", "mixed3d-irregular-app", "mixed3d-workbench",
+    // Ook uit cf107758, daar nog niet geplaatst: dezelfde 3D-app- en Rust-kernroute.
+    "frame3d-gl24h-app-route", "frame3d-volume-diagrams", "frame3d-volume-finite-j2-dkt-app-route",
   ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
   // Deze routes toetsen de getypeerde native-fem-client, de Rust-dispatcher
   // en de app-adapters. De sidecarbundel bevat alleen de TypeScript 2D-kern.
@@ -440,20 +683,39 @@ const ALLEEN_BRON = new Map([
   ["aluminium-voorspanning-verificatie", "Aluminium- en voorspancontrole buiten de sidecarbarrel."],
   ["drie-lagen-beton-verificatie", "Specifieke betontoets buiten de sidecarbarrel."],
   ["ifc-3d", "3D-projectopslag en IFC-export buiten de sidecarbarrel."],
+  [
+    "ifc-analyse-import",
+    "de import van een IFC4-analysemodel tegen de BRON: de STEP-lezer, de vertaling naar het 3D-model (knopen, staven, scharnieren, schijven, belastingvlakken, gevallen, combinaties, levels), de afdracht van de belastingvlakken, het projectbestand en de 3D-kern als apart proces. Hij leest daarnaast de generator van de testbestanden in docs/verificatie. De MCP-weg van dezelfde import staat tegen de bundel in `ifc-analyse-sidecar`",
+  ],
   ["toets-resultaat-3d", "3D-toetsresultaatcontract buiten de 2D-sidecarbarrel."],
   ["beton-bediening-ui", "React-interactie voor wapeningsselectie, sleepvoorbeelden en doorsnedebediening in Chromium; geen sidecarcode."],
   ["reken-ui", "React-interactie voor resultaatselectie, meldingen en het toetsingspaneel; geen sidecarcode."],
+  ["staalhal-wizard-ui", "React-interactie van de wizard Stalen hal in Chromium (stappen, mm-invoer, voorbeeld, meldingen); de generator zelf draait ook in de bundel via staalhal-sidecar."],
+  ["ifc-import-ui", "React-interactie van \"Rekenmodel importeren\" in Chromium (knop op het IFC-tabblad, keuzevenster, vraag bij niet-opgeslagen werk, verslag, foutmelding); de import zelf draait ook in de bundel via ifc-analyse-sidecar."],
   ["rekengang-generatie", "Asynchrone rekenregie van de app met afgeschermde React- en native IO-grenzen; niet beschikbaar in de sidecarbundel."],
+  ["beton-tooltips", "Leest KorfVelden.tsx en ProfielKiezer.tsx als bron: waar de uitleg staat (tooltip of tekst); geen solvercode en niet in de sidecarbundel."],
+  ["lijnlast-pijlen", "Pijlafstand van lijnlasten op het 2D-tekenvlak en de bron van FemCanvas; geen solvercode en niet in de sidecarbundel."],
+  ["html2canvas-ui", "DOM-schermafbeelding met html2canvas en color-mix in Chromium (bedieningskanaal en feedback); geen solvercode en niet in de sidecarbundel."],
+  ["tekenhulp", "Tekenhulpen van het 2D-tekenvlak (#53): ortho, hoeksnap en de bewaarde snapinstellingen, plus de bron van FemCanvas en de tab Weergave; geen solvercode en niet in de sidecarbundel."],
+  ["last-waarde", "Een lastwaarde intypen (komma, punt, min-teken, eenheid) voor het q-veld op het tekenvlak en het paneel; geen solvercode en niet in de sidecarbundel."],
   ["fs-scope", "Leest de Tauri-capability en de bestandsroutes van de app; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["staaf-dialoog-config", "Configuratielogica van de staafdialoog; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["aansluiting-standaard", "Aansluitingskeuze van een staafeinde (React-component en i18n); geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["toon-mm", "Weergave van lengtes in het windvenster; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["commando-reeks", "Toetsreeksen van het tekenvlak (MV, CO) en de kopieerregel voor lasten; geen solvercode en niet beschikbaar in de sidecarbundel."],
+  ["kader-selectie", "Kaderselectie (venster/crossing) en de Escape-regel van het 2D- en 3D-tekenvlak (lib/kaderSelectie, lib/escapeToets), plus bronteksttoetsen op tekenvlakken en thematokens; weergavelogica buiten de barrel, de sidecar selecteert niets."],
+  ["kaderselectie-ui", "Het echte 2D-tekenvlak (FemCanvas) met de echte modelstore in een lokale headless browser: crossing- en vensterkader, Escape uit het gereedschap en Delete op een plaat met ongedaan maken. React, DOM en CSS bestaan in de sidecarbundel niet; geen server en geen rekenkern."],
   ["klik-op-last", "Klikgedrag van het tekenvlak op lasten; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["weergave-model", "Weergavelogica van de tabbalk (Model sluit de resultaten); geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["undo-route", "Sneltoetsgedrag van de app (Ctrl+Z vanuit een invoerveld); geen solvercode en niet beschikbaar in de sidecarbundel."],
+  ["api-dekking", "Legt de dekking van de 3D-bediening door de API (src/api/dekking.ts) tegen de bediening zelf: tekent het 3D-lint (React, i18n in cimode) en leest de knoppen van het eigenschappenpaneel en de sneltoetsen uit de bron. React-onderdelen en bronbestanden zitten niet in de sidecarbundel; de commando's zelf draaien daar wel, in test-api-*."],
+  ["api-adapter", "De API-commando's in de draaiende app (src/bediening/apiAdapter.ts): welk commando welke app-actie aanroept (3D-bewerking als één stap, gevallen via de store, Openen voor de rest, ongedaan maken en opslaan). De app-adapter zit niet in de sidecarbundel; de commando's zelf draaien daar wel, in test-api-*."],
   ["selecteer-bij-focus", "Invoergedrag van de app (focus selecteert de waarde); geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["tauri-plugin-versies", "Vergelijkt package-lock.json met Cargo.lock en leest App.tsx; geen solvercode en niet beschikbaar in de sidecarbundel."],
+  ["extern-openen", "De helper openExternal in src/lib/tauri.ts (#38) met de echte opener-plugin en een nagebootste IPC-grens en window.open: terugval buiten Tauri en bij een geweigerde plugin, geen onafgehandelde rejection. Webview-glue; geen solvercode en niet in de sidecarbundel."],
+  ["bestandskoppeling", "Bestandskoppeling (#90): de interfacekant die een door het besturingssysteem aangereikt pad naar de bestaande open-weg brengt, met een nagebootste Rust-kant, plus broncontroles op App.tsx, tauri.conf.json en src-tauri/src/lib.rs. Geen solvercode en niet in de sidecarbundel; de Rust-kant toetst src-tauri/tests/bestandskoppeling.rs."],
+  ["bestandskoppeling-recent", "Bestandskoppeling (#90): de echte useRecentFiles en useBestandskoppeling in React in Chromium, met de native IPC-grens nagebootst; meerdere paden in één ophaalronde komen alle in de recente bestanden. Geen solvercode en niet in de sidecarbundel."],
+  ["mcp-koppeling-ui", "Een AI-assistent koppelen (#109): het paneel Instellingen → AI-assistent (MCP) in React in Chromium (schakelaar, status, pad van de MCP-server, Toevoegen aan Claude Desktop, opdracht voor Claude Code, JSON-fragment, vier talen, lint en tabblad), met de native IPC-grens nagebootst, plus broncontroles op lib.rs, gui_control.rs en mcp_koppeling.rs. Geen solvercode en niet in de sidecarbundel; de Rust-kant toetsen src-tauri/tests/gui_kanaal.rs en mcp_koppeling.rs."],
   ["eigen-gewicht-ui", "Echte tabbalk en tekenvlak (React, CSS, thema's) in Chromium met het geval \"Eigen gewicht\" (issue #42); geen solvercode en niet in de sidecarbundel. De rekenkant bewaakt test-eigen-gewicht-geval in beide standen."],
   ["window-controls","Echte React-titelbalk en native IPC-grens in Chromium, met de Tauri-windowcapability; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["beton-ui", "Echte React-interactie, async-resultaatverversing en containerlayout in Chromium; geen solverwijziging."],
@@ -463,6 +725,10 @@ const ALLEEN_BRON = new Map([
   ["plaat-plooi", "Controleert de expliciete veldinvoer, geometriepoort, projectserialisatie en strikte MCP-validatie rechtstreeks op de bron."],
   ["plaat-wapening", "UI-rendering, projectroundtrip, MCP-poort en betonwandbouwer"],
   ["pendelstaaf", "raakt kerninterne klassen (Assembler, Matrix)"],
+  [
+    "lastwaarde-modelcontrole",
+    "de app-kant van de controle van 12 oktober 2026 (K1, K2, C8): de modelcontrole en de rekenpoort van de app (lib/modelControle, lib/rekenPoort), de vertaling van de nieuwe meldingen via i18next en de momentenlijn van het tekenvlak (FemResultsOverlay, react-dom/server). Geen van die modules staat in de barrel; de MCP-kant van dezelfde punten staat in last-verwijzing-mcp, trapeziumlast-zonder-q en veldmaximum, die wél tegen de bundel draaien",
+  ],
   ["plaat-dkt", "raakt kerninterne klassen (Mesh, PlateRegion, DKT)"],
   ["plaat-ids", "raakt kerninterne klassen (Mesh, PlateRegion)"],
   ["plaat-lasten", "raakt kerninterne klassen (Mesh, PlateRegion, PlateLoads)"],
@@ -505,6 +771,10 @@ const ALLEEN_BRON = new Map([
     "modelcontrole",
     "test de modelcontrole en de herstelbewerkingen in de store; de acceptatieproef gebruikt de solver alleen als eindcontrole",
   ],
+  [
+    "verbindingstolerantie",
+    "de instelbare verbindingstolerantie van het 2D-model (#55): modelcontrole (lib/modelControle), rekenpoort, plaatsen en herstellen in de zustand-store, de snapinstellingen, i18n en de bron van FemCanvas, App.tsx en de tab Weergave. Geen van die modules hoort in de barrel; de MCP-poort houdt zijn eigen exacte drempel",
+  ],
   ["ifc-export", "staat los van de solver (IFC-export)"],
   ["ifc-spiegel", "staat los van de solver (IFC-export spiegelt het model)"],
   ["profieleditor-snap", "test de objectsnap van de profieleditor, niet de solver"],
@@ -512,6 +782,14 @@ const ALLEEN_BRON = new Map([
   [
     "hoeklijnen",
     "houdt de hoeklijnreeksen (L-profielen) in profiles.json en in de gegenereerde TS-tabellen tegen de gedrukte profieltabel, en controleert de as-afspraak van NEN-EN 1993-1-1 1.7(2) (lang been langs z, hoofdassen u-u/v-v) plus de tekenvorm. Hij leest profiles.json rechtstreeks als bronbestand en importeert de tekenmodule; de solver en de barrel komen er niet aan te pas",
+  ],
+  [
+    "rond-staal",
+    "massief rond staal (reeks RD) over de hele keten: de aliassen (`lib/rondStaal.ts`, de spiegel van de Rust-lookup), resolveSection, de 3D-rekenroute (`openFem3dSolver`, I_z en J) en de 3D-staaltoets (`openFem3dSteelCheck`), de profielkiezer (`profieleditor/catalogus`, `profielZoeken`), de tekenvorm (`profielVorm`) en de IFC-export, plus de toetsbrug als apart proces voor de toets op het draadeind. De 3D-modules, de kiezer, de tekening en de IFC-export staan niet in de 2D-sidecarbundel; de bundelkant van de herkenning bewaakt `staalherkenning`, die elke catalogussleutel — ook RD — door isSteelProfile en de staalbouwer haalt",
+  ],
+  [
+    "strip",
+    "platstaal (reeks Strip) over de hele keten: de aliassen (`lib/strip.ts`, de spiegel van de Rust-lookup), resolveSection, de 3D-rekenroute (`openFem3dSolver`, I_z en J) en de 3D-staaltoets (`openFem3dSteelCheck`), de profielkiezer (`profieleditor/catalogus`, `profielZoeken`), de tekenvorm (`profielVorm`) en de IFC-export, plus de toetsbrug als apart proces voor de trektoets. De 3D-modules, de kiezer, de tekening en de IFC-export staan niet in de 2D-sidecarbundel; de bundelkant van de herkenning bewaakt `staalherkenning`, die elke catalogussleutel — ook de strips — door isSteelProfile en de staalbouwer haalt",
   ],
   [
     "csp-wasm",
@@ -808,6 +1086,14 @@ const ALLEEN_BRON = new Map([
     "issue #47: het echte venster Zichtbaarheid, de echte weergavelijst en het echte tekenvlak op dezelfde displayFlags in een lokale headless browser — elke schakelaar zet dezelfde vlag als de verkenner, het tekenvlak volgt (knoop- en staafnummers, lagen, profielbreedte), Standaard, tandwiel, lintknop en thema. React, DOM en CSS bestaan in de sidecarbundel niet; geen server en geen rekenkern",
   ],
   [
+    "profielkleur",
+    "\"Profielen in kleur\": het vaste palet (contrast in beide thema's, kleurenblindheid, geen accentkleur) en de toekenning per profiel in `lib/profielKleur.ts` (stabiel, uniek, volgorde- en taalonafhankelijk, materiaal, zonder profiel, uitbreiding), de 3D-voorrang van de UC-kleuring, de weergavevlaggen en de teksten. Een weergavemodule buiten de barrel; de sidecar tekent niets",
+  ],
+  [
+    "profielkleur-ui",
+    "\"Profielen in kleur\" op het echte 2D-tekenvlak (verkenner, venster Zichtbaarheid, legenda, selectie, aanzicht, thema) en in de echte 3D-werkruimte (WebGL-pixels, snel en volledig opbouwpad, voorrang van de UC-kleuring) in een lokale headless browser. React, DOM, CSS en WebGL bestaan in de sidecarbundel niet; geen server en geen rekenkern",
+  ],
+  [
     "projectgegevens-ui",
     "issue #50: het echte venster Projectgegevens in een lokale headless browser, op de standaardgrootte en in een smal venster (iframe van 360 px) — geen horizontale overloop, uitleg bij normen, gevolgklasse, windgebied en terreincategorie in een InfoTip (nl/en/de/fr, niets verloren), korte status als één grijze regel. React, DOM en CSS bestaan in de sidecarbundel niet; geen server en geen rekenkern",
   ],
@@ -823,6 +1109,8 @@ const ALLEEN_BRON = new Map([
     "wind-hellend-dak-ui",
     "issue #49: het echte windvenster met de echte generator in een lokale headless browser — c_pe-velden leeg met “(automatisch, tabel 7.4a)”, de automatische waarden per zone, de gevallen per teken, overschrijven en leeg maken, lessenaarsdak 7.3a/7.3b en thema. React, DOM en CSS bestaan in de sidecarbundel niet; de rekenregels staan tegen de bundel in `wind-hellend-dak`",
   ],
+  ["stramien-streepstip", "issue #103: het streep-stip van stramien- en levellijnen — het patroon (lib/stramienStreepStip), de 2D-stijl in FemCanvas.css, de 3D-shader en -lijnen (Three), de section box en het rapport (reportGeometry). Weergavecode buiten de barrel; de sidecar tekent geen stramien"],
+  ["stramien-streepstip-ui", "issue #103: het echte 3D-tekenvlak (WebGL) en 2D-tekenvlak in een lokale headless browser — pixels langs een stramienas in, uit en ingezoomd, perspectief, section box, peilmaten en de berekende 2D-stijl. React, DOM, CSS en Three bestaan in de sidecarbundel niet; geen server en geen rekenkern"],
 ]);
 
 // ── Argumenten ────────────────────────────────────────────────────────────
@@ -947,7 +1235,7 @@ function schrijfBundelKopie(bestand) {
 }
 
 /** Start een testproces en verzamelt uitvoer, exitcode en looptijd. */
-function draai(commando, argumenten) {
+function draai(commando, argumenten, tijdslimietMs = TIJDSLIMIET_MS) {
   return new Promise((klaar) => {
     const start = process.hrtime.bigint();
     const uitvoermap = mkdtempSync(join(tmpdir(), "open-fem-test-"));
@@ -970,7 +1258,7 @@ function draai(commando, argumenten) {
       const fout = (existsSync(stderrPad) ? readFileSync(stderrPad, "utf8") : "")
         + foutBijStart
         + (verlopen
-          ? `\n[runner] tijdslimiet van ${TIJDSLIMIET_MS / 1000} s overschreden.\n`
+          ? `\n[runner] tijdslimiet van ${tijdslimietMs / 1000} s overschreden.\n`
           : "");
       rmSync(uitvoermap, { recursive: true, force: true });
       const ms = Number(process.hrtime.bigint() - start) / 1e6;
@@ -990,7 +1278,7 @@ function draai(commando, argumenten) {
       wekker = setTimeout(() => {
         verlopen = true;
         kind.kill("SIGKILL");
-      }, TIJDSLIMIET_MS);
+      }, tijdslimietMs);
 
       kind.on("error", (err) => {
         foutBijStart = err.message;
@@ -1056,7 +1344,8 @@ for (const bestand of tests) {
         ? ["--import", "tsx/esm", join(frontendRoot, bestand)]
         : [TSX_CLI, join(frontendRoot, bestand)];
     }
-    uitslag = await draai(commando, argumenten);
+    const tijdslimietMs = tijdslimietVan(naam);
+    uitslag = await draai(commando, argumenten, tijdslimietMs);
   } catch (err) {
     uitslag = { code: -1, uit: "", fout: String(err), ms: 0 };
   } finally {

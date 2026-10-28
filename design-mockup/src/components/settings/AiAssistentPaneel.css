@@ -1,0 +1,152 @@
+/* Instellingen → AI-assistent (MCP) — alleen wat de instellingen zelf niet
+   hebben: de status, de codeblokken en de meldingen. Kleuren uit de thema's. */
+
+.ai-paneel .ai-uitleg {
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-dialog-content-secondary);
+}
+
+.ai-status-stip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--theme-dialog-content-secondary);
+}
+
+.ai-status-aan {
+  color: var(--theme-accent, #d97706);
+}
+
+.ai-status-aan .ai-status-stip {
+  background: var(--theme-accent, #d97706);
+}
+
+.ai-status-fout {
+  color: var(--theme-danger-color, #dc2626);
+}
+
+.ai-status-fout .ai-status-stip {
+  background: var(--theme-danger-color, #dc2626);
+}
+
+/* Een kanaal dat alleen voor deze sessie aanstaat: de uitleg, de knop eronder. */
+.ai-sessie {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.ai-rij {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.ai-pad,
+.ai-code,
+.ai-gezocht-lijst code {
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.ai-pad {
+  display: block;
+  padding: 4px 6px;
+  border: 1px solid var(--theme-dialog-input-border);
+  background: var(--theme-dialog-input-bg);
+  color: var(--theme-dialog-input-text);
+  user-select: all;
+}
+
+.ai-kop {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-dialog-content-text);
+  margin: 12px 0 2px;
+}
+
+.ai-paneel .settings-description {
+  line-height: 1.45;
+  margin: 2px 0 6px;
+}
+
+.ai-knop {
+  min-width: 0;
+  padding: 5px 14px;
+}
+
+.ai-knop:disabled {
+  opacity: 0.5;
+}
+
+/* De tekst over de volle breedte, de knop eronder rechts. */
+.ai-kopieerblok {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.ai-code {
+  align-self: stretch;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  border: 1px solid var(--theme-dialog-input-border);
+  background: var(--theme-dialog-input-bg);
+  color: var(--theme-dialog-input-text);
+  user-select: all;
+}
+
+.ai-kopieer {
+  min-width: 82px;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.ai-melding {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  border-left: 3px solid var(--theme-dialog-content-secondary);
+  background: var(--theme-dialog-input-bg);
+  color: var(--theme-dialog-content-text);
+  overflow-wrap: anywhere;
+}
+
+.ai-melding-goed {
+  border-left-color: var(--theme-accent, #d97706);
+}
+
+.ai-melding-fout {
+  border-left-color: var(--theme-danger-color, #dc2626);
+}
+
+.ai-gezocht {
+  margin-top: 4px;
+}
+
+.ai-gezocht-lijst {
+  margin: 2px 0 4px;
+  padding-left: 16px;
+}
+
+.ai-voetnoot {
+  margin-top: 12px !important;
+}

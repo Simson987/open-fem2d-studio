@@ -17,6 +17,24 @@ const PROFILES_JSON: &str = include_str!("../data/profiles.json");
 /// (blad 3 van 3), par. 1.7(2) legt de assen anders, en de y-y- en z-z-as zijn
 /// geen hoofdassen. Wie hem als I-profiel zou meenemen, rekent stilzwijgend
 /// met de verkeerde regels.
+///
+/// `RoundBar` is massief rond staal, de reeks "RD <d>" met `d` de diameter in
+/// mm (EN 10060). Ook deze soort staat apart, want er geldt niets van de
+/// plaatregels op: tabel 5.2 classificeert plaatdelen, en een massieve ronde
+/// doorsnede heeft er geen. Ze is rotatiesymmetrisch (I_y = I_z, W om elke as
+/// gelijk), heeft knikkromme c (tabel 6.2, "massieve doorsneden") en kipt
+/// niet. De grootheden zijn gesloten formules van `d`; zie
+/// `scripts/genereer-rondstaal.mjs`.
+///
+/// `FlatBar` is platstaal (strip), de reeks "Strip <b>x<t>" met `b` de
+/// breedte en `t` de dikte in mm, b ≥ 2t. Een massieve rechthoek, dus ook hier
+/// geen plaatdelen met een gesteunde rand. De STAND ligt vast: de breedte b
+/// loopt langs de lokale z-as en de dikte t langs de lokale y-as, zodat
+/// I_y = t·b³/12 de sterke as is — net als bij elk ander catalogusprofiel, en
+/// net als een rechthoek "t×b" (breedte × hoogte) in de rest van de app. In de
+/// maten staat daarom h = b (de breedte van de strip) en b = t_w = t_f = t (de
+/// dikte); de dikte is de maat voor tabel 3.1. Knikkromme c om beide assen
+/// (tabel 6.2, massieve doorsneden). Zie `scripts/genereer-strip.mjs`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
 pub enum ProfileKind {
@@ -26,6 +44,8 @@ pub enum ProfileKind {
     Shs,
     Chs,
     Angle,
+    RoundBar,
+    FlatBar,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
@@ -84,11 +104,62 @@ pub struct SteelProfileDb {
 /// alles naar hoofdletters. Zo vindt "HEA 320" hetzelfde profiel als "HEA320"
 /// of "hea-320". De database schrijft de namen met spatie, maar de frontend en
 /// externe aanroepers doen dat niet altijd.
+///
+/// Massief rond staat in de database als "RD 24", maar wordt in de praktijk
+/// ook als "Ø24", "Ø 24" of "ROND 24" geschreven. Die schrijfwijzen krijgen
+/// hier de sleutel van "RD 24"; zie [`rond_staal_sleutel`]. De frontend heeft
+/// dezelfde regel in `design-mockup/src/lib/rondStaal.ts`.
 fn lookup_key(name: &str) -> String {
-    name.chars()
+    let sleutel: String = name
+        .chars()
         .filter(|c| !c.is_whitespace() && *c != '-' && *c != '.')
         .flat_map(|c| c.to_uppercase())
-        .collect()
+        .collect();
+    rond_staal_sleutel(&sleutel)
+        .or_else(|| strip_sleutel(&sleutel))
+        .unwrap_or(sleutel)
+}
+
+/// De voorvoegsels waarmee massief rond staal geschreven wordt, na het
+/// normaliseren van [`lookup_key`] (dus in hoofdletters: "ø" is dan "Ø").
+/// "⌀" (U+2300) is het eigenlijke diameterteken; "Ø" (U+00D8) is wat een
+/// toetsenbord meestal oplevert.
+const ROND_VOORVOEGSELS: [&str; 4] = ["RD", "ROND", "Ø", "⌀"];
+
+/// De sleutel van "RD <d>" voor een al genormaliseerde sleutel die massief
+/// rond aanduidt ("Ø24", "ROND24", "RD24"), of `None` als het geen massief
+/// rond is. Alleen een voorvoegsel gevolgd door uitsluitend cijfers telt: een
+/// naam als "RHS…" of "RD 24 S235" blijft ongemoeid.
+pub fn rond_staal_sleutel(sleutel: &str) -> Option<String> {
+    ROND_VOORVOEGSELS.iter().find_map(|v| {
+        let rest = sleutel.strip_prefix(v)?;
+        (!rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())).then(|| format!("RD{rest}"))
+    })
+}
+
+/// De voorvoegsels waarmee platstaal geschreven wordt, na het normaliseren
+/// van [`lookup_key`] (hoofdletters, zonder spaties): "Strip 80x10",
+/// "FL 80x10" en "Platstaal 80x10".
+const STRIP_VOORVOEGSELS: [&str; 3] = ["STRIP", "PLATSTAAL", "FL"];
+
+/// De sleutel van "Strip <b>x<t>" voor een al genormaliseerde sleutel die
+/// platstaal aanduidt ("FL80X10", "PLATSTAAL80X10", "STRIP80×10"), of `None`
+/// als het geen platstaal is. Alleen een voorvoegsel gevolgd door
+/// `<cijfers>x<cijfers>` telt (x, X, × of *); "FLB…" of "STRIP 80" blijven
+/// ongemoeid. De twee maten worden zo gezet dat de grootste voorop staat: een
+/// strip 10×80 is dezelfde doorsnede als 80×10, en de catalogus schrijft de
+/// breedte eerst.
+pub fn strip_sleutel(sleutel: &str) -> Option<String> {
+    STRIP_VOORVOEGSELS.iter().find_map(|v| {
+        let rest = sleutel.strip_prefix(v)?;
+        let (eerste, tweede) = rest.split_once(['X', '×', '*'])?;
+        let geldig = |m: &str| !m.is_empty() && m.chars().all(|c| c.is_ascii_digit());
+        if !(geldig(eerste) && geldig(tweede)) {
+            return None;
+        }
+        let (a, b): (u32, u32) = (eerste.parse().ok()?, tweede.parse().ok()?);
+        Some(format!("STRIP{}X{}", a.max(b), a.min(b)))
+    })
 }
 
 impl SteelProfileDb {

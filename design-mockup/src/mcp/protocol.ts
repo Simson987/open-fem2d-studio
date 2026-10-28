@@ -28,7 +28,7 @@
  * `BeamCheckInput`), meldingen en commentaar Nederlands.
  *
  * MODELVORM — het `model` in een payload is de STORE-EIGEN vorm: exact de
- * velden die `bouwMultiInput` leest en die ook in een `.ifcfem2d`-projectbestand
+ * velden die `bouwMultiInput` leest en die ook in een `.ifcfem`-projectbestand (of oudere `.ifcfem2d`)
  * staan (nodes, beams, supports, plates, loads, loadCases + de vlaggen).
  * Bewust geen eigen, vereenvoudigd modelvocabulaire: dat zou een tweede,
  * handgeschreven vertaling van model naar solver-invoer betekenen, en juist
@@ -46,6 +46,22 @@ export const SIDECAR_OPS = [
   "solve",
   "check",
   "load_project",
+  // De stalen hal (MCP-tool `open_fem_3d_staalhal_maken`): de generator van
+  // de wizard, en de uitwerking van de 3D-rekenresultaten die Rust ertussen
+  // berekent. Zie staalhalSidecar.ts.
+  "staalhal_maken",
+  "staalhal_uitwerken",
+  // De import van een IFC4-analysemodel (MCP-tool `open_fem_3d_ifc_importeren`):
+  // dezelfde import als de knop "Rekenmodel importeren" in de app, en de
+  // uitwerking van de 3D-rekenresultaten die Rust ertussen berekent. Zie
+  // ifcImportSidecar.ts.
+  "ifc_importeren",
+  "ifc_uitwerken",
+  // De API-commando's van de app (src/api/) zonder app, op de tekst van een
+  // projectbestand: de catalogus, en één commando uitvoeren. Zie apiSidecar.ts.
+  "api_catalogus",
+  "api_uitvoeren",
+  "extensie_importeren",
 ] as const;
 
 export type SidecarOp = (typeof SIDECAR_OPS)[number];
@@ -67,6 +83,13 @@ export type SidecarOp = (typeof SIDECAR_OPS)[number];
  *  - TIJD_OVERSCHREDEN  gereserveerd voor de Rust-kant, die de klok bewaakt
  *  - INTERN             onverwachte fout; originele tekst gaat mee in `detail`
  *
+ * Van de API-commando's (api_uitvoeren, zie src/api/register.ts):
+ *  - ONBEKEND_COMMANDO  geen commando met die naam; `detail.suggesties`
+ *  - NIET_GEVONDEN      een genoemd element of geval bestaat niet
+ *  - GEWEIGERD          een modelregel weigert de bewerking (de melding zegt waarom)
+ *  - GEEN_DOCUMENT      een documentcommando zonder project
+ *  - ALLEEN_IN_APP      een app-commando (weergave, ongedaan maken …) zonder app
+ *
  * Een code TOEVOEGEN hoogt `SIDECAR_PROTOCOL` niet op: een Rust-kant die de code
  * niet kent, geeft er zijn algemene remedie bij en laat melding en `detail`
  * ongemoeid, dus er breekt niets. Een code weghalen of van betekenis veranderen
@@ -80,6 +103,11 @@ export const FOUTCODES = [
   "DOORSNEDE_ONBEKEND",
   "TIJD_OVERSCHREDEN",
   "INTERN",
+  "ONBEKEND_COMMANDO",
+  "NIET_GEVONDEN",
+  "GEWEIGERD",
+  "GEEN_DOCUMENT",
+  "ALLEEN_IN_APP",
 ] as const;
 
 export type Foutcode = (typeof FOUTCODES)[number];

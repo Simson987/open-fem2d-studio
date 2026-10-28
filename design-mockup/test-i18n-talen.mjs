@@ -97,6 +97,8 @@ const GELIJK_MAG = new Set([
   "backstage.aboutPanel.tagline", "backstage.aboutPanel.stichting",
   "common.wind.case.buildingTab", "common.loadCases.swayDerivation.alphaM",
   "common.loadCases.swayDerivation.product",
+  // Kolomlijn in 3D: alleen coördinaten ("(1) x = … mm, y = … mm").
+  "common.loadCases.swayDerivation.columnLine3d",
   // Issue #49: hetzelfde tablabel met het dakdeel erachter; de woorden
   // ("dak", "loef", "lij") staan in de geneste sleutels roofSign/roofSides.
   "common.wind.case.buildingTabRoof",

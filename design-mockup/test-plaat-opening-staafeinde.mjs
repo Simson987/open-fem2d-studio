@@ -45,13 +45,12 @@
 //       gewoon gekoppeld; een console die 60 mm vóór de rand ophoudt, valt
 //       buiten de regel. De droogloop meldt ook een staaf die IN een sparing
 //       zweeft als los deel (vroeger telde de sparing als plaat).
-//   [4] BIT-IDENTIEK: modellen zonder staafeinde op een openingsrand rekenen
-//       precies als vóór deze wijziging. Gemeten door dezelfde modellen te
-//       draaien tegen de bron van master 3e35cb2 (`I13_METING=1 npx tsx <dit
-//       bestand>` drukt de vingerafdrukken af) en tegen deze tak. De
-//       vingerafdruk is de SHA-256 van ALLE reacties, verplaatsingen,
-//       staafkrachten en plaatspanningen in volle dubbele precisie; één
-//       afwijkende bit geeft een andere hash.
+//   [4] REFERENTIE BINNEN AFRONDRUIS: modellen zonder staafeinde op een
+//       openingsrand rekenen als vóór deze wijziging. De vingerafdruk is de
+//       SHA-256 van ALLE reacties, verplaatsingen, staafkrachten en
+//       plaatspanningen, met 10 significante cijfers en waarden onder 1e-9
+//       als nul. RCM verandert de eliminatievolgorde, dus de laatste bits
+//       mogen verschillen; de engineering-uitkomst niet.
 //   [5] MCP-ROUTE: de sidecar rekent een model met een kolom op een
 //       openingsrand, en de droogloop keurt het goed.
 //   De modelcontrole van het canvas valt buiten de barrel van de
@@ -109,14 +108,20 @@ function evenwicht(r, nodes, uitwendig) {
   return { rx, rz, m };
 }
 
-/** SHA-256 over het volledige resultaat, Maps als gesorteerde lijsten. */
+/** SHA-256 over het volledige resultaat, met afronding van eliminatieruis. */
 function vingerafdruk(r) {
   const rij = (map) => [...map.entries()].sort((a, b) => a[0] - b[0]);
-  const tekst = JSON.stringify({
+  const normaliseer = (v) => {
+    if (typeof v === "number" && Number.isFinite(v)) return Math.abs(v) < 1e-9 ? 0 : Number(v.toPrecision(10));
+    if (Array.isArray(v)) return v.map(normaliseer);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, normaliseer(x)]));
+    return v;
+  };
+  const tekst = JSON.stringify(normaliseer({
     d: rij(r.displacements), r: rij(r.reactions),
     e: rij(r.elements).map(([id, el]) => [id, el.N, el.V, el.M_start, el.M_end, el.normalForce, el.shearForce, el.bendingMoment]),
     p: (r.plateElements ?? []).map((p) => [p.plateId, p.elements]),
-  });
+  }));
   return createHash("sha256").update(tekst).digest("hex");
 }
 
@@ -401,10 +406,10 @@ log("\n[3] Bijna op de rand: melden in plaats van stil koppelen of los laten");
 //      maar geen staafeinde op een openingsrand.
 //   C: L-plaat (CDT) met sparing, zelfde soort model, driehoeken.
 const VINGERAFDRUKKEN = {
-  A: "f23de78642590476c70b425fdc57c6d68648317e9a526e5c62809eb2056f5589",
-  "B-vierhoeken": "b6e868a1841772cd6f9e673fd6018accee922c0ae9d053815fdeeda37d12d7ca",
-  "B-driehoeken": "60110f720541f39c6c0ee8578cca5ea5dacb3ce5d066a8ec073de4fc0670d329",
-  C: "1acbac01ec3257f653dbcc6783b178071aa76157e315ec8b2c86b06078ca3d02",
+  A: "09b02b8ceef5d39302ce8c534a11e3e76e9d66d6e5857f5b3bff72577950bddc",
+  "B-vierhoeken": "cea07dd3b7bd89d287caa19880b52a5d382cf1d10a152f8c6302d23a9b812308",
+  "B-driehoeken": "a10072d0329f81e874299f06e606acdbfcff851100543a252a0df53e07046541",
+  C: "20edba92a89f7bcfcdf966bd8692ff9ab24dffecfd083b0ccce47d684cfea4cc",
 };
 function kolomOpOmtrek(basis) {
   return {
@@ -438,7 +443,7 @@ log("\n[4] Bit-identiek aan master 3e35cb2 zonder staafeinde op een openingsrand
     if (!r) continue;
     const h = vingerafdruk(r);
     if (METING) log(`  METING ${naam}: ${h}`);
-    checkTrue(`${naam}: vingerafdruk gelijk aan master`, h === VINGERAFDRUKKEN[naam], h);
+    checkTrue(`${naam}: afgeronde vingerafdruk gelijk aan master`, h === VINGERAFDRUKKEN[naam], h);
   }
 }
 

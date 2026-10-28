@@ -15,9 +15,13 @@
 //
 // Modellen (uit de meting):
 //   1. vakwerkknoop: twee staven met een scharnier aan de knoopzijde, de knoop
-//      zelf zonder rotatiesteun → rotatie vrij, exact N = −14,142 kN als de
-//      knoop wél vastgehouden werd;
-//   2. pendelstaaf met een scharnier op een scharnieroplegging;
+//      zelf zonder rotatiesteun. Tot oktober 2026 was dat "rotatie vrij" en
+//      een weigering; sinds de controle van 12 oktober 2026 (punt B10, issue
+//      #191) zet de kern zo'n onbepaalde knoopdraaiing vast en rekent hij, op
+//      beide paden, met exact N = −14,142 kN. De gelijke melding op beide
+//      paden wordt nu bewaakt met een echt mechanisme: een raamwerk dat
+//      zijdelings kan wegzakken;
+//   2. pendelstaaf met een scharnier op een scharnieroplegging: rekent nu ook;
 //   3. losse knoop (raamwerkpad; het gemengde pad laat een inactieve knoop
 //      buiten het stelsel, en de modelcontrole meldt hem vooraf).
 //
@@ -77,27 +81,55 @@ const losseKnoop = (metSchijf) => ({
   loads: [{ id: 1, type: "lineLoad", caseId: 1, beamId: 1, q: -10 }],
 });
 
-log("\n[1] Vakwerkknoop: rotatie vrij op knoop 2");
+log("\n[1] Vakwerkknoop: alleen scharnierende staafeinden — beide paden rekenen (punt B10)");
 {
   const raam = melding(vakwerk(false));
   const gemengd = melding(vakwerk(true));
-  ok("raamwerkpad weigert", raam !== null);
-  ok("gemengd pad weigert", gemengd !== null);
-  ok("raamwerkpad noemt knoop 2 en 'draaien'", /knoop 2 op \(3000, 3000\) mm kan vrij draaien/.test(raam ?? ""), raam ?? "");
-  ok("gemengd pad noemt knoop 2 en 'draaien' (was: column 5)", /knoop 2 op \(3000, 3000\) mm kan vrij draaien/.test(gemengd ?? ""), gemengd ?? "");
-  ok("gemengd pad noemt het scharnier als oorzaak", /scharnier \(release Ry\)/.test(gemengd ?? ""));
+  ok("raamwerkpad rekent (was: weigering \"knoop 2 kan vrij draaien\")", raam === null, raam ?? "");
+  ok("gemengd pad rekent", gemengd === null, gemengd ?? "");
+  for (const [pad, metSchijf] of [["raamwerkpad", false], ["gemengd pad", true]]) {
+    const r = solveAllCases(bouwMultiInput(vakwerk(metSchijf))).perCase.get(1);
+    const N = r.elements.get(2).N;
+    ok(`${pad}: N in staaf 2 = −20/(2·sin 45°) = −14,142 kN`, Math.abs(N + 14142.1356) < 1, `${N} N`);
+    ok(`${pad}: geen moment in de nok`, Math.abs(r.elements.get(1).M_end) < 1, `${r.elements.get(1).M_end} N·mm`);
+  }
+}
+
+log("\n[1b] Een echt mechanisme: dezelfde melding op beide paden");
+{
+  const raamwerk = (metSchijf) => ({
+    ...basis,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 0, z: 3000 }, { id: 3, x: 4000, z: 3000 }, { id: 4, x: 4000, z: 0 },
+      ...(metSchijf ? schijfKnopen : [])],
+    beams: [st(1, 1, 2, { releases: { startRy: true, endRy: true } }), st(2, 2, 3, { releases: { startRy: true, endRy: true } }),
+      st(3, 4, 3, { releases: { startRy: true, endRy: true } })],
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 4, type: "pinned" }, ...(metSchijf ? schijfSteun : [])],
+    plates: metSchijf ? schijf : [],
+    loads: [{ id: 1, type: "pointForce", caseId: 1, nodeId: 2, fx: 10 }],
+  });
+  const raam = melding(raamwerk(false));
+  const gemengd = melding(raamwerk(true));
+  ok("raamwerkpad weigert het zijdelingse mechanisme", raam !== null && /singulier/.test(raam), raam ?? "GEEN FOUT");
+  ok("gemengd pad weigert het ook", gemengd !== null && /singulier/.test(gemengd), gemengd ?? "GEEN FOUT");
+  ok("de reden is een verschuiving, geen draaiing", /kan vrij (horizontaal|verticaal) verschuiven/.test(raam ?? ""), raam ?? "");
   ok("beide paden: zelfde melding tot aan de oorspronkelijke kolom",
     (raam ?? "").replace(/column \d+/, "") === (gemengd ?? "").replace(/column \d+/, ""),
     `\n    raam:    ${raam}\n    gemengd: ${gemengd}`);
 }
 
-log("\n[2] Pendelstaaf met scharnier op een scharnieroplegging: knoop 4");
+log("\n[2] Pendelstaaf met scharnier op een scharnieroplegging: rekent op beide paden (punt B10)");
 {
-  const raam = melding(pendel(false));
-  const gemengd = melding(pendel(true));
-  ok("raamwerkpad noemt knoop 4", /knoop 4 op \(4000, 0\) mm kan vrij draaien/.test(raam ?? ""), raam ?? "");
-  ok("gemengd pad noemt knoop 4", /knoop 4 op \(4000, 0\) mm kan vrij draaien/.test(gemengd ?? ""), gemengd ?? "");
-  ok("gemengd pad wijst op de scharnieroplegging", /scharnieroplegging/.test(gemengd ?? ""));
+  for (const [pad, metSchijf] of [["raamwerkpad", false], ["gemengd pad", true]]) {
+    const m = melding(pendel(metSchijf));
+    ok(`${pad}: rekent (was: "knoop 4 kan vrij draaien")`, m === null, m ?? "");
+    if (m !== null) continue;
+    const r = solveAllCases(bouwMultiInput(pendel(metSchijf))).perCase.get(1);
+    const p = r.elements.get(3);
+    ok(`${pad}: pendel zonder moment en dwarskracht`, Math.abs(p.M_start) < 1 && Math.abs(p.M_end) < 1 && Math.abs(p.V) < 1e-3,
+      `${p.M_start} / ${p.M_end} / ${p.V}`);
+    ok(`${pad}: ΣFx = −10 kN`, Math.abs(r.reactions.get(1).fx + r.reactions.get(4).fx + 10000) < 1e-3,
+      `${r.reactions.get(1).fx + r.reactions.get(4).fx}`);
+  }
 }
 
 log("\n[3] Losse knoop");

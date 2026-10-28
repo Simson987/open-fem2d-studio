@@ -17,3 +17,13 @@ export async function fetchAppVersion(): Promise<string> {
     return (pkg as { version?: string }).version ?? "";
   }
 }
+
+/**
+ * Het versienummer zoals de interface het toont. De app heeft een
+ * kalenderversie: jaar.week, bijvoorbeeld 2026.39. Tauri, Cargo en npm eisen
+ * drie delen (2026.39.0); een patch 0 valt in de weergave weg, een echte patch
+ * (2026.39.1) blijft staan. Een voorgevoegde "v" verdwijnt.
+ */
+export function toonVersie(versie: string): string {
+  return versie.trim().replace(/^v/i, "").replace(/^(\d+\.\d+)\.0$/, "$1");
+}

@@ -20,7 +20,7 @@
 //!
 //! DE MODELVORM IS DIE VAN HET PROJECTBESTAND
 //! Het `model`-object in de schema's hieronder is exact de vorm die in een
-//! `.ifcfem2d`-bestand staat en die `bouwMultiInput` leest — dezelfde velden,
+//! `.ifcfem`-bestand staat en die `bouwMultiInput` leest — dezelfde velden,
 //! dezelfde namen, dezelfde enum-waarden. Bewust geen eigen, vereenvoudigd
 //! vocabulaire aan de buitenkant: dat zou hier een handgeschreven vertaling
 //! vergen (welke veer bij `type: "spring"` hoort, een lastpositie in mm naar
@@ -99,7 +99,7 @@ fn fout(code: &str, melding: impl Into<String>, remedie: impl Into<String>) -> R
 /// Fout uit de sidecar-aansturing → `RpcError`, met code, melding, remedie en
 /// detail onaangetast. Er wordt hier niets samengevat: `detail` bevat het veld
 /// dat de sidecar aanwees, en dat is bij een invoerfout het enige bruikbare.
-fn van_sidecar(f: SidecarFout) -> RpcError {
+pub(crate) fn van_sidecar(f: SidecarFout) -> RpcError {
     let remedie = f.remedie.clone().unwrap_or_default();
     RpcError {
         // Een fout in wat de aanroeper aanleverde — de payload zelf of een staaf
@@ -251,7 +251,7 @@ fn model_payload(
                      doorgerekend zou worden is dan niet af te lezen aan de aanroep."
                 ),
                 "Geef precies één van beide: `model` voor een model in het verzoek, \
-                 `project_path` voor een opgeslagen .ifcfem2d-bestand.",
+                 `project_path` voor een opgeslagen .ifcfem-bestand (of ouder .ifcfem2d).",
             ));
         }
         (None, None) => {
@@ -259,7 +259,7 @@ fn model_payload(
                 ARGUMENT_ONGELDIG,
                 format!("`{tool}` kreeg geen model: `model` en `project_path` ontbreken beide."),
                 "Geef `model` (het model zelf) of `project_path` (een absoluut pad naar \
-                 een .ifcfem2d-bestand).",
+                 een .ifcfem-bestand).",
             ));
         }
     }
@@ -278,7 +278,7 @@ fn lees_projectbestand(pad: &str) -> Result<String, RpcError> {
         fout(
             BESTAND_ONLEESBAAR,
             format!("Het projectbestand `{pad}` kon niet worden gelezen ({e})."),
-            "Geef een absoluut pad naar een .ifcfem2d-bestand dat met deze versie is \
+            "Geef een absoluut pad naar een .ifcfem-bestand (of ouder .ifcfem2d) dat met deze versie is \
              opgeslagen, en controleer de leesrechten.",
         )
     })
@@ -469,23 +469,18 @@ async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
 
     // Maatgevend: de hoogste unity check over ALLE getoetste staven, met het
     // materiaal erbij. `null` als er niets te toetsen viel — expres niet 0, want
-    // 0 leest als "ruim voldoende".
+    // 0 leest als "ruim voldoende". Een staaf met status n.v.t. is niet
+    // (volledig) getoetst en telt niet mee, net als een geweigerde plaat
+    // hieronder: haar uc_max is geen uitkomst (controle 2026-10, punt B7).
+    let getoetst = |s: &nen_en_1993_1_1_section::CheckStatus| {
+        !matches!(s, nen_en_1993_1_1_section::CheckStatus::NotApplicable)
+    };
     let maatgevend = staal_res
         .iter()
+        .filter(|r| getoetst(&r.status))
         .map(|r| ("staal", r.beam_id, r.uc_max, r.governing_check_id.as_str()))
-        .chain(
-            hout_res
-                .iter()
-                .map(|r| ("hout", r.beam_id, r.uc_max, r.governing_check_id.as_str())),
-        )
-        .chain(clt_res.iter().map(|r| {
-            (
-                "kruislaaghout",
-                r.beam_id,
-                r.uc_max,
-                r.governing_check_id.as_str(),
-            )
-        }))
+        .chain(hout_res.iter().filter(|r| getoetst(&r.status)).map(|r| ("hout", r.beam_id, r.uc_max, r.governing_check_id.as_str())))
+        .chain(clt_res.iter().filter(|r| getoetst(&r.status)).map(|r| ("kruislaaghout", r.beam_id, r.uc_max, r.governing_check_id.as_str())))
         .filter(|(_, _, uc, _)| uc.is_finite())
         .max_by(|a, b| a.2.total_cmp(&b.2))
         .map(|(materiaal, beam_id, uc_max, check)| {
@@ -1191,7 +1186,7 @@ fn schema_loadcases() -> Value {
 fn schema_loads() -> Value {
     json!({
         "type": "array",
-        "description": "Lasten. `type` bepaalt welke velden meetellen: pointForce (fx/fz op nodeId, op beamId met posFrac, of op een plaatrand met plateId + edgeIndex/edge + posFrac), pointMoment (my), lineLoad (q of qStart/qEnd op beamId), thermal (deltaT op beamId), edgeLoad (q langs een plaatrand, desgewenst als deellast of trapezium met startFrac/endFrac/qStart/qEnd). Een plaatrand heeft precies één adres: `edgeIndex` (werkt bij elke plaat) of `edge` (alleen bij een asgelijnde rechthoek); beide, geen, of een benoemde rand op een polygoon wordt geweigerd met een reden. Staat er ook een `openingId`, dan ligt de last op de rand van DIE OPENING (edgeIndex telt dan langs de openingshoeken) in plaats van op de omtrek; een opening die niet bestaat of een benoemde rand op een opening wordt geweigerd — er wordt nooit stil op de omtrek teruggevallen.",
+        "description": "Lasten. `type` bepaalt welke velden meetellen: pointForce (fx/fz op nodeId, op beamId met posFrac, of op een plaatrand met plateId + edgeIndex/edge + posFrac), pointMoment (my op nodeId; fx/fz worden bij een koppel niet gelezen en geweigerd), lineLoad (q, of qStart en qEnd voor een trapezium, op beamId), thermal (deltaT op beamId), edgeLoad (q langs een plaatrand, desgewenst als deellast of trapezium met startFrac/endFrac/qStart/qEnd). Een plaatrand heeft precies één adres: `edgeIndex` (werkt bij elke plaat) of `edge` (alleen bij een asgelijnde rechthoek); beide, geen, of een benoemde rand op een polygoon wordt geweigerd met een reden. Staat er ook een `openingId`, dan ligt de last op de rand van DIE OPENING (edgeIndex telt dan langs de openingshoeken) in plaats van op de omtrek; een opening die niet bestaat of een benoemde rand op een opening wordt geweigerd — er wordt nooit stil op de omtrek teruggevallen.",
         "items": {
             "type": "object",
             "additionalProperties": false,
@@ -1209,8 +1204,8 @@ fn schema_loads() -> Value {
                 "my": { "type": "number", "description": "Koppel in kNm." },
                 "posFrac": { "type": "number", "minimum": 0, "maximum": 1,
                     "description": "Positie van een staafgebonden puntlast als fractie van de staaflengte vanaf `from`; bij een puntlast op een plaatrand de fractie langs de rand vanaf de beginhoek (edgeIndex i: hoek i; edge: de kleinste x of z) — daar verplicht. De kracht gaat consistent naar de twee randknopen van de elementrand waarop hij staat." },
-                "q": { "type": "number", "description": "Gelijkmatige lijnlast in kN/m staaflengte (negatief = omlaag bij qDir \"z\"); bij edgeLoad in kN/m randlengte." },
-                "qStart": { "type": "number", "description": "Trapeziumlast: waarde aan het begin van het belaste deel (staaf of plaatrand)." },
+                "q": { "type": "number", "description": "Gelijkmatige lijnlast in kN/m staaflengte (negatief = omlaag bij qDir \"z\"); bij edgeLoad in kN/m randlengte. Bij een lijnlast ook de waarde voor een ontbrekende qStart of qEnd; met qStart en qEnd allebei wordt q niet gebruikt." },
+                "qStart": { "type": "number", "description": "Trapeziumlast: waarde aan het begin van het belaste deel (staaf of plaatrand). Een lijnlast met qStart en qEnd is een volledige trapeziumlast, ook zonder q." },
                 "qEnd":   { "type": "number", "description": "Trapeziumlast: waarde aan het einde van het belaste deel (staaf of plaatrand)." },
                 "qDir": { "type": "string", "enum": ["x", "z"], "description": "Richting van de lijnlast; default \"z\"." },
                 "qCoord": { "type": "string", "enum": ["global", "local"],
@@ -1218,7 +1213,7 @@ fn schema_loads() -> Value {
                 "startFrac": { "type": "number", "minimum": 0, "maximum": 1,
                     "description": "Deellast: begin van het belaste deel als fractie; default 0. Bij edgeLoad langs de rand vanaf de beginhoek." },
                 "endFrac": { "type": "number", "minimum": 0, "maximum": 1,
-                    "description": "Deellast: einde van het belaste deel als fractie; default 1. Moet groter zijn dan startFrac." },
+                    "description": "Deellast: einde van het belaste deel als fractie; default 1. Moet groter zijn dan startFrac; een leeg of omgekeerd deel weigert de modelcontrole (validate, solve en check)." },
                 "deltaT": { "type": "number", "description": "Temperatuurverschil in K bij type \"thermal\"." },
                 "edge": { "type": "string", "enum": ["bottom", "top", "left", "right"],
                     "description": "Benoemde plaatrand, alleen bij een asgelijnde rechthoek (op een polygoon: weigering). Fracties tellen vanaf de kleinste x (bottom/top) of z (left/right). Niet samen met edgeIndex." },
@@ -1235,12 +1230,12 @@ fn schema_loads() -> Value {
     })
 }
 
-/// Het model, in exact de vorm van een `.ifcfem2d`-projectbestand.
+/// Het model, in exact de vorm van een `.ifcfem`-projectbestand.
 fn schema_fem_model() -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
-        "description": "Het rekenmodel in de vorm van een .ifcfem2d-projectbestand. Geometrie in mm met z positief omhoog; krachten in kN, koppels in kNm, lijnlasten in kN/m staaflengte. Onbekende velden worden GEWEIGERD, niet genegeerd.",
+        "description": "Het rekenmodel in de vorm van een .ifcfem-projectbestand. Geometrie in mm met z positief omhoog; krachten in kN, koppels in kNm, lijnlasten in kN/m staaflengte. Onbekende velden worden GEWEIGERD, niet genegeerd.",
         "required": ["nodes", "beams", "supports", "loadCases"],
         "properties": {
             "nodes": schema_nodes(),
@@ -1299,7 +1294,7 @@ fn schema_gevolgklasse() -> Value {
 fn schema_project_path() -> Value {
     json!({
         "type": "string",
-        "description": "Absoluut pad naar een .ifcfem2d-bestand. Alleen-lezen; de server schrijft nooit naar de schijf."
+        "description": "Absoluut pad naar een .ifcfem-bestand (of ouder .ifcfem2d). Alleen-lezen; de server schrijft nooit naar de schijf."
     })
 }
 
@@ -1313,7 +1308,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "validate_fem_model",
-            "description": "Droogloop zonder rekenen: controleert het model op losse knopen, mechanismen, staven met lengte nul, dubbele knopen, onbekende profiel/materiaal-combinaties, belastinggevallen zonder werkzame last, polygoonplaten zonder geldige meshcache, en ONBEKENDE VELDEN. Bestaat omdat een tikfout in een lastveld anders een geslaagde berekening oplevert waarin die last ontbreekt — een uitkomst die als 'nul' leest.",
+            "description": "Droogloop zonder rekenen: controleert het model op losse knopen, mechanismen, staven met lengte nul, dubbele knopen, onbekende profiel/materiaal-combinaties, lasten die naar een staaf, knoop of belastinggeval verwijzen dat niet bestaat, lasten zonder waarde of met de waarde in een veld dat het lasttype niet leest, belastinggevallen zonder werkzame last, polygoonplaten zonder geldige meshcache, en ONBEKENDE VELDEN. Bestaat omdat een tikfout in een lastveld anders een geslaagde berekening oplevert waarin die last ontbreekt — een uitkomst die als 'nul' leest.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1327,7 +1322,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "load_fem_project",
-            "description": "Leest een opgeslagen .ifcfem2d-projectbestand en geeft het model, de combinaties en tellingen terug — zodat een constructeur op zijn eigen model kan laten rekenen in plaats van het over te typen. De combinaties zijn die waarmee `solve_fem_model` met `project_path` zou rekenen: ze gaan door dezelfde functie als het openen in de app, dus de standaardset van versie 0.3.11 en ouder, standaardcombinaties van een andere gevolgklasse en verouderde windgeneratorcombinaties komen vervangen terug, en een bestand zonder combinaties geeft de standaardset (`combinations_source` = \"bestand\" of \"standaard\"). `gevolgklasse` is de klasse waarvoor ze zijn opgesteld: uit de projectgegevens, anders uit het kenmerk van de standaardcombinaties in het bestand, anders CC2. Wat er vervangen is, een aangenomen klasse en elke FOUT in de combinatieset staan in `warnings`. Geef de combinaties ongewijzigd terug aan `solve_fem_model`, samen met die `gevolgklasse`. Alleen-lezen: er is geen tool die naar de schijf schrijft.",
+            "description": "Leest een opgeslagen .ifcfem-projectbestand (of ouder .ifcfem2d) en geeft het model, de combinaties en tellingen terug — zodat een constructeur op zijn eigen model kan laten rekenen in plaats van het over te typen. De combinaties zijn die waarmee `solve_fem_model` met `project_path` zou rekenen: ze gaan door dezelfde functie als het openen in de app, dus de standaardset van versie 0.3.11 en ouder, standaardcombinaties van een andere gevolgklasse en verouderde windgeneratorcombinaties komen vervangen terug, en een bestand zonder combinaties geeft de standaardset (`combinations_source` = \"bestand\" of \"standaard\"). `gevolgklasse` is de klasse waarvoor ze zijn opgesteld: uit de projectgegevens, anders uit het kenmerk van de standaardcombinaties in het bestand, anders CC2. Wat er vervangen is, een aangenomen klasse en elke FOUT in de combinatieset staan in `warnings`. Geef de combinaties ongewijzigd terug aan `solve_fem_model`, samen met die `gevolgklasse`. Alleen-lezen: er is geen tool die naar de schijf schrijft.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1337,7 +1332,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "solve_fem_model",
-            "description": "Rekent het model door met dezelfde solver die de app gebruikt en levert reacties, verplaatsingen en staafkrachten per belastinggeval, per combinatie en als omhullende. Eenheden kN, kNm, mm en rad; N positief = trek, z positief omhoog. Sluitstuk is `steel_check_inputs`: een lijst die ongewijzigd aan `check_steel_beam` kan worden gevoerd. Let op `cases_skipped_empty` — een belastinggeval zonder werkzame last wordt overgeslagen en zou anders als 'nul' lezen. Let ook op `combinations_skipped`: bij een zuivere staalconstructie waarin elke staaf overwegend verticaal staat zonder gekozen doorbuigingsklasse worden de ongewijzigde standaardcombinaties 6.15 (frequent) en 6.16 (quasi-blijvend) niet doorgerekend — de zijdelingse eis van NEN-EN 1990 A1.4.3(7) leest ze niet — en dat staat daar met reden vermeld. Krijgt een staaf de vloer- of dakeis (A1.4.3(3)/(4)), dan worden ze wel doorgerekend.",
+            "description": "Rekent het model door met dezelfde solver die de app gebruikt en levert reacties, verplaatsingen en staafkrachten per belastinggeval, per combinatie en als omhullende. Vooraf draait dezelfde modelcontrole als validate_fem_model en de app: een model met een fout daarin (een last naar een staaf, knoop of belastinggeval dat niet bestaat, een last zonder waarde of met de waarde in een veld dat het lasttype niet leest) wordt geweigerd met de bevindingen, nooit stil zonder die last doorgerekend. Eenheden kN, kNm, mm en rad; N positief = trek, z positief omhoog. Sluitstuk is `steel_check_inputs`: een lijst die ongewijzigd aan `check_steel_beam` kan worden gevoerd. Let op `cases_skipped_empty` — een belastinggeval zonder werkzame last wordt overgeslagen en zou anders als 'nul' lezen. Let ook op `combinations_skipped`: bij een zuivere staalconstructie waarin elke staaf overwegend verticaal staat zonder gekozen doorbuigingsklasse worden de ongewijzigde standaardcombinaties 6.15 (frequent) en 6.16 (quasi-blijvend) niet doorgerekend — de zijdelingse eis van NEN-EN 1990 A1.4.3(7) leest ze niet — en dat staat daar met reden vermeld. Krijgt een staaf de vloer- of dakeis (A1.4.3(3)/(4)), dan worden ze wel doorgerekend.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1359,7 +1354,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "check_fem_model",
-            "description": "Doorrekenen EN toetsen in één aanroep: de solve loopt in dezelfde solver als de app, de toetsing in dezelfde Rust-kernen als de app. STAAL (EN 1993) staat in `results`, HOUT (EN 1995, EN 338 / EN 14080 zoals \"C24\" of \"GL28h\") in `timber_results` en KRUISLAAGHOUT (profiel \"CLT …\") in `clt_results`. Gebruik deze tool in plaats van solve_fem_model gevolgd door check_steel_beam / check_timber_beams — zo kan er geen veld tussenuit vallen. De toetsinvoer komt zichtbaar mee terug (`steel_check_inputs`, `timber_check_inputs`, `clt_check_inputs`) en kan ongewijzigd aan de losse toetstools worden gevoerd. Hout: k_mod volgt PER UGT-COMBINATIE uit de kortstdurende belasting erin (EN 1995-1-1 3.1.3(2), NB tabel 2.2: eigen gewicht blijvend, opslag lang, vloerbelasting middellang, sneeuw, wind en daken (categorie H) kort); `timber_check_inputs[].load_duration_per_combination` noemt per combinatie de klasse en de basis, en elk houtresultaat draagt `k_mod_per_load_duration` en `governing_combination_id`. Een opgegeven `checkConfig.loadDuration` werkt als ondergrens. BGT-combinaties die niet als 6.14b/6.15b/6.16b herkend worden, tellen bij staal en hout veilig-zijdig mee in de doorbuiging (melding in `warnings`). Beton wordt hier NIET getoetst en krijgt een verwijzing naar `check_concrete_beam`. Elke (gevraagde) staaf staat in precies één van `results`, `timber_results`, `clt_results` of `skipped_beams` (met reden) — nooit geen van beide en nooit dubbel. `governing` is de hoogste unity check over alle getoetste staven, met `material`; lees `skipped_beams` en de FOUT-regels in `warnings` altijd. PLATEN (wandschijven, altijd alle platen, `beam_ids` beperkt ze niet): de toetsinvoer staat in `plate_check_inputs` (zelfde vorm als `check_plates`), het resultaat per plaat in `plate_results` en de hoogste UC over de getoetste platen in `governing_plate`. Staal wordt getoetst met het vloeicriterium van NEN-EN 1993-1-1 6.2.1(5) per element (optionele plooi-invoer: begrensde EN 1993-1-5 §10(5a), met weigering voor trek, niet-uniforme velden en kolominteractie; zonder invoer blijft plooi niet getoetst); hout (massief en gelijmd gelamineerd) volgens NEN-EN 1995-1-1 6.1.2, 6.1.4, 6.1.5, 6.1.7 en 6.2.2 in de materiaalassen met k_mod per combinatie en de klimaatklasse van de plaat (`klimaatklasse`, ontbreekt = 1 met notitie); trek loodrecht op de vezel (6.1.3) is NIET toetsbaar en maakt de status NotApplicable waar hij optreedt. beton volgens NEN-EN 1992-1-1 bijlage F: benodigde wapening per richting (`wapening`, kN/m) en de betondrukdiagonaal (6.55)/(6.56), aanwezige wapening NIET getoetst (status NotApplicable waar wapening nodig is). Kruislaaghout en vrij materiaal komen terug met `geweigerd` en een reden, een plaat zonder (bruikbaar) materiaal staat met reden in `skipped_plates`. Elke plaat staat in `plate_check_inputs` of in `skipped_plates`.",
+            "description": "Doorrekenen EN toetsen in één aanroep: de solve loopt in dezelfde solver als de app, de toetsing in dezelfde Rust-kernen als de app. Net als solve_fem_model weigert deze tool een model waarin de modelcontrole van validate_fem_model een fout vindt. STAAL (EN 1993) staat in `results`, HOUT (EN 1995, EN 338 / EN 14080 zoals \"C24\" of \"GL28h\") in `timber_results` en KRUISLAAGHOUT (profiel \"CLT …\") in `clt_results`. Gebruik deze tool in plaats van solve_fem_model gevolgd door check_steel_beam / check_timber_beams — zo kan er geen veld tussenuit vallen. De toetsinvoer komt zichtbaar mee terug (`steel_check_inputs`, `timber_check_inputs`, `clt_check_inputs`) en kan ongewijzigd aan de losse toetstools worden gevoerd. Hout: k_mod volgt PER UGT-COMBINATIE uit de kortstdurende belasting erin (EN 1995-1-1 3.1.3(2), NB tabel 2.2: eigen gewicht blijvend, opslag lang, vloerbelasting middellang, sneeuw, wind en daken (categorie H) kort); `timber_check_inputs[].load_duration_per_combination` noemt per combinatie de klasse en de basis, en elk houtresultaat draagt `k_mod_per_load_duration` en `governing_combination_id`. Een opgegeven `checkConfig.loadDuration` werkt als ondergrens. BGT-combinaties die niet als 6.14b/6.15b/6.16b herkend worden, tellen bij staal en hout veilig-zijdig mee in de doorbuiging (melding in `warnings`). Beton wordt hier NIET getoetst en krijgt een verwijzing naar `check_concrete_beam`. Elke (gevraagde) staaf staat in precies één van `results`, `timber_results`, `clt_results` of `skipped_beams` (met reden) — nooit geen van beide en nooit dubbel. `governing` is de hoogste unity check over alle getoetste staven, met `material`; lees `skipped_beams` en de FOUT-regels in `warnings` altijd. PLATEN (wandschijven, altijd alle platen, `beam_ids` beperkt ze niet): de toetsinvoer staat in `plate_check_inputs` (zelfde vorm als `check_plates`), het resultaat per plaat in `plate_results` en de hoogste UC over de getoetste platen in `governing_plate`. Staal wordt getoetst met het vloeicriterium van NEN-EN 1993-1-1 6.2.1(5) per element (optionele plooi-invoer: begrensde EN 1993-1-5 §10(5a), met weigering voor trek, niet-uniforme velden en kolominteractie; zonder invoer blijft plooi niet getoetst); hout (massief en gelijmd gelamineerd) volgens NEN-EN 1995-1-1 6.1.2, 6.1.4, 6.1.5, 6.1.7 en 6.2.2 in de materiaalassen met k_mod per combinatie en de klimaatklasse van de plaat (`klimaatklasse`, ontbreekt = 1 met notitie); trek loodrecht op de vezel (6.1.3) is NIET toetsbaar en maakt de status NotApplicable waar hij optreedt. beton volgens NEN-EN 1992-1-1 bijlage F: benodigde wapening per richting (`wapening`, kN/m) en de betondrukdiagonaal (6.55)/(6.56), aanwezige wapening NIET getoetst (status NotApplicable waar wapening nodig is). Kruislaaghout en vrij materiaal komen terug met `geweigerd` en een reden, een plaat zonder (bruikbaar) materiaal staat met reden in `skipped_plates`. Elke plaat staat in `plate_check_inputs` of in `skipped_plates`.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,

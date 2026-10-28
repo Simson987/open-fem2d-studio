@@ -693,6 +693,13 @@ export function openCombinatieStaat(p: {
    */
   bijlage?: NationaleBijlageCode;
   idTellers?: { belastinggeval?: number; combinatie?: number };
+  /**
+   * De lasten van het project. Alleen voor de melding over weggehaalde
+   * wees-factoren: staat er een last in zo'n niet-bestaand geval, dan zegt de
+   * melding dat in plaats van "ze vermenigvuldigden geen enkele last".
+   * Weglaten = onbekend; de melding beweert dan niets over lasten.
+   */
+  loads?: readonly Pick<Load, "id" | "caseId">[];
 }): {
   staat: CombinatieStaat;
   afwijking: CombinatieAfwijking | null;
@@ -735,6 +742,7 @@ export function openCombinatieStaat(p: {
       combinations: staat.combinations,
       loadCases: p.loadCases,
       weesFactoren: wees,
+      loads: p.loads,
     }),
   };
 }
@@ -1500,13 +1508,11 @@ function regelsEnHerkomst(a: BlijvendeAfwijking): { lijst: string; herkomst: str
     a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") +
     (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
   const herkomst = a.oudeKolom !== null
-    ? `Het zijn precies de factoren die de standaardcombinaties van vóór september 2026 aan ` +
-      `belastinggeval ${a.oudeKolom} gaven, ${OUDE_GEVALLEN[a.oudeKolom]}. Zo'n geval heeft het id ` +
-      "van een verwijderd geval gekregen (tot september 2026 erfde het dan diens factoren), of zijn " +
-      "type is later gewijzigd zonder dat de factoren meegingen."
-    : "Zo'n patroon ontstaat in een projectbestand van vóór september 2026 wanneer een verwijderd " +
-      "geval zijn id aan een nieuw geval doorgaf, of wanneer het type later is gewijzigd zonder dat " +
-      "de factoren meegingen.";
+    ? `Deze factoren komen overeen met de oude standaardkolom voor belastinggeval ` +
+      `${a.oudeKolom}, ${OUDE_GEVALLEN[a.oudeKolom]}. Controleer of dit een bewust gekozen ` +
+      "eigen combinatie is; uit de factoren alleen is de leeftijd of herkomst van het project niet af te leiden."
+    : "De factoren kunnen bewust gekozen zijn. Uit deze afwijking is de leeftijd of herkomst van " +
+      "het project niet af te leiden.";
   return { lijst, herkomst };
 }
 
@@ -1517,8 +1523,9 @@ function tekstBlijvendeAfwijking(a: BlijvendeAfwijking): string {
     `bij een blijvende belasting passen: ${lijst}. Alle blijvende gevallen samen zijn één blijvende ` +
     "belasting G, met in elke combinatie dezelfde factor: γ_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in " +
     "de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b–6.16b). " +
-    `${herkomst} De last van dit geval telt daardoor met de verkeerde factoren. Kies "Vervang door ` +
-    'standaardcombinaties" in Belastinggevallen & combinaties, of corrigeer de factoren van dit geval.'
+    `${herkomst} De berekening gebruikt de getoonde factoren. Controleer of ze voor dit project ` +
+    'bedoeld zijn; behoud ze als eigen factoren of kies "Vervang door standaardcombinaties" in ' +
+    "Belastinggevallen & combinaties."
   );
 }
 
@@ -1828,6 +1835,33 @@ export interface CombinatieAfwijking {
 }
 
 /**
+ * Wat de weggehaalde wees-factoren met de lasten deden. Tot oktober 2026 stond
+ * hier zonder voorwaarde "Ze vermenigvuldigden geen enkele last, dus geen
+ * uitkomst van dit project verandert" — ook als er wél een last in dat
+ * niet-bestaande geval stond (controle 12 oktober 2026, punt K1: een lijnlast
+ * in geval 5, en de melding zei dat er niets veranderde). Zo'n last telt in
+ * geen enkel belastinggeval mee; de modelcontrole weigert het model daarom.
+ */
+function weesLastenTekst(
+  weesIds: readonly number[],
+  loads: readonly Pick<Load, "id" | "caseId">[] | undefined,
+): string {
+  if (loads === undefined) return "";
+  const wees = new Set(weesIds);
+  const getroffen = loads.filter((l) => wees.has(l.caseId));
+  if (getroffen.length === 0) {
+    return "Er stond geen last in, dus geen uitkomst van dit project verandert. ";
+  }
+  const lijst = getroffen.map((l) => `last ${l.id} (geval ${l.caseId})`).join(", ");
+  return (
+    `LET OP: er ${getroffen.length === 1 ? "staat" : "staan"} wél ${getroffen.length === 1 ? "een last" : `${getroffen.length} lasten`} ` +
+    `in een geval dat niet bestaat: ${lijst}. ${getroffen.length === 1 ? "Die last telt" : "Die lasten tellen"} ` +
+    "in geen enkele berekening mee; de modelcontrole weigert het model tot " +
+    `${getroffen.length === 1 ? "hij in een bestaand belastinggeval staat" : "ze in een bestaand belastinggeval staan"}. `
+  );
+}
+
+/**
  * Wat er na het openen nog te melden is, naast een eventuele vervanging: de
  * wees-factoren die `verwijderWeesFactoren` weghaalde, en een blijvend geval
  * met factoren die niet bij zijn type passen. `null` = niets te melden.
@@ -1839,6 +1873,8 @@ export function beoordeelCombinatiesBijOpenen(p: {
   combinations: readonly LoadCombination[];
   loadCases: readonly LoadCase[];
   weesFactoren?: readonly WeesFactor[];
+  /** De lasten, zie `openCombinatieStaat`. Weglaten = onbekend. */
+  loads?: readonly Pick<Load, "id" | "caseId">[];
 }): CombinatieAfwijking | null {
   const weesFactoren = [...(p.weesFactoren ?? [])];
   const blijvend = blijvendeFactorAfwijkingen({ loadCases: p.loadCases, combinations: p.combinations });
@@ -1852,9 +1888,9 @@ export function beoordeelCombinatiesBijOpenen(p: {
         `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren ` +
         `die niet bij een blijvende belasting passen: ${lijst}. Een blijvende belasting telt in de ` +
         "BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen. " +
-        `${herkomst} Zolang dat zo is, telt de last van dit geval met de verkeerde factoren. Het zijn ` +
-        'eigen combinaties, dus de app past ze niet aan: kies "Vervang door standaardcombinaties" in ' +
-        "Belastinggevallen & combinaties, of corrigeer de factoren. "
+        `${herkomst} De berekening gebruikt de getoonde factoren. De app laat deze eigen ` +
+        'combinaties staan: kies "Behoud eigen factoren" als dit uw bedoeling is, corrigeer de ' +
+        'factoren, of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties. '
       );
     }).join("") +
     (weesFactoren.length > 0
@@ -1863,11 +1899,60 @@ export function beoordeelCombinatiesBijOpenen(p: {
         (weesIds.length === 1
           ? `belastinggeval ${weesIds[0]}, dat in dit project niet (meer) bestaat`
           : `belastinggevallen ${weesIds.join(", ")}, die in dit project niet (meer) bestaan`) +
-        ": een rest van een verwijderd geval. Die factoren zijn bij het openen weggehaald. Ze " +
-        "vermenigvuldigden geen enkele last, dus geen uitkomst van dit project verandert; een " +
-        `nieuw belastinggeval krijgt een id boven ${weesIds[weesIds.length - 1]} en kan ze niet ` +
+        ": een rest van een verwijderd geval. Die factoren zijn bij het openen weggehaald. " +
+        weesLastenTekst(weesIds, p.loads) +
+        `Een nieuw belastinggeval krijgt een id boven ${weesIds[weesIds.length - 1]} en kan ze niet ` +
         "meer erven."
       : "");
 
   return { weesFactoren, blijvend, samenvatting: samenvatting.trim() };
+}
+
+/**
+ * Zorg dat deze belastinggevallen in het project bestaan en geef hun id's, in
+ * dezelfde volgorde. Voor een generator die een heel model maakt (de wizard
+ * "Stalen hal"): zijn lasten moeten in gevallen van het PROJECT landen.
+ *  - Een bestaand geval met dezelfde naam en hetzelfde type wordt hergebruikt.
+ *  - Het geval met het kenmerk `eigenGewicht` is het gekenmerkte geval van het
+ *    project. Is er geen, dan verhuist het eigen gewicht uit het eerste
+ *    blijvende geval naar een nieuw gekenmerkt geval (dezelfde stap als het
+ *    aanbod van issue #42, met de factoren van eigen combinaties); is er ook
+ *    geen blijvend geval, dan komt er een nieuw gekenmerkt geval vooraan.
+ *  - Een ontbrekend geval komt erbij met een id van de teller; de
+ *    standaardcombinaties volgen.
+ * Bestaande gevallen, hun lasten en eigen combinaties blijven ongemoeid: een
+ * ongedaan gemaakt model verwijst daarna nog naar dezelfde gevallen.
+ */
+export function zorgVoorBelastinggevallen(
+  staat: CombinatieStaat,
+  gevraagd: readonly Pick<LoadCase, "name" | "type" | "eigenGewicht">[],
+): { staat: CombinatieStaat; ids: number[] } {
+  let volgend = staat;
+  const ids: number[] = [];
+  for (const geval of gevraagd) {
+    if (isEigenGewichtGeval(geval)) {
+      const bestaand = volgend.loadCases.find((c) => isEigenGewichtGeval(c));
+      if (bestaand) { ids.push(bestaand.id); continue; }
+      const verhuisd = verplaatsEigenGewichtNaarEigenGeval(volgend);
+      if (verhuisd.id !== null) { volgend = verhuisd.staat; ids.push(verhuisd.id); continue; }
+      const nieuw = voegBelastinggevalToe(volgend, geval.name, "dead");
+      const gekenmerkt = wijzigBelastinggeval(nieuw.staat, nieuw.id, { eigenGewicht: true });
+      volgend = {
+        ...gekenmerkt,
+        loadCases: [
+          ...gekenmerkt.loadCases.filter((c) => c.id === nieuw.id),
+          ...gekenmerkt.loadCases.filter((c) => c.id !== nieuw.id),
+        ],
+      };
+      ids.push(nieuw.id);
+      continue;
+    }
+    const bestaand = volgend.loadCases.find((c) =>
+      !isEigenGewichtGeval(c) && c.name === geval.name && c.type === geval.type);
+    if (bestaand) { ids.push(bestaand.id); continue; }
+    const nieuw = voegBelastinggevalToe(volgend, geval.name, geval.type);
+    volgend = nieuw.staat;
+    ids.push(nieuw.id);
+  }
+  return { staat: volgend, ids };
 }

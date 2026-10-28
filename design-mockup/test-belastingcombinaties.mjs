@@ -1071,7 +1071,7 @@ log("\n[13] Nooit stil een deelverzameling — de juiste waarde of een FOUT, noo
       f?.niveau === "fout" && f.vervangAdvies === true && /is van type blijvend/.test(f.tekst) &&
       /"SLS Karakteristiek" 0,6 \(in de BGT telt een blijvende belasting met 1,0/.test(f.tekst), f?.tekst);
     checkWaar("route 3 na ongedaan maken: de FOUT herkent de windkolom van de oude standaardset",
-      /aan belastinggeval 4 gaven, het windgeval \(W\)/.test(f?.tekst ?? ""), f?.tekst);
+      /oude standaardkolom voor belastinggeval 4, het windgeval \(W\)/.test(f?.tekst ?? ""), f?.tekst);
     checkWaar("route 3 na ongedaan maken: blijvend geval 1 zelf wordt niet aangewezen", !uo.meld.some((m) => m.caseId === 1));
     const a = beoordeelCombinatiesBijOpenen({ combinations: oud.combinations, loadCases: oud.loadCases });
     const s = a?.samenvatting ?? "";
@@ -1084,6 +1084,32 @@ log("\n[13] Nooit stil een deelverzameling — de juiste waarde of een FOUT, noo
     check("route 3 na Vervang: UGT 1,35·8·36/8 = 48,60 kNm", v.ugt, 48.6);
     check("route 3 na Vervang: BGT 8·36/8 = 36,00 kNm", v.bgt, 36.0);
     checkWaar("route 3 na Vervang: geen FOUT", !heeftFout(v.meld), v.meld.map((m) => m.tekst).join(" | "));
+  }
+
+  // Een huidige gebruiker mag bewust eigen factoren kiezen. De herkomst van
+  // het project volgt niet uit de waarden 1,22 en 1,08.
+  {
+    let eigen = staatVan(START);
+    const ugt = eigen.combinations.find((c) => c.type === "uls" && c.factors.has(1));
+    const bgt = eigen.combinations.find((c) => c.type === "sls" && c.factors.has(1));
+    eigen = wijzigCombinatie(eigen, ugt.id, {
+      factors: new Map(ugt.factors).set(1, 1.22),
+    });
+    eigen = wijzigCombinatie(eigen, bgt.id, {
+      factors: new Map(bgt.factors).set(1, 1.08),
+    });
+    const geopend = openCombinatieStaat(eigen);
+    const s = geopend.afwijking?.samenvatting ?? "";
+    checkWaar("eigen factoren 1,22/1,08 blijven na openen behouden",
+      geopend.vervanging === null &&
+      geopend.staat.combinations.find((c) => c.id === ugt.id)?.factors.get(1) === 1.22 &&
+      geopend.staat.combinations.find((c) => c.id === bgt.id)?.factors.get(1) === 1.08);
+    checkWaar("melding noemt beide concrete afwijkingen en laat behouden toe",
+      s.includes(`"${ugt.name}" 1,22`) && s.includes(`"${bgt.name}" 1,08`) &&
+      s.includes("Behoud eigen factoren"), s);
+    checkWaar("melding beweert geen oud project of bewezen herkomst",
+      !s.includes("projectbestand van vóór september 2026") &&
+      s.includes("leeftijd of herkomst van het project niet af te leiden"), s);
   }
 
   // ── De MCP-weg ─────────────────────────────────────────────────────────

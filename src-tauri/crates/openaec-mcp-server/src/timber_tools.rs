@@ -212,6 +212,18 @@ fn schema_houten_staaf() -> Value {
                 "description": "Kniklengte om de sterke y-as in m (§6.3.2): knik IN het vlak van het model. 0 (of weglaten) = niet opgegeven; de kern houdt dan de staaflengte aan en zet in de kolomtoets dat die lengte een terugval is." },
             "buckling_length_z_m": { "type": "number", "default": 0,
                 "description": "Kniklengte om de zwakke z-as in m (§6.3.2): knik UIT het vlak van het model, een richting die de raamwerkberekening nooit ziet. 0 (of weglaten) = niet opgegeven; de kern leidt L_cr,z dan af uit 'lateral_bracing', maar ALLEEN op plaatsen waar een steun aan de boven- EN aan de onderrand zit (binnen 1 mm). Anders de staaflengte. De gebruikte waarde en haar herkomst staan in de kolomtoets en in de drukterm van de kiptoets." },
+            "is_cantilever": { "type": "boolean", "default": false,
+                "description": "Vrij staafeind (uitkraging, vrijstaande kolom): geen oplegging en geen aansluitende staaf aan één eind. Zonder opgegeven kniklengte geldt dan L_cr = 2*L, de ingeklemd-vrije staaf, behalve om een as uit 'zijdelingse_knik_in_analyse' (dan L). Weglaten = false: de terugval op de staaflengte, die beide einden als zijdelings gesteund aanneemt. `check_fem_model` en de app vullen dit uit het model." },
+            "zijdelingse_knik_in_analyse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["y", "z"],
+                "description": "Om welke doorsnedeassen de globale berekening tweede orde (P-Δ) MET scheefstand is en de staaf kan laten uitbuigen. Alleen van belang bij 'is_cantilever' zonder opgegeven kniklengte: om een gedekte as geldt dan de staaflengte (de zijdelingse knik zit al in de krachten; NEN-EN 1995-1-1 5.4.4, op dezelfde grondslag als NEN-EN 1993-1-1 5.2.2(7)b), om een niet-gedekte as 2*L. In een vlak model is hooguit 'y' waar. Zet het alleen voor een staaf waarvan de scheefstand de zijdelingse knikvorm aanstoot: een overwegend verticale staaf (kolom); de scheefstand is een horizontale kracht bij de verticale last, en een liggende uitkraging met druk krijgt er geen imperfectie in haar knikvorm door. Zet het alleen als die berekening voldoet aan NEN-EN 1995-1-1: rekenstijfheden E_d = E_mean/γ_M (2.2.2(1)P) en de imperfecties van 5.4.4(2), de scheefstand én de boogimperfectie e = 0,0025·l. Weglaten = geen as gedekt (2*L). `check_fem_model` en de app zetten het voor hout NIET: hun P-Δ rekent met E_mean.",
+                "properties": {
+                    "y": { "type": "boolean" },
+                    "z": { "type": "boolean" }
+                }
+            },
             "lateral_bracing": {
                 "type": "object",
                 "additionalProperties": false,
@@ -388,7 +400,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "check_timber_beams",
-            "description": "Run the EN 1995-1-1 (+C1+A1:2011/NB:2013) timber check on a list of rectangular b x h members: tension and compression parallel to the grain (§6.1), bending with k_m (§6.1.6), shear with k_cr (§6.1.7), column buckling (§6.3.2), lateral-torsional buckling (§6.3.3) and the deflection pair w_fin/w_add including creep k_def (§7.2). k_mod: `load_duration` applies to ALL combinations unless `load_duration_per_combination` gives the class per ULS combination (EN 1995-1-1 3.1.3(2), the shortest-duration load in a combination governs); without that list the permanent-only combination is NOT checked with k_mod 'Permanent'. `check_fem_model` builds the list from the load cases. Returns one TimberBeamCheckResult per member with the full derivation, in the order of the input list. Same input and output types as the Tauri command `check_timber_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::check_all_timber_beams`. NOT included: compression perpendicular to the grain, notched members, connections, fire and vibration.",
+            "description": "Run the EN 1995-1-1 (+C1+A1:2011/NB:2013) timber check on a list of rectangular b x h members: tension and compression parallel to the grain (§6.1; at a tension point the compression check is NotApplicable with sigma_c,0,d = 0, and column buckling has no unity check), bending with k_m (§6.1.6), combined bending and axial tension (§6.2.3, eq. 6.17/6.18) and combined bending and axial compression on cross-section level (§6.2.4, eq. 6.19/6.20), shear with k_cr (§6.1.7), column buckling (§6.3.2), lateral-torsional buckling (§6.3.3) and the deflection pair w_fin/w_add including creep k_def (§7.2). k_mod: `load_duration` applies to ALL combinations unless `load_duration_per_combination` gives the class per ULS combination (EN 1995-1-1 3.1.3(2), the shortest-duration load in a combination governs); without that list the permanent-only combination is NOT checked with k_mod 'Permanent'. `check_fem_model` builds the list from the load cases. Returns one TimberBeamCheckResult per member with the full derivation, in the order of the input list. Same input and output types as the Tauri command `check_timber_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::check_all_timber_beams`. NOT included: compression perpendicular to the grain, notched members, connections, fire and vibration.",
             "inputSchema": schema_invoerlijst(
                 schema_houten_staaf(),
                 "De houten staven die getoetst moeten worden.",
@@ -525,6 +537,9 @@ mod tests {
             // eind van de staaf.
             "width_end_mm",
             "height_end_mm",
+            // Het vrije eind en de 2e-orde-regel daarbij (L in plaats van 2·L).
+            "is_cantilever",
+            "zijdelingse_knik_in_analyse",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het staafschema mist `{v}`");

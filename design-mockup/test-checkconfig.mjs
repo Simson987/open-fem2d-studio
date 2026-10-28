@@ -3,7 +3,7 @@
 // Verifieert dat:
 //  (a) de builders ZONDER checkConfig exact de huidige gedocumenteerde
 //      defaults leveren (kniklengte = systeemlengte, geen kipsteunen,
-//      vloer/333, geen zeeg; hout Sc1/MediumTerm, fin 250 / add 333);
+//      vloer (w_fin-noemer 250), geen zeeg; hout Sc1/MediumTerm, fin 250 / add 333);
 //  (b) een gezette checkConfig 1-op-1 in BeamCheckInput / TimberBeamCheckInput
 //      terechtkomt (kniklengtes, kipsteunfracties gesorteerd+gefilterd,
 //      doorbuigingsklasse incl. custom L/n, zeeg; klimaatklasse, duurklasse);
@@ -26,7 +26,7 @@ const {
   serializeProject, deserializeProject,
   combinationsToFile, combinationsFromFile,
   PROJECT_FORMAT_VERSION,
-  PROJECT_FORMAT_VERSION_3D,
+  PROJECT_FORMAT_VERSION_MAX,
 } = await import("./src/io/projectFile.ts");
 
 let passed = 0, failed = 0;
@@ -108,7 +108,11 @@ log("\n[1] Staal ZONDER checkConfig → gedocumenteerde defaults");
   check("buckling_length_z_m = 0 (kern kiest)", i.buckling_length_z_m, 0);
   checkDeep("geen kipsteunen", i.lateral_bracing.top_flange_positions, []);
   check("deflection_limit_class Floor", i.deflection_limit_class, "Floor");
-  check("deflection_limit_numerator 333", i.deflection_limit_numerator, 333);
+  // De w_fin-noemer die de kern bij een vloer toetst: ℓ_rep/250 uit NEN-EN
+  // 1990:2002/NB:2019 A1.4.3(4). Tot oktober 2026 stond hier 333 — de grens
+  // van w2 + w3 — terwijl de kern die noemer buiten "Custom" niet las
+  // (controle 2026-10, punt B15).
+  check("deflection_limit_numerator 250", i.deflection_limit_numerator, 250);
   // 0 = de kern leidt de w_add-noemer af uit de klasse (NEN-EN 1990:2002/
   // NB:2019 A1.4.3(3)). Tot september 2026 zat die noemer als vaste 150 in de
   // kern; hij hoort niet uit de bouwer te komen tenzij de gebruiker hem geeft.
@@ -334,8 +338,9 @@ log("\n[6] v1-migratie: bestaand v1-bestand laadt zonder fouten");
   checkTrue("beams zonder checkConfig blijven geldig",
     Array.isArray(parsed?.beams) && parsed.beams.every((b) => b.checkConfig === undefined));
 
-  // Nieuwere versie dan de app kent → duidelijke fout (bestaand gedrag).
-  const future = JSON.stringify({ ...JSON.parse(text), version: PROJECT_FORMAT_VERSION_3D + 1 });
+  // Nieuwere versie dan de app kent → duidelijke fout (bestaand gedrag). De
+  // hoogste leesbare versie is sinds de belastingvlakken 4, niet meer 3.
+  const future = JSON.stringify({ ...JSON.parse(text), version: PROJECT_FORMAT_VERSION_MAX + 1 });
   let futureErr = null;
   try { deserializeProject(future); } catch (e) { futureErr = e; }
   checkTrue("toekomstige versie geeft nette fout", futureErr instanceof Error);

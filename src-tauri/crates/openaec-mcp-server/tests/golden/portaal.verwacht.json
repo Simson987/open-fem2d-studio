@@ -2331,7 +2331,7 @@
         "buckling_length_y_m": 0,
         "buckling_length_z_m": 0,
         "deflection_limit_class": "Floor",
-        "deflection_limit_numerator": 333,
+        "deflection_limit_numerator": 250,
         "deflection_add_limit_numerator": 0,
         "deflection_notes": [
           "w is gemeten vanaf de koorde tussen de verplaatste staafeinden: de starre zakking en rotatie van de staaf zelf tellen niet mee, alleen de kromming ertussen.",

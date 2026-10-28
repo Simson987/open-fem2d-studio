@@ -27,12 +27,17 @@
  * van belastinggeval selecteert bestaande resultaten en rekent nooit opnieuw.
  */
 import { verwerkToets } from "../../lib/commandoReeks";
+import { lijnlastPijlIntervallen, passendBeeldSchaal } from "../../lib/lijnlastPijlen";
+import { verborgenLijnlastLabels } from "../../lib/lijnlastLabels";
+import { kaderModus, selecteerInKader, type SchermPunt } from "../../lib/kaderSelectie";
+import { escapeActie, isInvoerVeld, volgDialoogBijToets } from "../../lib/escapeToets";
 import { lastIdVanKlik } from "../../lib/klikOpLast";
 import { laatVeldLos } from "../../lib/undoRoute";
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
 import { parseLength, formatLength } from "../../lib/lengthInput";
+import { leesLastWaarde, toonLastWaarde } from "../../lib/lastWaarde";
 import "./FemCanvas.css";
 import type { SolverResult } from "./solver/types";
 import type { LoadCombination, Envelope } from "./solver/combinations";
@@ -46,6 +51,8 @@ import { useResultaatInfoStore } from "../../stores/resultaatInfoStore";
 // Doorsnedenaam en begin-/eindmaten van een verlopende staaf: dezelfde
 // keuring als de solver en de rekenkern gebruiken; zie lib/verloopKeuze.
 import { doorsnedeNaamVertaald, verloopMaten } from "../../lib/verloopKeuze";
+import { profielKleuring2d } from "../../lib/profielKleur";
+import ProfielKleurLegenda from "./ProfielKleurLegenda";
 import { kipsteunBeelden } from "../../lib/kipsteunBeeld";
 import KipsteunLaag from "./KipsteunLaag";
 import { modelAanzicht } from "../../lib/aanzichtGeometrie";
@@ -54,7 +61,7 @@ import AanzichtLaag from "./AanzichtLaag";
 import { vertaal } from "../../lib/vertaalbareTekst";
 import type {
   Tool, Node, Beam, Plate, PlaatMeshCache, PlaatPunt, Support, Load, Selection,
-  ViewTransform, GridSettings, SupportType, StructuralGrid,
+  ViewTransform, GridSettings, SupportType, StructuralGrid, Snapshot,
 } from "./femTypes";
 import {
   withPlateDefaults, PLATE_DEFAULTS,
@@ -91,7 +98,7 @@ import {
 // Modelcontrole: knopen die op een staaf liggen zonder eraan vast te zitten,
 // samenvallende knopen en vrije uiteinden — mét knoopnummers en herstelactie,
 // zodat de solver niet als eerste met "singuliere matrix" hoeft te komen.
-import { CONTROLE_TOL_MM, controleerModel, type Bevinding } from "../../lib/modelControle";
+import { controleerModel, tussenpuntOpStaaf, type Bevinding } from "../../lib/modelControle";
 // Profielnaam, staafnummer en profielbreedte op het staafmidden, zonder
 // overlap (issue #47); de weergavevlaggen lezen zoals verkenner en venster.
 import { staafLabelPlaatsen, type LabelPlaats } from "../../lib/staafLabels";
@@ -106,6 +113,11 @@ import {
 // Snap per soort (knoop / stramien / raster) — de knopjes staan in de
 // statusbalk onderin; deze hook leest dezelfde stand.
 import { useSnapInstellingen } from "../../hooks/useSnapInstellingen";
+// Tekenhulpen (#53): Shift als ortho, hoeksnap bij een staaf. De rekenregels
+// staan los in lib/tekenhulp; hier alleen de koppeling met muis en toetsen.
+import {
+  ORTHO_WISSEL_MIN_PX, hoekPuntOpRaster, hoekSnap, hoekSnapHoeken, orthoPunt, type OrthoAs,
+} from "../../lib/tekenhulp";
 
 // Re-export Tool so older imports (Ribbon, HomeTab) keep working.
 export type { Tool } from "./femTypes";
@@ -463,24 +475,32 @@ interface FemCanvasProps {
   /** Deellast-grepen: commit van start-/endFrac op muis-loslaten (undo-baar). */
   updateLoad?: (id: number, updates: Partial<Load>) => void;
   deleteSelected: () => void;
-  splitBeamAt: (beamId: number, x: number, z: number) => void;
+  /**
+   * Subknoop op `beamId` bij (x, z). Het tekenvlak geeft het voetpunt op de
+   * staafas en de verbindingstolerantie (`tolMm`, issue #55) mee.
+   */
+  splitBeamAt: (beamId: number, x: number, z: number, tolMm?: number) => void;
   /**
    * Knoop plaatsen die zich meteen AANSLUIT op elke staaf waar hij middenop
    * ligt (die staaf wordt daar gesplitst). Dit is het gereedschap achter
    * "steunpunt halverwege een ligger": zonder splitsing is de nieuwe knoop een
    * los uiteinde dat de ligger niet raakt. Retourneert het knoop-id.
+   * `tolMm`: de verbindingstolerantie uit de tab Weergave (issue #55).
    */
-  addNodeMetSplitsing?: (x: number, z: number) => number;
+  addNodeMetSplitsing?: (x: number, z: number, tolMm?: number) => number;
   /** Herstelactie modelcontrole: splits `beamId` op de bestaande `nodeId`. */
   verbindKnoopMetStaaf?: (nodeId: number, beamId: number) => boolean;
   /** Herstelactie modelcontrole: voeg twee samenvallende knopen samen. */
   voegKnopenSamen?: (bewaarId: number, verwijderId: number) => boolean;
-  /** Herstelactie modelcontrole: alles herstellen in één undo-stap. */
-  herstelModel?: () => string[];
+  /**
+   * Herstelactie modelcontrole: alles herstellen in één undo-stap, met de
+   * verbindingstolerantie (issue #55). De store meldt wat er gebeurd is.
+   */
+  herstelModel?: (tolMm?: number) => string[];
   // Transformaties (multi-bewust). `false` = selectie bevat niets
   // transformeerbaars → canvas toont feedback i.p.v. een stille no-op.
   translateSelection: (sel: Selection, dx: number, dz: number) => boolean;
-  copySelection: (sel: Selection, dx: number, dz: number) => boolean;
+  copySelection: (sel: Selection, dx: number, dz: number, source?: Snapshot) => boolean;
   rotateSelection: (sel: Selection, cx: number, cz: number, angleRad: number) => boolean;
   mirrorSelection: (sel: Selection, x1: number, z1: number, x2: number, z2: number) => boolean;
   /**
@@ -548,6 +568,11 @@ const SCALE_MIN = 1 / 200;        // 50 px/m
 const SCALE_MAX = 1 / 2;          // 12 500 px/m
 const ORIGIN_X = 80;
 const ORIGIN_Y_FROM_BOTTOM = 60;
+
+/** Waar een negatieve q naartoe werkt; bepaalt de uitleg bij het invoerveld (#52). */
+type QRichting = "globalZ" | "globalX" | "localZ" | "localX";
+const qRichting = (coord: "global" | "local" | undefined, dir: "x" | "z" | undefined): QRichting =>
+  ((coord ?? "global") === "local" ? ((dir ?? "z") === "z" ? "localZ" : "localX") : ((dir ?? "z") === "z" ? "globalZ" : "globalX"));
 
 // Maatvoering-opmaak (px, schermruimte — niet meeschalend met de zoom)
 /** Straal van het open cirkeltje op het snijpunt maatlijn × stramienlijn. */
@@ -617,7 +642,11 @@ export default function FemCanvas(props: FemCanvasProps) {
     startSX: number; startSY: number; startOX: number; startOY: number;
   } | null>(null);
   const [size, setSize] = useState({ w: 1000, h: 600 });
-  const [hoverModel, setHoverModel] = useState<{ x: number; z: number } | null>(null);
+  // Het (gesnapte) punt onder de muis. `ortho` en `hoek` zeggen welke
+  // tekenhulp het punt heeft vastgezet (#53), voor de hulplijn en het label.
+  const [hoverModel, setHoverModel] = useState<{
+    x: number; z: number; ortho?: OrthoAs; hoek?: number;
+  } | null>(null);
   const [snapNode, setSnapNode] = useState<number | null>(null);
   const [snapBeam, setSnapBeam] = useState<number | null>(null);
   const [beamStart, setBeamStart] = useState<number | null>(null);
@@ -667,6 +696,14 @@ export default function FemCanvas(props: FemCanvasProps) {
   const toonStaafnummers = vlagAan(displayFlags, "staafnummers");
   const toonPeilmaten = vlagAan(displayFlags, "peilmaten");
   const toonMaatlijnen = vlagAan(displayFlags, "maatlijnen");
+  // Profielen in kleur (lib/profielKleur.ts): per uniek profiel een kleur uit
+  // het vaste palet, gesorteerd op de taalonafhankelijke naam; de legenda
+  // rechtsonder toont dezelfde regels. Alleen van model en taal afhankelijk.
+  const toonProfielKleur = toonStaven && vlagAan(displayFlags, "profielKleur");
+  const profielKleuren = useMemo(
+    () => (toonProfielKleur ? profielKleuring2d(beams, tCommon) : null),
+    [toonProfielKleur, beams, tCommon],
+  );
   const kipBeelden = useMemo(
     () => (toonKipsteunen ? kipsteunBeelden({ nodes, beams, supports, plates }) : []),
     [toonKipsteunen, nodes, beams, supports, plates],
@@ -680,6 +717,11 @@ export default function FemCanvas(props: FemCanvasProps) {
    * bevestigt, Backspace wist, Escape annuleert.
    */
   const [beamLengte, setBeamLengte] = useState<string | null>(null);
+  // Een q-waarde direct op het tekenvlak bewerken (#52): dubbelklik op het getal.
+  const [qBewerking, setQBewerking] = useState<{
+    loadId: number; field: "q" | "qStart" | "qEnd"; x: number; y: number; tekst: string; richting: QRichting;
+  } | null>(null);
+  const qBewerkingKlaar = useRef(false);
   // Dimension-edit popover state: click a maatlijn to enter a new distance.
   const [dimEdit, setDimEdit] = useState<{
     axis: "x" | "z";           // x = horizontal dim (between x-axes), z = vertical
@@ -755,6 +797,11 @@ export default function FemCanvas(props: FemCanvasProps) {
    * gaat niet mee in het projectbestand en niet naar het systeemklembord.
    */
   const lastenKlembordRef = useRef<KlembordLast[]>([]);
+  /** Modelselectie voor Ctrl+C/V. De store kopieert ook de opleggingen op de
+   * geselecteerde knopen en legt elke plakactie vast als één undo-stap. */
+  const modelKlembordRef = useRef<{
+    selection: Selection; snapshot: Snapshot; aantalPlakken: number;
+  } | null>(null);
 
   // ── Drag-to-move state (mouse-driven, Select tool only) ────────────────
   // While dragging a node or beam we keep the original positions of all the
@@ -762,7 +809,8 @@ export default function FemCanvas(props: FemCanvasProps) {
   // position and rebuild a ghost preview without committing to the store.
   const [dragState, setDragState] = useState<{
     nodeIds: number[];                                    // nodes being translated
-    originModel: { x: number; z: number };                // world-coord at drag start
+    /** Muispositie bij het indrukken (mm), ongesnapt; zie `sleepOorsprong`. */
+    originRuw: { x: number; z: number };
     originPositions: Map<number, { x: number; z: number }>; // pre-drag positions
     currentDelta: { dx: number; dz: number };             // snapped delta in mm
     /** Schermpositie van de muisknop-indruk, om een klik van een sleep te onderscheiden. */
@@ -885,16 +933,24 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
   }, [plates, nodes]);
 
-  // Resize observer
-  useEffect(() => {
+  // Meet de beginmaat vóór de eerste zichtbare render opnieuw. Anders rekent
+  // een lijnlast eerst met de standaardbreedte van 1000 px en verandert haar
+  // pijlaantal pas bij de eerste ResizeObserver-melding of zoomactie (#101).
+  useLayoutEffect(() => {
     if (!svgRef.current) return;
+    const parent = svgRef.current.parentElement!;
+    const meet = (w: number, h: number) => {
+      if (w > 0 && h > 0) setSize((vorig) => vorig.w === w && vorig.h === h ? vorig : { w, h });
+    };
+    const begin = parent.getBoundingClientRect();
+    meet(begin.width, begin.height);
     const ro = new ResizeObserver(entries => {
       for (const e of entries) {
         const r = e.contentRect;
-        if (r.width > 0 && r.height > 0) setSize({ w: r.width, h: r.height });
+        meet(r.width, r.height);
       }
     });
-    ro.observe(svgRef.current.parentElement!);
+    ro.observe(parent);
     return () => ro.disconnect();
   }, []);
 
@@ -921,6 +977,10 @@ export default function FemCanvas(props: FemCanvasProps) {
   // Snap per soort aan/uit — de knopjes staan in de statusbalk onderin
   // (StatusBar). Alles uit = vrij tekenen/slepen op de exacte muispositie.
   const snapInstellingen = useSnapInstellingen();
+  // Verbindingstolerantie (issue #55, tab Weergave): binnen deze afstand ligt
+  // een knoop op een staaf of op dezelfde plek. Voor de modelcontrole, het
+  // plaatsen van een knoop en het herstel; de geometrie zelf verandert niet.
+  const verbindingsTolerantie = snapInstellingen.verbindingsTolerantie;
   const snap = useCallback((v: number) =>
     snapInstellingen.raster ? Math.round(v / grid.spacingMm) * grid.spacingMm : v,
   [grid.spacingMm, snapInstellingen.raster]);
@@ -944,10 +1004,14 @@ export default function FemCanvas(props: FemCanvasProps) {
    *
    * `snapped` blijft de vlag voor de amberkleurige halo (nu: knoop óf
    * stramien, want beide zijn een "harde" vangst); `soort` zegt welke.
+   *
+   * `vrij` = Alt ingedrukt (#53): de snap staat tijdelijk helemaal uit en het
+   * punt is de exacte muispositie, alsof alle snapsoorten uit stonden.
    */
-  const snapPunt = useCallback((mx: number, mz: number): {
+  const snapPunt = useCallback((mx: number, mz: number, vrij = false): {
     x: number; z: number; snapped: boolean; soort: "knoop" | "stramien" | "raster" | "vrij";
   } => {
+    if (vrij) return { x: mx, z: mz, snapped: false, soort: "vrij" };
     // 1. Knoopsnap — zelfde straal als findSnapNode (14 px), omgerekend naar mm.
     if (snapInstellingen.knoop) {
       const tolKnoop = 14 / view.scale;
@@ -1020,8 +1084,9 @@ export default function FemCanvas(props: FemCanvasProps) {
     return best?.id ?? null;
   }, [nodes, worldToScreen]);
 
-  // Find nearest beam within 8 px of the click (perpendicular distance)
-  const findSnapBeam = useCallback((sx: number, sy: number): { beamId: number; x: number; z: number } | null => {
+  // Find nearest beam within 8 px of the click (perpendicular distance).
+  // `vrij` (Alt, #53): het punt op de staaf zonder rastersnap.
+  const findSnapBeam = useCallback((sx: number, sy: number, vrij = false): { beamId: number; x: number; z: number } | null => {
     const RADIUS_PX = 8;
     let best: { beamId: number; d: number; px: number; py: number } | null = null;
     for (const b of beams) {
@@ -1042,7 +1107,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     if (!best) return null;
     const w = screenToWorld(best.px, best.py);
-    return { beamId: best.beamId, x: snap(w.x), z: snap(w.z) };
+    return vrij ? { beamId: best.beamId, x: w.x, z: w.z } : { beamId: best.beamId, x: snap(w.x), z: snap(w.z) };
   }, [beams, nodesById, worldToScreen, screenToWorld, snap]);
 
   /**
@@ -1077,9 +1142,9 @@ export default function FemCanvas(props: FemCanvasProps) {
    * niet aanreikt (de canvas blijft dan bruikbaar, alleen zonder aansluiting).
    */
   const plaatsKnoop = useCallback((x: number, z: number): number => {
-    if (addNodeMetSplitsing) return addNodeMetSplitsing(x, z);
+    if (addNodeMetSplitsing) return addNodeMetSplitsing(x, z, verbindingsTolerantie);
     return addNode(x, z);
-  }, [addNodeMetSplitsing, addNode]);
+  }, [addNodeMetSplitsing, addNode, verbindingsTolerantie]);
 
   /**
    * Ligt er een staaf onder de muis (en geen knoop), maak dan dáár een knoop
@@ -1094,24 +1159,18 @@ export default function FemCanvas(props: FemCanvasProps) {
    * staafas. Zonder die projectie zou de knoop er net naast komen te liggen —
    * precies het gebrek dat dit gereedschap moet voorkomen.
    */
-  const knoopOpStaafOnderMuis = useCallback((sx: number, sy: number): number | null => {
-    const sb = findSnapBeam(sx, sy);
+  const knoopOpStaafOnderMuis = useCallback((sx: number, sy: number, vrij = false): number | null => {
+    const sb = findSnapBeam(sx, sy, vrij);
     if (!sb) return null;
     const b = beams.find(bb => bb.id === sb.beamId);
-    const a = b ? nodes.find(n => n.id === b.from) : undefined;
-    const c = b ? nodes.find(n => n.id === b.to) : undefined;
-    if (!a || !c) return null;
-    const vx = c.x - a.x, vz = c.z - a.z;
-    const lenSq = vx * vx + vz * vz;
-    if (lenSq < 1e-9) return null;
-    const t = Math.min(1, Math.max(0, ((sb.x - a.x) * vx + (sb.z - a.z) * vz) / lenSq));
-    const len = Math.sqrt(lenSq);
-    // Vlak bij een uiteinde: gebruik die knoop zelf. Splitsen zou daar een
-    // staaf met lengte nul opleveren.
-    if (t * len <= CONTROLE_TOL_MM) return a.id;
-    if ((1 - t) * len <= CONTROLE_TOL_MM) return c.id;
-    return plaatsKnoop(a.x + vx * t, a.z + vz * t);
-  }, [findSnapBeam, plaatsKnoop, beams, nodes]);
+    const p = b ? tussenpuntOpStaaf(nodes, b, sb.x, sb.z, verbindingsTolerantie) : null;
+    if (!p) return null;
+    // Op dezelfde plek als een uiteinde (binnen de verbindingstolerantie, de
+    // regel van de modelcontrole): gebruik die knoop zelf. Splitsen zou daar
+    // een staaf van (vrijwel) lengte nul opleveren.
+    if (p.eindknoop !== null) return p.eindknoop;
+    return plaatsKnoop(p.x, p.z);
+  }, [findSnapBeam, plaatsKnoop, beams, nodes, verbindingsTolerantie]);
 
   // Dichtstbijzijnde plaatrand binnen 8 px (P3.3/P4.3) — gebruikt door het
   // Lijnlast-gereedschap wanneer er géén staaf onder de muis ligt, zodat
@@ -1206,7 +1265,9 @@ export default function FemCanvas(props: FemCanvasProps) {
   }, []);
 
   /** Begin a drag-to-move operation. Captures original positions of every node
-   *  reachable via the current selection (node ids, beam endpoints, plate corners). */
+   *  reachable via the current selection (node ids, beam endpoints, plate corners).
+   *  Het indrukpunt wordt RUW bewaard; `sleepOorsprong` snapt het per frame
+   *  met de actuele stand van Alt (#53). */
   const startDragFromSelection = useCallback((
     sel: Selection, originX: number, originZ: number, startSX: number, startSY: number,
   ) => {
@@ -1219,13 +1280,22 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     setDragState({
       nodeIds,
-      originModel: { x: snap(originX), z: snap(originZ) },
+      originRuw: { x: originX, z: originZ },
       originPositions: orig,
       currentDelta: { dx: 0, dz: 0 },
       startSX, startSY,
       engaged: false,
     });
-  }, [selectionNodeIds, nodes, snap]);
+  }, [selectionNodeIds, nodes]);
+
+  /**
+   * Beginpunt van een sleep: het indrukpunt op het raster, of vrij zolang Alt
+   * ingedrukt is (#53). Per frame bepaald en niet eenmalig bij het indrukken:
+   * wie Alt loslaat vóór het loslaten van de muis, krijgt weer een
+   * verplaatsing in hele rasterstappen ("loslaten: weer zoals ingesteld").
+   */
+  const sleepOorsprong = (d: { originRuw: { x: number; z: number } }, vrij: boolean) =>
+    vrij ? d.originRuw : { x: snap(d.originRuw.x), z: snap(d.originRuw.z) };
 
   /** Apply current grab delta + commit to store. */
   const commitGrab = useCallback(() => {
@@ -1265,16 +1335,120 @@ export default function FemCanvas(props: FemCanvasProps) {
   }, [rotateMode, selection, rotateSelection]);
   const cancelRotate = useCallback(() => setRotateMode(null), []);
 
+  // ── Tekenhulpen: Alt = snap tijdelijk uit, Shift = ortho (#53) ──────────
+  /**
+   * De stand van Alt en Shift. Een muisgebeurtenis draagt hem zelf mee
+   * (altKey/shiftKey) en is daarom leidend; keydown/keyup houden hem bij
+   * wanneer de muis stilstaat, zodat het voorbeeld meteen meeverandert. De ref
+   * is voor de rekenregels (altijd actueel), de state voor de HUD.
+   */
+  const [tekenToetsen, setTekenToetsen] = useState({ alt: false, shift: false });
+  const tekenToetsenRef = useRef(tekenToetsen);
+  const zetTekenToetsen = useCallback((alt: boolean, shift: boolean) => {
+    const nu = tekenToetsenRef.current;
+    if (nu.alt === alt && nu.shift === shift) return;
+    tekenToetsenRef.current = { alt, shift };
+    setTekenToetsen({ alt, shift });
+  }, []);
+  /** Laatste muispositie op het tekenvlak, om na een Alt/Shift-wissel opnieuw te rekenen. */
+  const laatstePointerRef = useRef<{ sx: number; sy: number } | null>(null);
+  /** Vorige ortho-as voor de hysterese, met het beginpunt waar hij bij hoort. */
+  const orthoRef = useRef<{ start: { x: number; z: number }; as: OrthoAs } | null>(null);
+
+  /**
+   * Beginpunt voor ortho en hoeksnap: de startknoop van een staaf in aanbouw,
+   * het beginpunt van een sleep of de muispositie bij G. Een G met as-slot
+   * (X/Z) heeft geen ortho nodig: het slot legt de richting al vast.
+   *
+   * Een sleep telt pas als hij echt een sleep is (`engaged`, of de muis staat
+   * op `pointer` al voorbij de sleepdrempel — dat is het frame dat hem
+   * engaged maakt). Tot dan is het een klik, en een Shift-klik is meervoudige
+   * selectie, geen ortho: zonder die voorwaarde flitsten hulplijn en
+   * HUD-melding bij een Shift-klik met een paar pixels handbeweging.
+   */
+  const tekenStart = (
+    vrij: boolean, pointer?: { sx: number; sy: number },
+  ): { x: number; z: number } | null => {
+    if (grabMode) return grabMode.axisLock ? null : grabMode.cursorStartModel;
+    if (dragState) {
+      const sleep = dragState.engaged || (pointer !== undefined
+        && Math.hypot(pointer.sx - dragState.startSX, pointer.sy - dragState.startSY) >= SLEEP_DREMPEL_PX);
+      return sleep ? sleepOorsprong(dragState, vrij) : null;
+    }
+    if (tool === "addBeam" && beamStart !== null) {
+      const n = nodesById.get(beamStart);
+      return n ? { x: n.x, z: n.z } : null;
+    }
+    return null;
+  };
+
+  /**
+   * Het punt waar de muis tekent, met de tekenhulpen van #53 bovenop de snap:
+   *   - Alt: geen snap, de exacte muispositie;
+   *   - Shift (staaf in aanbouw, slepen, G): ortho — de richting horizontaal of
+   *     verticaal vanaf het beginpunt (met hysterese), daarna de snap voor de
+   *     afstand langs die richting: het punt op de lijn wordt gesnapt en de
+   *     andere coördinaat gaat terug naar die van het beginpunt;
+   *   - anders, bij een staaf in aanbouw: de hoeksnap op het gesnapte punt.
+   *     Een knoop of stramienas gaat voor, en ook een bestaande knoop of staaf
+   *     onder de muis (daarop sluit de klik aan): dan geen hoeksnap.
+   */
+  const tekenPunt = (
+    mx: number, mz: number, sx: number, sy: number, toetsen: { alt: boolean; shift: boolean },
+  ): { x: number; z: number; snapped: boolean; soort: string; ortho?: OrthoAs; hoek?: number } => {
+    const vrij = toetsen.alt;
+    const start = tekenStart(vrij, { sx, sy });
+    if (toetsen.shift && start) {
+      const vorige = orthoRef.current && orthoRef.current.start.x === start.x && orthoRef.current.start.z === start.z
+        ? orthoRef.current.as : null;
+      const { punt, as } = orthoPunt(start, { x: mx, z: mz }, vorige, ORTHO_WISSEL_MIN_PX / view.scale);
+      orthoRef.current = { start, as };
+      const s = snapPunt(punt.x, punt.z, vrij);
+      return as === "x"
+        ? { x: s.x, z: start.z, snapped: s.snapped, soort: "ortho", ortho: as }
+        : { x: start.x, z: s.z, snapped: s.snapped, soort: "ortho", ortho: as };
+    }
+    orthoRef.current = null;
+    const s = snapPunt(mx, mz, vrij);
+    if (!vrij && snapInstellingen.hoek && start && tool === "addBeam" && !grabMode && !dragState
+        && (s.soort === "raster" || s.soort === "vrij")
+        && findSnapNode(sx, sy) === null && findSnapBeam(sx, sy) === null) {
+      const h = hoekSnap(start, s, snapInstellingen.hoekTolerantie, hoekSnapHoeken(snapInstellingen.hoekExtra));
+      if (h) {
+        const p = snapInstellingen.raster ? hoekPuntOpRaster(start, h, grid.spacingMm) : h.punt;
+        return { x: p.x, z: p.z, snapped: false, soort: "hoek", hoek: h.hoekGraden };
+      }
+    }
+    return s;
+  };
+
+  /** Punt waar de ortho-hulplijn doorheen gaat; null = hier geen ortho. */
+  const orthoLijnPunt = grabMode
+    ? (grabMode.axisLock ? null : grabMode.centroidModel)
+    : tekenStart(tekenToetsen.alt);
+  /** Shift zet op dit moment de richting vast (HUD en hulplijn). */
+  const orthoActief = tekenToetsen.shift && !!hoverModel?.ortho && orthoLijnPunt !== null;
+  /**
+   * Gereedschappen waar Alt niets verandert: ze kiezen een hele staaf (lijnlast,
+   * temperatuur) of een knoop (moment), geen positie. Daar zou de melding
+   * "snap tijdelijk uit" iets beloven wat de klik niet doet.
+   */
+  const altZonderWerking = tool === "addLineLoad" || tool === "addThermal" || tool === "addMoment";
+  /** Alt zet de snap tijdelijk uit, en er wordt getekend, gesleept of verplaatst. */
+  const snapTijdelijkUit = tekenToetsen.alt && !altZonderWerking
+    && (tool !== "select" || !!dragState?.engaged || !!grabMode);
+
   // ── Mouse handlers ──────────────────────────────────────────────────────
   const updatePointerHover = (sx: number, sy: number) => {
     const startedAt = performance.now();
     const world = screenToWorld(sx, sy);
-    const snapped = snapPunt(world.x, world.z);
+    const snapped = tekenPunt(world.x, world.z, sx, sy, tekenToetsenRef.current);
     // Bij raster-snap vallen meerdere pointer-events vaak op exact hetzelfde
     // modelpunt. Houd dan hetzelfde object vast zodat React de update overslaat.
     setHoverModel((previous) => previous?.x === snapped.x && previous.z === snapped.z
+        && previous.ortho === snapped.ortho && previous.hoek === snapped.hoek
       ? previous
-      : { x: snapped.x, z: snapped.z });
+      : { x: snapped.x, z: snapped.z, ortho: snapped.ortho, hoek: snapped.hoek });
     // Hover halo (Select tool only)
     if (tool === "select" && !boxSelect && !dragState && !grabMode && !rotateMode) {
       setSnapNode(findSnapNode(sx, sy));
@@ -1301,6 +1475,11 @@ export default function FemCanvas(props: FemCanvasProps) {
     return { world, snapped };
   };
 
+  // Het frame verwerkt de hover met de NIEUWSTE render: een frame dat vóór
+  // een klik werd aangevraagd, kende de startknoop van de staaf nog niet en
+  // tekende dan zonder ortho of hoeksnap (#53).
+  const updatePointerHoverRef = useRef(updatePointerHover);
+  updatePointerHoverRef.current = updatePointerHover;
   const schedulePointerHover = (sx: number, sy: number) => {
     pendingHoverRef.current = { sx, sy };
     if (hoverFrameRef.current) return;
@@ -1308,7 +1487,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       hoverFrameRef.current = 0;
       const pending = pendingHoverRef.current;
       pendingHoverRef.current = null;
-      if (pending) updatePointerHover(pending.sx, pending.sy);
+      if (pending) updatePointerHoverRef.current(pending.sx, pending.sy);
     });
   };
 
@@ -1316,6 +1495,10 @@ export default function FemCanvas(props: FemCanvasProps) {
     const rect = svgRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    // Alt en Shift komen met de muisgebeurtenis mee (#53); ook als de toets
+    // werd ingedrukt toen het venster geen focus had.
+    laatstePointerRef.current = { sx, sy };
+    zetTekenToetsen(e.altKey, e.shiftKey);
 
     if (panRef.current.active) {
       pendingPanRef.current = {
@@ -1345,7 +1528,15 @@ export default function FemCanvas(props: FemCanvasProps) {
       }
       return;
     }
+    volgPointer(sx, sy);
+  };
 
+  /**
+   * Alles wat een muispositie doet behalve pannen: hover, slepen, G, R, kader
+   * en opening. Los van de muisgebeurtenis, zodat een Alt- of Shift-wissel
+   * zonder muisbeweging (keydown/keyup) dezelfde positie opnieuw kan verwerken.
+   */
+  const volgPointer = (sx: number, sy: number) => {
     const world = screenToWorld(sx, sy);
 
     // Deellast-greep-sleep: projecteer de muis op de staafas → fractie,
@@ -1364,7 +1555,7 @@ export default function FemCanvas(props: FemCanvasProps) {
           const tRaw = ((world.x - nA.x) * vx + (world.z - nA.z) * vz) / lenSq;
           // Snap het PUNT op de as en projecteer terug, zodat de greep op de
           // staaf blijft én het actieve rasterpunt gevolgd wordt.
-          const pSnap = snapPunt(nA.x + vx * tRaw, nA.z + vz * tRaw);
+          const pSnap = snapPunt(nA.x + vx * tRaw, nA.z + vz * tRaw, tekenToetsenRef.current.alt);
           let t = ((pSnap.x - nA.x) * vx + (pSnap.z - nA.z) * vz) / lenSq;
           const MIN_GAP = 0.02;
           if (loadHandleDrag.end === "start") {
@@ -1387,7 +1578,8 @@ export default function FemCanvas(props: FemCanvasProps) {
       return;
     }
 
-    // Snap to stramien intersection if close, else to grid spacing.
+    // Snap to stramien intersection if close, else to grid spacing — met de
+    // tekenhulpen (Alt, Shift-ortho) erbij; slepen en G gebruiken hetzelfde punt.
     const { snapped } = updatePointerHover(sx, sy);
 
     // Drag-to-move: update ghost preview delta in mm (snapped) — maar pas
@@ -1397,9 +1589,11 @@ export default function FemCanvas(props: FemCanvasProps) {
           && Math.hypot(sx - dragState.startSX, sy - dragState.startSY) < SLEEP_DREMPEL_PX) {
         return;
       }
-      const snappedDrag = snapPunt(world.x, world.z);
-      const dx = snappedDrag.x - dragState.originModel.x;
-      const dz = snappedDrag.z - dragState.originModel.z;
+      // Beginpunt en muispunt met DEZELFDE Alt-stand: zonder Alt beide op het
+      // raster, dus een verplaatsing in hele rasterstappen (#53).
+      const oorsprong = sleepOorsprong(dragState, tekenToetsenRef.current.alt);
+      const dx = snapped.x - oorsprong.x;
+      const dz = snapped.z - oorsprong.z;
       setDragState({ ...dragState, engaged: true, currentDelta: { dx, dz } });
       return;
     }
@@ -1417,8 +1611,7 @@ export default function FemCanvas(props: FemCanvasProps) {
 
     // G-grab: update cursor + recompute delta visualisation.
     if (grabMode) {
-      const snappedG = snapPunt(world.x, world.z);
-      setGrabMode({ ...grabMode, cursorModel: { x: snappedG.x, z: snappedG.z } });
+      setGrabMode({ ...grabMode, cursorModel: { x: snapped.x, z: snapped.z } });
       return;
     }
 
@@ -1440,6 +1633,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     if (hoverFrameRef.current) cancelAnimationFrame(hoverFrameRef.current);
     hoverFrameRef.current = 0;
     pendingHoverRef.current = null;
+    laatstePointerRef.current = null;
     setHoverModel(null);
     setSnapNode(null);
     setSnapBeam(null);
@@ -1458,6 +1652,8 @@ export default function FemCanvas(props: FemCanvasProps) {
     const rect = svgRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    laatstePointerRef.current = { sx, sy };
+    zetTekenToetsen(e.altKey, e.shiftKey);
     // Middle-mouse OR Space+left → pan
     if (e.button === 1 || (e.button === 0 && spaceHeld)) {
       e.preventDefault();
@@ -1467,9 +1663,10 @@ export default function FemCanvas(props: FemCanvasProps) {
       };
       return;
     }
-    // Cancel grab/rotate on mousedown — user is committing or starting fresh.
-    if (grabMode) { commitGrab(); return; }
-    if (rotateMode) { commitRotate(); return; }
+    // Tijdens G (verplaatsen) of R (draaien): links bevestigt, rechts annuleert
+    // en zet alles terug, zoals in Blender (#54).
+    if (grabMode) { if (e.button === 2) { e.preventDefault(); cancelGrab(); } else commitGrab(); return; }
+    if (rotateMode) { if (e.button === 2) { e.preventDefault(); cancelRotate(); } else commitRotate(); return; }
     // Right-click context menu (Select tool, on a selection)
     if (e.button === 2) {
       e.preventDefault();
@@ -1484,7 +1681,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     if (e.button === 0 && tool === "addOpening") {
       e.preventDefault();
       const world = screenToWorld(sx, sy);
-      const s = snapPunt(world.x, world.z);
+      const s = snapPunt(world.x, world.z, e.altKey);
       const doel = plates.find((pl) => {
         const punten = plaatHoekPunten(pl, nodes);
         return !!punten && puntInPolygoon(s.x, s.z, punten);
@@ -1512,7 +1709,13 @@ export default function FemCanvas(props: FemCanvasProps) {
         setSelection({ type: "load", id: lastId });
         return;
       }
-      const overNodeId = findSnapNode(sx, sy);
+      // Een klik op het getekende opleggingssymbool valt vaak buiten de
+      // knoopstraal van 14 px. Selecteer dan de bijbehorende knoop, zodat
+      // kopiëren ook de oplegging meeneemt.
+      const supportGroep = (e.target as Element | null)?.closest("[data-support-node-id]");
+      const supportNodeId = supportGroep?.getAttribute("data-support-node-id");
+      const overNodeId = supportNodeId !== null && supportNodeId !== undefined
+        ? Number(supportNodeId) : findSnapNode(sx, sy);
       const overBeam = findSnapBeam(sx, sy);
       const world = screenToWorld(sx, sy);
 
@@ -1632,29 +1835,31 @@ export default function FemCanvas(props: FemCanvasProps) {
         setBoxSelect(null);
         return;
       }
-      // Collect nodes inside box (in screen coords).
-      const pickedNodes: number[] = [];
-      for (const n of nodes) {
-        const p = worldToScreen(n.x, n.z);
-        if (p.x >= minSX && p.x <= maxSX && p.y >= minSY && p.y <= maxSY) {
-          pickedNodes.push(n.id);
-        }
-      }
-      // Beams: both endpoints must be inside the box.
-      const pickedNodeSet = new Set(pickedNodes);
-      const pickedBeams: number[] = [];
-      for (const b of beams) {
-        if (pickedNodeSet.has(b.from) && pickedNodeSet.has(b.to)) {
-          pickedBeams.push(b.id);
-        }
-      }
-      // Plates: all corner nodes must be inside the box.
-      const pickedPlates: number[] = [];
-      for (const p of plates) {
-        if (p.nodeIds.every(id => pickedNodeSet.has(id))) {
-          pickedPlates.push(p.id);
-        }
-      }
+      // CAD-conventie (lib/kaderSelectie): van links naar rechts gesleept is
+      // een venster — knopen binnen, staven met beide einden binnen, platen
+      // met alle hoeken binnen. Van rechts naar links is een crossing — ook
+      // een staaf die door het kader loopt en een plaat die het overlapt.
+      const modus = kaderModus(boxSelect.startSX, boxSelect.endSX);
+      const scherm = new Map(nodes.map((n) => [n.id, worldToScreen(n.x, n.z)]));
+      const gekozen = selecteerInKader({
+        knopen: nodes.map((n) => ({ id: n.id, p: scherm.get(n.id)! })),
+        staven: beams.flatMap((b) => {
+          const a = scherm.get(b.from), c = scherm.get(b.to);
+          return a && c ? [{ id: b.id, a, b: c }] : [];
+        }),
+        platen: plates.flatMap((p) => {
+          const rand = p.nodeIds.map((id) => scherm.get(id));
+          if (rand.some((q) => !q)) return [];
+          return [{
+            id: p.id,
+            rand: rand as SchermPunt[],
+            gaten: (p.openingen ?? []).map((o) => o.punten.map((q) => worldToScreen(q.x, q.z))),
+          }];
+        }),
+      }, { left: minSX, right: maxSX, top: minSY, bottom: maxSY }, modus);
+      const pickedNodes = gekozen.knoopIds;
+      const pickedBeams = gekozen.staafIds;
+      const pickedPlates = gekozen.plaatIds;
       let nextSel: Selection;
       if (pickedNodes.length === 0 && pickedBeams.length === 0 && pickedPlates.length === 0) {
         nextSel = boxSelect.additive ? selection : null;
@@ -1698,13 +1903,19 @@ export default function FemCanvas(props: FemCanvasProps) {
     const rect = svgRef.current!.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
-    const overNodeId = findSnapNode(sx, sy);
+    const supportNodeId = (e.target as Element | null)?.closest("[data-support-node-id]")
+      ?.getAttribute("data-support-node-id");
+    const overNodeId = supportNodeId !== null && supportNodeId !== undefined
+      ? Number(supportNodeId) : findSnapNode(sx, sy);
     // Model-positie uit het klik-event zelf. Niet op hoverModel leunen: dat is
     // de laatste mousemove-positie, en een klik zonder voorafgaande beweging
     // (touchpad-tap, snelle klik, automation) komt dan stilzwijgend op de
     // oude of ontbrekende hoverpositie uit.
     const clickWorld = screenToWorld(sx, sy);
-    const clickSnap = snapPunt(clickWorld.x, clickWorld.z);
+    // Met de tekenhulpen (#53): Alt = vrij punt, Shift = ortho, hoeksnap.
+    laatstePointerRef.current = { sx, sy };
+    zetTekenToetsen(e.altKey, e.shiftKey);
+    const clickSnap = tekenPunt(clickWorld.x, clickWorld.z, sx, sy, { alt: e.altKey, shift: e.shiftKey });
     const clickModel = { x: clickSnap.x, z: clickSnap.z };
 
     if (tool === "select") {
@@ -1721,7 +1932,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       if (overNodeId !== null) return;                      // staat er al een
       // Klik op een bestaande staaf: knoop ÓP die staaf, en de staaf wordt
       // daar in twee delen gesplitst zodat de knoop er echt aan vastzit.
-      if (knoopOpStaafOnderMuis(sx, sy) !== null) return;
+      if (knoopOpStaafOnderMuis(sx, sy, e.altKey) !== null) return;
       if (nodes.some(n => n.x === clickModel.x && n.z === clickModel.z)) return;
       plaatsKnoop(clickModel.x, clickModel.z);
       return;
@@ -1729,10 +1940,14 @@ export default function FemCanvas(props: FemCanvasProps) {
 
     if (tool === "addBeam") {
       // Need 2 node clicks. If clicking empty area, snap-create a node first.
-      let nodeId = overNodeId;
+      // Heeft ortho (Shift) of de hoeksnap het eindpunt vastgezet, dan is dát
+      // het punt — niet de knoop of staaf die toevallig onder de muis ligt.
+      // `plaatsKnoop` sluit het punt alsnog aan op een staaf waar het op valt.
+      const hulpPunt = clickSnap.soort === "ortho" || clickSnap.soort === "hoek";
+      let nodeId = hulpPunt ? null : overNodeId;
       // Ook een staafbegin/-einde sluit aan op wat eronder ligt: op een
       // bestaande staaf klikken splitst die en gebruikt de nieuwe tussenknoop.
-      if (nodeId === null) nodeId = knoopOpStaafOnderMuis(sx, sy);
+      if (nodeId === null && !hulpPunt) nodeId = knoopOpStaafOnderMuis(sx, sy, e.altKey);
       if (nodeId === null) {
         const existing = nodes.find(n => n.x === clickModel.x && n.z === clickModel.z);
         nodeId = existing ? existing.id : plaatsKnoop(clickModel.x, clickModel.z);
@@ -1751,8 +1966,26 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
 
     if (tool === "addSubNode") {
-      const sb = findSnapBeam(sx, sy);
-      if (sb) splitBeamAt(sb.beamId, sb.x, sb.z);
+      const sb = findSnapBeam(sx, sy, e.altKey);
+      if (!sb) return;
+      // Op het voetpunt op de staafas, zodat de staaf recht blijft (het
+      // rasterpunt kan naast een schuine staaf liggen). Valt dat punt binnen
+      // de verbindingstolerantie van een uiteinde (#55), dan staat daar al een
+      // knoop: niet knippen, want dat gaf een staaf van (vrijwel) lengte nul
+      // en meteen een fout in de modelcontrole.
+      const b = beams.find(bb => bb.id === sb.beamId);
+      const p = b ? tussenpuntOpStaaf(nodes, b, sb.x, sb.z, verbindingsTolerantie) : null;
+      if (!p) return;
+      if (p.eindknoop !== null) {
+        notifyInfo(i18next.t("common:canvas.subNode.atEndTitle"),
+          i18next.t("common:canvas.subNode.atEnd", {
+            knoop: p.eindknoop, staaf: sb.beamId,
+            mm: String(Math.round(verbindingsTolerantie * 100) / 100)
+              .replace(".", i18next.language?.startsWith("en") ? "." : ","),
+          }));
+        return;
+      }
+      splitBeamAt(sb.beamId, p.x, p.z, verbindingsTolerantie);
       return;
     }
 
@@ -1835,14 +2068,14 @@ export default function FemCanvas(props: FemCanvasProps) {
       // wél een staaf, dan komt de knoop op de staaf te liggen ÉN wordt de
       // staaf daar in twee delen gesplitst. Zonder die splitsing zou de
       // oplegging aan een losse knoop hangen die de ligger niet raakt.
-      const nodeId = overNodeId ?? knoopOpStaafOnderMuis(sx, sy);
+      const nodeId = overNodeId ?? knoopOpStaafOnderMuis(sx, sy, e.altKey);
       if (nodeId === null) return;
       addSupport(nodeId, type);
       return;
     }
 
     if (tool === "addZSpring" || tool === "addXSpring" || tool === "addRotSpring") {
-      const nodeId = overNodeId ?? knoopOpStaafOnderMuis(sx, sy);
+      const nodeId = overNodeId ?? knoopOpStaafOnderMuis(sx, sy, e.altKey);
       if (nodeId === null) return;
       const n = nodes.find(nn => nn.id === nodeId);
       const kind = tool === "addZSpring" ? "zSpring" : tool === "addXSpring" ? "xSpring" : "rotSpring";
@@ -1870,7 +2103,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       // 2) Geen knoop onder de muis: een puntlast mag ook op een VRIJE
       //    POSITIE op een staaf. (Het moment blijft knoopgebonden.)
       if (tool === "addMoment") return;
-      const sb = findSnapBeam(sx, sy);
+      const sb = findSnapBeam(sx, sy, e.altKey);
       if (!sb) {
         // 3) Geen staaf, wél een PLAATRAND: puntlast op de plaatrand. De
         //    positie is de fractie langs de rand vanaf de beginhoek — dezelfde
@@ -2022,15 +2255,16 @@ export default function FemCanvas(props: FemCanvasProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Ignore when typing in an input
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+      if (isInvoerVeld(e.target)) return;
 
       // Staat er een dialoog open, dan zijn de sneltoetsen van het canvas niet
       // aan de beurt. Escape sloot hieronder namelijk óók de selectie weg,
       // waarmee het eigenschappenpaneel en de dialoog die eruit geopend was
       // verdwenen: één druk op Escape klapte de profieleditor én de
-      // profielkiezer weg in plaats van alleen het bovenste venster.
-      if (erIsEenDialoogOpen()) return;
+      // profielkiezer weg in plaats van alleen het bovenste venster. De stand
+      // van vóór de toets telt (lib/escapeToets): de dialoog die Escape zelf
+      // sluit, is hier anders al weg.
+      if (dialoog.open()) return;
 
       // ── Active modal: grab/rotate ────────────────────────────────────
       // Numeric / X / Z / Enter / Esc handled here before generic Escape.
@@ -2105,21 +2339,29 @@ export default function FemCanvas(props: FemCanvasProps) {
         }
       }
 
-      // ── Ctrl+C / Ctrl+V — belastingen naar een ander belastinggeval ──
-      // Werkt op een lastselectie: één aangeklikte last, of de hele set uit
-      // "selecteer alle <soort>" in het contextmenu. Ctrl+C legt ze op het
-      // canvasklembord, Ctrl+V plakt ze in het ACTIEVE belastinggeval — dus
-      // eerst van tabblad wisselen, dan plakken. Zonder lastselectie laat
-      // Ctrl+C de toets ongemoeid, zodat kopiëren elders normaal blijft
-      // werken.
+      // ── Ctrl+C / Ctrl+V — modelselectie of belastingen ──
+      // Lastselecties gaan naar het belastingklembord en worden in het actieve
+      // belastinggeval geplakt. Een geselecteerde knoop/staaf/plaat gaat naar
+      // het modelklembord; de store neemt aanhangende opleggingen en lasten mee.
+      // Zonder kopieerbare selectie blijft de toets voor andere vensters vrij.
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !grabMode && !rotateMode) {
         const k = e.key.toLowerCase();
         if (k === "c") {
           const ids = selection?.type === "load" ? [selection.id]
             : selection?.type === "multi" ? (selection.loadIds ?? [])
             : [];
-          if (ids.length === 0) return;
+          const heeftModel = selectionNodeIds(selection).length > 0;
+          if (ids.length === 0 && !heeftModel) return;
           e.preventDefault();
+          if (heeftModel) {
+            modelKlembordRef.current = {
+              selection, snapshot: { nodes, beams, supports, plates, loads }, aantalPlakken: 0,
+            };
+            lastenKlembordRef.current = [];
+            notifyInfo(i18next.t("common:copy"));
+            return;
+          }
+          modelKlembordRef.current = null;
           // Het model gaat mee: elke klembordlast krijgt de PLAATS van zijn
           // aangrijpingspunt. Zonder dat landde een last bij het plakken op een
           // nieuwe staaf die toevallig hetzelfde nummer had gekregen — zie
@@ -2132,6 +2374,19 @@ export default function FemCanvas(props: FemCanvasProps) {
           return;
         }
         if (k === "v") {
+          const modelKlembord = modelKlembordRef.current;
+          if (modelKlembord) {
+            e.preventDefault();
+            const volgende = modelKlembord.aantalPlakken + 1;
+            if (copySelection(modelKlembord.selection, volgende * 500, 0, modelKlembord.snapshot)) {
+              modelKlembord.aantalPlakken = volgende;
+              notifyInfo(i18next.t("common:paste"));
+            } else {
+              notifyWarning(i18next.t("common:canvas.transform.nothingToDuplicate"),
+                i18next.t("common:canvas.transform.emptySelection"));
+            }
+            return;
+          }
           const klembord = lastenKlembordRef.current;
           if (klembord.length === 0 || !plakLasten) return;
           e.preventDefault();
@@ -2246,9 +2501,12 @@ export default function FemCanvas(props: FemCanvasProps) {
         setBoxSelect(null);
         setDragState(null);
         setContextMenu(null);
-        setSelection(null);
-        // ESC verlaat ook de actieve tool en valt terug naar Selecteren.
-        if (tool !== "select") onToolChange?.("select");
+        // Escape verlaat het lopende gereedschap en valt terug naar
+        // Selecteren; de selectie blijft dan staan. Een tweede Escape in
+        // Selecteren heft de selectie op (lib/escapeToets, gelijk aan 3D).
+        const actie = escapeActie(tool, selection !== null);
+        if (actie === "naarSelecteren") onToolChange?.("select");
+        else if (actie === "selectieOpheffen") setSelection(null);
         return;
       }
       if (e.key === "Delete" || e.key === "Backspace") {
@@ -2270,13 +2528,10 @@ export default function FemCanvas(props: FemCanvasProps) {
         const xs = nodes.map(n => n.x), zs = nodes.map(n => n.z);
         const minX = Math.min(...xs), maxX = Math.max(...xs);
         const minZ = Math.min(...zs), maxZ = Math.max(...zs);
-        const w = Math.max(1, maxX - minX), h = Math.max(1, maxZ - minZ);
-        const pad = 0.1;
         const usableW = size.w - ORIGIN_X - 40;
         const usableH = size.h - ORIGIN_Y_FROM_BOTTOM - 40;
-        const scaleW = (usableW * (1 - 2 * pad)) / w;
-        const scaleH = (usableH * (1 - 2 * pad)) / h;
-        const newScale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, Math.min(scaleW, scaleH)));
+        const newScale = passendBeeldSchaal(nodes, { w: usableW, h: usableH }, { min: SCALE_MIN, max: SCALE_MAX });
+        if (newScale === null) return;
         const centerWorldX = (minX + maxX) / 2;
         const centerWorldZ = (minZ + maxZ) / 2;
         // Where should center land on screen?
@@ -2290,17 +2545,66 @@ export default function FemCanvas(props: FemCanvasProps) {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === " ") setSpaceHeld(false);
     };
+    const dialoog = volgDialoogBijToets(erIsEenDialoogOpen);
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
+      dialoog.stop();
     };
   }, [selection, deleteSelected, setSelection, nodes, size, hoverModel,
       grabMode, rotateMode, cancelGrab, commitGrab, cancelRotate, commitRotate,
       selectionNodeIds, copySelection, onToolChange, tool, loadHandleDrag,
-      loads, plakLasten, activeLoadCaseId,
+      beams, supports, plates, loads, plakLasten, activeLoadCaseId,
       beamStart, beamLengte, commitBeamLengte]);
+
+  // ── Alt en Shift zonder muisbeweging (#53) ──────────────────────────────
+  // Indrukken of loslaten verwerkt de laatste muispositie opnieuw, zodat
+  // voorbeeld, hulplijn en HUD meteen meeveranderen. Focusverlies (Alt+Tab)
+  // laat beide los: anders bleef de snap uit staan na terugkeer.
+  // R-draaien heeft zijn eigen Shift (vrij draaien) en een lastgreep geen
+  // tekenhulp: die posities niet opnieuw verwerken, anders overschreef dat de
+  // Shift-stand van R met de toestand van vóór de toets.
+  const volgPointerRef = useRef(volgPointer);
+  volgPointerRef.current = (sx: number, sy: number) => {
+    if (rotateMode || loadHandleDrag || boxSelect) return;
+    volgPointer(sx, sy);
+  };
+  useEffect(() => {
+    const opToets = (e: KeyboardEvent) => {
+      if (e.key !== "Alt" && e.key !== "Shift") return;
+      const neer = e.type === "keydown";
+      if (neer && isInvoerVeld(e.target)) return;
+      const p = laatstePointerRef.current;
+      // Alleen Alt indrukken en loslaten zet in de browser de focus op het
+      // menu; boven het tekenvlak is Alt een tekenhulp.
+      if (e.key === "Alt" && p) e.preventDefault();
+      const alt = e.key === "Alt" ? neer : e.altKey;
+      const shift = e.key === "Shift" ? neer : e.shiftKey;
+      const nu = tekenToetsenRef.current;
+      if (nu.alt === alt && nu.shift === shift) return;
+      zetTekenToetsen(alt, shift);
+      if (p) volgPointerRef.current(p.sx, p.sy);
+    };
+    const los = () => {
+      const nu = tekenToetsenRef.current;
+      if (!nu.alt && !nu.shift) return;
+      zetTekenToetsen(false, false);
+      // Ook het punt onder de muis meteen terug naar de snap, niet pas bij
+      // de volgende muisbeweging.
+      const p = laatstePointerRef.current;
+      if (p) volgPointerRef.current(p.sx, p.sy);
+    };
+    window.addEventListener("keydown", opToets);
+    window.addEventListener("keyup", opToets);
+    window.addEventListener("blur", los);
+    return () => {
+      window.removeEventListener("keydown", opToets);
+      window.removeEventListener("keyup", opToets);
+      window.removeEventListener("blur", los);
+    };
+  }, [zetTekenToetsen]);
 
   // ── Wheel event listener (non-passive so preventDefault works) ──────────
   useEffect(() => {
@@ -2337,14 +2641,10 @@ export default function FemCanvas(props: FemCanvasProps) {
     const xs = nodes.map(n => n.x), zs = nodes.map(n => n.z);
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minZ = Math.min(...zs), maxZ = Math.max(...zs);
-    const w = Math.max(1, maxX - minX), h = Math.max(1, maxZ - minZ);
-    const pad = 0.1;
     const usableW = size.w - ORIGIN_X - 40;
     const usableH = size.h - ORIGIN_Y_FROM_BOTTOM - 40;
-    if (usableW <= 0 || usableH <= 0) return;
-    const scaleW = (usableW * (1 - 2 * pad)) / w;
-    const scaleH = (usableH * (1 - 2 * pad)) / h;
-    const newScale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, Math.min(scaleW, scaleH)));
+    const newScale = passendBeeldSchaal(nodes, { w: usableW, h: usableH }, { min: SCALE_MIN, max: SCALE_MAX });
+    if (newScale === null) return;
     const centerWorldX = (minX + maxX) / 2;
     const centerWorldZ = (minZ + maxZ) / 2;
     const cxScreen = ORIGIN_X + usableW / 2;
@@ -2414,7 +2714,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const hatchBot = groundY + 7.5;
       const hatchXs = [-14, -8, -2, 4, 10, 16];
       return (
-        <g key={`sup${s.nodeId}`} transform={supportTransform}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId} transform={supportTransform}>
           <polygon points={`${p.x},${p.y} ${p.x - 12},${triBase} ${p.x + 12},${triBase}`} className="fem-support" />
           <line x1={p.x - 16} y1={groundY} x2={p.x + 16} y2={groundY} className="fem-support-ground" />
           {hatchXs.map((dx, i) => (
@@ -2444,7 +2744,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         );
       }
       return (
-        <g key={`sup${s.nodeId}`} transform={supportTransform}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId} transform={supportTransform}>
           <line
             x1={p.x - halveBreedte} y1={p.y}
             x2={p.x + halveBreedte} y2={p.y}
@@ -2456,7 +2756,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     if (s.type === "xRoller") {
       return (
-        <g key={`sup${s.nodeId}`} transform={supportTransform}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId} transform={supportTransform}>
           <polygon points={`${p.x},${p.y} ${p.x - 20},${p.y - 12} ${p.x - 20},${p.y + 12}`} className="fem-support" />
           <line x1={p.x - 25} y1={p.y - 16} x2={p.x - 25} y2={p.y + 16} className="fem-support-ground" />
         </g>
@@ -2464,7 +2764,7 @@ export default function FemCanvas(props: FemCanvasProps) {
     }
     if (s.type === "zRoller") {
       return (
-        <g key={`sup${s.nodeId}`} transform={supportTransform}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId} transform={supportTransform}>
           <polygon points={`${p.x},${p.y} ${p.x - 12},${p.y + 20} ${p.x + 12},${p.y + 20}`} className="fem-support" />
           <circle cx={p.x - 6} cy={p.y + 22} r={2.5} className="fem-support" />
           <circle cx={p.x + 6} cy={p.y + 22} r={2.5} className="fem-support" />
@@ -2479,7 +2779,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const ys = [top, top + 4, top + 8, top + 12, top + 16, bot];
       const points = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
       return (
-        <g key={`sup${s.nodeId}`} transform={supportTransform}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId} transform={supportTransform}>
           <polyline points={points} className="fem-spring" />
           <line x1={p.x - 16} y1={p.y + 32} x2={p.x + 16} y2={p.y + 32} className="fem-support-ground" />
           {s.k !== undefined && <text x={p.x + 18} y={p.y + 22} className="fem-spring-label">k={s.k}</text>}
@@ -2492,7 +2792,7 @@ export default function FemCanvas(props: FemCanvasProps) {
       const xs = [left, left + 4, left + 8, left + 12, left + 16, right];
       const points = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
       return (
-        <g key={`sup${s.nodeId}`} transform={supportTransform}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId} transform={supportTransform}>
           <polyline points={points} className="fem-spring" />
           <line x1={p.x - 32} y1={p.y - 12} x2={p.x - 32} y2={p.y + 12} className="fem-support-ground" />
           {s.k !== undefined && <text x={p.x + 12} y={p.y + 4} className="fem-spring-label">k={s.k}</text>}
@@ -2529,7 +2829,7 @@ export default function FemCanvas(props: FemCanvasProps) {
         punten.push(`${(p.x + r * Math.sin(hoek)).toFixed(2)},${(p.y + 12 - r * Math.cos(hoek)).toFixed(2)}`);
       }
       return (
-        <g key={`sup${s.nodeId}`} transform={supportTransform}>
+        <g key={`sup${s.nodeId}`} data-support-node-id={s.nodeId} transform={supportTransform}>
           {/* aansluiting knoop → spiraal en spiraal → grondlijn */}
           <line x1={p.x} y1={p.y} x2={p.x} y2={p.y + 12 - rMax} className="fem-spring" />
           <polyline points={punten.join(" ")} fill="none" className="fem-spring" />
@@ -2574,6 +2874,26 @@ export default function FemCanvas(props: FemCanvasProps) {
     return Math.max(m, qa, qb);
   }, 0);
   const lineLoadPxPerKnm = maxLineQ > 0 ? LINE_LOAD_TARGET_PX / maxLineQ : 0;
+
+  // Pijlen van lijn- en randlasten: de h.o.h.-afstand geldt bij passend beeld,
+  // niet bij de huidige zoom. In- en uitzoomen verandert het aantal pijlen dan
+  // niet (#101); alleen een ander model of een ander venster doet dat.
+  const fitSchaal = passendBeeldSchaal(nodes, { w: size.w - ORIGIN_X - 40, h: size.h - ORIGIN_Y_FROM_BOTTOM - 40 },
+    { min: SCALE_MIN, max: SCALE_MAX });
+  const pijlSchaal = fitSchaal !== null ? fitSchaal / view.scale : 1;
+
+  /** Opent het invoerveld voor een q-waarde op de plek van het getal (#52). */
+  const openQBewerking = (l: Load, field: "q" | "qStart" | "qEnd", x: number, y: number, richting: QRichting) =>
+    (e: React.MouseEvent) => {
+      if (tool !== "select" || dragState || !updateLoad) return;
+      e.stopPropagation();
+      setSelection({ type: "load", id: l.id });
+      // Het eigenschappenpaneel pakt de focus niet: het veld op het tekenvlak krijgt hem.
+      setPendingLoadFocus?.(null);
+      const waarde = field === "q" ? (l.q ?? 0) : (l[field] ?? l.q ?? 0);
+      qBewerkingKlaar.current = false;
+      setQBewerking({ loadId: l.id, field, x, y, tekst: toonLastWaarde(waarde), richting });
+    };
 
   // ── Stapeling van lijnlasten op dezelfde staaf ──────────────────────────
   // Twee q-lasten op één staaf (bv. permanent + variabel, of twee elkaar
@@ -2664,6 +2984,18 @@ export default function FemCanvas(props: FemCanvasProps) {
       }
     }
   }
+  // Lastlabels: in een rechte keten van staven met dezelfde volle lijnlast
+  // krijgt alleen de middelste staaf het label "q=… kN/m" (lib/lijnlastLabels).
+  const verborgenLabels = verborgenLijnlastLabels(
+    activeLoads.flatMap((l) => l.type === "lineLoad" && l.beamId !== undefined ? [{
+      id: l.id, beamId: l.beamId, caseId: l.caseId, q: l.q,
+      trapezium: l.qStart !== undefined || l.qEnd !== undefined,
+      qDir: l.qDir ?? "z", qCoord: l.qCoord ?? "global",
+      startFrac: l.startFrac ?? 0, endFrac: l.endFrac ?? 1,
+      stapelOffset: qStapel.get(l.id)?.offset ?? 0,
+    }] : []),
+    beams, nodes,
+  );
 
   /**
    * Hoogte (px) van de gestapelde q-banden op fractie `t` van staaf `beamId`,
@@ -2880,9 +3212,10 @@ export default function FemCanvas(props: FemCanvasProps) {
       const lenA = Math.min(LINE_LOAD_MAX_PX, Math.max(LINE_LOAD_MIN_PX, Math.abs(qa) * lineLoadPxPerKnm || LINE_LOAD_MIN_PX));
       const lenB = Math.min(LINE_LOAD_MAX_PX, Math.max(LINE_LOAD_MIN_PX, Math.abs(qb) * lineLoadPxPerKnm || LINE_LOAD_MIN_PX));
       const arrows: React.ReactNode[] = [];
-      // Pijldichtheid gelijk houden: volle lengte → 8 tussenstappen,
-      // deellast naar rato (minimaal 2).
-      const N = Math.max(2, Math.round(8 * (bF - aF)));
+      // Pijlen op een vaste h.o.h.-afstand bij passend beeld (lib/lijnlastPijlen):
+      // een korte staaf loopt niet vol, een lange blijft niet leeg, en zoomen
+      // verandert het aantal niet.
+      const N = lijnlastPijlIntervallen(Math.hypot(sdx, sdy) * pijlSchaal);
       // Build the polyline along the arrow tails so we can draw a connecting
       // "load envelope" (silhouette) + clickable hit-region.
       const tailPts: { x: number; y: number }[] = [];
@@ -2934,7 +3267,7 @@ export default function FemCanvas(props: FemCanvasProps) {
           {/* Visible top line connecting all arrow tails */}
           <polyline className="fem-lineload-tip" points={tailPts.map(p => `${p.x},${p.y}`).join(" ")} />
           {arrows}
-          {isTrap ? (
+          {verborgenLabels.has(l.id) ? null : isTrap ? (
             // Trapezium: split label into qa / qb so each value clicks into its own input
             <>
               <text x={labelX} y={labelY} className="fem-load-text-static">q=</text>
@@ -2948,6 +3281,7 @@ export default function FemCanvas(props: FemCanvasProps) {
                     setPendingLoadFocus?.({ loadId: l.id, field: "qStart" });
                   }
                 }}
+                onDoubleClick={openQBewerking(l, "qStart", labelX + 14, labelY, qRichting(coordL, dirL))}
               >{qa.toFixed(1)}</text>
               <text x={labelX} y={labelY} dx="34" className="fem-load-text-static">→</text>
               <text
@@ -2960,6 +3294,7 @@ export default function FemCanvas(props: FemCanvasProps) {
                     setPendingLoadFocus?.({ loadId: l.id, field: "qEnd" });
                   }
                 }}
+                onDoubleClick={openQBewerking(l, "qEnd", labelX + 44, labelY, qRichting(coordL, dirL))}
               >{qb.toFixed(1)}</text>
               <text x={labelX} y={labelY} dx="64" className="fem-load-text-static">kN/m</text>
             </>
@@ -2975,6 +3310,7 @@ export default function FemCanvas(props: FemCanvasProps) {
                   setPendingLoadFocus?.({ loadId: l.id, field: "q" });
                 }
               }}
+              onDoubleClick={openQBewerking(l, "q", labelX, labelY, qRichting(coordL, dirL))}
             >
               q={qa.toFixed(1)} kN/m
             </text>
@@ -3056,8 +3392,8 @@ export default function FemCanvas(props: FemCanvasProps) {
       const lenA = lenVan(qa), lenB = lenVan(qb);
       const dirA = qa < 0 ? 1 : -1;   // zelfde flip-conventie als de lijnlast
       const dirB = qb < 0 ? 1 : -1;
-      // Pijldichtheid gelijk houden: volle rand → 8 tussenstappen, deel naar rato.
-      const N = Math.max(2, Math.round(8 * (bF - aF)));
+      // Dezelfde h.o.h.-afstand als de lijnlast op een staaf.
+      const N = lijnlastPijlIntervallen(Math.hypot(sdx, sdy) * pijlSchaal);
       const arrows: React.ReactNode[] = [];
       const tailPts: { x: number; y: number }[] = [];
       for (let i = 0; i <= N; i++) {
@@ -3113,15 +3449,18 @@ export default function FemCanvas(props: FemCanvasProps) {
             <>
               <text x={labelX} y={labelY} className="fem-load-text-static">p=</text>
               <text x={labelX} y={labelY} dx="14" className="fem-load-text fem-load-text-clickable"
-                onClick={focus("qStart")}>{qa.toFixed(1)}</text>
+                onClick={focus("qStart")}
+                onDoubleClick={openQBewerking(l, "qStart", labelX + 14, labelY, qRichting("global", dirL))}>{qa.toFixed(1)}</text>
               <text x={labelX} y={labelY} dx="34" className="fem-load-text-static">→</text>
               <text x={labelX} y={labelY} dx="44" className="fem-load-text fem-load-text-clickable"
-                onClick={focus("qEnd")}>{qb.toFixed(1)}</text>
+                onClick={focus("qEnd")}
+                onDoubleClick={openQBewerking(l, "qEnd", labelX + 44, labelY, qRichting("global", dirL))}>{qb.toFixed(1)}</text>
               <text x={labelX} y={labelY} dx="64" className="fem-load-text-static">kN/m</text>
             </>
           ) : (
             <text x={labelX} y={labelY} className="fem-load-text fem-load-text-clickable"
-              onClick={focus("q")}>
+              onClick={focus("q")}
+              onDoubleClick={openQBewerking(l, "q", labelX, labelY, qRichting("global", dirL))}>
               p={qa.toFixed(1)} kN/m
             </text>
           )}
@@ -3358,9 +3697,10 @@ export default function FemCanvas(props: FemCanvasProps) {
     // engine (alleen getoond als de plaat openingen heeft — dáár moet je
     // zien dat het net het gat volgt), het CDT-pad uit de actuele cache
     // (zelfde signatuurcheck als de engine). Driehoeken én vierhoeken.
+    // Alleen met de weergave "Mesh" aan (Zichtbaarheid, standaard uit).
     let meshPreview: React.ReactNode = null;
     const toonRaster = openingen.length > 0 || !plaatRekentAlsRaster(punten, openingen.map((o) => o.punten));
-    const mesh = toonRaster ? plaatPreviewMesh(pl, punten, verwezenKnoopPunten) : null;
+    const mesh = displayFlags.plaatMesh === true && toonRaster ? plaatPreviewMesh(pl, punten, verwezenKnoopPunten) : null;
     if (mesh) {
       const schermPunt = mesh.points.map(p2 => worldToScreen(p2.x, p2.z));
       const vlak = (ids: readonly number[]) => ids.map(pi => `${schermPunt[pi].x.toFixed(2)},${schermPunt[pi].y.toFixed(2)}`).join(" ");
@@ -3551,9 +3891,12 @@ export default function FemCanvas(props: FemCanvasProps) {
   // terwijl je tekent, en niet pas als de solver met "singuliere matrix" komt.
   // De controle is O(knopen × staven) op puur rekenwerk — voor modellen van
   // deze orde verwaarloosbaar naast het tekenen zelf.
+  // De verbindingstolerantie (issue #55) bepaalt wat "op de staaf" en "op
+  // dezelfde plek" is; een andere waarde laat het model staan en verandert
+  // alleen deze lijst.
   const bevindingen = useMemo(
-    () => controleerModel({ nodes, beams, supports, plates, loads }),
-    [nodes, beams, supports, plates, loads],
+    () => controleerModel({ nodes, beams, supports, plates, loads }, verbindingsTolerantie),
+    [nodes, beams, supports, plates, loads, verbindingsTolerantie],
   );
   const aantalFouten = useMemo(
     () => bevindingen.filter(b => b.ernst === "fout").length,
@@ -4117,7 +4460,7 @@ export default function FemCanvas(props: FemCanvasProps) {
                   const tMin = span > 1e-12 ? (hoekwaarden[minIndex] - plaatContourData.min) / span : 0.5;
                   const tMax = span > 1e-12 ? (hoekwaarden[maxIndex] - plaatContourData.min) / span : 0.5;
                   const gradientId = `plaat-gradient-${pr.plateId}-${el.elementId}`;
-                  const toonMesh = displayFlags.plaatMesh !== false;
+                  const toonMesh = displayFlags.plaatMesh === true;
                   const geselecteerd = geselecteerdPlaatElement?.plateId === pr.plateId &&
                     geselecteerdPlaatElement.elementId === el.elementId;
                   return (
@@ -4205,11 +4548,14 @@ export default function FemCanvas(props: FemCanvasProps) {
             }
           };
           const openBeamProps = (e: React.MouseEvent) => { e.stopPropagation(); setEditingBeamId(b.id); };
+          // Profielkleur via CSS-variabelen: selectie en snap winnen in de CSS.
+          const pk = profielKleuren?.perStaaf.get(b.id);
           return (
             <g key={`beam${b.id}`}>
               <line
                 x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-                className={`fem-member${isSel ? " selected" : ""}${isSnap ? " snap" : ""}${aanzichtHalf.has(b.id) ? " systeemlijn" : ""}`}
+                className={`fem-member${isSel ? " selected" : ""}${isSnap ? " snap" : ""}${aanzichtHalf.has(b.id) ? " systeemlijn" : ""}${pk ? " profielkleur" : ""}`}
+                style={pk ? ({ "--fem-profielkleur": pk.kleur, "--fem-profielstreep": pk.streep || "none" } as React.CSSProperties) : undefined}
                 onClick={selectBeam}
                 onDoubleClick={openBeamProps}
               />
@@ -4264,9 +4610,18 @@ export default function FemCanvas(props: FemCanvasProps) {
           const p1 = worldToScreen(startNode.x, startNode.z);
           const p2 = worldToScreen(doel.x, doel.z);
           const lengteMm = Math.hypot(doel.x - startNode.x, doel.z - startNode.z);
+          // Hoeksnap (#53): de voorbeeldstaaf vol in de accentkleur en een
+          // klein label met de vastgezette hoek bij de cursor.
+          const hoek = hoverModel.hoek;
           return (
             <g>
-              <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} className="fem-member-preview" />
+              <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                className={`fem-member-preview${hoek !== undefined ? " hoek" : ""}`} />
+              {hoek !== undefined && (
+                <text x={p2.x + 12} y={p2.y - 10} className="fem-hoek-label" pointerEvents="none">
+                  {`${hoek}°`}
+                </text>
+              )}
               {beamLengte !== null && (
                 <>
                   <circle cx={p2.x} cy={p2.y} r={4} className="fem-maat-punt" />
@@ -4531,9 +4886,22 @@ export default function FemCanvas(props: FemCanvasProps) {
           const y = Math.min(boxSelect.startSY, boxSelect.endSY);
           const w = Math.abs(boxSelect.endSX - boxSelect.startSX);
           const h = Math.abs(boxSelect.endSY - boxSelect.startSY);
+          // Venster doorgetrokken, crossing (naar links gesleept) gestippeld.
+          const modus = kaderModus(boxSelect.startSX, boxSelect.endSX);
           return (
-            <rect x={x} y={y} width={w} height={h} className="fem-box-select" pointerEvents="none" />
+            <rect x={x} y={y} width={w} height={h} data-modus={modus}
+              className={`fem-box-select${modus === "crossing" ? " crossing" : ""}`} pointerEvents="none" />
           );
+        })()}
+
+        {/* Ortho-hulplijn (#53): gestippeld door het beginpunt langs de as
+            die Shift vastzet. Bij G door het zwaartepunt van de selectie,
+            net als de lijn van het as-slot. */}
+        {orthoActief && orthoLijnPunt && hoverModel?.ortho && (() => {
+          const p = worldToScreen(orthoLijnPunt.x, orthoLijnPunt.z);
+          return hoverModel.ortho === "x"
+            ? <line x1={0} y1={p.y} x2={size.w} y2={p.y} className="fem-ortho-lijn" pointerEvents="none" />
+            : <line x1={p.x} y1={0} x2={p.x} y2={size.h} className="fem-ortho-lijn" pointerEvents="none" />;
         })()}
 
         {/* Hover cross */}
@@ -4675,7 +5043,10 @@ export default function FemCanvas(props: FemCanvasProps) {
 
         {/* Unity-check-badges (Resultaten-tab, rij "Unity check"): per staaf
             met toetsresultaat de maatgevende UC op het staafmidden. Groen
-            ≤ 1,0, rood > 1,0; klik opent het toetsingspaneel voor die staaf. */}
+            ≤ 1,0, rood > 1,0; grijs "niet getoetst" bij status n.v.t. — een
+            niet (volledig) getoetste staaf leest nooit als "voldoet", ook niet
+            met uc_max = 0 (controle 2026-10, punt B7). Klik opent het
+            toetsingspaneel voor die staaf. */}
         {showLoads && perCase && !solverBusy && !solveError && displayFlags.uc === true && checkResults.length > 0 && (
           <g className="fem-uc-layer">
             {checkResults.map(r => {
@@ -4687,8 +5058,9 @@ export default function FemCanvas(props: FemCanvasProps) {
               const p2 = worldToScreen(nB.x, nB.z);
               const mx = (p1.x + p2.x) / 2;
               const my = (p1.y + p2.y) / 2;
-              const ok = r.uc_max <= 1.0;
-              const tekst = `UC ${fmtNl(r.uc_max, 2)}`;
+              const nietGetoetst = r.status === "NotApplicable";
+              const ok = !nietGetoetst && r.uc_max <= 1.0;
+              const tekst = nietGetoetst ? tCommon("canvas.uc.nietGetoetst") : `UC ${fmtNl(r.uc_max, 2)}`;
               const bw = tekst.length * 7.5 + 16;
               return (
                 <g
@@ -4704,7 +5076,7 @@ export default function FemCanvas(props: FemCanvasProps) {
                   <title>{tCommon("canvas.uc.badgeTitle", { staaf: r.beam_id, toets: r.governing_check_id })}</title>
                   <rect
                     x={mx - bw / 2} y={my - 11} width={bw} height={22} rx={11}
-                    fill={ok ? "#16a34a" : "#dc2626"}
+                    fill={nietGetoetst ? "#64748b" : ok ? "#16a34a" : "#dc2626"}
                   />
                   <text x={mx} y={my + 4} className="fem-uc-badge-text">{tekst}</text>
                 </g>
@@ -4744,6 +5116,44 @@ export default function FemCanvas(props: FemCanvasProps) {
           </g>
         )}
       </svg>
+      {qBewerking && (() => {
+        // Het invoerveld voor een q-waarde (#52): Enter of ernaast klikken legt
+        // vast, Esc annuleert. Komma en punt mogen allebei.
+        const geldig = leesLastWaarde(qBewerking.tekst) !== null;
+        const sluit = (vastleggen: boolean) => {
+          if (qBewerkingKlaar.current) return;
+          const waarde = leesLastWaarde(qBewerking.tekst);
+          if (vastleggen && waarde === null) return;
+          qBewerkingKlaar.current = true;
+          if (vastleggen && waarde !== null) {
+            const last = loads.find((item) => item.id === qBewerking.loadId);
+            const huidig = last ? (qBewerking.field === "q" ? last.q : last[qBewerking.field] ?? last.q) : undefined;
+            if (last && huidig !== waarde) updateLoad?.(qBewerking.loadId, { [qBewerking.field]: waarde });
+          }
+          setQBewerking(null);
+        };
+        return (
+          <div className="fem-q-bewerking" style={{ left: qBewerking.x, top: qBewerking.y }}
+            onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}>
+            <div className="fem-q-bewerking-rij">
+              <span className="fem-q-bewerking-naam">{qBewerking.field === "qEnd" ? "q₂" : qBewerking.field === "qStart" ? "q₁" : "q"} =</span>
+              <input autoFocus inputMode="decimal" spellCheck={false}
+                aria-label={tCommon("canvas.qEdit.aria")} aria-invalid={!geldig}
+                value={qBewerking.tekst}
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => setQBewerking({ ...qBewerking, tekst: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); sluit(true); }
+                  else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); sluit(false); }
+                }}
+                onBlur={() => { if (geldig) sluit(true); else sluit(false); }} />
+              <span className="fem-q-bewerking-eenheid">kN/m</span>
+            </div>
+            <div className="fem-q-bewerking-hint">{tCommon(`canvas.qEdit.sign.${qBewerking.richting}`)}</div>
+          </div>
+        );
+      })()}
 
       {/* Legenda van de kleurklassen van de plaattoets. */}
       {plaatUcData && (
@@ -4817,6 +5227,13 @@ export default function FemCanvas(props: FemCanvasProps) {
             <span className="fem-hud-muted">— {tCommon("canvas.hud.transformClickTarget")}</span>
           )}
           {spaceHeld && <span className="fem-hud-muted">— [pan]</span>}
+          {/* Tekenhulpen (#53): Alt zet de snap tijdelijk uit, Shift is ortho. */}
+          {snapTijdelijkUit && (
+            <span className="fem-hud-strong">— {tCommon("canvas.hud.snapOff")}</span>
+          )}
+          {orthoActief && (
+            <span className="fem-hud-strong">— {tCommon("canvas.hud.ortho")}</span>
+          )}
         </div>
         {/* Assenstelsel-widget: +X (rechts), +Z (omhoog) en een boogpijl om de
             y-as die de positieve My-richting toont — zelfde draairichting als
@@ -4880,12 +5297,18 @@ export default function FemCanvas(props: FemCanvasProps) {
             : <span>(——, ——) m</span>}
         </div>
       </div>
-      {/* Modelcontrole — zie `lib/modelControle.ts`. Alleen zichtbaar wanneer
-          er iets te melden is; klappen open/dicht met een klik. De snapknopjes
-          die hier eerder stonden zijn verhuisd naar de statusbalk onderin,
-          waar ze per soort aan en uit te zetten zijn. */}
-      {bevindingen.length > 0 && (
-        <div className="fem-hud fem-hud-br">
+      {/* Rechtsonder, als één kolom (dus nooit over elkaar): de legenda van
+          "Profielen in kleur" en daaronder de modelcontrole. */}
+      {((profielKleuren && profielKleuren.regels.length > 0) || bevindingen.length > 0) && (
+        <div className="fem-hud fem-hud-br fem-hud-kolom">
+          {profielKleuren && (
+            <ProfielKleurLegenda regels={profielKleuren.regels} variant="2d" className="fem-hud-card" />
+          )}
+          {/* Modelcontrole — zie `lib/modelControle.ts`. Alleen zichtbaar wanneer
+              er iets te melden is; klappen open/dicht met een klik. De snapknopjes
+              die hier eerder stonden zijn verhuisd naar de statusbalk onderin,
+              waar ze per soort aan en uit te zetten zijn. */}
+          {bevindingen.length > 0 && (
           <div className={`fem-hud-card fem-controle-kaart${aantalFouten > 0 ? " fout" : ""}`}>
             <button
               className="fem-controle-kop"
@@ -4924,17 +5347,16 @@ export default function FemCanvas(props: FemCanvasProps) {
                 {aantalFouten > 0 && herstelModel && (
                   <button
                     className="fem-controle-fix fem-controle-alles"
-                    onClick={() => {
-                      const stappen = herstelModel();
-                      if (stappen.length === 0) return;
-                      notifyInfo(i18next.t("common:canvas.modelCheck.repaired"), stappen.join(" "));
-                    }}
+                    // De store meldt zelf welke staaf op welke knoop is
+                    // gesplitst en welke knopen zijn samengevoegd (#55).
+                    onClick={() => { herstelModel(verbindingsTolerantie); }}
                     title={tCommon("canvas.modelCheck.repairAllTitle")}
                   >{tCommon("canvas.modelCheck.repairAll", { n: aantalFouten })}</button>
                 )}
               </div>
             )}
           </div>
+          )}
         </div>
       )}
 

@@ -30,8 +30,8 @@
     "J": 0.000005
   },
   "sources": {
-    "axes": "https://opensees.github.io/OpenSeesDocumentation/user/manual/model/geomTransf/Linear.html",
-    "beam3d": "https://opensees.github.io/OpenSeesDocumentation/user/manual/model/elements/elasticBeamColumn.html",
+    "axes": "McGuire, Gallagher & Ziemian, Matrix Structural Analysis, 2nd ed., ch. 4 (3D transformation)",
+    "beam3d": "McGuire, Gallagher & Ziemian, Matrix Structural Analysis, 2nd ed., ch. 5 (3D frame element)",
     "axial": "https://oit.tudelft.nl/CIEM5000/2026/lecture1/single_element.html",
     "bending": "https://live.ocw.mit.edu/courses/16-001-unified-engineering-materials-and-structures-fall-2021/mit16_001_f21_pset12_sol.pdf",
     "torsion": "https://oit.tudelft.nl/CIEM5000/2026/lecture2/example.html",

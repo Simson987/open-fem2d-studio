@@ -128,6 +128,11 @@ fn run() -> &'static BeamCheckResult {
             staaf_notities: None,
             profile_end: None,
             custom_section_end: None,
+            tension_only: None,
+            a_net_mm2: None,
+            deflection_add_mm: None,
+            deflection_length_m: None,
+            zijdelingse_knik_in_analyse: None,
         };
         check_beam(input)
     })
@@ -318,6 +323,25 @@ fn portal_beam4_governing_ok() {
 ///   k_zz = 1 + (2·0,7024 − 0,6)·0,0073 = 1,0059, k_yz = 0,6035.
 ///   6.61 = 0,0057 + 0,5705·273,13/439,45 = 0,3603 (was 0,3791); 6.62 = 0,2201
 ///   (was 0,2313). uc_max blijft 0,6215 op 6.2.5.
+/// Oktober 2026 — trek, druk alleen bij druk, (6.36) vanaf 0,5·a en 6.3 per
+/// combinatie. Per veld nagelopen; uc_max blijft 0,621538 op 6.2.5.
+///  Deze ligger staat op TREK (N = +18,479 kN). Daar zaten drie fouten:
+///  * 6.2.3 (trek) ontbrak. Nu: N_t,Rd = 14 900·235 = 3501,5 kN, UC =
+///    18,479/3501,5 = 0,00528.
+///  * 6.3.1 rekende de trekkracht als drukkracht: UC 0,0073 op een knik die
+///    niet bestaat. Nu n.v.t., zonder unity check, met de reden.
+///  * 6.3.3 idem: 0,360318 (6.61) en 0,220055 (6.62) met de trek als druk. Nu
+///    n.v.t. — geen combinatie met druk. Kip (6.3.2) blijft 0,621538.
+///  * 6.2.4 stond al als n.v.t., maar droeg een unity check 0,00528; die is
+///    weg (geen 0,00 die als "voldoet" oogt).
+///  * 6.2.9 en 6.2.10: n = 0,00528 < 0,5·a, geen reductie; UC blijft 0,621538.
+/// Oktober 2026 (c) — 6.2.8 op elk station van de omhullende in plaats van
+/// alleen op het buigpunt. Alle 3 punten getoetst; de grootste dwarskracht
+/// is 234,164 kN, onder V_pl,z,Rd/2 = 321,216 kN, dus ρ = 0 op elk punt en is de
+/// maatgevende plaats het punt met het grootste moment (combinatie 21 op x = 2491 mm): UC = 273,135/439,45 = 0,621538,
+/// ongewijzigd. Wat verandert is de weergave: formule M_y,V,Rd = (1 − ρ)·
+/// M_y,c,Rd, de variabelen ρ en M_y,Ed erbij, de afleidingsstappen ρ en
+/// M_y,V,Rd, en Nederlandse kanttekeningen met de plaats.
 #[test]
 fn portal_beam4_snapshot() {
     insta::assert_json_snapshot!("portal_beam4", run());

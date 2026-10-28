@@ -17,11 +17,20 @@ pub(crate) const NDP: nationale_bijlage::Ndp1993 =
 
 pub mod bending;
 pub mod classification;
-pub mod combined_mn;
-pub mod combined_mnv;
 pub mod combined_mv;
 pub mod compression;
+/// Klasse 4: effectieve breedtes volgens NEN-EN 1993-1-5 §4.4 (A_eff, W_eff).
+pub mod effectief;
+/// §6.2.9 en §6.2.10 — buiging met normaalkracht (en dwarskracht) voor elke
+/// doorsnedevorm, met de vrijstellingen en benaderingen van §6.2.9.1.
+pub mod interactie;
+mod opmaak;
+/// Massief rond staal: buiging met normaal- en dwarskracht (§6.2.8–6.2.10).
+pub mod rond;
 pub mod shear;
+/// §6.2.3 — trek voor elke doorsnede (met of zonder nettodoorsnede), en het
+/// draadeind van een trekstaaf van rond staal.
+pub mod trek;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]

@@ -51,23 +51,31 @@ use crate::result::TimberBeamCheckResult;
 
 /// De volgorde waarin de toetsen in het resultaat staan — dezelfde als bij een
 /// prismatische staaf.
-const VOLGORDE: [&str; 8] = [
+const VOLGORDE: [&str; 12] = [
     "6.1.2_tension",
     "6.1.4_compression",
     "6.1.6_bending",
+    "6.2.3_bending_tension",
+    "6.2.4_bending_compression",
     "6.1.7_shear",
+    "6.1.8_torsion",
+    "6.1.8_torsion_shear_extension",
     "6.3.2_column_stability",
     "6.3.3_beam_stability",
     "deflection_w_fin",
     "deflection_w_add",
 ];
 
-/// De vier doorsnedetoetsen van §6.1, per rekenpunt met de plaatselijke maten.
-const DOORSNEDETOETSEN: [&str; 4] = [
+/// Doorsnedetoetsen per rekenpunt met de plaatselijke maten.
+const DOORSNEDETOETSEN: [&str; 8] = [
     "6.1.2_tension",
     "6.1.4_compression",
     "6.1.6_bending",
+    "6.2.3_bending_tension",
+    "6.2.4_bending_compression",
     "6.1.7_shear",
+    "6.1.8_torsion",
+    "6.1.8_torsion_shear_extension",
 ];
 
 /// De twee stabiliteitstoetsen, met de kleinste doorsnede in het veld.

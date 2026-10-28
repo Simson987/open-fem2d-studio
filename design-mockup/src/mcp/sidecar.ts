@@ -101,11 +101,20 @@ import { ANALYSETYPEN } from "../components/fem/femTypes";
 import type { SteelProfile } from "../lib/types/steel/SteelProfile";
 import { version as PAKKET_VERSIE } from "../../package.json";
 import { beeldKernfoutAf } from "./fouten";
+import { opStaalhalMaken, opStaalhalUitwerken } from "./staalhalSidecar";
+import { StaalhalFout } from "../components/openFem3d/wizards/staalhal";
+import { IfcSidecarInvoerFout, opIfcImporteren, opIfcUitwerken } from "./ifcImportSidecar";
+import { IfcImportFout } from "../io/ifcAnalyseImport";
+import { opApiCatalogus, opApiUitvoeren } from "./apiSidecar";
+import { opExtensieImporteren } from "./extensieSidecar";
+import { ApiFout } from "../api/register";
 import { controleerVelden, keurCheckConfig, valideerModel } from "./valideerModel";
 import { bijlageUitBestand, STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../lib/normAanduidingen";
 import {
+  FOUTCODES,
   SIDECAR_OPS,
   SIDECAR_PROTOCOL,
+  type Foutcode,
   mapNaarObject,
   maakFout,
   maakOk,
@@ -415,7 +424,7 @@ function leesAnalysetype(waarde: unknown): Analysetype | null {
 
 /**
  * Model uit een payload: ofwel `model` (store-eigen vorm), ofwel `project`
- * (de INHOUD van een `.ifcfem2d`-bestand). De sidecar leest zelf nooit van
+ * (de INHOUD van een `.ifcfem`-bestand). De sidecar leest zelf nooit van
  * schijf: Rust levert de bytes aan. Zo blijft alle bestandstoegang aan één
  * kant, zijn de FEM-tools aantoonbaar alleen-lezen, en heeft de bundel geen
  * `node:fs` nodig — wat hij ook niet mag hebben, want de bundel moet nul
@@ -427,7 +436,7 @@ function leesModel(payload: Record<string, unknown>): GelezenModel {
   if (heeftModel === heeftProject) {
     throw new InvoerFout(
       "Geef precies één van `model` (het model zelf) of `project` " +
-        "(de inhoud van een .ifcfem2d-bestand).",
+        "(de inhoud van een .ifcfem-bestand).",
     );
   }
 
@@ -691,6 +700,8 @@ function leesCombinaties(
       gevolgklasse,
       bijlage,
       idTellers: gelezen.idTellersUitBestand,
+      // Voor de melding over wees-factoren: stond er een last in zo'n geval?
+      loads: gelezen.model.loads,
     });
     return {
       lijst: staat.combinations,
@@ -841,9 +852,10 @@ function vormEnvelop(env: ReturnType<typeof computeEnvelope>) {
       governingCombinationId: e.governingCombinationId,
       governingMAbs: naarKNm(e.governingMAbs),
       // Positie van governingMAbs langs de staaf (mm vanaf de startknoop).
-      // De omhullende leest het volledige stationsraster, dus dat maximum
-      // ligt zelden op een uiteinde; zonder deze waarde is niet af te leiden
-      // waar het maatgevende moment optreedt.
+      // De omhullende leest het volledige stationsraster plus het veldextreem
+      // tussen de stations (V = 0, solver/veldExtremen.ts), dus dat maximum
+      // ligt zelden op een uiteinde of op een station; zonder deze waarde is
+      // niet af te leiden waar het maatgevende moment optreedt.
       governingMPos_mm: e.governingMPos_mm,
     })),
     reactions: mapNaarObject(env.reactions, (r) => ({
@@ -890,6 +902,31 @@ function rekenDoor(payload: Record<string, unknown>) {
       { fouten: veldFouten },
     );
   }
+  // DE MODELCONTROLE VAN `validate`, ook hier (controle 12 oktober 2026, punt
+  // K1). Tot dan draaide `solve`/`check` alleen de veldpoort hierboven: een
+  // lijnlast op staaf 7 die niet bestaat, of in belastinggeval 5 dat niet
+  // bestaat, viel in de mapping stil weg, en het antwoord (R = 2,5 kN waar
+  // 32,5 kN hoort) had `warnings: []`. `validate_fem_model` en de app weigerden
+  // hetzelfde model wél. Nu dezelfde `valideerModel`, zonder de combinatieset
+  // (die meldingen staan hieronder als "FOUT: …" in `warnings`, ongewijzigd).
+  //
+  // DE VOLGORDE. De bevindingen worden hier bepaald, maar pas NA de rekenkern
+  // gemeld: een model dat de kern of de mapping zelf weigert, houdt zo zijn
+  // eigen foutcode en melding (MODEL_ONOPLOSBAAR met knoop en richting,
+  // DOORSNEDE_ONBEKEND per staaf). Wat de kern wél zou doorrekenen terwijl de
+  // controle een fout ziet, wordt geweigerd — nooit meer een uitkomst bij een
+  // ander model dan er is ingevoerd.
+  const modelFouten = valideerModel(gelezen.rauw, { alleenModel: true }).errors;
+  const weigerBijModelfouten = (): void => {
+    if (modelFouten.length === 0) return;
+    const getoond = modelFouten.slice(0, 5);
+    throw new InvoerFout(
+      `Model niet doorgerekend — de modelcontrole (dezelfde als \`validate_fem_model\` en de ` +
+        `app) vindt ${modelFouten.length} fout(en): ${getoond.join(" ")}` +
+        (modelFouten.length > getoond.length ? ` En nog ${modelFouten.length - getoond.length}; zie \`detail.fouten\`.` : ""),
+      { fouten: modelFouten },
+    );
+  };
 
   const klasseGelezen = leesGevolgklasse(payload, gelezen);
   const gevolgklasse = klasseGelezen.klasse;
@@ -990,6 +1027,8 @@ function rekenDoor(payload: Record<string, unknown>) {
   } catch (err) {
     throw new ModelFout(String((err as Error)?.message ?? err));
   }
+  // De kern accepteerde het model; de modelcontrole heeft het laatste woord.
+  weigerBijModelfouten();
   const { perCase } = perCaseResultaat;
   try {
     losEindtoestandOp(multiInput, perCase, combinaties, eindstijfheid);
@@ -1067,7 +1106,12 @@ function rekenDoor(payload: Record<string, unknown>) {
     loadCases: gelezen.model.loadCases,
     // De nationale bijlage gaat als `bijlage` mee naar de rekenkern.
     nationaleBijlage: bijlage,
-    stabiliteit: { analysetype, alphaCr: stabiliteit, scheefstandAan: gelezen.model.scheefstandEnabled },
+    stabiliteit: {
+      analysetype, alphaCr: stabiliteit, scheefstandAan: gelezen.model.scheefstandEnabled,
+      // De φ waarmee is gerekend: 1/noemer, al naar de normkeuze omgezet
+      // (`leesScheefstand`). Zie `zijdelingseKnikInVlakModel`.
+      ...(gelezen.model.scheefstandEnabled ? { scheefstandPhi: 1 / gelezen.model.scheefstandNoemer } : {}),
+    },
   });
 
   // Hout en kruislaaghout: DEZELFDE bouwers als de app, met dezelfde filters
@@ -1081,12 +1125,27 @@ function rekenDoor(payload: Record<string, unknown>) {
   const houtData = {
     nodes: gelezen.model.nodes,
     supports: gelezen.model.supports,
+    // Het hele model en de platen, net als bij staal: een vrij staafeind
+    // (uitkraging) en een doorgaande lijn worden op alle staven herkend, ook
+    // buiten `beam_ids`, en een knoop op een plaat is geen vrij eind.
+    alleBeams: teToetsen,
+    plates: gelezen.model.plates,
     combinations: combinaties,
     combinationResults,
     supportedGrades: houtklassen ?? undefined,
     loadCases: gelezen.model.loadCases,
     gevallenMetLast: opgelost,
     nationaleBijlage: bijlage,
+    // Analysetype, α_cr en scheefstand, zoals de app ze via de toetsstore
+    // meegeeft: voor de α_cr-kanttekening en de kniklengte bij een vrij eind
+    // (2·L, of L bij P-Δ met scheefstand). Ontbrak tot oktober 2026 langs
+    // deze weg, waardoor hout via MCP anders getoetst werd dan in de app.
+    stabiliteit: {
+      analysetype, alphaCr: stabiliteit, scheefstandAan: gelezen.model.scheefstandEnabled,
+      // De φ waarmee is gerekend: 1/noemer, al naar de normkeuze omgezet
+      // (`leesScheefstand`). Zie `zijdelingseKnikInVlakModel`.
+      ...(gelezen.model.scheefstandEnabled ? { scheefstandPhi: 1 / gelezen.model.scheefstandNoemer } : {}),
+    },
   };
   const hout = buildTimberCheckInputs({
     ...houtData,
@@ -1474,8 +1533,49 @@ export function verwerkVerzoek(verzoek: SidecarVerzoek): SidecarAntwoord {
         // geslaagd, het antwoord luidt alleen `ok: false`. Daarom `maakOk` —
         // wie een lijst bevindingen vraagt en er een krijgt, kreeg antwoord.
         return maakOk(verzoek.id, opValidate(verzoek.payload));
+      case "staalhal_maken":
+        return maakOk(verzoek.id, opStaalhalMaken(verzoek.payload));
+      case "staalhal_uitwerken":
+        return maakOk(verzoek.id, opStaalhalUitwerken(verzoek.payload));
+      case "ifc_importeren":
+        return maakOk(verzoek.id, opIfcImporteren(verzoek.payload));
+      case "ifc_uitwerken":
+        return maakOk(verzoek.id, opIfcUitwerken(verzoek.payload));
+      case "api_catalogus":
+        return maakOk(verzoek.id, opApiCatalogus());
+      case "api_uitvoeren":
+        return maakOk(verzoek.id, opApiUitvoeren(verzoek.payload));
+      case "extensie_importeren":
+        return maakFout(verzoek.id, "INVOER_ONGELDIG", "Extensie-import loopt via de asynchrone sidecarlus.");
     }
   } catch (err) {
+    if (err instanceof ApiFout) {
+      // De codes van de API staan in FOUTCODES; een ApiFout met een andere
+      // code (een programmeerfout) valt door naar INTERN.
+      const code = (FOUTCODES as readonly string[]).includes(err.code) ? (err.code as Foutcode) : "INTERN";
+      const detail = err.detail && typeof err.detail === "object" && !Array.isArray(err.detail)
+        ? err.detail as Record<string, unknown>
+        : err.detail === undefined ? undefined : { waarde: err.detail };
+      return maakFout(verzoek.id, code, err.message, code === "INTERN" ? { ...detail, code: err.code } : detail);
+    }
+    if (err instanceof StaalhalFout) {
+      // De invoerpoort van de hal meldt ALLE problemen, elk met code en veld;
+      // die gaan ongeschonden mee in `detail`.
+      return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, { problemen: err.problemen });
+    }
+    if (err instanceof IfcImportFout) {
+      // Een bestand dat niet te lezen is (of geen IFC4-analysemodel bevat) is
+      // BESTAND_ONLEESBAAR; een ontbrekende of onbekende modelkeuze is invoer,
+      // met de lijst analysemodellen erbij.
+      const bestand = err.code === "leesfout" || err.code === "geenIfc4" || err.code === "geenAnalysemodel";
+      return maakFout(verzoek.id, bestand ? "BESTAND_ONLEESBAAR" : "INVOER_ONGELDIG", err.message, {
+        reden: err.code,
+        ...(err.modellen.length > 0 ? { modellen: err.modellen } : {}),
+      });
+    }
+    if (err instanceof IfcSidecarInvoerFout) {
+      return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, { veld: err.veld });
+    }
     if (err instanceof InvoerFout) {
       return maakFout(verzoek.id, "INVOER_ONGELDIG", err.message, err.detail);
     }
@@ -1516,6 +1616,24 @@ export function verwerkVerzoek(verzoek: SidecarVerzoek): SidecarAntwoord {
   }
 }
 
+/** Alleen extensie-import wacht op een mogelijk asynchroon importFile-script. */
+export async function verwerkVerzoekAsync(verzoek: SidecarVerzoek): Promise<SidecarAntwoord> {
+  if (verzoek.op !== "extensie_importeren") return verwerkVerzoek(verzoek);
+  try {
+    return maakOk(verzoek.id, await opExtensieImporteren(verzoek.payload));
+  } catch (fout) {
+    if (fout instanceof ApiFout) {
+      const code = (FOUTCODES as readonly string[]).includes(fout.code) ? fout.code as Foutcode : "INTERN";
+      return maakFout(verzoek.id, code, fout.message,
+        fout.detail && typeof fout.detail === "object" && !Array.isArray(fout.detail)
+          ? fout.detail as Record<string, unknown> : undefined);
+    }
+    return maakFout(verzoek.id, "INTERN", "Onverwachte fout bij extensie-import.", {
+      originele_melding: String((fout as Error)?.stack ?? fout),
+    });
+  }
+}
+
 /** Eén stdin-regel → één stdout-regel. Lege regels worden overgeslagen. */
 export function verwerkRegel(regel: string): string | null {
   const opgeschoond = regel.replace(/\r$/, "");
@@ -1524,6 +1642,14 @@ export function verwerkRegel(regel: string): string | null {
   const antwoord = ontleed.ok
     ? verwerkVerzoek(ontleed.verzoek)
     : ontleed.antwoord;
+  return serialiseerAntwoord(antwoord);
+}
+
+export async function verwerkRegelAsync(regel: string): Promise<string | null> {
+  const opgeschoond = regel.replace(/\r$/, "");
+  if (opgeschoond.trim().length === 0) return null;
+  const ontleed = ontleedVerzoek(opgeschoond);
+  const antwoord = ontleed.ok ? await verwerkVerzoekAsync(ontleed.verzoek) : ontleed.antwoord;
   return serialiseerAntwoord(antwoord);
 }
 
@@ -1557,6 +1683,13 @@ function leidConsoleOm(): void {
 export function startSidecar(): void {
   leidConsoleOm();
   let buffer = "";
+  let wachtrij = Promise.resolve();
+  const plan = (regel: string) => {
+    wachtrij = wachtrij.then(async () => {
+      const antwoord = await verwerkRegelAsync(regel);
+      if (antwoord !== null) process.stdout.write(antwoord);
+    });
+  };
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (brok?: string) => {
     buffer += brok ?? "";
@@ -1564,17 +1697,15 @@ export function startSidecar(): void {
     while (grens >= 0) {
       const regel = buffer.slice(0, grens);
       buffer = buffer.slice(grens + 1);
-      const antwoord = verwerkRegel(regel);
-      if (antwoord !== null) process.stdout.write(antwoord);
+      plan(regel);
       grens = buffer.indexOf("\n");
     }
   });
   process.stdin.on("end", () => {
     // Laatste regel zonder afsluitende "\n" telt gewoon mee.
-    const antwoord = verwerkRegel(buffer);
-    if (antwoord !== null) process.stdout.write(antwoord);
+    plan(buffer);
     buffer = "";
-    process.exitCode = 0;
+    void wachtrij.then(() => { process.exitCode = 0; });
   });
   process.stdin.resume();
 }

@@ -40,7 +40,8 @@ pub mod deflection;
 pub mod factors;
 pub mod section;
 pub mod shear;
-pub mod stability; // kruislaaghout: doorsnedemodel + toetsing per lamel
+pub mod stability;
+pub mod torsion; // kruislaaghout: doorsnedemodel + toetsing per lamel
 
 pub use data::{strength_class_by_name, strength_class_names, StrengthClass};
 pub use factors::{

@@ -1,0 +1,324 @@
+{
+ "format": "open-fem-studio-v2",
+ "version": 3,
+ "savedAt": "2026-10-11T16:41:36.000Z",
+ "nodes": [],
+ "beams": [],
+ "supports": [],
+ "plates": [],
+ "loads": [],
+ "loadCases": [
+  {
+   "id": 1,
+   "name": "G (zoals MCP-invoer)",
+   "type": "dead"
+  }
+ ],
+ "activeLoadCaseId": 1,
+ "selfWeightEnabled": false,
+ "nonlinearEnabled": true,
+ "analysetype": "tweedeOrdeGeometrisch",
+ "betonSegmentLengteMm": 400,
+ "betonKruipcoefficient": null,
+ "betonKruipInvoer": null,
+ "combinations": [
+  {
+   "id": 1,
+   "name": "1,0·G (controle)",
+   "type": "uls",
+   "formula": "1,0·G",
+   "factors": {
+    "1": 1.0
+   }
+  },
+  {
+   "id": 2,
+   "name": "1,0·G BGT (controle)",
+   "type": "sls",
+   "formula": "1,0·G",
+   "factors": {
+    "1": 1.0
+   }
+  }
+ ],
+ "idTellers": {
+  "belastinggeval": 2,
+  "combinatie": 3
+ },
+ "structuralGrid": {
+  "enabled": false,
+  "xAxes": [
+   {
+    "id": "spant-1",
+    "label": "1",
+    "position": 0
+   },
+   {
+    "id": "spant-2",
+    "label": "2",
+    "position": 6000
+   },
+   {
+    "id": "spant-3",
+    "label": "3",
+    "position": 12000
+   },
+   {
+    "id": "spant-4",
+    "label": "4",
+    "position": 18000
+   },
+   {
+    "id": "spant-5",
+    "label": "5",
+    "position": 24000
+   },
+   {
+    "id": "spant-6",
+    "label": "6",
+    "position": 30000
+   }
+  ],
+  "yAxes": [
+   {
+    "id": "gevel-A",
+    "label": "A",
+    "position": 0
+   },
+   {
+    "id": "gevel-B",
+    "label": "B",
+    "position": 20000
+   }
+  ],
+  "zAxes": [
+   {
+    "id": "peil",
+    "label": "Peil 0",
+    "position": 0
+   },
+   {
+    "id": "goot",
+    "label": "Goot",
+    "position": 6000
+   },
+   {
+    "id": "nok",
+    "label": "Nok",
+    "position": 6874.88663525924
+   }
+  ]
+ },
+ "scheefstandEnabled": false,
+ "scheefstandNoemer": 200,
+ "scheefstandRichting": 1,
+ "scheefstandBron": "vast",
+ "scheefstandHoogteM": null,
+ "scheefstandAantalElementen": null,
+ "eigenDoorsneden": [],
+ "eigenCltOpbouwen": [],
+ "projectInfo": {
+  "company": "",
+  "date": "",
+  "description": "Drie scharnierende poten CHS 88.9x4, toplast (10; 0; -60). Kijk naar alpha_cr: hoort ca. 4,0; kern met 1 element gaf 1807.",
+  "engineer": "",
+  "location": "",
+  "name": "K4 – test 061 – driepoot, 1 staaf per poot",
+  "notes": "",
+  "projectNumber": "",
+  "reportHeader": "",
+  "uitgangspunten": {
+   "en1992": false,
+   "en1993": false,
+   "en1995": false,
+   "gevolgklasse": "CC2",
+   "levensduurklasse": "4",
+   "nationaleBijlage": "NL",
+   "normenHandmatig": [],
+   "terreincategorie": "II",
+   "windgebied": "II"
+  }
+ },
+ "windInstellingen": {
+  "windgebied": "II",
+  "terreincategorie": "II",
+  "stuwdrukBron": "berekend",
+  "qpHandmatig_kNm2": 1,
+  "richtingLinks": true,
+  "richtingRechts": true,
+  "richtingHaaks": false,
+  "cpiKeuze": "beide",
+  "cpiHandmatig": 0.2,
+  "hohSpant_m": 5,
+  "positieSpant": "tussenspant",
+  "belastingbreedteOverride_m": null,
+  "gebouwlengte_m": 30,
+  "afstandTotKopgevel_m": 15,
+  "cpeDakLoef": null,
+  "cpeDakLij": null,
+  "cpeDakHaaks": null,
+  "combinatiesGenereren": true,
+  "gevelhoogte_m": null,
+  "vorm": "gebouw",
+  "vrijstaandDakvorm": "lessenaar",
+  "blokkering_phi": 0,
+  "vrijstaandHoogte_m": null,
+  "wrijving": "geen",
+  "aantalOverkappingen": 1,
+  "positieOverkapping": 1,
+  "kolomDoorsnede": "geen",
+  "kolomBreedte_mm": 200,
+  "kolomDiepte_mm": 200
+ },
+ "rapport": {
+  "margeBoven": 18,
+  "margeOnder": 20,
+  "margeBinnen": 15,
+  "margeBuiten": 15,
+  "basisLettergrootte": 10,
+  "regelafstand": 1.45,
+  "pageSize": "A4",
+  "orientation": "portrait",
+  "hiddenSections": {
+   "nodes": true,
+   "beams": true,
+   "plates": true,
+   "materials": true,
+   "combinations": true,
+   "plateStresses": true,
+   "checkDetail": true,
+   "clt": true,
+   "betonStijfheid": true,
+   "spanning": true
+  },
+  "rapportType": "beperkt",
+  "toetsingDetail": "beknopt",
+  "verborgenToetsStaven": {},
+  "inhoudsopgaveDiepte": 1
+ },
+ "modelDimension": "3d",
+ "model3d": {
+  "nodes": [
+   {
+    "id": 1,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 2,
+    "x": 4,
+    "y": 0,
+    "z": 0
+   },
+   {
+    "id": 3,
+    "x": 2,
+    "y": 3.4641,
+    "z": 0
+   },
+   {
+    "id": 4,
+    "x": 2,
+    "y": 1.1547,
+    "z": 3
+   }
+  ],
+  "beams": [
+   {
+    "id": 1,
+    "startNodeId": 1,
+    "endNodeId": 4,
+    "profileName": "CHS 88.9x4",
+    "material": "S235",
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true,
+     "torsionStart": false,
+     "torsionEnd": false
+    }
+   },
+   {
+    "id": 2,
+    "startNodeId": 2,
+    "endNodeId": 4,
+    "profileName": "CHS 88.9x4",
+    "material": "S235",
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true,
+     "torsionStart": false,
+     "torsionEnd": false
+    }
+   },
+   {
+    "id": 3,
+    "startNodeId": 3,
+    "endNodeId": 4,
+    "profileName": "CHS 88.9x4",
+    "material": "S235",
+    "releases": {
+     "myStart": true,
+     "myEnd": true,
+     "mzStart": true,
+     "mzEnd": true,
+     "torsionStart": false,
+     "torsionEnd": false
+    }
+   }
+  ],
+  "plates": [],
+  "supports": [
+   {
+    "nodeId": 1,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 2,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   },
+   {
+    "nodeId": 3,
+    "ux": true,
+    "uy": true,
+    "uz": true,
+    "rx": true,
+    "ry": true,
+    "rz": true
+   }
+  ],
+  "loads": [
+   {
+    "id": 1,
+    "nodeId": 4,
+    "fx": 10,
+    "fy": 0,
+    "fz": -60,
+    "mx": 0,
+    "my": 0,
+    "mz": 0,
+    "caseId": 1
+   }
+  ],
+  "memberLoads": [],
+  "memberPointLoads": [],
+  "thermalLoads": [],
+  "surfaceLoads": []
+ },
+ "openFem3dViewSets": [],
+ "openFem3dStandaardViewsUitRapport": []
+}

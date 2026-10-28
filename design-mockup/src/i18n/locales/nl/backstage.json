@@ -22,7 +22,7 @@
     "github": "GitHub",
     "license": "Licentie",
     "stichting": "Stichting OpenAEC Foundation (NL)",
-    "copyright": "© 2026 OpenAEC Foundation. Code: MIT. Inhoud: CC BY-SA 4.0."
+    "copyright": "© 2026 OpenAEC Foundation. Code: AGPL-3.0-or-later; normtoetsingen: LGPL-3.0-or-later. Inhoud: CC BY-SA 4.0."
   },
   "importPanel": {
     "title": "Importeren",
@@ -53,15 +53,30 @@
     "clearAll": "Alles wissen",
     "noRecent": "Nog geen recente bestanden",
     "remove": "Verwijderen",
+    "chooseImporter": "Kies de importeur (nummer):",
+    "invalidImporter": "Geen geldige importeur gekozen.",
+    "reportTitle": "Importverslag",
+    "closeReport": "Sluiten",
     "justNow": "Zojuist",
     "minutesAgo_one": "{{count}} min geleden",
     "minutesAgo_other": "{{count}} min geleden",
     "hoursAgo_one": "{{count}} uur geleden",
     "hoursAgo_other": "{{count}} uur geleden",
     "daysAgo_one": "{{count}} dag geleden",
-    "daysAgo_other": "{{count}} dagen geleden"
+    "daysAgo_other": "{{count}} dagen geleden",
+    "importIfc": "IFC-rekenmodel importeren...",
+    "importIfcHint": "Een IFC4-analysemodel (Structural Analysis View) inlezen als nieuw 3D-project."
   },
   "extensionManager": {
+    "intro": "Installeer een ZIP of koppel een map met extension.json. Extensies importeren bestanden lokaal.",
+    "trustWarning": "Een extensie draait code op deze computer. Koppel alleen extensies die je zelf maakte of vertrouwt. Doorgaan?",
+    "linkFolder": "Map koppelen…",
+    "reload": "Opnieuw laden",
+    "empty": "Nog geen extensies geïnstalleerd of gekoppeld.",
+    "other": "Overig",
+    "enabled": "Aan",
+    "unlink": "Ontkoppelen",
+    "remove": "Verwijderen",
     "desc": {
       "ifc-importer": "IFC4 STEP-bestanden in de applicatie importeren",
       "pdf-export": "Rapporten als PDF exporteren met OpenAEC Report Generator",
