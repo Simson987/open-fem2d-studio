@@ -101,7 +101,10 @@ log("\n[a] Zonder de velden: het gedrag van vóór de velden (regressie-anker)")
   check("K_CR_STANDAARD = 1,0", K_CR_STANDAARD, 1);
   check("kiptoets aan", i.perform_ltb_check, true);
   check("aangrijpingspunt zwaartepunt", i.ltb_load_position, "CentreOfGravity");
-  check("belastinggeval gelijkmatig verdeeld (ongewijzigd)", i.ltb_load_case, "UniformLoad");
+  // Issue #220: de bouwer noemt het belastinggeval niet meer; de kern leidt het
+  // af uit het momentverloop (vroeger vast "UniformLoad", ook bij een constant
+  // moment). Zie timber-check/tests/kipgeval_tabel61.rs.
+  check("belastinggeval niet opgegeven (de kern leidt het af)", i.ltb_load_case, undefined);
   check("l_ef-override 0 (ongewijzigd)", i.ltb_effective_length_override_m, 0);
   // Een checkConfig met alleen ANDERE velden raakt de drie evenmin.
   const j = hout({ serviceClass: 2, ltbSupportSpacing_m: 1.5 });

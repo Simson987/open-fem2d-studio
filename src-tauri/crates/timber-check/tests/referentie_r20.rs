@@ -180,7 +180,7 @@ fn invoer(
         buckling_length_z_m: LEF_KIP_M,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(LtbLoadCase::UniformLoad),
         ltb_load_position: LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: lef_override_m,
         perform_ltb_check: true,

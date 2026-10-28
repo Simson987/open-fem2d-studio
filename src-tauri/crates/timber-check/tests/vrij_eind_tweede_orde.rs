@@ -68,7 +68,7 @@ fn kolom(is_cantilever: bool, zijdelings: Option<ZijdelingseKnikInAnalyse>) -> T
         buckling_length_z_m: 0.0,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(LtbLoadCase::UniformLoad),
         ltb_load_position: LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: false,

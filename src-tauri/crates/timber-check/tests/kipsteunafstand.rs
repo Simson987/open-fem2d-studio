@@ -84,7 +84,7 @@ fn ligger(segment_m: f64, l_ef_override_m: f64) -> TimberBeamCheckResult {
         buckling_length_z_m: L_M,
         lateral_bracing: None,
         ltb_segment_length_m: segment_m,
-        ltb_load_case: nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad),
         ltb_load_position: nen_en_1995_1_1::stability::LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: l_ef_override_m,
         perform_ltb_check: true,

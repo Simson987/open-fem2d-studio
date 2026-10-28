@@ -154,8 +154,16 @@ lateral_bracing?: LateralBracing,
 ltb_segment_length_m: number,
 /**
  * Belastinggeval voor l_ef (tabel 6.1).
+ *
+ * `None` of weglaten = AFLEIDEN uit het momentverloop in
+ * `forces_envelope` en [`Self::is_cantilever`] (issue #220): constant
+ * moment 1,0·ℓ, parabool 0,9·ℓ, driehoek 0,8·ℓ, uitkraging 0,5·ℓ of
+ * 0,8·ℓ, en de bovengrens 1,0·ℓ voor een verloop dat bij geen rij past.
+ * De afleiding staat met reden in de kiptoets. Tot oktober 2026 was
+ * weglaten stil "gelijkmatig verdeeld" (0,9·ℓ), ook bij een constant
+ * moment — 10 % te gunstig.
  */
-ltb_load_case: LtbLoadCase,
+ltb_load_case?: LtbLoadCase,
 /**
  * Aangrijpingspunt van de belasting (tabel 6.1, voetnoot).
  */

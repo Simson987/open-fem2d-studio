@@ -107,7 +107,7 @@ fn ligger(kip: bool, positie: LtbLoadPosition, k_cr: f64) -> TimberBeamCheckResu
         buckling_length_z_m: L_M,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(LtbLoadCase::UniformLoad),
         ltb_load_position: positie,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: kip,

@@ -39,7 +39,8 @@
  *    de kern kiest (staaflengte, of om z uit steunen aan beide randen) en
  *    meldt de herkomst (zie de toelichting bij het `inputs.push`);
  *    kipsteunafstand = staaflengte;
- *    belastinggeval "gelijkmatig verdeeld"; aangrijpingspunt uit
+ *    belastinggeval van tabel 6.1: NIET opgegeven, de kern leidt het af uit
+ *    het momentverloop en het vrije eind (issue #220); aangrijpingspunt uit
  *    cfg.ltbLoadPosition, leeg → zwaartepunt; kiptoets uit
  *    cfg.performLtbCheck, leeg → aan; k_cr uit cfg.kCr, leeg → 1,0 (NB bij
  *    6.1.7); geen lastverdelend systeem;
@@ -1095,7 +1096,11 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // De waarde komt uit `lib/kipsteunen.ts`, dezelfde afleiding als het
       // tekenvlak toont (issue #40).
       ltb_segment_length_m: kip.ltb_segment_length_m,
-      ltb_load_case: "UniformLoad",
+      // Belastinggeval van tabel 6.1: bewust NIET opgegeven. De kern leidt het
+      // af uit het momentverloop van `forces_envelope` en `is_cantilever`
+      // (issue #220) en zet de afleiding in de kiptoets. Tot oktober 2026
+      // stond hier vast "UniformLoad" (0,9·ℓ), ook bij een constant moment
+      // (hoort 1,0·ℓ) en bij een uitkraging (0,5 of 0,8·ℓ).
       // Aangrijpingspunt van de belasting (tabel 6.1, voetnoot a): aan de
       // drukzijde l_ef + 2h, aan de trekzijde l_ef − 0,5h. Leeg = zwaartepunt,
       // het gedrag van vóór dit veld. Een dak of vloer op de bovenrand van een

@@ -69,7 +69,7 @@ fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> Timbe
         buckling_length_z_m: 0.0,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(nen_en_1995_1_1::stability::LtbLoadCase::UniformLoad),
         ltb_load_position: nen_en_1995_1_1::stability::LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: true,

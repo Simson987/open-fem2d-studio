@@ -185,6 +185,9 @@ struct Keten<'a> {
     section: &'a TimberSection,
     mat: &'static StrengthClass,
     afschuining: Option<Afschuining>,
+    /// Het belastinggeval van tabel 6.1, opgegeven of afgeleid (issue #220),
+    /// met de notitie over de afleiding.
+    kipgeval: (nen_en_1995_1_1::stability::LtbLoadCase, Option<String>),
 }
 
 /// De toetsen die van k_mod afhangen — doorsneden §6.1 en stabiliteit §6.3.2
@@ -385,14 +388,14 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
             (
                 effective_length_mm(
                     segment_mm,
-                    input.ltb_load_case,
+                    k.kipgeval.0,
                     input.ltb_load_position,
                     section.h_mm,
                 ),
                 l_ef_toelichting(
                     segment_mm,
                     segment_herkomst,
-                    input.ltb_load_case,
+                    k.kipgeval.0,
                     input.ltb_load_position,
                     section.h_mm,
                 ),
@@ -418,6 +421,11 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
         // welke L_cr,z hij bepaald is — en die kan op de staaflengte zijn
         // teruggevallen.
         kip.notes.push(l_ef_notitie);
+        if input.ltb_effective_length_override_m <= 0.0 {
+            if let Some(n) = &k.kipgeval.1 {
+                kip.notes.push(n.clone());
+            }
+        }
         kip.notes.push(format!(
             "k_c,z in de drukterm van (6.35) is bepaald met {kniklengte_z_samenvatting} — dezelfde \
              kniklengte als in de kolomtoets van art. 6.3.2, waar haar afleiding staat."
@@ -670,6 +678,7 @@ pub(crate) fn check_timber_beam_intern(
         section: &section,
         mat,
         afschuining,
+        kipgeval: crate::kipgeval::kipgeval(&input),
     };
     let (mut checks, k_mod_per_load_duration, governing_combination_id, load_duration) =
         match belastingduur::groepeer(

@@ -26,10 +26,6 @@ fn default_noemer_add() -> f64 {
     nen_en_1995_1_1::deflection::NOEMER_W_ADD
 }
 
-fn default_ltb_load_case() -> LtbLoadCase {
-    LtbLoadCase::UniformLoad
-}
-
 fn default_ltb_load_position() -> LtbLoadPosition {
     LtbLoadPosition::CentreOfGravity
 }
@@ -158,8 +154,17 @@ pub struct TimberBeamCheckInput {
     #[serde(default)]
     pub ltb_segment_length_m: f64,
     /// Belastinggeval voor l_ef (tabel 6.1).
-    #[serde(default = "default_ltb_load_case")]
-    pub ltb_load_case: LtbLoadCase,
+    ///
+    /// `None` of weglaten = AFLEIDEN uit het momentverloop in
+    /// `forces_envelope` en [`Self::is_cantilever`] (issue #220): constant
+    /// moment 1,0·ℓ, parabool 0,9·ℓ, driehoek 0,8·ℓ, uitkraging 0,5·ℓ of
+    /// 0,8·ℓ, en de bovengrens 1,0·ℓ voor een verloop dat bij geen rij past.
+    /// De afleiding staat met reden in de kiptoets. Tot oktober 2026 was
+    /// weglaten stil "gelijkmatig verdeeld" (0,9·ℓ), ook bij een constant
+    /// moment — 10 % te gunstig.
+    #[serde(default)]
+    #[ts(optional)]
+    pub ltb_load_case: Option<LtbLoadCase>,
     /// Aangrijpingspunt van de belasting (tabel 6.1, voetnoot).
     #[serde(default = "default_ltb_load_position")]
     pub ltb_load_position: LtbLoadPosition,

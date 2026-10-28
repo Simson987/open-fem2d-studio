@@ -19,7 +19,6 @@ use approx::assert_relative_eq;
 use mechanics::{ForcePoint, InternalForces};
 use nen_en_1993_1_1_section::CheckStatus;
 use nen_en_1995_1_1::afgeschuind::SchuineRand;
-use nen_en_1995_1_1::{LoadDurationClass, ServiceClass};
 use steel_check::CheckKind;
 use timber_check::{check_timber_beam, TimberBeamCheckInput, TimberBeamCheckResult};
 

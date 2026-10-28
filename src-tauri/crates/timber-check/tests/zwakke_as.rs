@@ -65,7 +65,7 @@ fn houten_staaf(
         buckling_length_z_m: l_cr_z_m,
         lateral_bracing: steunen,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(LtbLoadCase::UniformLoad),
         ltb_load_position: LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: true,

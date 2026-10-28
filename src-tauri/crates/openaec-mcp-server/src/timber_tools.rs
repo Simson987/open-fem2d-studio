@@ -240,8 +240,7 @@ fn schema_houten_staaf() -> Value {
                 "type": "string",
                 "enum": ["ConstantMoment", "UniformLoad", "ConcentratedMidspan",
                          "CantileverUniform", "CantileverConcentratedEnd"],
-                "default": "UniformLoad",
-                "description": "Belastinggeval voor l_ef volgens tabel 6.1: l_ef/l = 1,0 bij \"ConstantMoment\", 0,9 bij \"UniformLoad\" (default), 0,8 bij \"ConcentratedMidspan\", 0,5 bij \"CantileverUniform\" en 0,8 bij \"CantileverConcentratedEnd\"."
+                "description": "Belastinggeval voor l_ef volgens tabel 6.1: l_ef/l = 1,0 bij \"ConstantMoment\", 0,9 bij \"UniformLoad\", 0,8 bij \"ConcentratedMidspan\", 0,5 bij \"CantileverUniform\" en 0,8 bij \"CantileverConcentratedEnd\". Weglaten = de kern LEIDT HET AF uit het momentverloop in 'forces_envelope' en 'is_cantilever': per UGT-combinatie constant, parabool (gelijkmatig), driehoek (puntlast midden) of bij een uitkraging d^2/d; een combinatie van twee lastvormen krijgt de grootste l_ef van die twee, een verloop dat bij geen rij past (eindmomenten, doorgaande ligger, minder dan 5 stations) de bovengrens 1,0. Over de combinaties telt de grootste l_ef; een kipsteunafstand korter dan de staaf geeft 1,0. De afleiding staat in de notities van de kiptoets. `check_fem_model` laat dit veld weg."
             },
             "ltb_load_position": {
                 "type": "string",
@@ -693,7 +692,8 @@ mod tests {
         assert_eq!(p["k_cr"]["default"], json!(1));
         assert_eq!(p["perform_ltb_check"]["default"], json!(true));
         assert_eq!(p["load_sharing"]["default"], json!(false));
-        assert_eq!(p["ltb_load_case"]["default"], json!("UniformLoad"));
+        // Issue #220: geen standaard meer; weglaten = afleiden uit het momentverloop.
+        assert!(p["ltb_load_case"].get("default").is_none());
         assert_eq!(p["ltb_load_position"]["default"], json!("CentreOfGravity"));
         assert_eq!(
             p["deflection_limit_fin"]["default"].as_f64(),

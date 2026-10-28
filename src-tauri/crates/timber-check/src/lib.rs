@@ -14,6 +14,7 @@
 pub mod belastingduur; // k_mod per belastingduurklasse, EN 1995-1-1 3.1.3(2)
 pub mod clt; // kruislaaghout: CltBeamCheckInput → CltBeamCheckResult, toets per lamel
 pub mod input;
+mod kipgeval; // belastinggeval van tabel 6.1 uit het momentverloop (issue #220)
 pub mod orchestrator;
 pub mod result;
 pub mod verlopend; // verlopende rechthoek b(x) × h(x), toets per rekenpunt
