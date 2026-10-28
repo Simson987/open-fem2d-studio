@@ -51,6 +51,7 @@ import {
   type Gevolgklasse,
   type StandaardHerkomst,
 } from "./normcombinaties";
+import type { VeldpatroonHerkomst } from "./veldpatronen";
 import { materiaalasRanges, spanningInMateriaalassen } from "../../../lib/plaatMateriaal";
 
 // ── Public types ──────────────────────────────────────────────────────────
@@ -103,6 +104,14 @@ export interface LoadCombination {
    * ψ₂ = 1, want daarin houdt beton E_cm.
    */
   eindtoestand?: { psi2: number; bgt?: true };
+  /**
+   * Aanwezig = een VELDPATROONVARIANT (issue #219): dezelfde combinatie, maar
+   * met een veranderlijk vloergeval alleen op de ongunstige velden (NEN-EN
+   * 1991-1-1 6.2.1(1)). De factoren wijzen dan naar deelgevallen per veld.
+   * Gezet door `veldpatroonVarianten` (solver/veldpatronen.ts) na een
+   * lineaire rekengang; wordt niet opgeslagen.
+   */
+  veldpatroon?: VeldpatroonHerkomst;
 }
 
 /**

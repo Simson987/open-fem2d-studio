@@ -56,6 +56,7 @@ import type {
   PlateStressRange,
 } from "./types";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
+import { VELD_GEVAL_OFFSET } from "./types";
 
 type AnyMesh = any; // structural typing — Mesh shape from core/fem/Mesh
 
@@ -2359,8 +2360,12 @@ export function registreerScheefstandRichtingen(
  */
 export function gevalResultaten(perCase: Map<number, SolverResult>): Map<number, SolverResult> {
   const sr = getScheefstandRichtingen(perCase);
-  if (!sr) return perCase;
-  return new Map([...perCase].filter(([id]) => id < sr.offset));
+  // De deelgevallen per veld (veldpatronen.ts, issue #219) zijn evenmin
+  // belastinggevallen van de gebruiker.
+  const heeftDelen = [...perCase.keys()].some((id) => id >= VELD_GEVAL_OFFSET);
+  if (!sr && !heeftDelen) return perCase;
+  const grens = Math.min(sr?.offset ?? Infinity, VELD_GEVAL_OFFSET);
+  return new Map([...perCase].filter(([id]) => id < grens));
 }
 
 /** Lost elk belastinggeval van `input` op en zet het onder `id + idOffset`. */

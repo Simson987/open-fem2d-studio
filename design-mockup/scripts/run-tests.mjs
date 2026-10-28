@@ -421,6 +421,11 @@ const BUNDEL_TESTS = new Set([
   "vakwerk-scharnieren",
   "veldmaximum",
   "veldzakking",
+  // Veldsgewijze plaatsing van veranderlijke vloerbelasting (#219): splitsen,
+  // veldpatronen, omhullende en staalbouwer — alles in de barrel — en de
+  // gebouwde MCP-server. Hoort ook tegen de bundel: de sidecar maakt de
+  // varianten met dezelfde functies als de app.
+  "veldsgewijze-plaatsing",
   // Verlopende profielen (deel 1): doorsnede op positie x, segmenten met A
   // en I, eigen gewicht per segment, de poorten en de in-proces sidecar.
   // Praat met `engine`, `sectionResolver`, `modelNaarSolverInput`,

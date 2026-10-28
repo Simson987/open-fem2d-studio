@@ -440,6 +440,7 @@ export const VELDEN_3D = {
     scheefstandRichting: { afgeleid: "rekenvariant van de scheefstand, gezet bij het rekenen en niet opgeslagen" },
     scheefstandAs: { afgeleid: "rekenvariant van de scheefstand, gezet bij het rekenen en niet opgeslagen" },
     eindtoestand: { afgeleid: "rekenvariant met de eindstijfheid, gezet bij het rekenen en niet opgeslagen" },
+    veldpatroon: { afgeleid: "rekenvariant met veldsgewijs geplaatste veranderlijke vloerbelasting (issue #219), gezet bij het rekenen en niet opgeslagen" },
   } satisfies Record<keyof LoadCombination, Dekking>,
 };
 
