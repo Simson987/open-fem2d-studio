@@ -535,6 +535,8 @@
       "combosNoticeTitle": "Avis à l'ouverture : combinaisons",
       "unknownFieldsTitle": "Ce fichier contient des champs que cette version ne connaît pas",
       "unknownFieldsBody": "{{velden}} — ils ne sont pas chargés et disparaîtront au prochain enregistrement. Conservez une copie du fichier si vous en avez besoin.",
+      "unknownSections3dTitle": "Profilé ou matériau inconnu dans le modèle 3D",
+      "unknownSections3dBody": "{{staven}}. Le calcul refusera ces barres ; choisissez un profilé et un matériau connus dans les propriétés.",
       "projectOpened": "Projet ouvert",
       "libraryUpdated": "Bibliothèque mise à jour par ce projet",
       "openFailed": "Impossible d'ouvrir le fichier",

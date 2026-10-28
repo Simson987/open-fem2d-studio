@@ -19,10 +19,7 @@ import { connectOpenFem3DNodesToBeams, OPEN_FEM_3D_CONNECT_TOLERANCE_MM } from "
 import { mergeOpenFem3DNodes, OPEN_FEM_3D_MERGE_TOLERANCE_MM } from "../../components/openFem3d/openFem3dSamenvoegen";
 import { openFem3DPlateGroundSide } from "../../components/openFem3d/openFem3dPlateBedding";
 import { VERBINDINGSTOLERANTIE_MAX_MM, VERBINDINGSTOLERANTIE_MIN_MM } from "../../lib/modelControle";
-import { CONCRETE_E_CM, resolveSection, TIMBER_E_MEAN } from "../../lib/sectionResolver";
-import { STEEL_GRADES } from "../../lib/steelGrades";
-import { STEEL_SECTIONS } from "../../lib/steelSections.generated";
-import { isEigenProfiel } from "../../lib/profieleditor/eigenDoorsnedenStore";
+import { keurOpenFem3DStaafdoorsnede, onbekendeOpenFem3DDoorsneden } from "../../components/openFem3d/openFem3dDoorsnedeKeuring";
 
 const RAD_PER_GRAAD = Math.PI / 180;
 
@@ -37,53 +34,17 @@ function vindStaaf(model: OpenFem3DModel, beamId: number) {
   return beam;
 }
 /**
- * Bekende catalogusnamen die op een onbekende staalprofielnaam lijken: dezelfde
- * reeks (letters vooraan), het dichtst bij het getal. Alleen een suggestie.
- */
-function lijkendeProfielen(profiel: string): string[] {
-  const sleutel = profiel.replace(/[\s\-.]/g, "").toUpperCase();
-  const m = /^([A-Z]+)(\d+)?/.exec(sleutel);
-  if (!m) return [];
-  const [, reeks, getal] = m;
-  const doel = getal ? Number(getal) : 0;
-  return Object.keys(STEEL_SECTIONS)
-    .filter((k) => k.startsWith(reeks) && /^\d/.test(k.slice(reeks.length)))
-    .map((k) => ({ k, n: Number(/^\d+/.exec(k.slice(reeks.length))![0]) }))
-    .sort((a, b) => Math.abs(a.n - doel) - Math.abs(b.n - doel) || a.k.localeCompare(b.k))
-    .slice(0, 5)
-    .map((x) => x.k);
-}
-
-/**
- * Een 3D-staaf met een profiel of materiaal dat de rekenkern niet kent, of een
- * combinatie die niet bij elkaar past ("IPE 9999", "S999", "IPE 300" in C24),
- * wordt al bij het invoeren geweigerd (#230) — met staafnummer, de onbekende
- * naam en bekende namen als suggestie. Tot dan sloeg `model3d.beam.add` zo'n
- * staaf op en weigerde pas Berekenen in de app. Dezelfde regel als die
- * weigering: `resolveSection` (openFem3dSolver, `bron === "default"`).
- *
- * Een eigen doorsnede ("EIGEN:…") wordt hier NIET gekeurd: die staat in de
- * winkel van de app (profieleditor), die het API-kanaal zonder app niet ziet.
- * Berekenen weigert een niet bewaarde eigen doorsnede nog altijd met reden.
+ * Een 3D-staaf met een profiel of materiaal dat de rekenkern niet kent, wordt
+ * al bij het invoeren geweigerd (#230) — met staafnummer, de onbekende naam en
+ * bekende namen als suggestie. De regel: `keurOpenFem3DStaafdoorsnede`.
  */
 function keurStaafdoorsnede(beam: { id: number; material?: string; profileName?: string }): void {
-  const materiaal = beam.material?.trim() ?? "";
-  const profiel = beam.profileName?.trim() ?? "";
-  if (isEigenProfiel(profiel)) return;
-  const r = resolveSection(materiaal, profiel);
-  if (r.bron !== "default") return;
-  const materiaalBekend = STEEL_GRADES.includes(materiaal) || materiaal in TIMBER_E_MEAN
-    || materiaal in CONCRETE_E_CM || /^(VRIJ|ALU)/i.test(materiaal);
-  const suggestie = !materiaalBekend
-    ? ` Bekende materialen: ${[...STEEL_GRADES].join(", ")}; hout ${Object.keys(TIMBER_E_MEAN).slice(0, 4).join(", ")} …; ` +
-      `beton ${Object.keys(CONCRETE_E_CM).slice(0, 3).join(", ")} …; of vrij materiaal "VRIJ:<naam> E=<N/mm2> rho=<kg/m3> f=<N/mm2>".`
-    : STEEL_GRADES.includes(materiaal) && lijkendeProfielen(profiel).length > 0
-      ? ` Bekende profielen in deze reeks: ${lijkendeProfielen(profiel).join(", ")}.`
-      : "";
+  const fout = keurOpenFem3DStaafdoorsnede(beam);
+  if (!fout) return;
   throw new ApiFout(
     "INVOER_ONGELDIG",
-    `3D-staaf ${beam.id}: ${r.reden ?? "doorsnede onbekend"}. De staaf is niet opgeslagen.${suggestie}`,
-    { beamId: beam.id, profileName: profiel || null, material: materiaal || null },
+    `3D-staaf ${beam.id}: ${fout.reden}. De staaf is niet opgeslagen.${fout.suggestie}`,
+    { beamId: beam.id, profileName: fout.profileName, material: fout.material },
   );
 }
 
@@ -199,7 +160,7 @@ function naarPatch(invoer: Wisbaar<StaafVeldenInvoer> & { startNodeId?: number; 
 
 const modelLezen = documentCommando<Record<string, never>, unknown>({
   naam: "model3d.get",
-  beschrijving: "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen.",
+  beschrijving: "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen. Staan er staven in met een profiel of materiaal dat Berekenen weigert (bijvoorbeeld uit een met de hand bewerkt projectbestand), dan noemt onbekendeDoorsneden ze met staafnummer, namen en reden.",
   invoer: obj({}),
   uitvoeren: (_invoer, document) => {
     const model = model3dVan(document);
@@ -213,6 +174,12 @@ const modelLezen = documentCommando<Record<string, never>, unknown>({
           loadPanels: (model.loadPanels ?? []).length, diaphragms: (model.diaphragms ?? []).length,
         },
         model,
+        // #230: staven met een profiel of materiaal dat Berekenen weigert,
+        // al bij het lezen gemeld (alleen als er zulke staven zijn).
+        ...(() => {
+          const onbekend = onbekendeOpenFem3DDoorsneden(model);
+          return onbekend.length > 0 ? { onbekendeDoorsneden: onbekend.map(({ suggestie: _s, ...rest }) => rest) } : {};
+        })(),
       },
     };
   },

@@ -535,6 +535,8 @@
       "combosNoticeTitle": "Hinweis beim Öffnen: Kombinationen",
       "unknownFieldsTitle": "Diese Datei enthält Felder, die diese Version nicht kennt",
       "unknownFieldsBody": "{{velden}} — diese werden nicht geladen und gehen beim nächsten Speichern verloren. Bewahren Sie eine Kopie der Datei auf, wenn Sie sie benötigen.",
+      "unknownSections3dTitle": "Unbekanntes Profil oder Material im 3D-Modell",
+      "unknownSections3dBody": "{{staven}}. Die Berechnung lehnt diese Stäbe ab; wählen Sie in den Eigenschaften ein bekanntes Profil und Material.",
       "projectOpened": "Projekt geöffnet",
       "libraryUpdated": "Bibliothek durch dieses Projekt aktualisiert",
       "openFailed": "Datei kann nicht geöffnet werden",

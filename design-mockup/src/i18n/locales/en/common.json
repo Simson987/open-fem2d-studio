@@ -535,6 +535,8 @@
       "combosNoticeTitle": "Notice on opening: combinations",
       "unknownFieldsTitle": "This file contains fields this version does not recognise",
       "unknownFieldsBody": "{{velden}} — these are not loaded and will be lost on the next Save. Keep a copy of the file if you need them.",
+      "unknownSections3dTitle": "Unknown section or material in the 3D model",
+      "unknownSections3dBody": "{{staven}}. Calculate will refuse these members; choose a known section and material in the properties.",
       "projectOpened": "Project opened",
       "libraryUpdated": "Library updated by this project",
       "openFailed": "Cannot open file",
