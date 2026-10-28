@@ -10,9 +10,9 @@
 //!   zijn invoer uitvoert.
 //! * **Weg 3 (MCP)**: de werkelijke binary over stdio, `tools/call`.
 //!
-//! Er komt geen invoerveld bij: de profielnaam is een tekst die al langs alle
-//! drie de wegen reist, en de catalogus zit in de kern. Deze test bewaakt dat
-//! dat zo blijft.
+//! De profielnaam is een tekst die al langs alle drie de wegen reist, en de
+//! catalogus zit in de kern. Sinds #226 reist ook het veld `draadeind` mee
+//! ("Gesneden"): zonder dat veld is het draadeind alleen informatie.
 
 use serde_json::{json, Value};
 use std::process::Stdio;
@@ -51,7 +51,10 @@ fn trekstaaf(naam: &str) -> Value {
         "deflection_permanent_mm": 0.0,
         "deflection_add_limit_numerator": 300.0,
         "q_equiv_n_per_mm": 0.0,
-        "z_a_mm": 0.0
+        "z_a_mm": 0.0,
+        // Een in de staaf gesneden draad (#226): het draadeind telt dan mee
+        // en is maatgevend. Het veld reist langs alle drie de wegen.
+        "draadeind": "Gesneden"
     })
 }
 

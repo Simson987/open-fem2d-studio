@@ -80,6 +80,7 @@ fn hoeklijn(naam: &str, l_m: f64, n_kn: f64) -> BeamCheckResult {
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     })
 }
 

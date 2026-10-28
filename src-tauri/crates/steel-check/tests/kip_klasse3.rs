@@ -91,6 +91,7 @@ fn hea300(grade: &str, n_kn: f64) -> BeamCheckResult {
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     })
 }
 

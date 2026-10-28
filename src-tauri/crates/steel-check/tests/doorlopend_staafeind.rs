@@ -76,6 +76,7 @@ fn staaf_van(
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     })
 }
 

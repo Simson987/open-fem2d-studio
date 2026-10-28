@@ -9,7 +9,7 @@ use crate::input::{
     MELDING_DOORSNEDE_STRIP, MELDING_INTERACTIE_RONDSTAAL, MELDING_INTERACTIE_STRIP,
     MELDING_KNIK_HOOFDASSEN, MELDING_KNIK_RONDSTAAL, MELDING_KNIK_STRIP,
     MELDING_KOKER_WARMVERVAARDIGD, MELDING_TREK_ALLEEN, MELDING_TREK_RONDSTAAL, MELDING_TREK_STRIP,
-    MELDING_VORM_NIET_CONTROLEERBAAR, NIET_VOLLEDIG_GETOETST, REDEN_GESLOTEN_CEL_NIET_GEDECLAREERD,
+    Draadeind, MELDING_VORM_NIET_CONTROLEERBAAR, NIET_VOLLEDIG_GETOETST, REDEN_GESLOTEN_CEL_NIET_GEDECLAREERD,
     REDEN_INTERACTIE_GEEN_DRUK, REDEN_INTERACTIE_ZONDER_KIP, REDEN_KIP_HOEKPROFIEL,
     REDEN_KIP_NIET_DUBBELSYMMETRISCH, REDEN_KIP_NVT_CHS, REDEN_KIP_NVT_RONDSTAAL, REDEN_KIP_NVT_STRIP,
     REDEN_KIP_STRIP_STERKE_AS, REDEN_KLASSE_4, TOETS_TREK_ALLEEN,
@@ -1278,7 +1278,117 @@ pub(crate) fn uc_of(c: &NamedCheck) -> f64 {
     }
 }
 
+/// Het draadeind van een staaf van massief rond staal, naar de opgegeven
+/// eindafwerking (issue #226). Gesneden: de toets van NEN-EN 1993-1-8 tabel
+/// 3.4 telt gewoon mee. Opgestuikt, gelast of geen draad: geen draadeindtoets,
+/// wel een notitie bij de trektoets (al in `checks`). Niet opgegeven: de toets
+/// als AANNAME van een gesneden draad, met een notitie; zij telt niet mee in
+/// de maatgevende UC (zie [`check_beam`], `draadeind_als_informatie`).
+fn draadeind_toets(
+    input: &BeamCheckInput,
+    d_mm: f64,
+    grade: &SteelGrade,
+    trek_state: ForceStateSnapshot,
+    checks: &mut [NamedCheck],
+) -> Option<NamedCheck> {
+    let tekst = match input.draadeind {
+        Some(Draadeind::Gesneden) => {
+            return Some(make_resistance(n_t_rd_draadeind(d_mm, grade, trek_state)))
+        }
+        None => {
+            let mut c = n_t_rd_draadeind(d_mm, grade, trek_state);
+            c.notes.insert(
+                0,
+                format!(
+                    "AANNAME: de eindafwerking is niet opgegeven (veld 'draadeind'); gerekend is een \
+                     in de staaf gesneden draad M{}. Deze toets is informatie en telt niet mee in \
+                     de maatgevende unity check. Voldoet zij niet, dan is de staaf niet volledig \
+                     getoetst: geef de eindafwerking op (gesneden, opgestuikt, gelast of geen \
+                     draad).",
+                    nl_getal(d_mm)
+                ),
+            );
+            return Some(make_resistance(c));
+        }
+        Some(Draadeind::Opgestuikt) => {
+            "Eindafwerking opgestuikte draad: de draad is groter dan de staaf, dus de \
+             spanningsdoorsnede verzwakt de staaf niet en de brutodoorsnede (6.6) is de \
+             trektoets van de staaf. De draad en de moer horen bij de aansluiting (NEN-EN \
+             1993-1-8 tabel 3.4) en zijn hier niet getoetst."
+        }
+        Some(Draadeind::Gelast) => {
+            "Eindafwerking gelast, zonder draad: geen draadeindtoets; de brutodoorsnede (6.6) is \
+             de trektoets van de staaf. De las hoort bij de aansluiting (NEN-EN 1993-1-8 4.5) en \
+             is hier niet getoetst."
+        }
+        Some(Draadeind::Geen) => {
+            "Geen draad aan de staafeinden: geen draadeindtoets; de brutodoorsnede (6.6) is de \
+             trektoets van de staaf."
+        }
+    };
+    for c in checks.iter_mut().filter(|c| c.id == TOETS_TREK) {
+        plak_notitie(c, tekst);
+    }
+    None
+}
+
+/// De reden bij een staaf die alleen op het AANGENOMEN draadeind niet zou
+/// voldoen (zie [`draadeind_toets`]).
+fn reden_draadeind_aanname(uc: f64) -> String {
+    format!(
+        "het draadeind is niet opgegeven (veld 'draadeind'); bij een in de staaf gesneden draad \
+         voldoet het niet (UC {}, NEN-EN 1993-1-8 tabel 3.4). Geef de eindafwerking op",
+        nl_getal_3(uc)
+    )
+}
+
+/// Bij massief rond zonder opgegeven eindafwerking is het draadeind
+/// informatie (issue #226): uc_max en de maatgevende toets zonder die toets,
+/// en een overschrijding daarvan maakt de staaf NIET VOLLEDIG GETOETST — geen
+/// Ok, en geen NotOk die alleen op de aanname rust.
+fn draadeind_als_informatie(mut r: BeamCheckResult) -> BeamCheckResult {
+    let Some(draad) = r.checks.iter().find(|c| c.id == TOETS_DRAADEIND) else {
+        return r;
+    };
+    let uc_draad = uc_of(draad);
+    let mut uc_max = 0.0_f64;
+    let mut maatgevend = String::new();
+    for c in r.checks.iter().filter(|c| c.id != TOETS_DRAADEIND) {
+        let uc = uc_of(c);
+        if uc > uc_max {
+            uc_max = uc;
+            maatgevend = c.id.clone();
+        }
+    }
+    if r.governing_check_id == TOETS_DRAADEIND {
+        r.governing_check_id = maatgevend;
+    }
+    r.uc_max = uc_max;
+    if uc_max > 1.0 {
+        r.status = CheckStatus::NotOk;
+    } else if uc_draad > 1.0 {
+        let reden = reden_draadeind_aanname(uc_draad);
+        r.governing_check_id = if r.governing_check_id.starts_with(NIET_VOLLEDIG_GETOETST) {
+            format!("{}; {reden}", r.governing_check_id)
+        } else {
+            format!("{NIET_VOLLEDIG_GETOETST}: {reden}")
+        };
+        r.status = CheckStatus::NotApplicable;
+    }
+    r
+}
+
 pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
+    let als_informatie = input.draadeind.is_none();
+    let r = check_beam_kern(input);
+    if als_informatie {
+        draadeind_als_informatie(r)
+    } else {
+        r
+    }
+}
+
+fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
     // 0. DE DOORBUIGINGSNOEMERS. Een noemer van 0 of kleiner geeft geen grens
     //    L/n; tot september 2026 werd dat bij klasse 'Custom' een oneindige
     //    grens met UC 0 en status Ok. Het is een invoerfout, dus de staaf
@@ -1747,7 +1857,9 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     //    daarnaast het draadeind (NEN-EN 1993-1-8 tabel 3.4).
     checks.push(make_resistance(n_t_rd(p, &grade, a_net, trek_state)));
     if let Some(d_mm) = doorsnede.rond_d_mm {
-        checks.push(make_resistance(n_t_rd_draadeind(d_mm, &grade, trek_state)));
+        if let Some(c) = draadeind_toets(&input, d_mm, &grade, trek_state, &mut checks) {
+            checks.push(c);
+        }
     }
 
     // Klasse 4 met effectieve doorsnede: vanaf hier rekenen de toetsen die van
@@ -3226,7 +3338,9 @@ fn trek_alleen_staaf(
     );
     checks.push(make_resistance(trek));
     if let Some(d_mm) = doorsnede.rond_d_mm {
-        checks.push(make_resistance(n_t_rd_draadeind(d_mm, grade, trek_state)));
+        if let Some(c) = draadeind_toets(input, d_mm, grade, trek_state, &mut checks) {
+            checks.push(c);
+        }
     }
     // De informatieve regel: de grootste drukkracht, niet getoetst.
     let druk = comp_state.forces.n_ed < 0.0;

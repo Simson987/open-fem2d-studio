@@ -61,6 +61,7 @@ fn staaf(naam: &str, grade: &str, l_m: f64, krachten: InternalForces) -> BeamChe
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     })
 }
 

@@ -2,6 +2,7 @@
 import type { ConsequenceClass } from "./ConsequenceClass";
 import type { CustomSection } from "./CustomSection";
 import type { DeflectionClass } from "./DeflectionClass";
+import type { Draadeind } from "./Draadeind";
 import type { ForcePoint } from "./ForcePoint";
 import type { LateralBracing } from "./LateralBracing";
 import type { NationaleBijlage } from "../norm/NationaleBijlage";
@@ -315,4 +316,16 @@ deflection_length_m?: number,
  * `None` of weglaten = geen as gedekt, 2·L bij een vrij eind: het gedrag
  * van vóór dit veld, en de veilige kant voor wie de berekening niet kent.
  */
-zijdelingse_knik_in_analyse?: ZijdelingseKnikInAnalyse, };
+zijdelingse_knik_in_analyse?: ZijdelingseKnikInAnalyse, 
+/**
+ * De eindafwerking van een staaf van massief rond staal (zie
+ * [`Draadeind`]); bij elke andere doorsnede zonder betekenis.
+ *
+ * `None` of weglaten = niet opgegeven: de kern rekent het draadeind dan
+ * als AANNAME van een gesneden draad, als informatie. Die toets telt
+ * niet mee in de maatgevende unity check; voldoet zij niet, dan is de
+ * staaf NIET VOLLEDIG GETOETST (nooit Ok, maar ook geen onvoorwaardelijke
+ * NotOk). Tot oktober 2026 was het draadeind altijd maatgevend, ook bij
+ * een staaf zonder gesneden draad (issue #226).
+ */
+draadeind?: Draadeind, };
