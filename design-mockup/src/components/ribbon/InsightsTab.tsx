@@ -75,17 +75,6 @@ export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExpo
           </RibbonGroup>
         )}
 
-        {onOpenMasonryCheck && (
-          <RibbonGroup label={t("insights.toolsGroup")}>
-            <RibbonButton
-              icon={solverInfoIcon}
-              label={t("insights.masonryCheck")}
-              size="large"
-              onClick={onOpenMasonryCheck}
-            />
-          </RibbonGroup>
-        )}
-
         {/* Matrices */}
         <RibbonGroup label={t("insights.matrices")}>
           <RibbonButton
@@ -143,6 +132,18 @@ export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExpo
             />
           </RibbonButtonStack>
         </RibbonGroup>
+
+        {/* Achteraan, zodat de bestaande groepen op hun plek blijven (issue #98). */}
+        {onOpenMasonryCheck && (
+          <RibbonGroup label={t("insights.toolsGroup")}>
+            <RibbonButton
+              icon={solverInfoIcon}
+              label={t("insights.masonryCheck")}
+              size="large"
+              onClick={onOpenMasonryCheck}
+            />
+          </RibbonGroup>
+        )}
       </div>
     </div>
   );
