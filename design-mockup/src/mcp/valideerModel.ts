@@ -32,12 +32,15 @@
  *
  * WAT DEZE VALIDATIE NIET CLAIMT
  * `ok: true` betekent "geen van de bekende valkuilen aangetroffen", niet "dit
- * model is oplosbaar". De mechanismecontrole toetst NOODZAKELIJKE voorwaarden
- * (er moet in x én z gesteund zijn, rotatie moet verhinderd zijn, elk
- * losstaand constructiedeel moet ergens steunen). Dat een stelsel niet
- * singulier is, bewijst alleen de ontbinding zelf — en die hoort in de solver,
- * niet hier. Een tweede, benaderende stelselcontrole zou een tweede antwoord
- * op dezelfde vraag zijn, en dat is precies wat dit ontwerp vermijdt.
+ * model is oplosbaar". De mechanismecontrole toetst eerst NOODZAKELIJKE
+ * voorwaarden (er moet in x én z gesteund zijn, rotatie moet verhinderd zijn,
+ * elk losstaand constructiedeel moet ergens steunen). Dat een stelsel niet
+ * singulier is, bewijst alleen de ontbinding zelf. Die wordt daarom niet
+ * benaderend nageschreven, maar sinds issue #248 voor modellen zonder platen
+ * aan de rekenkern zelf gevraagd (`zoekMechanisme`: dezelfde mesh, matrix,
+ * randvoorwaarden en oplosser als de berekening, zonder last). Een tweede,
+ * eigen stelselcontrole zou een tweede antwoord op dezelfde vraag zijn, en dat
+ * is precies wat dit ontwerp vermijdt.
  *
  * GEEN TWEEDE WAARHEID
  * De controle "valt deze last stilzwijgend weg?" wordt niet nageschreven maar
@@ -64,6 +67,7 @@ import {
   lastWaardeFout, zoekDubbeleKnopen, zoekStaafeindenBijPlaatrand, type LastWaardeVelden,
 } from "../lib/modelControle";
 import { bouwMultiInput, type FemModelInvoer } from "../lib/modelNaarSolverInput";
+import { zoekMechanisme } from "../components/fem/solver/engine";
 import { bepaalVerloop, resolveSection } from "../lib/sectionResolver";
 import { keurPlaatMateriaal, plaatMateriaalSoort } from "../lib/plaatMateriaal";
 import { plaatPlooiGeometrieFout } from "../lib/plaatPlooi";
@@ -1819,6 +1823,35 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
           "staafeinden samen en geen oplegging houdt de draaiing tegen. Een koppel kan daar " +
           "nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star " +
           "aansluit, of maak één staafeinde op deze knoop star.",
+      );
+    }
+  }
+
+  // KINEMATISCHE CONTROLE (issue #248). De voorwaarden hierboven zijn
+  // noodzakelijk, niet voldoende: een rechthoekig raam met alle staafeinden
+  // scharnierend is gesteund in x, z en tegen rotatie van het geheel, en kan
+  // toch als parallellogram scheefvallen. Of het stelsel singulier is, vraagt
+  // deze controle aan de rekenkern zelf (`zoekMechanisme` in engine.ts:
+  // dezelfde mesh, stijfheidsmatrix, randvoorwaarden en stelseloplosser als de
+  // berekening, met een nul-lastvector). Het oordeel sluit zo aan op de
+  // berekening: wat hier als mechanisme gemeld wordt, weigert de solve met
+  // dezelfde melding, en een stabiel model (bedding, veren, scharnierend
+  // vakwerk met diagonaal) wordt niet onterecht geweigerd.
+  //
+  // Alleen als het model verder klopt (anders is de mesh niet betrouwbaar op
+  // te bouwen) en zonder platen (het gemengde pad wordt niet nagebootst).
+  // Niet in de poort vóór `solve`/`check` (`alleenModel`): daar doet de
+  // rekenkern dezelfde controle zelf, met dezelfde melding.
+  if (errors.length === 0 && !opties.alleenModel && plates.length === 0 && supports.length > 0) {
+    let melding: string | null;
+    try {
+      melding = zoekMechanisme(bouwMultiInput(alsModelInvoer(m)));
+    } catch (e) {
+      melding = `Het rekenmodel is niet op te bouwen: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    if (melding) {
+      errors.push(
+        `Het model is een mechanisme en wordt niet doorgerekend. ${melding}`,
       );
     }
   }

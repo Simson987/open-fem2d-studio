@@ -19,7 +19,7 @@
  * NO FEM math itself — that all sits in `src/core/`.
  */
 import { Mesh } from "../../../core/fem/Mesh";
-import { solveNonlinear, SingulierStelselFout, type NonlinearSolverOptions } from "../../../core/solver/NonlinearSolver";
+import { solveNonlinear, SingulierStelselFout, zoekFrameMechanisme, type NonlinearSolverOptions } from "../../../core/solver/NonlinearSolver";
 import { assembleGlobalStiffnessMatrix, buildNodeIdToIndex, getDofsPerNode, PlaatElementFout } from "../../../core/solver/Assembler";
 import { calculateBeamLength, calculateBeamAngle, calculateBeamLocalStiffness } from "../../../core/fem/Beam";
 import { generatePlateRegionMesh } from "../../../core/fem/PlateRegion";
@@ -2286,6 +2286,27 @@ function eisEindigeUitkomst(r: SolverResult, wat: string): SolverResult {
 }
 
 // ── Public engine functions ─────────────────────────────────────────────────
+
+/**
+ * MECHANISMECONTROLE VOOR DE VALIDATIE (issue #248). Bouwt de rekenmesh met
+ * dezelfde `buildMesh` als elke berekening (zonder lasten) en vraagt de kern
+ * of het raamwerkstelsel singulier is (`zoekFrameMechanisme`). Geeft de
+ * melding terug die de berekening zou geven, met het knoopnummer uit het
+ * model, of `null` als het stelsel oplosbaar is.
+ *
+ * Alleen voor modellen zonder platen: het gemengde pad (staven + schijven)
+ * wordt hier niet nagebootst; daar geeft deze functie `null` en blijft het
+ * oordeel aan de berekening zelf.
+ */
+export function zoekMechanisme(input: SolverInput | MultiInput): string | null {
+  const { mesh, nodeIdMap, plateInfo } = buildMesh(input, () => 0);
+  if (plateInfo.length > 0) return null;
+  const fout = zoekFrameMechanisme(mesh);
+  if (!fout) return null;
+  const vertaald = metKnoopnummer(fout, nodeIdMap, plateInfo);
+  return vertaald instanceof Error ? vertaald.message : String(vertaald);
+}
+
 
 export function solve(input: SolverInput): SolverResult {
   const { mesh, nodeIdMap, beamIdMap, plateInfo, beamSegments, segmentUitvoer, randKoppelingen } = buildMesh(input);

@@ -983,6 +983,41 @@ export function applyBoundaryConditions(
 }
 
 /**
+ * MECHANISMECONTROLE ZONDER LAST (issue #248) — is het raamwerkstelsel van
+ * deze mesh kinematisch bepaald? Geeft de singulariteit terug zoals de
+ * berekening haar zou melden, of `null` als het stelsel oplosbaar is.
+ *
+ * WAAROM HIER, EN NIET IN DE VALIDATIE NAGESCHREVEN. Een rechthoekig raam met
+ * alle staafeinden scharnierend is een parallellogrammechanisme. De
+ * modelcontrole van `validate_fem_model` keek alleen naar NOODZAKELIJKE
+ * voorwaarden (x, z en rotatie ergens gesteund) en keurde het goed, terwijl de
+ * berekening het daarna weigerde ("knoop 3 kan vrij horizontaal verschuiven").
+ * Een tweede, eigen rangtoets in de validatie zou een tweede antwoord op
+ * dezelfde vraag zijn. Deze functie doet daarom PRECIES wat het lineaire
+ * raamwerkpad van `solveNonlinear` doet — dezelfde stijfheidsmatrix
+ * (scharnieren, eindveren, bedding, opleggingsveren), dezelfde randvoorwaarden
+ * (inclusief het vastzetten van onbepaalde knoopdraaiingen,
+ * `vrijeKnoopdraaiingen`) en dezelfde stelseloplosser — alleen met een
+ * nul-lastvector. Of het stelsel singulier is, hangt niet van de last af; zo
+ * keurt de validatie per definitie hetzelfde als de berekening.
+ *
+ * Alleen het raamwerkpad (staven zonder schijven). Het gemengde pad met
+ * schijven heeft een eigen opbouw en wordt hier niet nagebootst.
+ */
+export function zoekFrameMechanisme(mesh: Mesh): SingulierStelselFout | null {
+  const K = assembleGlobalStiffnessWithGeometric(mesh, new Map(), false);
+  const F = new Array<number>(K.rows).fill(0);
+  const { K: Kbc, F: Fbc } = applyBoundaryConditions(K, F, mesh);
+  try {
+    losFrameStelselOp(Kbc, Fbc, mesh);
+    return null;
+  } catch (e) {
+    if (e instanceof SingulierStelselFout) return e;
+    throw e;
+  }
+}
+
+/**
  * Calculate internal forces for all beam elements
  */
 function calculateAllInternalForces(

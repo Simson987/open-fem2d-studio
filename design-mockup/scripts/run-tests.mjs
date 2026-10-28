@@ -421,6 +421,13 @@ const BUNDEL_TESTS = new Set([
   "vakwerk-scharnieren",
   "veldmaximum",
   "veldzakking",
+  // Modelcontrole, invoer en rekenroute (controle 26 oktober 2026): de
+  // mechanismecontrole van `validate` vraagt de kern (#248), opleggingen per
+  // vrijheidsgraad samenvoegen (#223), veren met k <= 0 weigeren (#222) en
+  // bedding als steun (#246). Praten met `sidecar`, `valideerModel` en
+  // `engine` — alles in de barrel. Horen óók tegen de bundel: de MCP-weg
+  // valideert en rekent met de bundel.
+  "mechanisme-raam",
   // Veldsgewijze plaatsing van veranderlijke vloerbelasting (#219): splitsen,
   // veldpatronen, omhullende en staalbouwer — alles in de barrel — en de
   // gebouwde MCP-server. Hoort ook tegen de bundel: de sidecar maakt de

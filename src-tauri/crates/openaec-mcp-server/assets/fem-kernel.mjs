@@ -3926,6 +3926,18 @@ function applyBoundaryConditions(K, F, mesh) {
   }
   return { K: Kmod, F: Fmod, fixedDofs };
 }
+function zoekFrameMechanisme(mesh) {
+  const K = assembleGlobalStiffnessWithGeometric(mesh, /* @__PURE__ */ new Map(), false);
+  const F = new Array(K.rows).fill(0);
+  const { K: Kbc, F: Fbc } = applyBoundaryConditions(K, F, mesh);
+  try {
+    losFrameStelselOp(Kbc, Fbc, mesh);
+    return null;
+  } catch (e) {
+    if (e instanceof SingulierStelselFout) return e;
+    throw e;
+  }
+}
 function calculateAllInternalForces(mesh, displacements) {
   const beamForces = /* @__PURE__ */ new Map();
   const axialForces = /* @__PURE__ */ new Map();
@@ -20810,6 +20822,14 @@ function eisEindigeUitkomst(r, wat) {
     }
   }
   return r;
+}
+function zoekMechanisme(input) {
+  const { mesh, nodeIdMap, plateInfo } = buildMesh(input, () => 0);
+  if (plateInfo.length > 0) return null;
+  const fout = zoekFrameMechanisme(mesh);
+  if (!fout) return null;
+  const vertaald = metKnoopnummer(fout, nodeIdMap, plateInfo);
+  return vertaald instanceof Error ? vertaald.message : String(vertaald);
 }
 function solve(input) {
   const { mesh, nodeIdMap, beamIdMap, plateInfo, beamSegments, segmentUitvoer, randKoppelingen } = buildMesh(input);
@@ -42405,6 +42425,7 @@ async function opExtensieImporteren(payload) {
 // src/mcp/valideerModel.ts
 init_femTypes();
 init_PlaatMesher();
+init_engine();
 init_sectionResolver();
 init_plaatMateriaal();
 init_plaatPlooi();
@@ -43804,6 +43825,19 @@ function valideerModel(rauw, opties = {}) {
     if (l.type === "pointMoment" && typeof l.my === "number" && l.my !== 0 && typeof l.nodeId === "number" && vrijDraaiendeKnopen.has(l.nodeId)) {
       errors.push(
         `Koppel ${id2} op knoop ${l.nodeId}: op deze knoop komen alleen scharnierende staafeinden samen en geen oplegging houdt de draaiing tegen. Een koppel kan daar nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star aansluit, of maak \xE9\xE9n staafeinde op deze knoop star.`
+      );
+    }
+  }
+  if (errors.length === 0 && !opties.alleenModel && plates.length === 0 && supports.length > 0) {
+    let melding;
+    try {
+      melding = zoekMechanisme(bouwMultiInput(alsModelInvoer(m)));
+    } catch (e) {
+      melding = `Het rekenmodel is niet op te bouwen: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    if (melding) {
+      errors.push(
+        `Het model is een mechanisme en wordt niet doorgerekend. ${melding}`
       );
     }
   }
@@ -46194,6 +46228,7 @@ export {
   zijdelingseKnikInVlakModel,
   zijdelingseVerplaatsingMm,
   zijdenInWereldtermen,
+  zoekMechanisme,
   zoekPuntenOpLijnstuk,
   zonderBgtEindtoestand,
   zorgVoorBelastinggevallen

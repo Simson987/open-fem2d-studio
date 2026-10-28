@@ -307,10 +307,16 @@ log("\n[5] Constructieve controles");
   const losseKnoop = PORTAAL();
   losseKnoop.nodes.push({ id: 5, x: 3000, z: 6000 });
   const u7 = valideerModel(losseKnoop);
+  // Tot issue #248 was dit alleen een waarschuwing (ok: true), terwijl de
+  // solve hetzelfde raamwerk weigerde ("knoop 5 … kan vrij horizontaal
+  // verschuiven … een losse knoop"). Sinds de validatie de kern zelf vraagt
+  // of het stelsel singulier is, sluit het oordeel daarop aan: een fout met
+  // dezelfde melding, en de waarschuwing blijft erbij staan.
   ok(
-    "een losse knoop is een waarschuwing, geen fout",
-    u7.ok === true && noemt(u7.warnings, "Knoop 5"),
-    u7.warnings.join(" | "),
+    "een losse knoop in een raamwerk: waarschuwing én de mechanismefout van de solve",
+    u7.ok === false && noemt(u7.warnings, "Knoop 5")
+      && noemt(u7.errors, "knoop 5 op (3000, 6000) mm kan vrij horizontaal verschuiven"),
+    [...u7.errors, ...u7.warnings].join(" | "),
   );
 
   const lastOpLosseKnoop = PORTAAL();
