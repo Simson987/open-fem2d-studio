@@ -6,8 +6,13 @@
 //! vrijheidsgraden weigert de factorisatie dan. Deze module gebruikt dezelfde
 //! publieke bouwstenen van de kern (vrijheidsgraadnummering, sparse
 //! assemblage, reductie voor koppelingen, sparse Cholesky, eigenwaardesolver
-//! en het lineaire rekenpad) en factoriseert elke iteratie opnieuw, met een
-//! verse symbolische analyse.
+//! en het lineaire rekenpad) en factoriseert elke iteratie numeriek opnieuw.
+//! De symbolische analyse wordt sinds #213 per P-Δ-som één keer gemaakt, op
+//! een VAST patroon van K + K_G (alle posities van K en van de 12×12-blokken
+//! van K_G, ook waar de waarde nul is: `TangentPatroon`), en daarna
+//! hergebruikt zolang het patroon gelijk is (`Symbolisch`). Tot #213 viel een
+//! K_G-term die precies nul werd uit het patroon, verschoof dat patroon en
+//! volgde elke iteratie een verse analyse.
 //!
 //! Formulering:
 //! - K is de lineaire stijfheid van de kern, inclusief oplegveren en de
@@ -50,7 +55,7 @@ use rekenkern::{
     element::{compute_local_axes_3d, frame_transform_3d},
     linalg::{
         lanczos_buckling_eigen_sparse, numeric_cholesky, sparse_cholesky_solve, symbolic_cholesky,
-        transform_displacement, transform_stiffness, CscMatrix, NumericCholesky,
+        transform_displacement, transform_stiffness, CscMatrix, NumericCholesky, SymbolicCholesky,
     },
     solver::{
         assembly::assemble_sparse_3d, constraints::FreeConstraintSystem, dof::DofNumbering,
@@ -279,9 +284,14 @@ impl Stelsel {
         }
     }
 
-    /// Eén tangentoplossing met een verse factorisatie. `None` = K + K_G niet positief definiet.
-    fn los_tangent(&self, kg: &[Vec<f64>]) -> Result<Option<Vec<f64>>, String> {
-        let k_t = CscMatrix::linear_combination(1.0, &self.k_ff, 1.0, &self.kg_vrij(kg));
+    /// Eén tangentoplossing met een verse numerieke factorisatie. `None` = K + K_G
+    /// niet positief definiet. De symbolische analyse (ordening, eliminatieboom,
+    /// structuur van L) hangt alleen af van het patroon van K + K_G; is dat
+    /// patroon gelijk aan dat van de vorige iteratie, dan wordt zij hergebruikt
+    /// (`Symbolisch`, issue #213). Dezelfde symbolische analyse op hetzelfde
+    /// patroon geeft dezelfde numerieke factor, tot op het laatste bit.
+    fn los_tangent(&self, kg: &[Vec<f64>], symbolisch: &mut Symbolisch) -> Result<Option<Vec<f64>>, String> {
+        let k_t = symbolisch.tangent(self).met(kg);
         let mut rechts = self.f_f.clone();
         if self.heeft_opgelegd {
             let kg_ur = self.kg_maal(kg, &self.u_opgelegd);
@@ -291,7 +301,7 @@ impl Stelsel {
         }
         let k_s = self.reduceer_matrix(&k_t);
         let f_s = self.reduceer_vector(&rechts);
-        let Some(factor) = factoriseer(&k_s)? else { return Ok(None) };
+        let Some(factor) = symbolisch.factoriseer(&k_s)? else { return Ok(None) };
         let q = sparse_cholesky_solve(&factor, &f_s);
         let u_f = self.breid_uit(&q);
         if u_f.iter().any(|waarde| !waarde.is_finite()) {
@@ -437,6 +447,111 @@ impl Stelsel {
             })
             .collect();
         (BucklingSummary::Available { modes, members }, nulmode)
+    }
+}
+
+/// K + K_G op het vrije blok (onderste driehoek) met een VAST patroon (issue
+/// #213): de posities van K_ff en van elk 12×12-blok van K_G op vrije
+/// vrijheidsgraden, ook waar de waarde nul is. `linear_combination` met
+/// `kg_vrij` liet een term die precies nul was weg; dan verschoof het patroon
+/// van iteratie tot iteratie en moest de symbolische analyse telkens opnieuw.
+/// Een expliciete nul verandert niets aan de matrix. Het patroon en de plek
+/// van elke K_G-term worden één keer bepaald; per iteratie is het daarna een
+/// kopie van K plus het optellen van de elementtermen.
+struct TangentPatroon {
+    /// Het patroon met de waarden van K_ff (nul waar alleen K_G komt).
+    sjabloon: CscMatrix,
+    /// Per staaf: (index i·12 + j in de elementmatrix, plek in `values`).
+    plek: Vec<Vec<(usize, usize)>>,
+}
+
+impl TangentPatroon {
+    fn bouw(stelsel: &Stelsel) -> Self {
+        let nf = stelsel.nf;
+        let mut per_kolom: Vec<Vec<usize>> = vec![Vec::new(); nf];
+        for j in 0..nf {
+            per_kolom[j].extend_from_slice(&stelsel.k_ff.row_idx[stelsel.k_ff.col_ptr[j]..stelsel.k_ff.col_ptr[j + 1]]);
+        }
+        let posities = |staaf: &Staaf| -> Vec<(usize, usize, usize)> {
+            let mut uit = Vec::new();
+            for i in 0..12 {
+                for j in 0..12 {
+                    let (gi, gj) = (staaf.dofs[i], staaf.dofs[j]);
+                    if gi < nf && gj < nf && gj <= gi { uit.push((i * 12 + j, gi, gj)); }
+                }
+            }
+            uit
+        };
+        for staaf in &stelsel.staven {
+            for (_, gi, gj) in posities(staaf) { per_kolom[gj].push(gi); }
+        }
+        let mut col_ptr = vec![0usize; nf + 1];
+        let mut row_idx = Vec::new();
+        for (j, rijen) in per_kolom.iter_mut().enumerate() {
+            rijen.sort_unstable();
+            rijen.dedup();
+            row_idx.extend_from_slice(rijen);
+            col_ptr[j + 1] = row_idx.len();
+        }
+        let plek_van = |gi: usize, gj: usize| -> usize {
+            let begin = col_ptr[gj];
+            begin + row_idx[begin..col_ptr[gj + 1]].binary_search(&gi).expect("positie in het vaste patroon")
+        };
+        let mut values = vec![0.0; row_idx.len()];
+        for j in 0..nf {
+            for p in stelsel.k_ff.col_ptr[j]..stelsel.k_ff.col_ptr[j + 1] {
+                values[plek_van(stelsel.k_ff.row_idx[p], j)] = stelsel.k_ff.values[p];
+            }
+        }
+        let plek = stelsel.staven.iter()
+            .map(|staaf| posities(staaf).into_iter().map(|(index, gi, gj)| (index, plek_van(gi, gj))).collect())
+            .collect();
+        Self { sjabloon: CscMatrix { n: nf, col_ptr, row_idx, values }, plek }
+    }
+
+    /// K + K_G voor de element-K_G's `kg` (globaal, per staaf).
+    fn met(&self, kg: &[Vec<f64>]) -> CscMatrix {
+        let mut k_t = self.sjabloon.clone();
+        for (plekken, matrix) in self.plek.iter().zip(kg) {
+            for &(index, p) in plekken { k_t.values[p] += matrix[index]; }
+        }
+        k_t
+    }
+}
+
+/// De symbolische analyse van de vorige P-Δ-iteratie, met het patroon waarvoor
+/// zij geldt (issue #213). Het patroon van K + K_G verschuift soms (een
+/// K_G-term die precies nul wordt valt weg), dus hergebruik alleen bij een
+/// identiek patroon; anders een verse analyse, zoals vóór #213.
+#[derive(Default)]
+struct Symbolisch {
+    /// Het vaste patroon van K + K_G, één keer gebouwd.
+    tangent: Option<TangentPatroon>,
+    patroon: Option<(usize, Vec<usize>, Vec<usize>, Rc<SymbolicCholesky>)>,
+    /// Hoe vaak de analyse is hergebruikt en hoe vaak opnieuw gemaakt.
+    hergebruikt: usize,
+    nieuw: usize,
+}
+
+impl Symbolisch {
+    fn tangent(&mut self, stelsel: &Stelsel) -> &TangentPatroon {
+        self.tangent.get_or_insert_with(|| TangentPatroon::bouw(stelsel))
+    }
+
+    fn factoriseer(&mut self, matrix: &CscMatrix) -> Result<Option<NumericCholesky>, String> {
+        let gelijk = self.patroon.as_ref().is_some_and(|(n, kolommen, rijen, _)|
+            *n == matrix.n && kolommen == &matrix.col_ptr && rijen == &matrix.row_idx);
+        if !gelijk {
+            let analyse = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| symbolic_cholesky(matrix)))
+                .map_err(|paniek| format!("de sparse factorisatie brak af: {}", paniek_tekst(paniek)))?;
+            self.patroon = Some((matrix.n, matrix.col_ptr.clone(), matrix.row_idx.clone(), Rc::new(analyse)));
+            self.nieuw += 1;
+        } else {
+            self.hergebruikt += 1;
+        }
+        let analyse = Rc::clone(&self.patroon.as_ref().expect("zojuist gezet").3);
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| numeric_cholesky(&analyse, matrix)))
+            .map_err(|paniek| format!("de sparse factorisatie brak af: {}", paniek_tekst(paniek)))
     }
 }
 
@@ -825,7 +940,8 @@ fn is_nul(results: &AnalysisResults3D) -> bool {
         .all(|waarde| waarde.abs() <= 1e-20)
 }
 
-/// Directe tweede orde met een verse factorisatie per iteratie.
+/// Directe tweede orde met een verse numerieke factorisatie per iteratie (de
+/// symbolische analyse op het vaste patroon van K + K_G één keer, #213).
 ///
 /// `lineair` is de eerste-ordeoplossing van de kern voor dezelfde invoer.
 pub(crate) fn los_op(
@@ -903,11 +1019,12 @@ pub(crate) fn los_op(
     let mut n_laatst = Vec::new();
     let mut converged = false;
     let mut iterations = 0;
+    let mut symbolisch = Symbolisch::default();
     for iteratie in 1..=max_iterations {
         iterations = iteratie;
         let normaalkrachten = stelsel.normaalkrachten(&u);
         let kg = stelsel.geometrisch(&normaalkrachten);
-        let Some(u_f) = stelsel.los_tangent(&kg)? else {
+        let Some(u_f) = stelsel.los_tangent(&kg, &mut symbolisch)? else {
             if nulmode {
                 return Err(format!(
                     "tweede-orde 3D-berekening wijst op instabiliteit: de tangentiële stijfheid K + K_G is in iteratie {iteratie} niet positief definiet. Het model heeft een beweging zonder stijfheid (knikfactor vrijwel 0) die onder elke drukkracht instabiel is, bijvoorbeeld een raam met scharnierende voeten dat buiten zijn vlak kan omvallen. De eerste orde laat die beweging ongemoeid omdat de belasting er loodrecht op staat. Voeg opleggingen, verbanden of rotatieblokkeringen toe die deze beweging tegenhouden.",
@@ -980,7 +1097,8 @@ pub(crate) fn los_op(
         summary: SecondOrderSummary { iterations, converged, stable: true, max_amplification },
         buckling,
         diagnostics: vec![format!(
-            "Tweede orde: {iterations} iteraties met een verse factorisatie per iteratie; relatieve verplaatsingswijziging onder {tolerance:.0e}.",
+            "Tweede orde: {iterations} iteraties met een verse numerieke factorisatie per iteratie (symbolische analyse {} keer gemaakt, {} keer hergebruikt: het patroon van K + K_G is vast); relatieve verplaatsingswijziging onder {tolerance:.0e}.",
+            symbolisch.nieuw, symbolisch.hergebruikt,
         )],
     })
 }

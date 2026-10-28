@@ -1081,3 +1081,53 @@ fn field_moment_of_a_two_span_beam_is_9ql2_over_128() {
         close(punt.t * 5.0, x_veld, 1e-9, 0.0);
     }
 }
+
+/// Issue #213: de P-Δ-iteratie hergebruikt de symbolische analyse van
+/// K + K_G (vast patroon) en blijft de gesloten oplossing volgen.
+///
+/// Uitkragende kolom L = 4 m (8 delen), E = 210 000 MPa, kop: P = 100 kN druk
+/// en H = 1 kN in x. Gesloten oplossing (tweede orde, exact):
+///   δ = H/(P·k)·(tan(kL) − kL), k = √(P/EI).
+/// Met EI om de buigas van ux: EI = 2,1·10⁸ kN/m² · I. I volgt uit de
+/// lineaire zakking H·L³/(3EI), zodat de test niet afhangt van welke lokale
+/// as de kern voor een staande staaf kiest.
+#[test]
+fn pdelta_hergebruikt_de_symbolische_analyse_en_volgt_de_gesloten_oplossing() {
+    let n = 8usize;
+    let length: f64 = 4.0;
+    let mut nodes = Vec::new();
+    let mut members = Vec::new();
+    for index in 0..=n {
+        nodes.push(Node3D { id: index + 1, x: 0.0, y: 0.0, z: index as f64 * length / n as f64 });
+        if index > 0 { members.push(member(index, index, index + 1)); }
+    }
+    let make = |p: f64, analysis: AnalysisKind| {
+        let mut value = request(
+            nodes.clone(), members.clone(), vec![fixed(1)],
+            vec![NodalLoad3D { id: 1, node_id: n + 1, fx: 1.0, fy: 0.0, fz: -p, mx: 0.0, my: 0.0, mz: 0.0 }],
+        );
+        value.analysis = analysis;
+        value
+    };
+    let tip_x = |result: &open_fem_3d::SolveResult3D| result.displacements.iter()
+        .find(|value| value.node_id == n + 1).unwrap().ux;
+    let e = 210_000.0e3;
+    let lineair = tip_x(&solve(make(0.0, AnalysisKind::Linear)).unwrap());
+    let ei = length.powi(3) / (3.0 * lineair);
+    let i = ei / e;
+    assert!((i - 8e-6).abs() < 1e-12 || (i - 12e-6).abs() < 1e-12, "I = {i}");
+    let p = 100.0;
+    let uit = solve(make(p, AnalysisKind::PDelta)).unwrap();
+    let k = (p / ei).sqrt();
+    let exact = 1.0 / (p * k) * ((k * length).tan() - k * length);
+    let delta = tip_x(&uit);
+    assert!((delta - exact).abs() <= 5e-3 * exact, "δ = {delta}, gesloten oplossing {exact}");
+    let melding = uit.diagnostics.iter().find(|d| d.starts_with("Tweede orde:")).expect("tweede-ordemelding");
+    let iteraties = uit.second_order.as_ref().unwrap().iterations;
+    assert!(iteraties >= 2, "{melding}");
+    assert!(
+        melding.contains("symbolische analyse 1 keer gemaakt")
+            && melding.contains(&format!("{} keer hergebruikt", iteraties - 1)),
+        "{melding}"
+    );
+}
