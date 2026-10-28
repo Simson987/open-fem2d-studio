@@ -41,5 +41,6 @@ spanning-check = { path = "../spanning-check" }
 aluminium-check = { path = "../aluminium-check" }
 metselwerk-check = { path = "../metselwerk-check" }
 koudgevormd-check = { path = "../koudgevormd-check" }
+natuursteen-check = { path = "../natuursteen-check" }
 plaat-check = { path = "../plaat-check" }
 nen-en-1993-1-8-las = { path = "../nen-en-1993-1-8-las" }

@@ -337,3 +337,56 @@ fn invoer_is_strikt() {
     v["geometrie"]["t_mn"] = serde_json::json!(1.0);
     assert!(serde_json::from_value::<MetselwerkWandInput>(v).is_err());
 }
+
+// ── Natuursteenmetselwerk (issue #99) ───────────────────────────────────────
+
+/// Natuursteen (EN 771-6) in algemene mortel, groep 1 (§3.1.1):
+/// f_b = 40 N/mm² (uit de opgave), f_m = 10 N/mm², K = 0,45 en γ_M = 2,0
+/// (TESTWAARDEN, geen NB). α = 0,7, β = 0,3 (§3.6.1.2):
+/// f_k = 0,45 · 40^0,7 · 10^0,3 = 0,45 · 13,2264 · 1,99526 = 11,8756 N/mm²;
+/// f_d = 11,8756 / 2,0 = 5,9378 N/mm².
+fn natuursteenwand() -> MetselwerkWandInput {
+    let mut w = wand();
+    w.naam = "natuursteen 120".into();
+    w.materiaal.steensoort = Steensoort::Natuursteen;
+    w.materiaal.steengroep = Steengroep::Groep1;
+    w.materiaal.mortel = Mortelsoort::Algemeen;
+    w.materiaal.f_b_mpa = 40.0;
+    w.materiaal.f_m_mpa = Some(10.0);
+    w.materiaal.k = nw(0.45);
+    w.materiaal.gamma_m = nw(2.0);
+    w
+}
+
+#[test]
+fn natuursteen_groep_1_algemene_mortel() {
+    let r = check_metselwerk_wall(&natuursteenwand());
+    let s = r.sterkte.as_ref().expect("sterkte");
+    assert_eq!((s.alpha, s.beta), (0.7, 0.3));
+    assert_relative_eq!(40f64.powf(0.7), 13.2264, max_relative = 1e-5);
+    assert_relative_eq!(s.f_k_mpa, 0.45 * 40f64.powf(0.7) * 10f64.powf(0.3), max_relative = 1e-12);
+    assert_relative_eq!(s.f_k_mpa, 11.87557, max_relative = 1e-6);
+    assert_relative_eq!(s.f_d_mpa, 5.937786, max_relative = 1e-6);
+    assert!(r.notes.iter().any(|n| n.contains("EN 771-6") && n.contains("f_b")), "{:?}", r.notes);
+    // Boven: zelfde excentriciteit als de kalkzandsteenwand, Φ = 0,78256:
+    // N_Rd = 0,78256 · 120 · 5,93779 = 557,59 kN/m.
+    let phi = 1.0 - 2.0 * (0.6 / 60.0 * 1000.0 + 1370.8304 / 450.0) / 120.0;
+    assert_relative_eq!(check(&r, "druk_boven").uc.as_ref().unwrap().rd, phi * 120.0 * 5.937786, max_relative = 1e-6);
+    assert_eq!(r.status, CheckStatus::Ok, "{:?}", r.niet_getoetst);
+}
+
+/// Natuursteen in een andere groep dan 1 is een invoerfout (§3.1.1); lijmmortel
+/// met natuursteen valt buiten §3.6.1.2. Beide: niet getoetst, nooit Ok.
+#[test]
+fn natuursteen_buiten_groep_1_of_in_lijmmortel_is_niet_getoetst() {
+    let mut w = natuursteenwand();
+    w.materiaal.steengroep = Steengroep::Groep2;
+    let r = check_metselwerk_wall(&w);
+    assert_eq!(r.status, CheckStatus::NotApplicable);
+    assert!(r.niet_getoetst[0].contains("§3.1.1"), "{:?}", r.niet_getoetst);
+    let mut w = natuursteenwand();
+    w.materiaal.mortel = Mortelsoort::Lijm;
+    let r = check_metselwerk_wall(&w);
+    assert_eq!(r.status, CheckStatus::NotApplicable);
+    assert!(r.niet_getoetst[0].contains("lijmmortel"), "{:?}", r.niet_getoetst);
+}

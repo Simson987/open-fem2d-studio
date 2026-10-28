@@ -119,6 +119,34 @@ pub fn f_k(k: f64, f_b: f64, f_m: f64, alpha: f64, beta: f64) -> f64 {
     k * f_b.powf(alpha) * fm_term
 }
 
+/// Natuursteen (EN 771-6) als metselsteen (issue #99).
+///
+/// NEN-EN 1996-1-1 §3.1.1 deelt kunststeen, cellenbeton en gezaagde
+/// natuursteen in bij groep 1; tabel 3.1 (holtepercentages) geldt niet voor
+/// natuursteen. Een andere groep is daarom een invoerfout: dan zou β bij een
+/// geconcentreerde last (§6.1.3) en de keuze van `K` (tabel 3.3: natuursteen
+/// alleen in groep 1) niet kloppen. `Err` met reden, zodat de toets "niet
+/// getoetst" meldt in plaats van te rekenen.
+pub fn controleer_natuursteen(groep: Steengroep) -> Result<(), String> {
+    if groep == Steengroep::Groep1 {
+        Ok(())
+    } else {
+        Err(format!(
+            "natuursteen (EN 771-6) hoort volgens §3.1.1 bij groep 1; opgegeven is {groep:?}. \
+             Kies Groep1 (niet getoetst)"
+        ))
+    }
+}
+
+/// Toelichting bij f_b van natuursteen: de genormaliseerde gemiddelde
+/// druksterkte (§3.1.2.1) volgt uit de opgegeven druksterkte (EN 771-6,
+/// beproefd volgens EN 1926) met de vormfactor van EN 772-1 bijlage A. Die
+/// omrekening gebeurt NIET in de toets: `f_b` is invoer uit de opgave.
+pub const TOELICHTING_FB_NATUURSTEEN: &str =
+    "Natuursteen (EN 771-6): f_b is de genormaliseerde gemiddelde druksterkte (§3.1.2.1) uit de opgave van de \
+     producent (druksterkte volgens EN 1926, omgerekend met de vormfactor van EN 772-1 bijlage A); de toets rekent \
+     niet om en neemt f_b over zoals opgegeven. Groep 1 (§3.1.1).";
+
 /// Factor op `K` bij een langsvoeg (een mortelvoeg evenwijdig aan het
 /// wandvlak over (een deel van) de wandlengte): 0,8 (§3.6.1.2).
 pub const FACTOR_LANGSVOEG: f64 = 0.8;

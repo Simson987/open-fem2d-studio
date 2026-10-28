@@ -82,6 +82,9 @@ metselwerk-check = { path = "../metselwerk-check" }
 # `list_koudgevormd_staalsoorten`, dezelfde functies als het Tauri-command en de toetsbrug.
 koudgevormd-check = { path = "../koudgevormd-check" }
 nen-en-1993-1-3 = { path = "../nen-en-1993-1-3" }
+# Natuursteen (issue #99): `check_natural_stone_elements`, dezelfde functie als
+# het Tauri-command en de toetsbrug.
+natuursteen-check = { path = "../natuursteen-check" }
 nen-en-1999-1-1 = { path = "../nen-en-1999-1-1" }
 # Ruimtelijke raamwerken: exact dezelfde neutrale adapter en vastgezette
 # externe 3D-kern als het Tauri-command `solve_open_fem_3d`.

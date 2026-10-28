@@ -71,6 +71,12 @@ ok("NDP-waarde zonder bron wordt geweigerd", bouwMetselwerkInvoer(zonderBron).fo
 const algemeen = formulier();
 algemeen.mortel = "Algemeen";
 ok("algemene mortel vraagt f_m", bouwMetselwerkInvoer(algemeen).fouten.some((f) => f.veld === "fm"));
+// Issue #99: natuursteenmetselwerk — groep 1 (§3.1.1), geen lijmmortel.
+const natuur = formulier();
+Object.assign(natuur, { steensoort: "Natuursteen", steengroep: "Groep2" });
+ok("natuursteen buiten groep 1 → veldfout steengroep", bouwMetselwerkInvoer(natuur).fouten.some((f) => f.veld === "steengroep"));
+Object.assign(natuur, { steengroep: "Groep1", mortel: "Lijm" });
+ok("natuursteen in lijmmortel → veldfout mortel", bouwMetselwerkInvoer(natuur).fouten.some((f) => f.veld === "mortel"));
 const { invoer, fouten } = bouwMetselwerkInvoer(formulier());
 ok("volledig formulier: invoer zonder fouten", invoer && fouten.length === 0, JSON.stringify(fouten));
 ok("NDP met bron naar de kern", invoer.materiaal.k.waarde === 0.8 && invoer.materiaal.k.bron === "testwaarde");
@@ -103,6 +109,17 @@ if (!existsSync(TOETSBRUG)) {
   delete zonderKe.materiaal.k_e;
   const [r2] = await roep("check_masonry_walls", [zonderKe]);
   ok("zonder K_E: Φ_m niet getoetst en nooit Ok", r2.status === "NotApplicable" && r2.niet_getoetst.some((n) => n.includes("K_E")));
+  // Issue #99: natuursteen groep 1, algemene mortel, f_b = 40 (opgave), f_m = 10,
+  // K = 0,45 en γ_M = 2,0 (TESTWAARDEN): f_k = 0,45·40^0,7·10^0,3 = 11,8756 N/mm².
+  const ns = structuredClone(invoer);
+  Object.assign(ns.materiaal, { steensoort: "Natuursteen", steengroep: "Groep1", mortel: "Algemeen", f_b_mpa: 40, f_m_mpa: 10,
+    k: { waarde: 0.45, bron: "testwaarde" }, gamma_m: { waarde: 2.0, bron: "testwaarde" } });
+  const [rn] = await roep("check_masonry_walls", [ns]);
+  dicht("natuursteen f_k = 11,8756 N/mm²", rn.sterkte.f_k_mpa, 11.875571, 1e-6);
+  ok("natuursteen: toelichting f_b uit de opgave", rn.notes.some((n) => n.includes("EN 771-6")));
+  ns.materiaal.steengroep = "Groep3";
+  const [rn3] = await roep("check_masonry_walls", [ns]);
+  ok("natuursteen groep 3 → niet getoetst (§3.1.1)", rn3.status === "NotApplicable" && rn3.niet_getoetst[0].includes("§3.1.1"));
   const fout = structuredClone(invoer);
   fout.materiaal.f_vk_0 = 1;
   let geweigerd = false;

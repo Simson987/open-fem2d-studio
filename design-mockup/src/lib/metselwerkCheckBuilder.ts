@@ -125,6 +125,13 @@ export function bouwMetselwerkInvoer(f: MetselwerkFormulier, wandId = 1): Metsel
     return { waarde: v, bron: bron.trim() };
   };
 
+  // Natuursteenmetselwerk (issue #99): NEN-EN 1996-1-1 §3.1.1 deelt natuursteen
+  // (EN 771-6) in bij groep 1; lijmmortel met natuursteen valt buiten §3.6.1.2.
+  // De kern weigert beide ook ("niet getoetst"); hier al als veldfout.
+  if (f.steensoort === "Natuursteen") {
+    if (f.steengroep !== "Groep1") fouten.push({ veld: "steengroep", melding: "natuursteen hoort bij groep 1 (§3.1.1)" });
+    if (f.mortel === "Lijm") fouten.push({ veld: "mortel", melding: "lijmmortel met natuursteen valt buiten §3.6.1.2" });
+  }
   const fb = getal("fb", f.fb, { positief: true });
   const fm = f.mortel === "Algemeen" ? getal("fm", f.fm, { positief: true }) : leesGetal(f.fm);
   const k = ndp("k", true);

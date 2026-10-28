@@ -26,11 +26,13 @@ interface Props {
   onOpenVolumeWorkbench?: () => void;
   /** Opent de metselwerktoets (NEN-EN 1996-1-1, issue #98). */
   onOpenMasonryCheck?: () => void;
+  /** Opent de natuursteentoets (elementen, issue #99). */
+  onOpenNaturalStoneCheck?: () => void;
 }
 
 const stub = (label: string) => () => console.log(`TODO: ${label}`);
 
-export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench, onOpenMasonryCheck }: Props) {
+export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench, onOpenMasonryCheck, onOpenNaturalStoneCheck }: Props) {
   const { t } = useTranslation("ribbon");
   const openInsights = () => onShowInsights?.();
   const goto = (mode: "element" | "system" | "dof" | "logs" | "errors") => () => {
@@ -134,14 +136,25 @@ export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExpo
         </RibbonGroup>
 
         {/* Achteraan, zodat de bestaande groepen op hun plek blijven (issue #98). */}
-        {onOpenMasonryCheck && (
+        {(onOpenMasonryCheck || onOpenNaturalStoneCheck) && (
           <RibbonGroup label={t("insights.toolsGroup")}>
-            <RibbonButton
-              icon={solverInfoIcon}
-              label={t("insights.masonryCheck")}
-              size="large"
-              onClick={onOpenMasonryCheck}
-            />
+            {onOpenMasonryCheck && (
+              <RibbonButton
+                icon={solverInfoIcon}
+                label={t("insights.masonryCheck")}
+                size="large"
+                onClick={onOpenMasonryCheck}
+              />
+            )}
+            {/* Natuursteen (issue #99): achter Metselwerkwand. */}
+            {onOpenNaturalStoneCheck && (
+              <RibbonButton
+                icon={solverInfoIcon}
+                label={t("insights.naturalStoneCheck")}
+                size="large"
+                onClick={onOpenNaturalStoneCheck}
+              />
+            )}
           </RibbonGroup>
         )}
       </div>

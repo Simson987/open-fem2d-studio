@@ -2247,3 +2247,77 @@ async fn koudgevormde_invoer_rekent_en_een_tikfout_wordt_geweigerd() {
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
+
+// ── Natuursteen (issue #99) ────────────────────────────────────────────────
+
+/// De consoleplaat van `natuursteen-check/tests/handberekening.rs`, met f_vk
+/// zodat alles getoetst wordt; er wordt hier geen UC vastgelegd.
+fn geldige_natuursteeninvoer() -> Value {
+    let nw = |w: f64| json!({ "waarde": w, "bron": "testwaarde" });
+    json!({
+        "element_id": 1, "naam": "console", "soort": "Consoleplaat",
+        "materiaal": {
+            "steensoort": "testkalksteen", "buigproef": "En12372",
+            "buigsterkte": { "soort": "Proefresultaten", "waarden": [14.2, 15.8, 13.5, 16.1, 14.9, 15.3],
+                "verdeling": "Lognormaal", "bron": "testrapport" },
+            "schuifsterkte": nw(1.0), "gamma_m": nw(2.0), "reductiefactoren": []
+        },
+        "doorsnede": { "b_mm": 1000.0, "h_mm": 30.0 },
+        "zijdelings_gesteund": false,
+        "belasting": { "soort": "Ligger", "schema": "Uitkragend", "l_m": 0.3, "q_ed_kn_m": 0.0, "f_ed_kn": 1.5 }
+    })
+}
+
+#[tokio::test]
+async fn schema_van_check_natural_stone_elements_is_strikt_op_elk_niveau() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 230, "check_natural_stone_elements").await;
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false, "omhulsel");
+    let el = &tool["inputSchema"]["properties"]["inputs"]["items"];
+    assert_eq!(el["additionalProperties"], false, "element");
+    for veld in ["materiaal", "doorsnede", "oplegging", "doorbuiging", "verankering"] {
+        assert_eq!(el["properties"][veld]["additionalProperties"], false, "{veld}");
+    }
+    let mat = &el["properties"]["materiaal"];
+    // γ_M en de reductiefactoren zijn verplicht en hebben geen standaard.
+    for veld in ["gamma_m", "reductiefactoren", "buigsterkte"] {
+        assert!(mat["required"].as_array().unwrap().contains(&json!(veld)), "{veld} verplicht");
+        assert!(mat["properties"][veld].get("default").is_none(), "{veld} zonder standaard");
+    }
+    assert!(el["required"].as_array().unwrap().contains(&json!("zijdelings_gesteund")));
+    for v in mat["properties"]["buigsterkte"]["oneOf"].as_array().unwrap()
+        .iter().chain(el["properties"]["belasting"]["oneOf"].as_array().unwrap()) {
+        assert_eq!(v["additionalProperties"], false, "variant {v}");
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+#[tokio::test]
+async fn natuursteeninvoer_rekent_en_een_tikfout_wordt_geweigerd() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let result = roep_tool_aan(&mut stdin, &mut reader, 231, "check_natural_stone_elements",
+        json!({ "inputs": [geldige_natuursteeninvoer()] })).await;
+    assert_eq!(result["isError"], false, "geldige invoer: {}", foutmelding(&result));
+    let r = &result["structuredContent"]["results"][0];
+    assert!(r["checks"].as_array().unwrap().iter().any(|c| c["id"] == "buiging"));
+    assert_eq!(r["status"], "Ok", "{r}");
+
+    for (i, (pad, tikfout)) in [("element", "zijdelings_gestuend"), ("materiaal", "gamma_M"),
+                                 ("belasting", "q_ed"), ("buigsterkte", "n")].into_iter().enumerate() {
+        let mut invoer = geldige_natuursteeninvoer();
+        let doel = match pad {
+            "element" => &mut invoer,
+            "materiaal" => &mut invoer["materiaal"],
+            "belasting" => &mut invoer["belasting"],
+            _ => &mut invoer["materiaal"]["buigsterkte"],
+        };
+        doel.as_object_mut().unwrap().insert(tikfout.into(), json!(1));
+        let result = roep_tool_aan(&mut stdin, &mut reader, 232 + i as u32, "check_natural_stone_elements",
+            json!({ "inputs": [invoer] })).await;
+        assert_eq!(result["isError"], true, "{pad}: `{tikfout}` gaf een resultaat: {result}");
+        assert!(foutmelding(&result).contains(tikfout), "{pad}: {}", foutmelding(&result));
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
