@@ -1245,7 +1245,7 @@ fn schema_fem_model() -> Value {
             "loadCases": schema_loadcases(),
             "loads": schema_loads(),
             "selfWeightEnabled": { "type": "boolean", "default": false,
-                "description": "Eigen gewicht van staven en platen meerekenen: in het belastinggeval met `eigenGewicht: true`, en zonder zo'n geval in het eerste \"dead\"-geval." },
+                "description": "Eigen gewicht van staven en platen meerekenen: in het belastinggeval met `eigenGewicht: true`, en zonder zo'n geval in het eerste \"dead\"-geval. LET OP: weglaten = false = GEEN eigen gewicht (anders dan een nieuw project in de app). Het antwoord van solve/check meldt dat dan altijd in `warnings`, met het niet meegenomen staafgewicht in kN, en `self_weight` zegt per belastinggeval (`included_per_case`) of het eigen gewicht is meegerekend." },
             "scheefstandEnabled": { "type": "boolean", "default": false,
                 "description": "Initiële scheefstand (imperfectie) als equivalente horizontale krachten meerekenen." },
             "scheefstandNoemer": { "type": "number", "exclusiveMinimum": 0, "default": 200,

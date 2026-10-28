@@ -96,6 +96,8 @@ const tijdslimietVan = (naam) => naam === "open-fem3d-selectie-ui" ? SELECTIE_UI
  * ontsluit.
  */
 const BUNDEL_TESTS = new Set([
+  // #231: eigen gewicht uit in de MCP-modelvorm wordt gemeld (solve en check).
+  "eigen-gewicht-mcp",
   // De API-commando's (src/api/) en hun weg door de sidecar (`api_catalogus`,
   // `api_uitvoeren`): de MCP-server voert ze zonder app uit via de bundel, dus
   // alles hoort ook daartegen te slagen.

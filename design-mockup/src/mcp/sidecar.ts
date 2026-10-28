@@ -83,6 +83,7 @@ import {
   metEindtoestandVarianten,
 } from "../lib/houtEindstijfheid";
 import { DoorsnedeOnbekendFout } from "../lib/sectionResolver";
+import { eigenGewichtOverzicht } from "../lib/eigenGewichtOverzicht";
 // De scheefstand φ: dezelfde afleiding als de app (App.tsx → bepaalScheefstand).
 import {
   SCHEEFSTAND_BRONNEN,
@@ -914,6 +915,90 @@ function opHandshake() {
 }
 
 /** Gedeelde kern van `solve` en `check`. */
+/**
+ * EIGEN GEWICHT IN HET ANTWOORD (#231). In de MCP-modelvorm staat
+ * `selfWeightEnabled` standaard UIT (een nieuw appproject zet hem aan). Tot
+ * deze correctie stond dat nergens in het antwoord: bij een ligger IPE300 van
+ * 200 m viel 0,4144 kN/m × 200 m = 82,9 kN — 98 % van de belasting — zonder
+ * een woord weg. De standaard blijft UIT (een bestaand verzoek mag niet stil
+ * een andere belasting krijgen), maar het antwoord zegt het nu ALTIJD, met het
+ * niet meegenomen staafgewicht in kN, en per belastinggeval of het eigen
+ * gewicht erin zit.
+ *
+ * De getallen komen uit `eigenGewichtOverzicht` met de schakelaar AAN — dat
+ * is LETTERLIJK de functie waarmee `bouwMultiInput` het eigen gewicht maakt
+ * (q = ρ·A·g, EN 1991-1-1 tabel A.4 voor ρ staal = 7850 kg/m³), dus het
+ * gemelde totaal is precies wat er met `selfWeightEnabled: true` bij zou komen.
+ */
+function eigenGewichtStatus(model: FemModelInvoer): {
+  melding: string | null;
+  info: {
+    enabled: boolean;
+    case_id: number | null;
+    case_name: string | null;
+    beams_weight_kN: number;
+    plates_kN_per_m2: Array<{ plate_id: number; p: number }>;
+    included_per_case: Record<string, boolean>;
+  };
+} {
+  const aan = model.selfWeightEnabled === true;
+  let overzicht: ReturnType<typeof eigenGewichtOverzicht> | null = null;
+  try {
+    overzicht = eigenGewichtOverzicht({
+      nodes: model.nodes,
+      beams: model.beams,
+      plates: model.plates,
+      loadCases: model.loadCases,
+      selfWeightEnabled: true,
+    });
+  } catch {
+    // Een materiaal zonder dichtheid weigert de rekengang zelf al met reden.
+    overzicht = null;
+  }
+  // Het geval dat het eigen gewicht zou krijgen; zonder (blijvend) geval is
+  // er geen, en dat meldt `meldingenBelastinggevallen` zelf.
+  const doelId = overzicht?.caseId ?? null;
+  const doelNaam = doelId === null
+    ? null
+    : (model.loadCases.find((c) => c.id === doelId)?.name ?? null);
+  const gewichtKN = overzicht?.gewichtStavenKN ?? 0;
+  const platen = (overzicht?.platen ?? []).map((pl) => ({ plate_id: pl.plateId, p: pl.p }));
+  const perGeval: Record<string, boolean> = {};
+  for (const c of model.loadCases) perGeval[String(c.id)] = aan && c.id === doelId;
+
+  let melding: string | null = null;
+  if (!aan && (gewichtKN > 0 || platen.length > 0)) {
+    const delen: string[] = [];
+    if (gewichtKN > 0) {
+      delen.push(`${gewichtKN.toFixed(1).replace(".", ",")} kN staafgewicht`);
+    }
+    if (platen.length > 0) {
+      delen.push(
+        `het plaatgewicht (ρ·g·t) van ${platen.length} plaat/platen, ` +
+          platen.map((pl) => `plaat ${pl.plate_id}: ${Math.abs(pl.p).toFixed(2).replace(".", ",")} kN/m²`).join(", "),
+      );
+    }
+    melding =
+      "Eigen gewicht staat UIT (`selfWeightEnabled` ontbreekt of is false; in de MCP-modelvorm is " +
+      `dat de standaard): ${delen.join(" en ")} is in GEEN belastinggeval meegenomen. ` +
+      "Zet `selfWeightEnabled: true` om het mee te rekenen" +
+      (doelNaam !== null
+        ? ` (het komt dan in belastinggeval ${doelId} "${doelNaam}").`
+        : "; het model heeft daarvoor een blijvend geval (type \"dead\") nodig.");
+  }
+  return {
+    melding,
+    info: {
+      enabled: aan,
+      case_id: aan ? doelId : null,
+      case_name: aan ? doelNaam : null,
+      beams_weight_kN: gewichtKN,
+      plates_kN_per_m2: platen,
+      included_per_case: perGeval,
+    },
+  };
+}
+
 function rekenDoor(payload: Record<string, unknown>) {
   const gelezen = leesModel(payload);
 
@@ -1249,6 +1334,9 @@ function rekenDoor(payload: Record<string, unknown>) {
     bijlage,
   );
   if (klasseMelding) waarschuwingen.push(klasseMelding);
+  // Eigen gewicht uit: altijd melden, met wat er wegvalt (#231).
+  const eigenGewicht = eigenGewichtStatus(gelezen.model);
+  if (eigenGewicht.melding) waarschuwingen.push(eigenGewicht.melding);
   // Een belastinggeval met last dat in geen enkele doorgerekende UGT-combinatie
   // meetelt, en eigen gewicht zonder blijvend geval. Tot september 2026 kwam
   // hier niets: een geval van type "overig" telde stil als nul (basisaudit nr 1).
@@ -1307,6 +1395,7 @@ function rekenDoor(payload: Record<string, unknown>) {
     plaat,
     onbekendeIds,
     waarschuwingen,
+    eigenGewicht: eigenGewicht.info,
     formatVersion: gelezen.formatVersion,
     stabiliteit: {
       analysis_type: analysetype,
@@ -1393,6 +1482,8 @@ function opSolve(payload: Record<string, unknown>) {
       beam_id: s.beamId,
       reason: s.reason,
     })),
+    // Of en waar het eigen gewicht is meegerekend, en hoeveel het is (#231).
+    self_weight: d.eigenGewicht,
     warnings: d.waarschuwingen,
     solve_ms: d.solveMs,
   };
@@ -1455,6 +1546,7 @@ function opCheck(payload: Record<string, unknown>) {
     // toetsbaar maakt.
     plate_check_inputs: d.plaat.inputs,
     skipped_plates: d.plaat.skipped.map((s) => ({ plate_id: s.plateId, reason: s.reason })),
+    self_weight: d.eigenGewicht,
     warnings: d.waarschuwingen,
   };
 }
