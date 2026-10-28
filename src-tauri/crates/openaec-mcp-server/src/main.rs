@@ -68,6 +68,9 @@ mod timber_tools;
 /// Aluminium (NEN-EN 1999-1-1, issue #5): legeringen en staaftoets. Zie
 /// `aluminium_tools.rs`.
 mod aluminium_tools;
+/// Koudgevormde profielen (NEN-EN 1993-1-3, issue #4): staalsoorten en
+/// staaftoets. Zie `koudgevormd_tools.rs`.
+mod koudgevormd_tools;
 
 /// De plaattoets (wandschijven, belast in het vlak): `check_plates`. Roept
 /// dezelfde `plaat_check::check_all_plates` aan als het Tauri-command en de
@@ -565,6 +568,7 @@ fn tool_definitions() -> Value {
     lijst.extend(concrete_tools::tool_definitions());
     lijst.extend(timber_tools::tool_definitions());
     lijst.extend(aluminium_tools::tool_definitions());
+    lijst.extend(koudgevormd_tools::tool_definitions());
     lijst.extend(plate_tools::tool_definitions());
     lijst.extend(gui_tools::tool_definitions());
     lijst.extend(api_tools::tool_definitions());
@@ -675,6 +679,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         // Aluminium: `aluminium_check::check_all_aluminium_beams`, dezelfde
         // functie als het Tauri-command en de toetsbrug.
         alu if aluminium_tools::is_aluminium_tool(alu) => aluminium_tools::dispatch(alu, args).await,
+        // Koudgevormd: `koudgevormd_check::check_all_koudgevormd_beams`,
+        // dezelfde functie als het Tauri-command en de toetsbrug.
+        kv if koudgevormd_tools::is_koudgevormd_tool(kv) => koudgevormd_tools::dispatch(kv, args).await,
         // De plaattoets: `plaat_check::check_all_plates`, dezelfde functie als
         // het Tauri-command en de toetsbrug. Zie `plate_tools.rs`.
         plaat if plate_tools::is_plate_tool(plaat) => plate_tools::dispatch(plaat, args).await,

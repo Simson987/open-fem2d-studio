@@ -140,6 +140,19 @@ const KRUISTABEL: &[Rij] = &[
         mcp: Some("check_aluminium_beams"),
         reden: "",
     },
+    // Koudgevormde profielen (NEN-EN 1993-1-3, issue #4): meervoud langs alle drie de wegen.
+    Rij {
+        tauri: Some("list_koudgevormd_staalsoorten"),
+        toetsbrug: Some("list_koudgevormd_staalsoorten"),
+        mcp: Some("list_koudgevormd_staalsoorten"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("check_koudgevormd_beams"),
+        toetsbrug: Some("check_koudgevormd_beams"),
+        mcp: Some("check_koudgevormd_beams"),
+        reden: "",
+    },
     Rij {
         tauri: Some("list_concrete_classes"),
         toetsbrug: Some("list_concrete_classes"),

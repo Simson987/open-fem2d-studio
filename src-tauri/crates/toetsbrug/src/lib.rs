@@ -43,6 +43,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use spanning_check::SpanningBeamCheckInput;
 use aluminium_check::AluminiumBeamCheckInput;
+use koudgevormd_check::KoudgevormdBeamCheckInput;
 use steel_check::BeamCheckInput;
 use timber_check::clt::CltBeamCheckInput;
 use timber_check::TimberBeamCheckInput;
@@ -252,6 +253,19 @@ pub fn behandel(v: Verzoek) -> Result<Value, String> {
             let inputs: Vec<AluminiumBeamCheckInput> =
                 serde_json::from_value(inputs).map_err(|e| format!("aluminiuminvoer: {e}"))?;
             serde_json::to_value(aluminium_check::check_all_aluminium_beams(inputs))
+                .map_err(|e| e.to_string())
+        }
+        // Koudgevormde profielen (NEN-EN 1993-1-3, issue #4): staalsoorten en
+        // staaftoets. Zelfde typen en functies als het Tauri-command en de
+        // MCP-tools van dezelfde naam (`openaec-mcp-server/src/koudgevormd_tools.rs`).
+        "list_koudgevormd_staalsoorten" => {
+            serde_json::to_value(koudgevormd_check::list_koudgevormd_staalsoorten()).map_err(|e| e.to_string())
+        }
+        "check_koudgevormd_beams" => {
+            let inputs = v.inputs.ok_or("check_koudgevormd_beams vraagt om `inputs`")?;
+            let inputs: Vec<KoudgevormdBeamCheckInput> =
+                serde_json::from_value(inputs).map_err(|e| format!("invoer koudgevormd: {e}"))?;
+            serde_json::to_value(koudgevormd_check::check_all_koudgevormd_beams(inputs))
                 .map_err(|e| e.to_string())
         }
         // Platen (wandschijven): de elementspanningen per UGT-combinatie getoetst

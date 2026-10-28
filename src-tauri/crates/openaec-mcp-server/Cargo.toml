@@ -75,6 +75,10 @@ plaat-check = { path = "../plaat-check" }
 # Aluminium (NEN-EN 1999-1-1, issue #5): `check_aluminium_beams` en
 # `list_aluminium_alloys`, dezelfde functies als het Tauri-command en de toetsbrug.
 aluminium-check = { path = "../aluminium-check" }
+# Koudgevormde profielen (NEN-EN 1993-1-3, issue #4): `check_koudgevormd_beams` en
+# `list_koudgevormd_staalsoorten`, dezelfde functies als het Tauri-command en de toetsbrug.
+koudgevormd-check = { path = "../koudgevormd-check" }
+nen-en-1993-1-3 = { path = "../nen-en-1993-1-3" }
 nen-en-1999-1-1 = { path = "../nen-en-1999-1-1" }
 # Ruimtelijke raamwerken: exact dezelfde neutrale adapter en vastgezette
 # externe 3D-kern als het Tauri-command `solve_open_fem_3d`.

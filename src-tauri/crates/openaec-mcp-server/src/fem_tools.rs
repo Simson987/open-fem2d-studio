@@ -1044,7 +1044,9 @@ fn schema_checkconfig() -> Value {
             "aluLasstatus": { "type": "string", "enum": ["geen", "gelast"],
                 "description": "Aluminium (NEN-EN 1999-1-1): 'geen' = bevestigd ongelast, 'gelast' = hele doorsnede in de HAZ. Weglaten = onbekend: de app rekent veilig als gelast en geeft nooit 'voldoet'." },
             "aluZijdelingsGesteund": { "type": "boolean",
-                "description": "Aluminium: verklaring dat kip (§6.3.2) niet kan optreden. Weglaten = nee; kip blijft dan niet getoetst." }
+                "description": "Aluminium: verklaring dat kip (§6.3.2) niet kan optreden. Weglaten = nee; kip blijft dan niet getoetst." },
+            "kvZijdelingsGesteund": { "type": "boolean",
+                "description": "Koudgevormd profiel (NEN-EN 1993-1-3): verklaring dat de staaf over de hele lengte zijdelings en tegen wringen gesteund is, zodat kip (§6.2.4) niet kan optreden. Weglaten = nee; kip blijft dan niet getoetst." }
         }
     })
 }
