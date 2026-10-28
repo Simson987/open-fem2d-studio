@@ -265,6 +265,24 @@ export default function OpenFem3DExplorer(props: Props) {
   const memberPointLoads = (conditionModel.memberPointLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
   const thermalLoads = (conditionModel.thermalLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
   const surfaceLoads = (conditionModel.surfaceLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
+  // Native Rust-route (openFem3dNativeModel): volumes en hun lasten. Alleen
+  // getoond als het model ze heeft; een gewoon 3D-model ziet geen extra tak.
+  const volumes = props.model.volumes ?? [];
+  const volumeBodyLoads = (props.model.volumeBodyLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
+  const volumeFaceLoads = (props.model.volumeFaceLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
+  const plateEdgeLoads = (props.model.plateEdgeLoads ?? []).filter((load) => (load.caseId ?? 1) === activeLoadCaseId);
+  const nativeLoadCount = volumeBodyLoads.length + volumeFaceLoads.length + plateEdgeLoads.length;
+  const volumeById = new Map(volumes.map((volume) => [volume.id, volume]));
+  // Een volume kiezen = zijn hoekknopen kiezen (de 3D-selectie kent geen volumesoort).
+  const selectVolume = (volumeId: number) => {
+    const volume = volumeById.get(volumeId);
+    if (volume) props.setSelection({ type: "multi", nodeIds: [...volume.nodeIds], beamIds: [] });
+  };
+  const volumeSelected = (volumeId: number) => {
+    const volume = volumeById.get(volumeId);
+    return !!volume && props.selection?.type === "multi"
+      && volume.nodeIds.every((nodeId) => openFem3DSelectionContains(props.selection, "node", nodeId));
+  };
   // Belastingvlakken staan, net als de andere lasten, onder hun eigen geval.
   const loadPanels = (props.model.loadPanels ?? []).filter((panel) => (panel.caseId ?? 1) === activeLoadCaseId);
   const select = (event: React.MouseEvent<HTMLButtonElement>, item: OpenFem3DSingleSelection) =>
@@ -314,6 +332,14 @@ export default function OpenFem3DExplorer(props: Props) {
               onClick={(event) => select(event, { type: "plate", id: plate.id })} />;
           })}
         </Branch>
+        {volumes.length > 0 && <ItemBranch label={t("tree.volumes")} items={volumes}
+          showNextLabel={(count) => t("tree.showNext", { count })} renderItem={(volume) =>
+          <Leaf key={`volume-${volume.id}`}
+            label={t("tree.volumeLabel", { kind: volume.kind === "tet4" ? "Tet4" : "Hex8", id: volume.id })}
+            value={t("tree.volumeValue", { count: volume.nodeIds.length, e: volume.eMpa, nu: volume.poisson })}
+            active={volumeSelected(volume.id)}
+            onClick={() => selectVolume(volume.id)} />
+        } />}
         <Branch label={t("tree.diaphragms")} count={(props.model.diaphragms ?? []).length}
           showNextLabel={(count) => t("tree.showNext", { count })}>
           {(props.model.diaphragms ?? []).map((diaphragm) => {
@@ -370,7 +396,7 @@ export default function OpenFem3DExplorer(props: Props) {
             active={openFem3DSelectionContains(props.selection, "plate", plate.id)}
             onClick={(event) => select(event, { type: "plate", id: plate.id })} />))}
         </Branch>
-        <Branch label={t("tree.loads")} count={nodalLoads.length + memberLoads.length + memberPointLoads.length + thermalLoads.length + surfaceLoads.length}
+        <Branch label={t("tree.loads")} count={nodalLoads.length + memberLoads.length + memberPointLoads.length + thermalLoads.length + surfaceLoads.length + nativeLoadCount}
           showNextLabel={(count) => t("tree.showNext", { count })}>
           {nodalLoads.map((load) => <Leaf key={load.id} label={`#${load.id} · ${t("tree.nodeLabel", { id: load.nodeId })}`}
             value={[load.fx && `Fx ${load.fx}`, load.fy && `Fy ${load.fy}`, load.fz && `Fz ${load.fz}`, load.mx && `Mx ${load.mx}`, load.my && `My ${load.my}`, load.mz && `Mz ${load.mz}`].filter(Boolean).join(" · ")}
@@ -396,6 +422,21 @@ export default function OpenFem3DExplorer(props: Props) {
             value={`qx ${load.qx} · qy ${load.qy} · qz ${load.qz} kN/m²`}
             active={openFem3DSelectionContains(props.selection, "surfaceLoad", load.id)}
             onClick={(event) => select(event, { type: "surfaceLoad", id: load.id })} />)}
+          {volumeBodyLoads.map((load) => <Leaf key={`volume-body-${load.id}`}
+            label={t("tree.volumeBodyLoadLabel", { id: load.id, volumeId: load.volumeId })}
+            value={`${load.forceKnPerM3.join(" · ")} kN/m³`}
+            active={volumeSelected(load.volumeId)}
+            onClick={() => selectVolume(load.volumeId)} />)}
+          {volumeFaceLoads.map((load) => <Leaf key={`volume-face-${load.id}`}
+            label={t("tree.volumeFaceLoadLabel", { id: load.id, volumeId: load.volumeId, face: load.faceIndex + 1 })}
+            value={`${load.tractionKnPerM2.join(" · ")} kN/m²`}
+            active={volumeSelected(load.volumeId)}
+            onClick={() => selectVolume(load.volumeId)} />)}
+          {plateEdgeLoads.map((load) => <Leaf key={`plate-edge-${load.id}`}
+            label={t("tree.plateEdgeLoadLabel", { id: load.id, plateId: load.plateId, edge: load.edgeIndex + 1 })}
+            value={`${load.startKnPerM} → ${load.endKnPerM} kN/m`}
+            active={openFem3DSelectionContains(props.selection, "plate", load.plateId)}
+            onClick={(event) => select(event, { type: "plate", id: load.plateId })} />)}
         </Branch>
         <Branch label={t("tree.loadPanels")} count={loadPanels.length}
           showNextLabel={(count) => t("tree.showNext", { count })}>
@@ -432,6 +473,11 @@ export default function OpenFem3DExplorer(props: Props) {
           {props.checksRunning && <> · normtoetsing…</>}
           {props.checksError && <><br />Normtoetsing: {props.checksError}</>}
           {props.result.diagnostics.includes(OPEN_FEM_3D_PLATES_LINEAR_NOTICE) && <><br />{t("openFem3dPlate.linearNotice")}</>}
+          {props.result.nativeVolume3D && <><br /><span data-open-fem3d-native-volume-result>{t("tree.nativeVolumeResult", {
+            count: props.result.nativeVolume3D.elements.length,
+            sigma: props.result.nativeVolume3D.elements.reduce((maximum, element) => Math.max(maximum, element.vonMisesMpa), 0).toFixed(3),
+            membranes: props.result.nativeVolume3D.membranes?.length ?? 0,
+          })}</span></>}
         </div> : <div className="fem-results-hint">{t("tree.clickCalculateBefore")} <strong>{t("tree.calculate")}</strong>.</div>}
         {props.activeCaseEmpty && <div className="fem-results-hint" data-open-fem3d-active-case-empty>
           {t("tree.activeCaseEmpty3d", {

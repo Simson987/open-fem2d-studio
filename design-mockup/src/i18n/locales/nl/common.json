@@ -1327,7 +1327,14 @@
       "label": "Zoeken in de verkenner",
       "clear": "Zoekveld wissen",
       "none": "Niets gevonden voor “{{q}}”."
-    }
+    },
+    "volumes": "Volumes",
+    "volumeLabel": "{{kind}} {{id}}",
+    "volumeValue": "{{count}} knopen · E {{e}} MPa · ν {{nu}}",
+    "volumeBodyLoadLabel": "b#{{id}} · volumekracht, volume {{volumeId}}",
+    "volumeFaceLoadLabel": "t#{{id}} · volume {{volumeId}} vlak {{face}}",
+    "plateEdgeLoadLabel": "r#{{id}} · plaat {{plateId}} rand {{edge}}",
+    "nativeVolumeResult": "Open FEM Rust: {{count}} volume-elementen · σvm,max {{sigma}} MPa · {{membranes}} membranen"
   },
   "resultsOverlay": {
     "deflectionScale": "Vervormingsschaal: {{schaal}}×"

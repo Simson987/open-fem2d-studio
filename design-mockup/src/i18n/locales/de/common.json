@@ -1327,7 +1327,14 @@
       "label": "Im Explorer suchen",
       "clear": "Suche löschen",
       "none": "Nichts gefunden für „{{q}}“."
-    }
+    },
+    "volumes": "Volumen",
+    "volumeLabel": "{{kind}} {{id}}",
+    "volumeValue": "{{count}} Knoten · E {{e}} MPa · ν {{nu}}",
+    "volumeBodyLoadLabel": "b#{{id}} · Volumenkraft, Volumen {{volumeId}}",
+    "volumeFaceLoadLabel": "t#{{id}} · Volumen {{volumeId}} Fläche {{face}}",
+    "plateEdgeLoadLabel": "r#{{id}} · Platte {{plateId}} Rand {{edge}}",
+    "nativeVolumeResult": "Open FEM Rust: {{count}} Volumenelemente · σvm,max {{sigma}} MPa · {{membranes}} Membranen"
   },
   "resultsOverlay": {
     "deflectionScale": "Verformungsmaßstab: {{schaal}}×"

@@ -1327,7 +1327,14 @@
       "label": "Search the explorer",
       "clear": "Clear search",
       "none": "Nothing found for “{{q}}”."
-    }
+    },
+    "volumes": "Volumes",
+    "volumeLabel": "{{kind}} {{id}}",
+    "volumeValue": "{{count}} nodes · E {{e}} MPa · ν {{nu}}",
+    "volumeBodyLoadLabel": "b#{{id}} · body force, volume {{volumeId}}",
+    "volumeFaceLoadLabel": "t#{{id}} · volume {{volumeId}} face {{face}}",
+    "plateEdgeLoadLabel": "r#{{id}} · plate {{plateId}} edge {{edge}}",
+    "nativeVolumeResult": "Open FEM Rust: {{count}} volume elements · σvm,max {{sigma}} MPa · {{membranes}} membranes"
   },
   "resultsOverlay": {
     "deflectionScale": "Deflection scale: {{schaal}}×"

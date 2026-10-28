@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { register } from "node:module";
 import { fileURLToPath } from "node:url";
 import { parseOpenFem3DModel } from "./src/components/openFem3d/openFem3dModel.ts";
 import {
@@ -151,5 +152,31 @@ console.log("[5] app en vertalingen");
       && features.every((feature) => typeof solve.nativeFeature[feature] === "string"),
       `${taal}: melding over de automatische keuze van Open FEM Rust vertaald`);
   }
+}
+console.log("[6] verkenner toont volumes");
+{
+  // De componenten importeren stylesheets; Node kent die niet.
+  register("data:text/javascript," + encodeURIComponent(
+    "export async function load(url, ctx, next) {"
+    + " if (url.split('?')[0].endsWith('.css')) return { format: 'module', source: 'export default {};', shortCircuit: true };"
+    + " return next(url, ctx); }"));
+  await import("./scripts/i18n-voor-tests.mjs");
+  const React = (await import("react")).default;
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { default: OpenFem3DExplorer } = await import("./src/components/openFem3d/OpenFem3DExplorer.tsx");
+  const noop = () => {};
+  const render = (model, selection = null) => renderToStaticMarkup(React.createElement(OpenFem3DExplorer, {
+    model, selection, setSelection: noop, result: null,
+    visibility: {}, setVisibility: noop, displayFlags: {}, setDisplayFlags: noop,
+    gridShow: true, setGridShow: noop, structuralGrid: { enabled: false, xAxes: [], zAxes: [] }, setStructuralGridEnabled: noop,
+  })).replace(/<[^>]+>/g, " ");
+  const volume = parseOpenFem3DModel({ ...tetModel(),
+    volumeBodyLoads: [{ id: 3, volumeId: 21, caseId: 1, forceKnPerM3: [0, 0, -25] }] });
+  const boom = render(volume);
+  ok(boom.includes("Volumes") && boom.includes("Tet4 21") && boom.includes("4 knopen · E 1200 MPa · ν 0.2"),
+    "de verkenner toont de tak Volumes met het Tet4-volume");
+  ok(boom.includes("b#3 · volumekracht, volume 21") && boom.includes("0 · 0 · -25 kN/m³"), "en de volumelast onder Belastingen");
+  const { volumes: _volumes, ...frameOnly } = tetModel();
+  ok(!render(parseOpenFem3DModel(frameOnly)).includes("Volumes"), "een model zonder volumes krijgt geen extra tak");
 }
 console.log(`\n${checks} geslaagd, 0 gefaald`);
