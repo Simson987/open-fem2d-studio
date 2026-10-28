@@ -54,8 +54,10 @@ import {
 import {
   eersteOrdeCombinatieResultaat,
   getSecondOrderState,
+  solveCombinationFirstOrder,
   tweedeOrdePerCombinatie,
 } from "../components/fem/solver/engine";
+import { materiaalVanStaaf } from "./variantInvoer";
 import {
   alphaCrLabel,
   bepaalAlphaCr,
@@ -336,6 +338,181 @@ export function eigenKolomMelding2D(kolommen: readonly EigenKolom2D[], phiModel:
     "systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).";
 }
 
+// ── Hout volgens NEN-EN 1995-1-1 in de toets (fase 4) ───────────────────────
+
+/**
+ * γ_M per materiaalsoort, NEN-EN 1995-1-1 tabel 2.3 met de NB (Nederland houdt
+ * de aanbevolen waarden aan; de Rust-spiegel is `Ndp1995` in
+ * `nationale-bijlage/src/ndp_1995.rs`): massief hout 1,30, gelijmd gelamineerd
+ * hout 1,25, LVL 1,20. Kruislaaghout (CLT) staat niet in tabel 2.3; het is
+ * gelijmd gelamineerd hout en krijgt hier 1,25.
+ */
+export const HOUT_GAMMA_M = { massief: 1.3, gelamineerd: 1.25, lvl: 1.2 } as const;
+
+/**
+ * De houten staven van het model met hun γ_M, voor de rekenstijfheid
+ * E_d = E_mean/γ_M in de toetsrekengang (NEN-EN 1995-1-1 2.2.2(1)P en
+ * 2.4.1(2)P, (2.15)). Alleen staven met een herkende houtsoort of CLT.
+ */
+export function houtStavenVoorToets(beams: readonly Beam[]): Map<number, number> {
+  const uit = new Map<number, number>();
+  for (const b of beams) {
+    const soort = materiaalVanStaaf(b);
+    if (soort === "clt") uit.set(b.id, HOUT_GAMMA_M.gelamineerd);
+    else if (soort === "hout") {
+      const m = (b.material ?? "").trim().toUpperCase();
+      uit.set(b.id, m.startsWith("GL") ? HOUT_GAMMA_M.gelamineerd : m.startsWith("LVL") ? HOUT_GAMMA_M.lvl : HOUT_GAMMA_M.massief);
+    }
+  }
+  return uit;
+}
+
+/** De boogimperfectie e = 0,0025·l van NEN-EN 1995-1-1 5.4.4(2), als factor. */
+export const HOUT_BOOG_FACTOR = 0.0025;
+
+/** Eén vervangende boogimperfectie op een gedrukte houtstaaf, in één toetscombinatie. */
+export interface HoutBoog {
+  beamId: number;
+  /** De drukkracht (N, positief) uit de eerste orde van de combinatie. */
+  nDruk: number;
+  /** l (mm). */
+  lengteMm: number;
+  /** e = 0,0025·l (mm). */
+  e: number;
+  /** De vervangende verdeelde last 8·N·e/l² (N/mm), loodrecht op de staaf. */
+  q: number;
+  /** De eindkrachten 4·N·e/l (N), tegengesteld aan q, op beide einden. */
+  eindkracht: number;
+  /**
+   * De richting van q in lokale y (+1 of −1): zo dat de boog dezelfde kromming
+   * heeft als de eerste-ordemomentenlijn van de combinatie in het midden van de
+   * staaf, de ongunstige kant (de vergroting telt op).
+   */
+  zin: 1 | -1;
+}
+
+/** Een eigen geval-id voor de boogimperfectie: botst niet met de gevallen, de veldgevallen of de offsets. */
+export const BOOG_GEVAL_ID = 1_900_000_000;
+
+/** Tussenknopen in een gedrukte houtstaaf, zodat P·δ binnen de staaf meedoet. */
+const HOUT_SNEDEN = [0.25, 0.5, 0.75];
+
+/**
+ * De toetsinvoer met de rekenstijfheid van hout: E_d = E_mean/γ_M per houten
+ * staaf, en de staaf in vieren (`extraSneden` 0,25/0,5/0,75). De 2D-P-Δ mist
+ * P·δ binnen een rekenelement (`solveCombinationSecondOrder`); met vier
+ * elementen ligt het veldmoment binnen ~2 % van de exacte oplossing.
+ */
+function metHoutRekenstijfheid(basis: MultiInput, gammaM: ReadonlyMap<number, number>): MultiInput {
+  return {
+    ...basis,
+    beams: basis.beams.map((b) => {
+      const g = gammaM.get(b.id);
+      if (g === undefined) return b;
+      const sneden = [...new Set([...(b.extraSneden ?? []), ...HOUT_SNEDEN])].sort((x, y) => x - y);
+      return { ...b, E: (b.E ?? 210000) / g, extraSneden: sneden };
+    }),
+  };
+}
+
+/**
+ * De boogimperfecties van de gedrukte houtstaven in één combinatie: per staaf
+ * met druk (de grootste druk langs de staaf, uit de EERSTE orde van dezelfde
+ * combinatie met E_d en met de scheefstand van de variant) e = 0,0025·l, als
+ * vervangende lasten: q = 8·N·e/l² loodrecht op de staaf en 4·N·e/l
+ * tegengesteld op beide einden (samen in evenwicht, dus zonder invloed op de
+ * reacties).
+ *
+ * DE RICHTING (5.4.4(2) zegt "in de meest ongunstige richting" niet expliciet
+ * voor de boog; de ongunstige is die waarin boog en buiging optellen): de boog
+ * krijgt dezelfde kromming als de eerste-ordemomentenlijn in het midden van de
+ * staaf. Bij een ingeklemde kolom met een vrije kop is dat de boog TEGEN de
+ * scheefstand in: die heeft de kromming van de knikvorm (een boog mee met de
+ * scheefstand trekt de kop terug en verlaagt het voetmoment). Zonder
+ * merkbaar middenmoment: omlaag voor een liggende staaf, tegen de scheefstand
+ * in voor een staande.
+ */
+export function houtBogen(
+  invoer: MultiInput,
+  combinatie: LoadCombination,
+  gammaM: ReadonlyMap<number, number>,
+): HoutBoog[] {
+  const eersteOrde = solveCombinationFirstOrder(invoer, combinatie);
+  const richting = combinatie.scheefstandRichting ?? invoer.scheefstand?.richting ?? 1;
+  if (!eersteOrde) return [];
+  const knoop = new Map(invoer.nodes.map((n) => [n.id, n]));
+  const uit: HoutBoog[] = [];
+  for (const b of invoer.beams) {
+    if (!gammaM.has(b.id)) continue;
+    const el = eersteOrde.elements.get(b.id);
+    const a = knoop.get(b.from), c = knoop.get(b.to);
+    if (!el || !a || !c) continue;
+    const lengteMm = Math.hypot(c.x - a.x, c.z - a.z);
+    if (!(lengteMm > 0)) continue;
+    const nMin = Math.min(el.N, ...(el.normalForce ?? []));
+    if (!(nMin < 0)) continue;
+    const nDruk = -nMin;
+    const e = HOUT_BOOG_FACTOR * lengteMm;
+    // Het moment in het midden (doorbuigend positief): een last in lokale −y
+    // geeft een positief veldmoment, dus zin = −teken(M_midden).
+    const st = el.stations_mm ?? [];
+    let iMid = 0;
+    st.forEach((x, i) => { if (Math.abs(x - lengteMm / 2) < Math.abs(st[iMid] - lengteMm / 2)) iMid = i; });
+    const mMid = el.bendingMoment?.[iMid] ?? 0;
+    let zin: 1 | -1;
+    if (Math.abs(mMid) > 1e-6 * nDruk * e) zin = mMid > 0 ? -1 : 1;
+    else {
+      const sin = (c.z - a.z) / lengteMm, cos = (c.x - a.x) / lengteMm;
+      // Staand: lokale +y = (−sin θ, cos θ); tegen de scheefstand in = −richting in x.
+      zin = Math.abs(sin) > Math.abs(cos) ? ((richting * Math.sign(sin)) as 1 | -1) : ((-Math.sign(cos) || -1) as 1 | -1);
+    }
+    uit.push({ beamId: b.id, nDruk, lengteMm, e, q: (8 * nDruk * e) / lengteMm ** 2, eindkracht: (4 * nDruk * e) / lengteMm, zin });
+  }
+  return uit;
+}
+
+/** De vervangende lasten van de bogen, als lasten van het boogsgeval `BOOG_GEVAL_ID`. */
+export function boogLasten(
+  invoer: MultiInput,
+  bogen: readonly HoutBoog[],
+): Pick<MultiInput, "loads" | "pointLoads"> {
+  const knoop = new Map(invoer.nodes.map((n) => [n.id, n]));
+  const loads: NonNullable<MultiInput["loads"]> = [...(invoer.loads ?? [])];
+  const pointLoads: NonNullable<MultiInput["pointLoads"]> = [...(invoer.pointLoads ?? [])];
+  for (const boog of bogen) {
+    const b = invoer.beams.find((x) => x.id === boog.beamId)!;
+    const a = knoop.get(b.from)!, c = knoop.get(b.to)!;
+    const th = Math.atan2(c.z - a.z, c.x - a.x);
+    const sin = Math.sin(th), cos = Math.cos(th);
+    // Lokale +y = (−sin θ, cos θ); de zin volgt uit `houtBogen`.
+    const s = boog.zin;
+    loads.push({ beamId: b.id, q: s * boog.q, qDir: "z", qCoord: "local", caseId: BOOG_GEVAL_ID, geenScheefstand: true });
+    // De eindkrachten tegengesteld: −s·F·(−sin θ, cos θ).
+    for (const nodeId of [b.from, b.to]) {
+      pointLoads.push({
+        nodeId, fx: s * boog.eindkracht * sin, fz: -s * boog.eindkracht * cos,
+        caseId: BOOG_GEVAL_ID, geenScheefstand: true,
+      });
+    }
+  }
+  return { loads, pointLoads };
+}
+
+/**
+ * De Nederlandse melding bij hout in de toets met de route van NEN-EN 1995-1-1
+ * (instelling `houtToetsEN1995`, fase 4).
+ */
+export const TOETS_HOUT_EN1995_MELDING =
+  "Hout in de toets volgens NEN-EN 1995-1-1 (instelling 'Hout EN 1995'): de tweede-ordeberekening (P-Δ) " +
+  "rekent de houten staven met E_d = E_mean/γ_M (2.2.2(1)P, (2.15); γ_M volgens tabel 2.3 met de NB: " +
+  "massief 1,30, gelamineerd en CLT 1,25), elke gedrukte houten staaf krijgt de boogimperfectie " +
+  "e = 0,0025·l (5.4.4(2)) als vervangende lasten 8·N·e/l² en 4·N·e/l, met N uit de eerste orde van " +
+  "dezelfde combinatie, en de houten staven zijn in vieren verdeeld zodat P·δ binnen de staaf meedoet. " +
+  "De scheefstand is minstens die van (5.1). Een staande houten staaf met een vrij eind krijgt daarmee " +
+  "in het vlak de systeemlengte L als de φ van haar lasten minstens die van (5.1) met h = haar lengte " +
+  "is; de knik wordt getoetst met k_c volgens 6.3.2 (de boog zit dan dubbel: in de krachten en in k_c, " +
+  "de veilige kant).";
+
 // ── De toetsrekengang 2D ────────────────────────────────────────────────────
 
 /** De analyse waarmee de toetskrachten zijn bepaald. */
@@ -397,6 +574,11 @@ export interface ToetsKrachten2D {
    * toegepaste φ (voor de φ-eis van een vrij staafeind in de staaltoets).
    */
   eigenKolom?: { kolommen: EigenKolom2D[]; perStaaf: Map<number, number> };
+  /**
+   * Hout volgens NEN-EN 1995-1-1 (fase 4): γ_M per staaf en de bogen per
+   * toetscombinatie-id. Ontbreekt = hout met E_mean.
+   */
+  hout?: { gammaM: ReadonlyMap<number, number>; bogen: Map<number, HoutBoog[]> };
   /** Wat er verder te melden is (Nederlands): hout, de toets-φ, vervallen varianten. */
   meldingen: string[];
 }
@@ -429,6 +611,13 @@ export interface ToetsKrachtenInvoer2D {
      */
     eigenKolommen?: readonly EigenKolom2D[];
   };
+  /**
+   * Hout volgens NEN-EN 1995-1-1 (issue #199, fase 4; instelling
+   * `houtToetsEN1995`): per houten staaf γ_M (`houtStavenVoorToets`). Dan E_d,
+   * de boogimperfectie per gedrukte houtstaaf en de onderverdeling. Ontbreekt
+   * of leeg = hout met E_mean, zoals vóór fase 4.
+   */
+  hout?: { gammaM: ReadonlyMap<number, number> };
   /** Het analysetype van het model, dus van de resultaatrekengang. */
   analysetype: Analysetype;
   /**
@@ -537,10 +726,13 @@ function foutTekst(e: unknown): string {
  *  - α_cr: één keer per basiscombinatie, op de primaire variant.
  */
 export function bepaalToetsKrachten2D(invoer: ToetsKrachtenInvoer2D): ToetsKrachten2D {
-  const { basis, combinaties, scheefstand, analysetype, resultaten } = invoer;
+  const { combinaties, scheefstand, analysetype, resultaten } = invoer;
   const ts = bepaalToetsScheefstand(scheefstand.project, scheefstand.normen);
   const meldingen = [...ts.meldingen];
-  if (scheefstand.normen.includes("en1995")) meldingen.push(TOETS_HOUT_MELDING);
+  const hout = invoer.hout && invoer.hout.gammaM.size > 0 ? invoer.hout : null;
+  if (scheefstand.normen.includes("en1995")) meldingen.push(hout ? TOETS_HOUT_EN1995_MELDING : TOETS_HOUT_MELDING);
+  // Fase 4: E_d en de onderverdeling van de houten staven, alleen in de toets.
+  const basis = hout ? metHoutRekenstijfheid(invoer.basis, hout.gammaM) : invoer.basis;
 
   // ── De toetscombinaties ──────────────────────────────────────────────────
   const ugt = combinaties.filter((c) => c.type === "uls");
@@ -564,6 +756,7 @@ export function bepaalToetsKrachten2D(invoer: ToetsKrachtenInvoer2D): ToetsKrach
   const resultaatScheef = resultaatStatus?.input.scheefstand;
   const hergebruikt =
     !metEigen &&
+    !hout &&
     resultaten !== undefined &&
     analysetype !== "eersteOrde" &&
     scheefstand.modelAan &&
@@ -587,10 +780,20 @@ export function bepaalToetsKrachten2D(invoer: ToetsKrachtenInvoer2D): ToetsKrach
   // ── Per combinatie apart: een divergerende som raakt de andere niet ──────
   const combinationResults = new Map<number, SolverResult>();
   const mislukt: { id: number; naam: string; reden: string }[] = [];
+  const bogen = new Map<number, HoutBoog[]>();
   for (const c of ugtCombinaties) {
     try {
-      const r = (hergebruikt ? resultaten!.combinationResults.get(c.id) : undefined) ?? combineResults(c, perCase);
-      combinationResults.set(c.id, r);
+      let r: SolverResult | undefined = hergebruikt ? resultaten!.combinationResults.get(c.id) : undefined;
+      // Fase 4: de boogimperfecties van deze combinatie als eigen geval, in een
+      // eigen tweede-orde-status (de bogen hangen van N van de combinatie af).
+      const b = hout ? houtBogen(toetsInvoer, c, hout.gammaM) : [];
+      if (b.length > 0) {
+        bogen.set(c.id, b);
+        const invoerC: MultiInput = { ...toetsInvoer, ...boogLasten(toetsInvoer, b) };
+        const comboC = { ...c, factors: new Map([...c.factors, [BOOG_GEVAL_ID, 1]]) };
+        r = combineResults(comboC, tweedeOrdePerCombinatie(invoerC).perCase);
+      }
+      combinationResults.set(c.id, r ?? combineResults(c, perCase));
     } catch (e) {
       mislukt.push({ id: c.id, naam: c.name, reden: foutTekst(e) });
     }
@@ -643,6 +846,7 @@ export function bepaalToetsKrachten2D(invoer: ToetsKrachtenInvoer2D): ToetsKrach
     weigering,
     meldingen,
     ...(kaarten ? { eigenKolom: { kolommen: [...eigenKolommen], perStaaf: kaarten.perStaaf } } : {}),
+    ...(hout ? { hout: { gammaM: hout.gammaM, bogen } } : {}),
   };
 }
 
@@ -797,6 +1001,7 @@ export function toetsSet2D(
       scheefstandAan: true,
       scheefstandPhi: toets.analyse.phi,
       ...(toets.eigenKolom ? { scheefstandPhiPerStaaf: toets.eigenKolom.perStaaf } : {}),
+      ...(toets.hout ? { houtEN1995: true } : {}),
     },
     eersteOrdeResultaten: eersteOrdeResultatenVoorToets(
       { perCase: toets.perCase, ugtCombinaties: toets.ugtCombinaties },

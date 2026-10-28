@@ -4327,6 +4327,10 @@
           "ownColumnSway": {
             "type": "boolean",
             "description": "2D en 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(φ_model, φ_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte."
+          },
+          "timberEn1995": {
+            "type": "boolean",
+            "description": "Alleen 2D (issue #199, fase 4): hout in de UGT-toets volgens NEN-EN 1995-1-1: E_d = E_mean/γ_M, de boogimperfectie e = 0,0025·l per gedrukte houtstaaf, en de systeemlengte L bij een staand vrij houten eind."
           }
         },
         "additionalProperties": false

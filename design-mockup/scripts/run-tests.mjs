@@ -221,6 +221,9 @@ const BUNDEL_TESTS = new Set([
   // De eigen scheefstand per losse kolom in 2D (issue #199, fase 3): engine
   // (φ per staaf en knoop) en toetsKrachten — beide in de barrel.
   "scheefstand-losse-kolom-2d",
+  // Hout in de UGT-toets volgens NEN-EN 1995-1-1 (issue #199, fase 4): E_d,
+  // boogimperfectie, de houtbouwer en de sidecar — alles in de barrel.
+  "hout-toets-en1995",
   "hoekverdraaiing",
   // Bewaakt dat de kniklengte van een HOUTEN staaf tot in de toetsinvoer
   // komt (buckling_length_y_m/_z_m in TimberBeamCheckInput). Praat alleen met

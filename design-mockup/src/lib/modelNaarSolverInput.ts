@@ -88,6 +88,8 @@ export interface FemModelInvoer {
    * resultaten.
    */
   scheefstandEigenKolom?: boolean;
+  /** Hout in de UGT-toets volgens NEN-EN 1995-1-1 (issue #199, fase 4). Ontbreekt = uit. */
+  houtToetsEN1995?: boolean;
   axialMaterialLoadPath?: number[];
 }
 

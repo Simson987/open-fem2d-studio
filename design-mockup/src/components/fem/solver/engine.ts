@@ -1637,7 +1637,7 @@ export function buildMesh(
       // een H in +richting moet geven. Voor globale z-lasten is dit
       // bit-identiek aan het oude pad (gy = q); een lokale last krijgt zo
       // een companion op basis van zijn échte verticale aandeel.
-      const schLast = schFactorStaaf(ld.beamId);
+      const schLast = ld.geenScheefstand ? 0 : schFactorStaaf(ld.beamId);
       const qxA = gxA + schLast * -gyA;
       const qyA = gyA;
       const qxB = gxB + schLast * -gyB;
@@ -1790,7 +1790,7 @@ export function buildMesh(
       if (f === 0) continue;
       const meshNid = nodeIdMap.get(pl.nodeId);
       if (meshNid === undefined) continue;
-      pasKnooplastToe(meshNid, pl.fx ?? 0, pl.fz ?? 0, pl.my ?? 0, f, schFactorKnoop(pl.nodeId));
+      pasKnooplastToe(meshNid, pl.fx ?? 0, pl.fz ?? 0, pl.my ?? 0, f, pl.geenScheefstand ? 0 : schFactorKnoop(pl.nodeId));
     }
   }
 

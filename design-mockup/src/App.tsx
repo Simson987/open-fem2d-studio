@@ -166,6 +166,7 @@ import {
   bepaalToetsKrachten2D,
   bepaalToetsScheefstand,
   eigenKolomScheefstand2D,
+  houtStavenVoorToets,
   scheefstandToelichtingToets,
   toetsOmschrijving,
   toetsScheefstandNormen,
@@ -1374,6 +1375,8 @@ function App() {
     scheefstandTorsie: fem.scheefstandTorsie,
     // Issue #199, fase 3: de eigen scheefstand per losse kolom.
     scheefstandEigenKolom: fem.scheefstandEigenKolom,
+    // Issue #199, fase 4: hout in de toets volgens NEN-EN 1995-1-1.
+    houtToetsEN1995: fem.houtToetsEN1995,
     // Eigen doorsneden reizen mee in het projectbestand: een staaf met
     // `EIGEN:<naam>` moet op een andere machine dezelfde doorsnede vinden.
     // Alleen de doorsneden die dit model daadwerkelijk gebruikt — anders
@@ -1604,6 +1607,7 @@ function App() {
         scheefstandAantalY: parsed.scheefstandAantalY,
         scheefstandTorsie: parsed.scheefstandTorsie,
         scheefstandEigenKolom: parsed.scheefstandEigenKolom,
+        houtToetsEN1995: parsed.houtToetsEN1995,
         gevolgklasse:
           bestandsklasse === "CC1" || bestandsklasse === "CC2" || bestandsklasse === "CC3"
             ? bestandsklasse
@@ -3255,6 +3259,8 @@ function App() {
               }) }
             : {}),
         },
+        // Issue #199, fase 4: hout volgens NEN-EN 1995-1-1, alleen met de instelling.
+        ...(fem.houtToetsEN1995 ? { hout: { gammaM: houtStavenVoorToets(fem.beams) } } : {}),
         analysetype: fem.analysetype,
         resultaten: perCase && hergebruikMag
           ? { perCase, combinationResults: resultaten, ...(alphaCrResultaten ? { alphaCr: alphaCrResultaten } : {}) }
@@ -4017,7 +4023,7 @@ function App() {
       // en stil verloren gaan bij het afsluiten.
       fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen,
       fem.scheefstandAantalX, fem.scheefstandAantalY, fem.scheefstandTorsie, fem.scheefstandEigenKolom,
-      openFem3d]);
+      fem.houtToetsEN1995, openFem3d]);
 
   // C2: sluitbeveiliging. Tauri: onCloseRequested + native dialoog (dekt de
   // titelbalk-sluitknop, Bestand → Afsluiten en Alt+F4). Browser: beforeunload.
@@ -5331,6 +5337,8 @@ function App() {
           setScheefstandTorsie={fem.setScheefstandTorsie}
           scheefstandEigenKolom={fem.scheefstandEigenKolom}
           setScheefstandEigenKolom={fem.setScheefstandEigenKolom}
+          houtToetsEN1995={fem.houtToetsEN1995}
+          setHoutToetsEN1995={fem.setHoutToetsEN1995}
           // φ_X en φ_Y, m_X en m_Y (issue #194): de balk toont beide richtingen.
           scheefstandPhiNoemer={scheefstandBalk.noemer}
           scheefstandPhiNoemerY={scheefstandBalk.noemerY}
@@ -5396,6 +5404,8 @@ function App() {
           setScheefstandTorsie={fem.setScheefstandTorsie}
           scheefstandEigenKolom={fem.scheefstandEigenKolom}
           setScheefstandEigenKolom={fem.setScheefstandEigenKolom}
+          houtToetsEN1995={fem.houtToetsEN1995}
+          setHoutToetsEN1995={fem.setHoutToetsEN1995}
           // De uitkomst en de afleiding gaan als GEGEVEN mee naar de balk: de
           // balk toont wat er is gerekend en rekent niets zelf, zodat er geen
           // tweede plek is waar φ kan ontstaan.

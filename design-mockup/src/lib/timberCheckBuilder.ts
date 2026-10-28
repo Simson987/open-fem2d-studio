@@ -90,7 +90,7 @@ import {
 } from "./uitkraging";
 import type { Staafeinden } from "./types/steel/Staafeinden";
 import { kipsteunenVanStaaf } from "./kipsteunen";
-import type { StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
+import { zijdelingseKnikHoutInVlakModel, type StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
 import {
   eigenNaamVan,
   isEigenProfiel,
@@ -126,6 +126,18 @@ export const HOUT_TOETS_STAAFNOTITIE =
  * eigen, eerste-ordegegevens krijgt de houtmelding niet, want die zou over zijn
  * krachten iets onwaars zeggen.
  */
+/**
+ * De melding bij elke houtstaaf als de toets hout volgens NEN-EN 1995-1-1 rekent
+ * (issue #199, fase 4, `StabiliteitVoorToets.houtEN1995`). Vervangt dan
+ * `HOUT_TOETS_STAAFNOTITIE`.
+ */
+export const HOUT_TOETS_EN1995_STAAFNOTITIE =
+  "HOUT IN DE TOETS VOLGENS NEN-EN 1995-1-1: de UGT-krachten van deze staaf komen uit een " +
+  "tweede-ordeberekening (P-Δ) met scheefstand (minstens (5.1)), met de rekenstijfheid E_d = E_mean/γ_M " +
+  "(2.2.2(1)P) en, als de staaf gedrukt is, de boogimperfectie e = 0,0025·l (5.4.4(2)); de staaf is in " +
+  "vieren verdeeld. Een staand vrij staafeind krijgt daarmee in het vlak de systeemlengte L als de " +
+  "scheefstand minstens die van (5.1) met h = de staaflengte is; de knik wordt getoetst met k_c volgens 6.3.2.";
+
 export function isTweedeOrdeToets(stabiliteit: StabiliteitVoorToets | undefined): boolean {
   return stabiliteit !== undefined && stabiliteit.analysetype !== "eersteOrde" && stabiliteit.scheefstandAan;
 }
@@ -1067,7 +1079,22 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
     // niet de volledige EN 1995-route, dus 2·L bij een vrij eind (issue #199,
     // B10). De EC3-kanttekening over α_cr (`alphaCrStaafNotitie`) die hier tot
     // 2026.42 stond, is weg: de toets rekent nooit eerste orde.
-    if (isTweedeOrdeToets(ruweData.stabiliteit)) staafNotities.push(HOUT_TOETS_STAAFNOTITIE);
+    if (isTweedeOrdeToets(ruweData.stabiliteit)) {
+      staafNotities.push(ruweData.stabiliteit?.houtEN1995 ? HOUT_TOETS_EN1995_STAAFNOTITIE : HOUT_TOETS_STAAFNOTITIE);
+    }
+    // Fase 4 (issue #199): met hout volgens NEN-EN 1995-1-1 in de toets zit de
+    // zijdelingse knik van een staande staaf met één vrij eind in de krachten
+    // (L, `zijdelingseKnikHoutInVlakModel`); anders 2·L.
+    const eenVrijEind = vrijEind && !(staafeinden.begin === "Vrij" && staafeinden.eind === "Vrij");
+    const knoopA = data.nodes.find((n) => n.id === beam.from), knoopB = data.nodes.find((n) => n.id === beam.to);
+    const staand = knoopA !== undefined && knoopB !== undefined && lengthMm > 0
+      && Math.abs(knoopB.z - knoopA.z) / lengthMm >= Math.sin((75 * Math.PI) / 180);
+    const zijdelingsHout = eenVrijEind
+      ? zijdelingseKnikHoutInVlakModel(ruweData.stabiliteit, staand, lengthMm / 1000,
+        ledenVanLijn.size > 0 ? [...ledenVanLijn] : [beam.id])
+      : {};
+    const kniklengteYOpgegeven = Number.isFinite(cfg.bucklingLengthY_m) && (cfg.bucklingLengthY_m as number) > 0;
+    if (zijdelingsHout.notitie && !kniklengteYOpgegeven) staafNotities.push(zijdelingsHout.notitie);
 
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
@@ -1151,7 +1178,10 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // 5.4.4(2), en de P-Δ van deze app rekent met E_mean en zonder
       // boogimperfectie. Een vrij houten eind houdt dus 2·L, ook nu de
       // toetskrachten altijd tweede orde met scheefstand zijn (issue #199); dat
-      // zegt `HOUT_TOETS_STAAFNOTITIE` bij de staaf.
+      // zegt `HOUT_TOETS_STAAFNOTITIE` bij de staaf. Met hout volgens
+      // NEN-EN 1995-1-1 in de toets (fase 4, `houtEN1995`) wel, voor een
+      // staande staaf: zie `zijdelingseKnikHoutInVlakModel`.
+      ...(zijdelingsHout.veld ? { zijdelingse_knik_in_analyse: zijdelingsHout.veld } : {}),
       // Zijdelingse steunen per rand — ALLEEN voor de kniklengte om z. Dezelfde
       // twee lijsten als bij staal (boven = bovenrand, onder = onderrand). De
       // kipsteunafstand hieronder blijft er uitdrukkelijk los van.

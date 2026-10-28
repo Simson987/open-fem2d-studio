@@ -389,6 +389,7 @@ function scheefstandVan(document: ApiDocument) {
     membersY: document.scheefstandAantalY ?? null,
     torsion: document.scheefstandTorsie === true,
     ownColumnSway: document.scheefstandEigenKolom === true,
+    timberEn1995: document.houtToetsEN1995 === true,
   };
 }
 
@@ -396,6 +397,7 @@ type ScheefstandInvoer = {
   enabled?: boolean; source?: ScheefstandBron; denominator?: number; heightM?: number | null;
   members?: number | null; membersX?: number | null; membersY?: number | null; torsion?: boolean;
   ownColumnSway?: boolean;
+  timberEn1995?: boolean;
 };
 
 const scheefstandLezen = documentCommando<Record<string, never>, unknown>({
@@ -422,6 +424,7 @@ const scheefstandZetten = documentCommando<ScheefstandInvoer, unknown>({
     membersY: ofNull(geheel("Alleen 3D: handmatige m_Y.", { minimum: 1 }), "null = members of afleiden."),
     torsion: jaNee("Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10)."),
     ownColumnSway: jaNee("2D en 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(φ_model, φ_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte."),
+    timberEn1995: jaNee("Alleen 2D (issue #199, fase 4): hout in de UGT-toets volgens NEN-EN 1995-1-1: E_d = E_mean/γ_M, de boogimperfectie e = 0,0025·l per gedrukte houtstaaf, en de systeemlengte L bij een staand vrij houten eind."),
   }),
   uitvoeren: (invoer, document) => {
     const nieuw: ApiDocument = {
@@ -435,6 +438,7 @@ const scheefstandZetten = documentCommando<ScheefstandInvoer, unknown>({
       ...(invoer.membersY !== undefined ? { scheefstandAantalY: invoer.membersY } : {}),
       ...(invoer.torsion !== undefined ? { scheefstandTorsie: invoer.torsion } : {}),
       ...(invoer.ownColumnSway !== undefined ? { scheefstandEigenKolom: invoer.ownColumnSway } : {}),
+      ...(invoer.timberEn1995 !== undefined ? { houtToetsEN1995: invoer.timberEn1995 } : {}),
     };
     return { uitkomst: scheefstandVan(nieuw), document: nieuw };
   },
