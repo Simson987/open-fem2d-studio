@@ -2450,6 +2450,8 @@ function getConstrainedDofs(mesh, analysisType = "plane_stress") {
 function applyEndReleases(Ke, releasedDofs, F) {
   const n2 = 6;
   const eliminated = /* @__PURE__ */ new Set();
+  let schaal = 0;
+  for (let i = 0; i < n2; i++) for (let j = 0; j < n2; j++) schaal = Math.max(schaal, Math.abs(Ke.get(i, j)));
   for (const c of releasedDofs) {
     const kcc = Ke.get(c, c);
     if (Math.abs(kcc) < 1e-20) {
@@ -2484,6 +2486,15 @@ function applyEndReleases(Ke, releasedDofs, F) {
       Ke.set(c, i, 0);
     }
     eliminated.add(c);
+  }
+  if (releasedDofs.length > 0 && schaal > 0) {
+    const drempel = 1e-13 * schaal;
+    for (let i = 0; i < n2; i++) {
+      for (let j = 0; j < n2; j++) {
+        const v = Ke.get(i, j);
+        if (v !== 0 && Math.abs(v) < drempel) Ke.set(i, j, 0);
+      }
+    }
   }
 }
 function applyEndConnections(Ke, hingedDofs, springs, F) {
