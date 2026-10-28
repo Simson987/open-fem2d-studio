@@ -138,6 +138,7 @@ export interface OpenFem3DPlateSummary {
   elementCount: number;
   nodeCount: number;
   areaM2: number;
+  /** Vlaklasten plus knooplasten op de plaatknopen, globaal (kN); zie `PlateSummary3D` (#244). */
   loadResultantKn: [number, number, number];
   extremes: OpenFem3DPlateExtreme[];
 }

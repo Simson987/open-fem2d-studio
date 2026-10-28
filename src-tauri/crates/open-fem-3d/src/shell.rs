@@ -162,7 +162,9 @@ pub struct PlateSummary3D {
     pub element_count: usize,
     pub node_count: usize,
     pub area_m2: f64,
-    /// Resultante van de vlaklasten op deze plaat, globaal (kN).
+    /// Resultante van de vlaklasten op deze plaat plus de knooplasten op
+    /// haar knopen, globaal (kN). Een knooplast op een knoop van meer platen
+    /// telt naar rato mee (gelijk verdeeld). Knoopmomenten tellen niet mee.
     pub load_resultant_kn: V3,
     pub extremes: Vec<PlateExtreme3D>,
 }
@@ -723,6 +725,27 @@ pub(crate) fn recover_shell_results(
         let area = geometry[&load.plate_id].area_m2;
         let entry = load_per_plate.entry(load.plate_id).or_insert([0.0; 3]);
         *entry = add(*entry, scale([load.qx_kn_per_m2, load.qy_kn_per_m2, load.qz_kn_per_m2], area));
+    }
+    // Issue #244 (punt 069): ook de knooplasten op knopen van de plaat. Een
+    // wandschijf die alleen via knooplasten op haar rand belast wordt, gaf
+    // `loadResultantKn = [0, 0, 0]` terwijl de reacties wél 100 kN waren.
+    // Een knoop die op meer platen ligt, verdeelt zijn last gelijk over die
+    // platen, zodat de som over alle platen de totale knooplast blijft.
+    // Alleen krachten; een knoopmoment heeft geen krachtresultante.
+    let mut platen_van: HashMap<usize, Vec<usize>> = HashMap::new();
+    for element in &request.shell_elements {
+        for &node_id in &element.node_ids {
+            let lijst = platen_van.entry(node_id).or_default();
+            if !lijst.contains(&element.plate_id) { lijst.push(element.plate_id); }
+        }
+    }
+    for load in &request.nodal_loads {
+        let Some(platen) = platen_van.get(&load.node_id) else { continue };
+        let deel = scale([load.fx, load.fy, load.fz], 1.0 / platen.len() as f64);
+        for plate_id in platen {
+            let entry = load_per_plate.entry(*plate_id).or_insert([0.0; 3]);
+            *entry = add(*entry, deel);
+        }
     }
     let mut summaries = Vec::new();
     for plate in &request.plates {
