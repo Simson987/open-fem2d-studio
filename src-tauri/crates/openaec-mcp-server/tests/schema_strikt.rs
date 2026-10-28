@@ -1,6 +1,7 @@
 //! Strikt schema en strikte invoer voor `check_steel_beam`, voor de
 //! betontools (`check_concrete_beam`, `concrete_mn_kappa`) en voor de
-//! houttools (`check_timber_beams`, `check_clt_beams`).
+//! houttools (`check_timber_beams`, `check_clt_beams`) en de aluminiumtoets
+//! (`check_aluminium_beams`, issue #5).
 //!
 //! Waarom deze test bestaat: het oude schema zette `additionalProperties` op
 //! `true` en verzweeg vijf velden met `#[serde(default)]`. Een client die dat
@@ -1857,6 +1858,66 @@ async fn schema_van_gui_start_app_is_strikt() {
         let uit = roep_tool_aan(&mut stdin, &mut reader, 92, "gui_start_app", buiten.clone()).await;
         assert_eq!(uit["isError"], json!(true), "{buiten}: {uit}");
         assert_eq!(uit["structuredContent"]["error_code"], json!("ARGUMENT_ONGELDIG"), "{buiten}");
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+// ── Aluminium (NEN-EN 1999-1-1, issue #5) ──────────────────────────────────
+
+/// I 200×100×6×10 in EN AW-6063 T6, de ligger van
+/// `aluminium-check/tests/handberekening.rs`; er wordt hier geen UC vastgelegd.
+fn geldige_aluminiuminvoer() -> Value {
+    json!({
+        "beam_id": 4, "section_name": "ALU-I 200x100x6x10",
+        "doorsnede": { "vorm": "IProfiel", "h_mm": 200.0, "b_mm": 100.0, "tw_mm": 6.0, "tf_mm": 10.0 },
+        "legering": "EN AW-6063 T6", "lasstatus": "Geen", "length_m": 3.0,
+        "forces_envelope": [
+            { "combination_id": 1, "position_mm": 0.0,
+              "forces": { "n_ed": -100.0, "vy_ed": 0.0, "vz_ed": 20.0, "mt_ed": 0.0, "my_ed": 10.0, "mz_ed": 0.0 } }
+        ],
+        "buckling_length_y_m": 3.0, "buckling_length_z_m": 1.5
+    })
+}
+
+#[tokio::test]
+async fn schema_van_check_aluminium_beams_is_strikt_op_elk_niveau() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let tool = tooldefinitie(&mut stdin, &mut reader, 60, "check_aluminium_beams").await;
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false, "omhulsel");
+    let staaf = &tool["inputSchema"]["properties"]["inputs"]["items"];
+    assert_eq!(staaf["additionalProperties"], false, "staaf");
+    assert_eq!(staaf["properties"].as_object().unwrap().len(), 12,
+        "precies de 12 velden van AluminiumBeamCheckInput (spiegeltest in aluminium_tools.rs)");
+    // De lasstatus is verplicht en heeft geen standaard (issue #5: nooit stil ongelast).
+    assert!(staaf["required"].as_array().unwrap().contains(&json!("lasstatus")));
+    assert!(staaf["properties"]["lasstatus"].get("default").is_none());
+    for variant in staaf["properties"]["doorsnede"]["oneOf"].as_array().unwrap() {
+        assert_eq!(variant["additionalProperties"], false, "doorsnedevariant {variant}");
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+#[tokio::test]
+async fn aluminiuminvoer_rekent_en_een_tikfout_wordt_geweigerd() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let result = roep_tool_aan(&mut stdin, &mut reader, 61, "check_aluminium_beams",
+        json!({ "inputs": [geldige_aluminiuminvoer()] })).await;
+    assert_eq!(result["isError"], false, "geldige invoer: {}", foutmelding(&result));
+    let r = &result["structuredContent"]["results"][0];
+    assert!(!r["checks"].as_array().unwrap().is_empty());
+    // Kip en 6.3.3 zijn niet geïmplementeerd: deze staaf mag niet "Ok" zijn.
+    assert_eq!(r["status"], "NotApplicable");
+
+    for (i, (pad, tikfout)) in [("staaf", "zijdelings_gestuend"), ("doorsnede", "t_mm")].into_iter().enumerate() {
+        let mut invoer = geldige_aluminiuminvoer();
+        let doel = if pad == "staaf" { &mut invoer } else { &mut invoer["doorsnede"] };
+        doel.as_object_mut().unwrap().insert(tikfout.into(), json!(1));
+        let result = roep_tool_aan(&mut stdin, &mut reader, 62 + i as u32, "check_aluminium_beams",
+            json!({ "inputs": [invoer] })).await;
+        assert_eq!(result["isError"], true, "{pad}: `{tikfout}` gaf een resultaat: {result}");
+        assert!(foutmelding(&result).contains(tikfout), "{pad}: {}", foutmelding(&result));
     }
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;

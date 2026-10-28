@@ -85,7 +85,15 @@
     "cltFvRolLeeg": "not checked",
     "cltFvRolBron": "Source of f_v,rol,k",
     "cltFvRolHint": "EN 1995-1-1 and EN 338 give no rolling shear strength for cross-laminated timber. Enter the declared f_v,rol,k and its source (ETA or product declaration); each transverse layer is then checked with f_v,rol,d = k_mod·f_v,rol,k/γ_M. Empty = rolling shear not checked, stated in the report.",
-    "cltKdefHint": "Table 3.2 of EN 1995-1-1 gives no k_def for cross-laminated timber, and the national annex adds none. No value is therefore assumed: enter k_def and its source (ETA or product declaration of the panel, for this service class). If either is missing, w_fin and w_add are not checked and that reason is stated in the report."
+    "cltKdefHint": "Table 3.2 of EN 1995-1-1 gives no k_def for cross-laminated timber, and the national annex adds none. No value is therefore assumed: enter k_def and its source (ETA or product declaration of the panel, for this service class). If either is missing, w_fin and w_add are not checked and that reason is stated in the report.",
+    "aluTitle": "Aluminium (EN 1999-1-1)",
+    "aluLasstatus": "Welds",
+    "aluLasstatusHint": "Unknown: the check conservatively assumes welding (whole cross-section in the HAZ) and never reports 'OK'. Welded: whole cross-section in the HAZ (MIG); buckling is then not checked.",
+    "aluLasOnbekend": "Unknown",
+    "aluLasGeen": "No welds",
+    "aluLasGelast": "Welded (MIG)",
+    "aluZijdelings": "Laterally restrained (no LTB)",
+    "aluZijdelingsHint": "Lateral-torsional buckling (§6.3.2) is not implemented yet. Only tick this if the compression edge is laterally restrained over the full length; otherwise LTB stays 'not checked'."
   },
   "profilePicker": {
     "titleChooseMaterial": "Assign section — choose material",
@@ -109,12 +117,25 @@
       },
       "aluminium": {
         "label": "Aluminium",
-        "hint": "Coming later — no section database or check yet"
+        "hint": "Extruded profile (I, box, rectangle) + alloy from table 3.2b (EN 1999)"
       },
       "overig": {
         "label": "Other",
         "hint": "Free material: own name, E, ρ and allowable stress; checked on the equivalent stress (von Mises), without a code"
       }
+    },
+    "alu": {
+      "vorm": {
+        "IProfiel": "I-section",
+        "Koker": "Box section",
+        "Rechthoek": "Rectangle (solid)"
+      },
+      "tw": "Web thickness t_w (mm)",
+      "tf": "Flange thickness t_f (mm)",
+      "t": "Wall thickness t (mm)",
+      "alloy": "Alloy",
+      "hint": "E = 70,000 N/mm², ρ = 2,700 kg/m³ (EN 1999-1-1 §3.2.5). Strengths and buckling class from table 3.2b, depending on the wall thickness. Computed without corner radii (safe). Specify in the member properties whether the member is welded.",
+      "invalid": "Enter valid dimensions (h > 2·t, b > t_w)"
     },
     "inProject": "In this project",
     "inUseTitle_one": "{{profiel}} in {{materiaal}}, currently on {{count}} member",

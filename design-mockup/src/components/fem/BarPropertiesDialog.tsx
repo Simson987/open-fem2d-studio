@@ -28,6 +28,7 @@ import { matchSupportedTimberGrade } from "../../lib/timberCheckBuilder";
 import { isCltProfiel } from "../../lib/cltCheckBuilder";
 import { sanitizeRestraintFractions } from "../../lib/steelCheckBuilder";
 import { parseVrijMateriaal } from "../../lib/vrijMateriaal";
+import { isAluminiumMateriaal } from "../../lib/aluminiumMateriaal";
 import ProfielKiezer, { profielenInGebruik } from "./ProfielKiezer";
 // Één bron voor de doorsnedenaam en de begin-/eindmaten van een verlopende
 // staaf — dezelfde keuring als de solver en de rekenkern; zie lib/verloopKeuze.
@@ -179,6 +180,9 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
       ? cfg0.preCamber_mm.toString() : "",
   );
   const [serviceClass, setServiceClass] = useState<1 | 2 | 3>(cfg0.serviceClass ?? 1);
+  // Aluminium (EN 1999-1-1): "" = lasstatus onbekend (geen "voldoet").
+  const [aluLas, setAluLas] = useState<"" | "geen" | "gelast">(cfg0.aluLasstatus ?? "");
+  const [aluZijdelings, setAluZijdelings] = useState<boolean>(cfg0.aluZijdelingsGesteund === true);
   // Dwarsspanning voor de vergelijkspanning van een vrij materiaal. Leeg = 0:
   // een staafelement kent alleen N, V en M, dus σ_z kan alleen van de
   // gebruiker komen (bijvoorbeeld een oplegdruk).
@@ -236,6 +240,8 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
   const isTimber = matchSupportedTimberGrade(material) !== null;
   // Vrij materiaal: geen norm, maar een toets op de vergelijkspanning.
   const vrij = parseVrijMateriaal(material);
+  // Aluminium: EN 1999-1-1 (issue #5).
+  const alu = isAluminiumMateriaal(material);
 
   /**
    * Bouw een schone checkConfig: alleen expliciet ingevulde waarden; alles
@@ -318,6 +324,11 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
     if (sigmaZStr.trim() !== "" && Number.isFinite(sigmaZ) && sigmaZ !== 0) {
       cfg.spanningSigmaZ = sigmaZ;
     }
+    // Aluminium: alleen een uitdrukkelijke keuze gaat het bestand in.
+    if (aluLas !== "") cfg.aluLasstatus = aluLas;
+    else delete cfg.aluLasstatus;
+    if (aluZijdelings) cfg.aluZijdelingsGesteund = true;
+    else delete cfg.aluZijdelingsGesteund;
     // De betonvelden gaan onveranderd mee; zie de toelichting bij `betonCfg`.
     for (const [k, v] of Object.entries(betonCfg)) {
       if (v !== undefined) (cfg as Record<string, unknown>)[k] = v;
@@ -472,7 +483,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
           <button
             className={`bar-props-tab${tab === "norm" ? " active" : ""}`}
             onClick={() => setTab("norm")}
-          >{vrij ? t("barDialog.tabStress") : isTimber ? "EN 1995" : "EN 1993"}</button>
+          >{vrij ? t("barDialog.tabStress") : alu ? "EN 1999" : isTimber ? "EN 1995" : "EN 1993"}</button>
         </div>
 
         <div className="bar-props-body">
@@ -648,6 +659,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                   <code>
                     {vrij
                       ? t("barDialog.standardNone")
+                      : alu ? "NEN-EN 1999-1-1"
                       : isTimber ? "NEN-EN 1995-1-1" : "NEN-EN 1993-1-1"}
                   </code>
                 </div>
@@ -669,6 +681,30 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                       placeholder="0"
                       value={sigmaZStr}
                       onChange={(e) => setSigmaZStr(e.target.value)}
+                    />
+                  </DialoogRij>
+                </div>
+              )}
+
+              {alu && (
+                <div className="bar-props-section">
+                  <div className="bar-props-section-title">{t("cfg.aluTitle")}</div>
+                  <DialoogRij label={t("cfg.aluLasstatus")} info={t("cfg.aluLasstatusHint")}>
+                    <select
+                      className="bar-props-select"
+                      value={aluLas}
+                      onChange={(e) => setAluLas(e.target.value as "" | "geen" | "gelast")}
+                    >
+                      <option value="">{t("cfg.aluLasOnbekend")}</option>
+                      <option value="geen">{t("cfg.aluLasGeen")}</option>
+                      <option value="gelast">{t("cfg.aluLasGelast")}</option>
+                    </select>
+                  </DialoogRij>
+                  <DialoogRij label={t("cfg.aluZijdelings")} info={t("cfg.aluZijdelingsHint")}>
+                    <input
+                      type="checkbox"
+                      checked={aluZijdelings}
+                      onChange={(e) => setAluZijdelings(e.target.checked)}
                     />
                   </DialoogRij>
                 </div>
@@ -731,7 +767,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                 </div>
               </div>
 
-              {!isTimber && (
+              {!isTimber && !alu && (
                 <div className="bar-props-section">
                   <div className="bar-props-section-title">{t("cfg.bracingTitle")}</div>
                   <DialoogRij label={t("cfg.bracingLabel")} info={t("cfg.bracingHint")}>

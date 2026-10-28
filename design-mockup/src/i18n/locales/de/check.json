@@ -85,7 +85,15 @@
     "cltFvRolLeeg": "nicht nachgewiesen",
     "cltFvRolBron": "Quelle f_v,rol,k",
     "cltFvRolHint": "EN 1995-1-1 und EN 338 enthalten keine Rollschubfestigkeit für Brettsperrholz. Geben Sie das deklarierte f_v,rol,k und die Quelle an (ETA oder Produkterklärung); dann wird jede Querlage mit f_v,rol,d = k_mod·f_v,rol,k/γ_M nachgewiesen. Leer = Rollschub nicht nachgewiesen, mit Hinweis im Bericht.",
-    "cltKdefHint": "Tabelle 3.2 der EN 1995-1-1 enthält kein k_def für Brettsperrholz, und der Nationale Anhang ergänzt keines. Daher wird kein Wert angenommen: Geben Sie k_def und die Quelle an (ETA oder Produkterklärung der Platte, für diese Nutzungsklasse). Fehlt eines davon, werden w_fin und w_add nicht nachgewiesen und dieser Grund steht im Bericht."
+    "cltKdefHint": "Tabelle 3.2 der EN 1995-1-1 enthält kein k_def für Brettsperrholz, und der Nationale Anhang ergänzt keines. Daher wird kein Wert angenommen: Geben Sie k_def und die Quelle an (ETA oder Produkterklärung der Platte, für diese Nutzungsklasse). Fehlt eines davon, werden w_fin und w_add nicht nachgewiesen und dieser Grund steht im Bericht.",
+    "aluTitle": "Aluminium (EN 1999-1-1)",
+    "aluLasstatus": "Schweißnähte",
+    "aluLasstatusHint": "Unbekannt: der Nachweis rechnet sicher wie geschweißt (ganzer Querschnitt in der WEZ) und meldet nie 'erfüllt'. Geschweißt: ganzer Querschnitt in der WEZ (MIG); Knicken wird dann nicht nachgewiesen.",
+    "aluLasOnbekend": "Unbekannt",
+    "aluLasGeen": "Keine Schweißnähte",
+    "aluLasGelast": "Geschweißt (MIG)",
+    "aluZijdelings": "Seitlich gehalten (kein Biegedrillknicken)",
+    "aluZijdelingsHint": "Biegedrillknicken (§6.3.2) ist noch nicht implementiert. Nur ankreuzen, wenn der Druckrand über die ganze Länge seitlich gehalten ist; sonst bleibt es 'nicht nachgewiesen'."
   },
   "profilePicker": {
     "titleChooseMaterial": "Profil zuweisen — Werkstoff wählen",
@@ -109,12 +117,25 @@
       },
       "aluminium": {
         "label": "Aluminium",
-        "hint": "Folgt später — noch keine Profildatenbank und kein Nachweis"
+        "hint": "Strangpressprofil (I, Hohlprofil, Rechteck) + Legierung aus Tabelle 3.2b (EN 1999)"
       },
       "overig": {
         "label": "Sonstige",
         "hint": "Freier Werkstoff: eigener Name, E, ρ und zulässige Spannung; Nachweis über die Vergleichsspannung (von Mises), ohne Norm"
       }
+    },
+    "alu": {
+      "vorm": {
+        "IProfiel": "I-Profil",
+        "Koker": "Rechteckhohlprofil",
+        "Rechthoek": "Rechteck (massiv)"
+      },
+      "tw": "Stegdicke t_w (mm)",
+      "tf": "Flanschdicke t_f (mm)",
+      "t": "Wanddicke t (mm)",
+      "alloy": "Legierung",
+      "hint": "E = 70 000 N/mm², ρ = 2 700 kg/m³ (EN 1999-1-1 §3.2.5). Festigkeiten und Knickklasse aus Tabelle 3.2b, abhängig von der Wanddicke. Ohne Eckradien gerechnet (sicher). In den Stabeigenschaften angeben, ob der Stab geschweißt ist.",
+      "invalid": "Gültige Maße eingeben (h > 2·t, b > t_w)"
     },
     "inProject": "In diesem Projekt",
     "inUseTitle_one": "{{profiel}} in {{materiaal}}, derzeit an {{count}} Stab",

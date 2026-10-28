@@ -42,6 +42,7 @@ use plaat_check::PlateCheckInput;
 use serde::Deserialize;
 use serde_json::Value;
 use spanning_check::SpanningBeamCheckInput;
+use aluminium_check::AluminiumBeamCheckInput;
 use steel_check::BeamCheckInput;
 use timber_check::clt::CltBeamCheckInput;
 use timber_check::TimberBeamCheckInput;
@@ -238,6 +239,19 @@ pub fn behandel(v: Verzoek) -> Result<Value, String> {
             let inputs: Vec<SpanningBeamCheckInput> =
                 serde_json::from_value(inputs).map_err(|e| format!("spanningsinvoer: {e}"))?;
             serde_json::to_value(spanning_check::check_all_spanning_beams(inputs))
+                .map_err(|e| e.to_string())
+        }
+        // Aluminium (NEN-EN 1999-1-1, issue #5): legeringen en staaftoets.
+        // Zelfde typen en functies als het Tauri-command en de MCP-tools van
+        // dezelfde naam (`openaec-mcp-server/src/aluminium_tools.rs`).
+        "list_aluminium_alloys" => {
+            serde_json::to_value(aluminium_check::list_aluminium_alloys()).map_err(|e| e.to_string())
+        }
+        "check_aluminium_beams" => {
+            let inputs = v.inputs.ok_or("check_aluminium_beams vraagt om `inputs`")?;
+            let inputs: Vec<AluminiumBeamCheckInput> =
+                serde_json::from_value(inputs).map_err(|e| format!("aluminiuminvoer: {e}"))?;
+            serde_json::to_value(aluminium_check::check_all_aluminium_beams(inputs))
                 .map_err(|e| e.to_string())
         }
         // Platen (wandschijven): de elementspanningen per UGT-combinatie getoetst

@@ -473,6 +473,8 @@ export interface GebruikteKaders {
   concrete: boolean;
   /** Wél getoetst, maar tegen géén norm: de vrije spanningstoets. */
   vrij: boolean;
+  /** Aluminium, NEN-EN 1999-1-1 (issue #5). */
+  aluminium: boolean;
 }
 
 /**
@@ -489,12 +491,16 @@ const VLAG_PER_SOORT: Record<CheckSoort, keyof GebruikteKaders> = {
   clt: "timber",
   beton: "concrete",
   spanning: "vrij",
+  aluminium: "aluminium",
 };
+
+/** De aanduiding van de aluminiumkern (`nen_en_1999_1_1::NORM`). */
+const ALUMINIUM_NORM_FULL = "NEN-EN 1999-1-1:2007+A1:2009";
 
 /** Welke normen daadwerkelijk in de resultaten voorkomen. */
 export function usedNorms(results: MemberCheckResult[]): GebruikteKaders {
   const uit: GebruikteKaders = {
-    steel: false, timber: false, concrete: false, vrij: false,
+    steel: false, timber: false, concrete: false, vrij: false, aluminium: false,
   };
   for (const r of results) {
     const soort = checkSoort(r);
@@ -522,8 +528,8 @@ export function basisText(
   /** De nationale bijlage uit de projectgegevens, zoals gelezen; weglaten = niet ingesteld. */
   bijlage?: unknown,
 ): string | null {
-  const { steel, timber, concrete } = usedNorms(results);
-  if (!steel && !timber && !concrete) return null;
+  const { steel, timber, concrete, aluminium } = usedNorms(results);
+  if (!steel && !timber && !concrete && !aluminium) return null;
   let a: NormAanduidingen;
   try {
     a = normAanduidingenVoor(bijlage);
@@ -543,6 +549,8 @@ export function basisText(
   if (steel) parts.push(t("report.basisSteel", `staal: ${STEEL_NORM_FULL}`, { norm: STEEL_NORM_FULL }));
   if (timber) parts.push(t("report.basisTimber", `hout: ${TIMBER_NORM_FULL}`, { norm: TIMBER_NORM_FULL }));
   if (concrete) parts.push(t("report.basisConcrete", `beton: ${CONCRETE_NORM_FULL}`, { norm: CONCRETE_NORM_FULL }));
+  // Aluminium: γ_M uit tabel 6.1 (aanbevolen waarden); geen NB verwerkt.
+  if (aluminium) parts.push(t("report.basisAluminium", "aluminium: {{norm}}", { norm: ALUMINIUM_NORM_FULL }));
   if (parts.length === 0) return null;
   const label = t("report.basisLabel", "Toetsbasis");
   // De zin over de bijlage is PROZA en staat per taal in i18n; hij is niet

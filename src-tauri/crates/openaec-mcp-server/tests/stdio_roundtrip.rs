@@ -106,7 +106,8 @@ async fn stdio_roundtrip_initialize_list_call() {
     // gui_*-tools (het bedieningskanaal van de desktop-app, zie gui_tools.rs;
     // sinds de staalhal ook gui_build_3d_steel_hall, sinds de IFC-import ook
     // gui_import_ifc_analysis_model, sinds issue #109 ook gui_start_app)
-    // + project_import (lokale extensie) = 55 vaste tools.
+    // + project_import (lokale extensie) + list_aluminium_alloys en
+    // check_aluminium_beams (issue #5) = 57 vaste tools.
     // Daarbij één tool per API-commando van de app, uit de ingebakken catalogus
     // (assets/api-catalogus.json, geschreven door `npm run build:sidecar`).
     // Ook die tellen exact: elk commando uit de catalogus, niets meer.
@@ -120,8 +121,8 @@ async fn stdio_roundtrip_initialize_list_call() {
         .collect();
     assert_eq!(
         tools.len(),
-        55 + api_namen.len(),
-        "expected 55 + {} tools, got {}",
+        57 + api_namen.len(),
+        "expected 57 + {} tools, got {}",
         api_namen.len(),
         tools.len()
     );

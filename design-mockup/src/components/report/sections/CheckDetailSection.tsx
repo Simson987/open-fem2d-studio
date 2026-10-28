@@ -40,6 +40,7 @@ import {
   isConcreteCheckResult,
   isSteelCheckResult,
   isStressCheckResult,
+  isAluminiumCheckResult,
   sectionLabel,
   type MemberCheckResult,
 } from "../../../lib/checkTypes";
@@ -390,6 +391,8 @@ function MemberBlock({
       ? `EN 1992 · ${result.reinforcement_summary} · f_cd = ${result.f_cd_mpa.toFixed(1)} N/mm² · f_yd = ${result.f_yd_mpa.toFixed(0)} N/mm²`
       : isStressCheckResult(result)
         ? `${t("report.spanningGeenNorm", "vrije spanningstoets (geen norm)")} · f_toel = ${fmtValue(result.f_toel_mpa, 2)} N/mm² · γ_M = ${fmtValue(result.gamma_m, 2)} · f_d = ${fmtValue(result.f_d_mpa, 2)} N/mm²`
+        : isAluminiumCheckResult(result)
+          ? `EN 1999 · ${result.legering} · ${t("report.aluLasstatus", "lassen")}: ${t(`report.aluLas${result.lasstatus}`, result.lasstatus)}${result.niet_getoetst.length > 0 ? ` · ${t("report.aluNietGetoetst", "niet getoetst")}: ${result.niet_getoetst.join("; ")}` : ""}`
         : `EN 1995 · ${t("report.serviceClass", "klimaatklasse")} ${serviceClassLabel(result.service_class)} · ${belastingduurTekst(result, t, tCheck)}`;
 
   // Beknopt: alleen de maatgevende toets — de UC die telt, met dezelfde

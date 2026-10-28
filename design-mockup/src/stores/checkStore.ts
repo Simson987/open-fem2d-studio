@@ -4,7 +4,8 @@
  * Eén run draait de vijf Rust-kernen parallel — staal (`check_steel_beams`),
  * hout (`check_timber_beams`), kruislaaghout (`check_clt_beams`), beton
  * (`check_concrete_beams`) en de vrije spanningstoets
- * (`check_stress_beams`) — en merget de resultaten op staaf-id in één lijst
+ * (`check_stress_beams`) — plus aluminium (`check_aluminium_beams`,
+ * NEN-EN 1999-1-1) — en merget de resultaten op staaf-id in één lijst
  * met hetzelfde NamedCheck-contract. Niet-toetsbare staven komen met
  * expliciete reden in `skipped` (zichtbaar in het toetsingspaneel) — geen
  * stille aannames.
@@ -35,6 +36,7 @@ import type { TimberBeamCheckResult } from "../lib/types/timber/TimberBeamCheckR
 import type { CltBeamCheckResult } from "../lib/types/timber/CltBeamCheckResult";
 import type { ConcreteBeamCheckResult } from "../lib/types/concrete/ConcreteBeamCheckResult";
 import type { SpanningBeamCheckResult } from "../lib/types/spanning/SpanningBeamCheckResult";
+import type { AluminiumBeamCheckResult } from "../lib/types/aluminium/AluminiumBeamCheckResult";
 import type { ConcreteClass } from "../lib/types/concrete/ConcreteClass";
 import type { SteelProfile } from "../lib/types/steel/SteelProfile";
 import type { MemberCheckResult, CheckSkip } from "../lib/checkTypes";
@@ -65,6 +67,7 @@ import { buildPlaatCheckInputs, type PlaatSkip } from "../lib/plaatCheckBuilder"
 import type { PlateCheckResult } from "../lib/types/plaat/PlateCheckResult";
 import { isVrijMateriaal } from "../lib/vrijMateriaal";
 import { isAluminiumMateriaal } from "../lib/aluminiumMateriaal";
+import { buildAluminiumCheckInputs } from "../lib/aluminiumCheckBuilder";
 import type { NationaleBijlageCode } from "../lib/normAanduidingen";
 import {
   bepaalKruipPerStaaf,
@@ -281,6 +284,7 @@ interface CheckState {
     clt: ReturnType<typeof buildCltCheckInputs>["inputs"];
     beton: ReturnType<typeof buildBetonCheckInputs>["inputs"];
     spanning: ReturnType<typeof buildSpanningCheckInputs>["inputs"];
+    aluminium: ReturnType<typeof buildAluminiumCheckInputs>["inputs"];
     plaat: ReturnType<typeof buildPlaatCheckInputs>["inputs"];
   } | null;
 
@@ -481,6 +485,8 @@ export const useCheckStore = create<CheckState>((set) => ({
         bEffPerStaaf: bEffWaardenPerStaaf(beffUitkomsten),
       });
       const spanning = buildSpanningCheckInputs(data);
+      // Aluminium (NEN-EN 1999-1-1): alleen staven met een `ALU:`-materiaal.
+      const aluminium = buildAluminiumCheckInputs(data);
       // Platen: alleen volledige platen (met id) — zie `CheckRunData.plates`.
       const plaat = buildPlaatCheckInputs({
         nodes: data.nodes,
@@ -497,7 +503,7 @@ export const useCheckStore = create<CheckState>((set) => ({
 
       // Eerlijkheid: elke staaf die nergens terechtkwam expliciet melden.
       const bouwers: { inputs: { beam_id: number }[]; skipped: CheckSkip[] }[] = [
-        steel, timber, clt, beton, spanning,
+        steel, timber, clt, beton, spanning, aluminium,
       ];
       const covered = new Set<number>(
         bouwers.flatMap((b) => [
@@ -510,9 +516,7 @@ export const useCheckStore = create<CheckState>((set) => ({
         if (!covered.has(b.id)) {
           skipped.push({
             beamId: b.id,
-            reason: isAluminiumMateriaal(b.material)
-              ? `aluminiumstaaf ${b.material}: alleen 2D-stijfheid is beschikbaar; EN 1999-toetsing vergt een expliciete lasstatus, profielclassificatie en normeditie`
-              : `niet herkend als staal, hout, kruislaaghout, beton of vrij materiaal (materiaal "${b.material ?? "—"}", profiel "${b.profile ?? "—"}") — geen toetsing mogelijk`,
+            reason: `niet herkend als staal, hout, kruislaaghout, beton of vrij materiaal (materiaal "${b.material ?? "—"}", profiel "${b.profile ?? "—"}") — geen toetsing mogelijk`,
           });
         }
       }
@@ -521,7 +525,7 @@ export const useCheckStore = create<CheckState>((set) => ({
         console.info(`[Toetsing] staaf ${s.beamId} overgeslagen — ${s.reason}`);
       }
 
-      const [steelResults, timberResults, cltResults, betonResults, spanningResults, plaatResults] =
+      const [steelResults, timberResults, cltResults, betonResults, spanningResults, plaatResults, aluminiumResults] =
         await Promise.all([
           steel.inputs.length > 0
             ? roepKern<BeamCheckResult[]>("check_steel_beams", steel.inputs)
@@ -541,6 +545,9 @@ export const useCheckStore = create<CheckState>((set) => ({
           plaat.inputs.length > 0
             ? roepKern<PlateCheckResult[]>("check_plates", plaat.inputs)
             : Promise.resolve<PlateCheckResult[]>([]),
+          aluminium.inputs.length > 0
+            ? roepKern<AluminiumBeamCheckResult[]>("check_aluminium_beams", aluminium.inputs)
+            : Promise.resolve<AluminiumBeamCheckResult[]>([]),
         ]);
 
       const merged: MemberCheckResult[] = [
@@ -549,6 +556,7 @@ export const useCheckStore = create<CheckState>((set) => ({
         ...cltResults,
         ...betonResults,
         ...spanningResults,
+        ...aluminiumResults,
       ].sort((a, b) => a.beam_id - b.beam_id);
 
       if (ingehaald()) return;
@@ -570,6 +578,7 @@ export const useCheckStore = create<CheckState>((set) => ({
           clt: clt.inputs,
           beton: beton.inputs,
           spanning: spanning.inputs,
+          aluminium: aluminium.inputs,
           plaat: plaat.inputs,
         },
       });

@@ -15670,6 +15670,9 @@ var init_referentierichting = __esm({
       cltKdefBron: "gelijk",
       cltFvRolK: "gelijk",
       cltFvRolKBron: "gelijk",
+      // Aluminium: een lasstatus en een verklaring over de hele staaf.
+      aluLasstatus: "gelijk",
+      aluZijdelingsGesteund: "gelijk",
       // Boven en onder zijn ZIJDEN in de referentierichting, geen posities.
       betonKorf: "gelijk",
       betonMilieuklasse: "gelijk",
@@ -17448,8 +17451,8 @@ function uitkragingZakkingMm(w, inklemming) {
   return max;
 }
 function uitkragingNotitie(inklemming, deel) {
-  const getal5 = (v) => String(Math.round(v)).replace(".", ",");
-  const plaats = deel && deel.soort === "overstek" ? `de inklemming van het overstek op x = ${getal5(inklemming === "eind" ? deel.totMm : deel.vanMm)} mm (de knoop waar het overstek aan de rest van de constructie hangt)` : inklemming === "begin" ? "het begin van de staaf (x = 0)" : inklemming === "eind" ? "het eind van de staaf (x = L)" : "het eind met de kleinste verplaatsing (er is geen vrij staafeind herkend; de klasse 'uitkraging' is gekozen)";
+  const getal6 = (v) => String(Math.round(v)).replace(".", ",");
+  const plaats = deel && deel.soort === "overstek" ? `de inklemming van het overstek op x = ${getal6(inklemming === "eind" ? deel.totMm : deel.vanMm)} mm (de knoop waar het overstek aan de rest van de constructie hangt)` : inklemming === "begin" ? "het begin van de staaf (x = 0)" : inklemming === "eind" ? "het eind van de staaf (x = L)" : "het eind met de kleinste verplaatsing (er is geen vrij staafeind herkend; de klasse 'uitkraging' is gekozen)";
   return `Uitkraging: w is de zakking ten opzichte van het ingeklemde eind, ${plaats}: w(x) \u2212 w(inklemming). De verplaatsing van dat eind is afgetrokken, zijn rotatie niet \u2014 die hoort bij de zakking van het vrije eind. Niet gemeten vanaf de koorde tussen de verplaatste staafeinden: bij een uitkraging beweegt het vrije eind zelf mee, en dan zou de zakking grotendeels wegvallen. \u2113_rep = 2\xB7L voor w_fin \xE9n w_add (NEN-EN 1990:2002/NB:2019 A1.4.3).`;
 }
 function doorbuigingsDelen(lengteMm, inklemming, steunpuntenMm) {
@@ -18276,7 +18279,7 @@ function timberDeflectionNumerators(cls, customN) {
 }
 function houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm) {
   const klasse = timberDeflectionNumerators(cfg.deflectionClass, cfg.deflectionLimitNumerator);
-  const getal5 = (v) => String(Math.round(v * 1e3) / 1e3).replace(".", ",");
+  const getal6 = (v) => String(Math.round(v * 1e3) / 1e3).replace(".", ",");
   const deel = doorbuiging.deel;
   if (deel) {
     const lengteDeel = deel.totMm - deel.vanMm;
@@ -18287,7 +18290,7 @@ function houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm) {
     const uit2 = { fin: basis.fin * f, add: basis.add * f };
     return {
       ...uit2,
-      notitie: `Getoetst deel (${deel.soort}, x = ${getal5(deel.vanMm)}\u2013${getal5(deel.totMm)} mm): ` + (eigen ? `de eigen noemer ${getal5(basis.fin)} geldt op de lengte van het deel, ${getal5(lengteDeel)} mm` : `\u2113_rep = ${deel.inklemming ? `2 \xD7 ${getal5(lengteDeel)} = ` : ""}${getal5(referentie)} mm, met de noemers ${getal5(basis.fin)} (w_fin) en ${getal5(basis.add)} (w_add) op \u2113_rep`) + `. Op de lijnlengte L = ${getal5(lengthMm)} mm is dat w_fin tegen L/${getal5(uit2.fin)} en w_add tegen L/${getal5(uit2.add)}.`
+      notitie: `Getoetst deel (${deel.soort}, x = ${getal6(deel.vanMm)}\u2013${getal6(deel.totMm)} mm): ` + (eigen ? `de eigen noemer ${getal6(basis.fin)} geldt op de lengte van het deel, ${getal6(lengteDeel)} mm` : `\u2113_rep = ${deel.inklemming ? `2 \xD7 ${getal6(lengteDeel)} = ` : ""}${getal6(referentie)} mm, met de noemers ${getal6(basis.fin)} (w_fin) en ${getal6(basis.add)} (w_add) op \u2113_rep`) + `. Op de lijnlengte L = ${getal6(lengthMm)} mm is dat w_fin tegen L/${getal6(uit2.fin)} en w_add tegen L/${getal6(uit2.add)}.`
     };
   }
   const vrijEindZonderKlasse = (doorbuiging.inklemming === "begin" || doorbuiging.inklemming === "eind") && cfg.deflectionClass !== "cantilever" && cfg.deflectionClass !== "custom";
@@ -18295,7 +18298,7 @@ function houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm) {
   const uit = { fin: klasse.fin / 2, add: klasse.add / 2 };
   return {
     ...uit,
-    notitie: `Uitkraging (vrij staafeind herkend): \u2113_rep = 2\xB7L, dus w_fin tegen L/${getal5(uit.fin)} en w_add tegen L/${getal5(uit.add)} op de staaflengte (de noemers ${getal5(klasse.fin)} en ${getal5(klasse.add)} van de klasse, op \u2113_rep).`
+    notitie: `Uitkraging (vrij staafeind herkend): \u2113_rep = 2\xB7L, dus w_fin tegen L/${getal6(uit.fin)} en w_add tegen L/${getal6(uit.add)} op de staaflengte (de noemers ${getal6(klasse.fin)} en ${getal6(klasse.add)} van de klasse, op \u2113_rep).`
   };
 }
 function matchSupportedTimberGrade(materialName, supportedGrades = SUPPORTED_TIMBER_GRADES) {
@@ -18859,20 +18862,78 @@ var init_timberCheckBuilder = __esm({
 function isAluminiumMateriaal(naam) {
   return /^\s*ALU:/i.test(naam ?? "");
 }
+function normaliseer(s) {
+  return s.replace(/[\s_-]/g, "").toUpperCase();
+}
 function parseAluminiumMateriaal(naam) {
   if (!isAluminiumMateriaal(naam)) return null;
-  const legering = naam.replace(/^\s*ALU:\s*/i, "").replace(/[\s-]/g, "").toUpperCase();
-  return legering === "ENAW6063T6" ? MATERIAAL : null;
+  const sleutel = normaliseer(naam.replace(/^\s*ALU:\s*/i, ""));
+  const legering = ALUMINIUM_LEGERINGEN.find((l) => normaliseer(l) === sleutel);
+  return legering ? { aanduiding: legering, eMod: 7e4, dichtheid: 2700 } : null;
 }
-var MATERIAAL;
+var ALUMINIUM_LEGERINGEN;
 var init_aluminiumMateriaal = __esm({
   "src/lib/aluminiumMateriaal.ts"() {
     "use strict";
-    MATERIAAL = {
-      aanduiding: "EN AW-6063-T6",
-      eMod: 7e4,
-      dichtheid: 2700
-    };
+    ALUMINIUM_LEGERINGEN = [
+      "EN AW-6060 T6",
+      "EN AW-6061 T6",
+      "EN AW-6063 T6",
+      "EN AW-6082 T6"
+    ];
+  }
+});
+
+// src/lib/aluminiumProfiel.ts
+function parseAluminiumProfiel(naam) {
+  const t = naam ?? "";
+  const i = I_PATROON.exec(t);
+  if (i) {
+    const [h, b, tw, tf] = i.slice(1, 5).map(getal4);
+    if ([h, b, tw, tf].every((v) => v > 0) && h > 2 * tf && b > tw) {
+      return { vorm: "IProfiel", h_mm: h, b_mm: b, tw_mm: tw, tf_mm: tf };
+    }
+    return null;
+  }
+  const k = K_PATROON.exec(t);
+  if (k) {
+    const [h, b, wand] = k.slice(1, 4).map(getal4);
+    if ([h, b, wand].every((v) => v > 0) && h > 2 * wand && b > 2 * wand) {
+      return { vorm: "Koker", h_mm: h, b_mm: b, t_mm: wand };
+    }
+  }
+  return null;
+}
+function aluminiumGrootheden(d) {
+  switch (d.vorm) {
+    case "IProfiel": {
+      const hw = d.h_mm - 2 * d.tf_mm;
+      return {
+        A: 2 * d.b_mm * d.tf_mm + hw * d.tw_mm,
+        Iy: (d.b_mm * d.h_mm ** 3 - (d.b_mm - d.tw_mm) * hw ** 3) / 12
+      };
+    }
+    case "Koker": {
+      const hi = d.h_mm - 2 * d.t_mm;
+      const bi = d.b_mm - 2 * d.t_mm;
+      return {
+        A: d.b_mm * d.h_mm - bi * hi,
+        Iy: (d.b_mm * d.h_mm ** 3 - bi * hi ** 3) / 12
+      };
+    }
+    case "Rechthoek":
+      return { A: d.b_mm * d.h_mm, Iy: d.b_mm * d.h_mm ** 3 / 12 };
+  }
+}
+var GETAL, X, I_PATROON, K_PATROON, getal4;
+var init_aluminiumProfiel = __esm({
+  "src/lib/aluminiumProfiel.ts"() {
+    "use strict";
+    GETAL = String.raw`(\d+(?:[.,]\d+)?)`;
+    X = String.raw`\s*[x×*]\s*`;
+    I_PATROON = new RegExp(String.raw`^\s*ALU[-\s]?I\s*${GETAL}${X}${GETAL}${X}${GETAL}${X}${GETAL}\s*$`, "i");
+    K_PATROON = new RegExp(String.raw`^\s*ALU[-\s]?K\s*${GETAL}${X}${GETAL}${X}${GETAL}\s*$`, "i");
+    getal4 = (s) => Number(s.replace(",", "."));
   }
 });
 
@@ -18886,7 +18947,7 @@ function parseRechthoek(profiel) {
   if (!(b > 0 && h > 0)) return null;
   return { b, h };
 }
-function normaliseer(naam) {
+function normaliseer2(naam) {
   return profielSleutel(naam);
 }
 function betonDoorsnede(profile) {
@@ -18935,7 +18996,7 @@ function voorbeeldProfiel(soort) {
     case "staal":
       return 'een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
     case "aluminium":
-      return 'een rechthoek als "100x200" of een eigen doorsnede uit de profieleditor';
+      return 'een extrusieprofiel als "ALU-I 200x100x6x10" of "ALU-K 120x60x4", een rechthoek als "100x200" of een eigen doorsnede uit de profieleditor';
     case "onbekend":
       return "een herkend constructiemateriaal";
   }
@@ -18968,6 +19029,11 @@ function resolveSection(material, profile) {
     };
   }
   if (soort === "vrij" || soort === "aluminium") {
+    const alu = soort === "aluminium" ? parseAluminiumProfiel(profile) : null;
+    if (alu) {
+      const g = aluminiumGrootheden(alu);
+      return { E, A: g.A, I: g.Iy, bron: "aluminium-profiel" };
+    }
     const rect = parseRechthoek(profile);
     if (rect) {
       const { b, h } = rect;
@@ -18978,7 +19044,7 @@ function resolveSection(material, profile) {
         bron: soort === "aluminium" ? "aluminium-bxh" : "vrij"
       };
     }
-    const sec = STEEL_SECTIONS[normaliseer(profile ?? "")];
+    const sec = STEEL_SECTIONS[normaliseer2(profile ?? "")];
     if (sec) return {
       E,
       A: sec.A,
@@ -19000,7 +19066,7 @@ function resolveSection(material, profile) {
       return { E, A: b * h, I: b * h * h * h / 12, bron: "hout-bxh" };
     }
   } else {
-    const sec = STEEL_SECTIONS[normaliseer(profile ?? "")];
+    const sec = STEEL_SECTIONS[normaliseer2(profile ?? "")];
     if (sec) return { E, A: sec.A, I: sec.Iy, bron: "staal-db" };
   }
   return {
@@ -19098,7 +19164,7 @@ function gelasteIMatenVanEigen(profile) {
   return { b, h, tw, tf };
 }
 function matenVanCatalogusI(naam) {
-  const d = STEEL_SECTION_DIMS[normaliseer(naam ?? "")];
+  const d = STEEL_SECTION_DIMS[normaliseer2(naam ?? "")];
   if (!d) {
     return `profiel "${naam}" is niet bekend in de staalcatalogus \u2014 een verlopende stalen staaf loopt van I/H-profiel naar I/H-profiel`;
   }
@@ -19192,8 +19258,8 @@ function bepaalVerloop(material, profile, profileEnd) {
     }
     return { status: "verlopend", verloop: { soort: "gelastI", E, begin: beginM, eind: eindM } };
   }
-  const dB = STEEL_SECTION_DIMS[normaliseer(profile ?? "")];
-  const dE = STEEL_SECTION_DIMS[normaliseer(eind)];
+  const dB = STEEL_SECTION_DIMS[normaliseer2(profile ?? "")];
+  const dE = STEEL_SECTION_DIMS[normaliseer2(eind)];
   if (!dB) {
     return nietOndersteund(`"${profile}"`);
   }
@@ -19234,6 +19300,7 @@ var init_sectionResolver = __esm({
     init_betonCheckBuilder();
     init_vrijMateriaal();
     init_aluminiumMateriaal();
+    init_aluminiumProfiel();
     init_steelGrades();
     init_strip();
     TIMBER_E_MEAN = {
@@ -29092,12 +29159,12 @@ function readOpenFem3DBeamBedding(value, start, end, label) {
     throw new Error(`${label}: onbekend veld in de bedding: ${onbekend2.join(", ")}. Toegestaan: ${BEDDING_KEYS.join(", ")}.`);
   }
   const positief2 = (key, wat) => {
-    const getal5 = raw[key];
-    if (getal5 === void 0 || getal5 === null) return void 0;
-    if (typeof getal5 !== "number" || !Number.isFinite(getal5) || getal5 <= 0) {
+    const getal6 = raw[key];
+    if (getal6 === void 0 || getal6 === null) return void 0;
+    if (typeof getal6 !== "number" || !Number.isFinite(getal6) || getal6 <= 0) {
       throw new Error(`${label}: ${wat} moet een eindig getal groter dan 0 zijn.`);
     }
-    return getal5;
+    return getal6;
   };
   const kKnPerM3 = positief2("kKnPerM3", "de beddingsconstante k (kN/m\xB3)");
   const widthM = positief2("widthM", "de contactbreedte b (m)");
@@ -30147,14 +30214,14 @@ function combinationsFromFile(raw) {
     }
     const factors = /* @__PURE__ */ new Map();
     for (const [caseId, f] of Object.entries(c.factors ?? {})) {
-      const getal5 = typeof f === "number" ? f : Number(f);
-      if (!Number.isFinite(getal5)) {
+      const getal6 = typeof f === "number" ? f : Number(f);
+      if (!Number.isFinite(getal6)) {
         redenen.push(
           `In ${naam} is de factor van belastinggeval ${caseId} ${JSON.stringify(f)}; dat is geen getal. Een decimale KOMMA hoort een punt te zijn (1.5, niet 1,5); anders zou er met NaN gerekend worden en zou de hele combinatie leeg uitkomen.`
         );
         continue;
       }
-      factors.set(Number(caseId), getal5);
+      factors.set(Number(caseId), getal6);
     }
     return {
       id: c.id,
@@ -33104,7 +33171,7 @@ function openFem3DZijdelingseKnik(model, uls, analyseVan, phi) {
   const assen = new Set(uls.map((c) => c.scheefstandAs ?? "x"));
   const gedekt = tweedeOrde && allemaalScheef && assen.has("x") && assen.has("y");
   const minSinus = Math.sin(VERTICAAL_VANAF_GRADEN2 * Math.PI / 180);
-  const getal5 = (x, d) => x.toFixed(d).replace(".", ",");
+  const getal6 = (x, d) => x.toFixed(d).replace(".", ",");
   return (beam) => {
     if (!gedekt) return {};
     const a = model.nodes.find((n2) => n2.id === beam.startNodeId);
@@ -33119,7 +33186,7 @@ function openFem3DZijdelingseKnik(model, uls, analyseVan, phi) {
     if (langsAs !== void 0 && langsAs >= nodig * (1 - 1e-9)) return { veld: { y: true, z: true } };
     const gedraaid = factor < 1 - 1e-9;
     return {
-      notitie: "VRIJ STAAFEIND, TWEEDE ORDE: de berekening is P-\u0394 met scheefstand in X en Y, maar de " + (langsAs !== void 0 && langsAs > 0 ? `scheefstand \u03C6 = 1/${getal5(1 / langsAs, 0)} ` + (gedraaid ? `langs de hoofdassen van deze kolom (zij is ${getal5(rol * 180 / Math.PI, 1)}\xB0 om haar as gedraaid, dus \u03C6_model\xB7${getal5(factor, 3)}) is kleiner dan ` : "van het model is kleiner dan ") : "scheefstand \u03C6 van het model is niet bekend en dus niet aantoonbaar minstens ") + `\u03C6 = 1/${getal5(1 / nodig, 0)} die deze kolom zelf hoort te krijgen (NEN-EN 1993-1-1 (5.5) met h = ${getal5(lengte, 3)} m, haar eigen lengte, en m = 1: een kolom met een vrije kop hangt nergens aan en middelt haar scheefstand met niets). Haar zijdelingse knik zit dus niet volledig in de krachten, en de kniklengte blijft om beide assen 2\xB7L. Wie L wil gebruiken, rekent met een scheefstand van minstens die \u03C6 of geeft de kniklengtes zelf op.`
+      notitie: "VRIJ STAAFEIND, TWEEDE ORDE: de berekening is P-\u0394 met scheefstand in X en Y, maar de " + (langsAs !== void 0 && langsAs > 0 ? `scheefstand \u03C6 = 1/${getal6(1 / langsAs, 0)} ` + (gedraaid ? `langs de hoofdassen van deze kolom (zij is ${getal6(rol * 180 / Math.PI, 1)}\xB0 om haar as gedraaid, dus \u03C6_model\xB7${getal6(factor, 3)}) is kleiner dan ` : "van het model is kleiner dan ") : "scheefstand \u03C6 van het model is niet bekend en dus niet aantoonbaar minstens ") + `\u03C6 = 1/${getal6(1 / nodig, 0)} die deze kolom zelf hoort te krijgen (NEN-EN 1993-1-1 (5.5) met h = ${getal6(lengte, 3)} m, haar eigen lengte, en m = 1: een kolom met een vrije kop hangt nergens aan en middelt haar scheefstand met niets). Haar zijdelingse knik zit dus niet volledig in de krachten, en de kniklengte blijft om beide assen 2\xB7L. Wie L wil gebruiken, rekent met een scheefstand van minstens die \u03C6 of geeft de kniklengtes zelf op.`
     };
   };
 }
@@ -37925,7 +37992,7 @@ var metBeschrijving = (schema, beschrijving) => beschrijving ? { ...schema, desc
 function obj(properties, required = [], beschrijving) {
   return metBeschrijving({ type: "object", properties, ...required.length ? { required } : {}, additionalProperties: false }, beschrijving);
 }
-function getal4(beschrijving, grenzen = {}) {
+function getal5(beschrijving, grenzen = {}) {
   return metBeschrijving({ type: "number", ...grenzen }, beschrijving);
 }
 function geheel(beschrijving, grenzen = {}) {
@@ -39097,8 +39164,8 @@ function lijkendeProfielen(profiel) {
   const sleutel = profiel.replace(/[\s\-.]/g, "").toUpperCase();
   const m = /^([A-Z]+)(\d+)?/.exec(sleutel);
   if (!m) return [];
-  const [, reeks, getal5] = m;
-  const doel = getal5 ? Number(getal5) : 0;
+  const [, reeks, getal6] = m;
+  const doel = getal6 ? Number(getal6) : 0;
   return Object.keys(STEEL_SECTIONS).filter((k) => k.startsWith(reeks) && /^\d/.test(k.slice(reeks.length))).map((k) => ({ k, n: Number(/^\d+/.exec(k.slice(reeks.length))[0]) })).sort((a, b) => Math.abs(a.n - doel) - Math.abs(b.n - doel) || a.k.localeCompare(b.k)).slice(0, 5).map((x) => x.k);
 }
 function keurOpenFem3DStaafdoorsnede(beam) {
@@ -39164,7 +39231,7 @@ function metWaarschuwingen(uitkomst, model, plateIds) {
   const warnings = wandWaarschuwingen(model, plateIds);
   return warnings.length > 0 ? { ...uitkomst, warnings } : uitkomst;
 }
-var coordinaat = (as3) => getal4(`${as3}-co\xF6rdinaat in m (globaal, z omhoog).`);
+var coordinaat = (as3) => getal5(`${as3}-co\xF6rdinaat in m (globaal, z omhoog).`);
 var knoopId = id("Id van een bestaande 3D-knoop.");
 var scharnieren2 = obj({
   myStart: jaNee("Momentscharnier om de lokale y-as aan het begin."),
@@ -39175,13 +39242,13 @@ var scharnieren2 = obj({
   torsionEnd: jaNee("Torsiescharnier aan het eind.")
 }, [], "Eindscharnieren in lokale assen; een ontbrekende vrijheidsgraad is vast.");
 var bedding = obj({
-  kKnPerM3: getal4("Beddingsconstante k in kN/m\xB3 voor de verticale richting (globaal Z; de grond ligt onder de staaf). Niet bij een (bijna) verticale staaf.", { exclusiveMinimum: 0 }),
-  widthM: getal4("Contactbreedte b in m; de lijnstijfheid is k\xB7b (kN/m per m).", { exclusiveMinimum: 0 }),
-  kLateralKnPerM3: getal4("Zijdelingse beddingsconstante in kN/m\xB3: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair. Bij een staaf steiler dan 45\xB0 (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y.", { exclusiveMinimum: 0 }),
+  kKnPerM3: getal5("Beddingsconstante k in kN/m\xB3 voor de verticale richting (globaal Z; de grond ligt onder de staaf). Niet bij een (bijna) verticale staaf.", { exclusiveMinimum: 0 }),
+  widthM: getal5("Contactbreedte b in m; de lijnstijfheid is k\xB7b (kN/m per m).", { exclusiveMinimum: 0 }),
+  kLateralKnPerM3: getal5("Zijdelingse beddingsconstante in kN/m\xB3: horizontaal loodrecht op de staafas, naar beide zijden, altijd lineair. Bij een staaf steiler dan 45\xB0 (een (schoor)paal) rondom, in twee richtingen loodrecht op de as; bij een loodrechte paal in X en Y.", { exclusiveMinimum: 0 }),
   compressionOnly: jaNee("Alleen druk: de verticale veren vallen weg waar de staaf omhoog komt (de grond trekt niet).")
 }, ["widthM"], "Staaf op bedding (Winkler): de grond steunt de staaf over haar hele lengte; de rekenkern knipt de staaf fijn genoeg. Geef kKnPerM3, kLateralKnPerM3 of beide.");
 var plaatBedding = obj({
-  kKnPerM3: getal4("Beddingsconstante k in kN/m\xB3, loodrecht op het plaatvlak. De grond ligt aan de onderzijde: tegen de plaatnormaal in (de z-as van de plaatassen; bij een vloer globaal \u2212Z). Bij een wand legt de assenafspraak de grondzijde vast, los van de knoopvolgorde, en is zij niet te kiezen: een wand in het XZ-vlak heeft de grond aan +Y, een wand in het YZ-vlak aan \u2212X (de uitkomst noemt haar in groundSide en waarschuwt in warnings). Ligt de grond aan de andere kant, dan zijn zakking en gronddruk van teken omgekeerd en is alleen druk niet bruikbaar. De rekenkern zet op elke knoop van het rekennet een veer k\xB7A_trib; zonder oplegging in het plaatvlak houdt zij de plaat daar vast zolang de belasting loodrecht op de plaat staat.", { exclusiveMinimum: 0 }),
+  kKnPerM3: getal5("Beddingsconstante k in kN/m\xB3, loodrecht op het plaatvlak. De grond ligt aan de onderzijde: tegen de plaatnormaal in (de z-as van de plaatassen; bij een vloer globaal \u2212Z). Bij een wand legt de assenafspraak de grondzijde vast, los van de knoopvolgorde, en is zij niet te kiezen: een wand in het XZ-vlak heeft de grond aan +Y, een wand in het YZ-vlak aan \u2212X (de uitkomst noemt haar in groundSide en waarschuwt in warnings). Ligt de grond aan de andere kant, dan zijn zakking en gronddruk van teken omgekeerd en is alleen druk niet bruikbaar. De rekenkern zet op elke knoop van het rekennet een veer k\xB7A_trib; zonder oplegging in het plaatvlak houdt zij de plaat daar vast zolang de belasting loodrecht op de plaat staat.", { exclusiveMinimum: 0 }),
   compressionOnly: jaNee("Alleen druk: de veren vallen weg waar de plaat van de grond loskomt (de grond trekt niet).")
 }, ["kKnPerM3"], "Plaat op bedding (Winkler), bijvoorbeeld een vloer op zand: de grond steunt de plaat over haar hele oppervlak. Het resultaat geeft per plaat de zakking en de gronddruk per knoop van het rekennet.");
 var staafVelden = {
@@ -39191,7 +39258,7 @@ var staafVelden = {
     { minLength: 1 }
   ),
   material: tekst('Materiaal, bijv. "S235", "S355", "C24", "C30/37".', { minLength: 1 }),
-  rollAngleDeg: getal4("Rotatie van de lokale y/z-assen om de staafas, in graden."),
+  rollAngleDeg: getal5("Rotatie van de lokale y/z-assen om de staafas, in graden."),
   releases: scharnieren2,
   tensionOnly: jaNee("Trek-alleen staaf (bijv. een windverband): valt weg zolang hij op druk staat."),
   shearDeformation: jaNee("Afschuifvervorming (Timoshenko) meenemen; gebruikt Av;y en Av;z. Standaard uit (Euler\u2013Bernoulli)."),
@@ -39361,8 +39428,8 @@ var staafSplitsen = documentCommando({
   beschrijving: "Een 3D-staaf in twee delen splitsen met een nieuwe tussenknoop. Geef fraction (0\u20131) \xF3f positionM (m vanaf het begin).",
   invoer: obj({
     id: id("Id van de staaf."),
-    fraction: getal4("Plaats als deel van de lengte, strikt tussen 0 en 1.", { exclusiveMinimum: 0, maximum: 1 }),
-    positionM: getal4("Plaats in m vanaf de beginknoop.", { exclusiveMinimum: 0 })
+    fraction: getal5("Plaats als deel van de lengte, strikt tussen 0 en 1.", { exclusiveMinimum: 0, maximum: 1 }),
+    positionM: getal5("Plaats in m vanaf de beginknoop.", { exclusiveMinimum: 0 })
   }, ["id"]),
   uitvoeren: ({ id: beamId, fraction, positionM }, document2) => {
     const huidig = model3dVan(document2);
@@ -39389,7 +39456,7 @@ var knopenAansluiten = documentCommando({
   naam: "model3d.beam.connectNodes",
   beschrijving: "Knopen op staven aansluiten (issue #63), zoals de lintknop Knopen aansluiten en de knop Aansluiten in de modelcontrole: elke 3D-staaf waarop een knoop ligt zonder eraan vast te zitten, wordt in \xE9\xE9n keer op al die knopen gesplitst. Een knoop ligt op een staaf als hij niet haar begin- of eindknoop is, hoogstens toleranceMm van de staafas af ligt, en zijn projectie op de as verder dan toleranceMm van beide staafeinden ligt (langs de as gemeten; geen stompje). De knoop wordt niet verschoven: ligt hij net naast de as, dan lopen de delen naar de knoop. Lijnlasten (lokaal en globaal), puntlasten, temperatuur, scharnieren (begin op het eerste deel, eind op het laatste), profiel, materiaal, rolhoek, trek-alleen, bedding en groep gaan mee; de oorspronkelijke id blijft bij het eerste deel. Zonder beamIds en nodeIds het hele model; anders alleen de paren met een genoemde knoop of een genoemde staaf. Geeft per gesplitste staaf de knopen en de delen (splits, met parts), het aantal gesplitste staven (count) en aangesloten knopen (nodeCount), en wat overgeslagen is (skipped: nearNode = te dicht bij een ander knippunt, met otherNodeId; duplicate = de knip zou een bestaande staaf verdubbelen, want de staven overlappen, met otherBeamId). E\xE9n stap ongedaan maken.",
   invoer: obj({
-    toleranceMm: getal4(
+    toleranceMm: getal5(
       `Verbindingstolerantie in mm (${VERBINDINGSTOLERANTIE_MIN_MM}\u2013${VERBINDINGSTOLERANTIE_MAX_MM}); weglaten = ${OPEN_FEM_3D_CONNECT_TOLERANCE_MM} mm, de standaard van de app.`,
       { minimum: VERBINDINGSTOLERANTIE_MIN_MM, maximum: VERBINDINGSTOLERANTIE_MAX_MM }
     ),
@@ -39420,7 +39487,7 @@ var knopenSamenvoegen = documentCommando({
   naam: "model3d.nodes.merge",
   beschrijving: "Knopen samenvoegen (issue #75), zoals de lintknop Knopen samenvoegen en de knop Samenvoegen in de modelcontrole: 3D-knopen die binnen toleranceMm van elkaar liggen (transitief: een groep), worden \xE9\xE9n knoop. De knoop met de laagste id blijft op zijn plek; staven, platen (hoeken, getekende randen met boogstuurknopen, openingen), knooplasten, opleggingen, schijven, belastingvlakken en het level gaan naar hem. Een groep breder dan 2 \xD7 toleranceMm wordt geweigerd (tooWide): zo ver mag een verbinding niet verschuiven. Opleggingen: de geblokkeerde vrijheidsgraden samen; een veer en een blokkering in dezelfde richting: de blokkering wint (notes: springOverruled); twee veren of verschillende opgelegde verplaatsingen in \xE9\xE9n richting: geweigerd (springs, prescribed). Een staaf van lengte 0 verdwijnt met haar lasten (removedBeams); een staaf die omhangt houdt haar lasten over dezelfde fractie van haar lengte. Een dubbele staaf (dezelfde eindknopen, in welke volgorde ook) blijft \xE9\xE9n keer, de laagste id, met de lasten van beide (mergedBeams; reversed: in omgekeerde richting, posities gespiegeld en de lokale componenten volgens de lokale assen: met dezelfde rolhoek qy, py en de temperatuurgradi\xEBnt in y van teken om, qz en pz niet; een globale lijnlast houdt zijn richting). Verschillen de staven in profiel, materiaal, stand van de doorsnede, scharnieren, trek-alleen, bedding, toetsinstellingen of groep, of sluit een belastingvlak er maar \xE9\xE9n uit: geweigerd (beamProperties, beamExcluded). Verder geweigerd: verschillende levels (levels), een plaat op een level waarvan de blijvende knoop niet op die hoogte ligt (levelPlate), twee schijven (diaphragms) of een schijf die niet meer op \xE9\xE9n hoogte ligt (diaphragmHeight), een plaat, opening of belastingvlak met minder dan drie hoeken, een rand die zichzelf raakt, een ontaarde boog, een niet meer vlakke plaat of een randoplegging op een rand van lengte 0. Weigeren gaat per groep: de rest wordt samengevoegd. Zonder nodeIds het hele model; anders alleen de groepen met een genoemde knoop (de paren met die knoop). Geeft groups (keepNodeId, nodeIds die verdwenen, distanceMm), count (groepen), nodeCount (verdwenen knopen), removedBeams, mergedBeams, plates (hoeken die wegvielen), notes en refused (per groep nodeIds, keepNodeId en reason met kind). E\xE9n stap ongedaan maken.",
   invoer: obj({
-    toleranceMm: getal4(
+    toleranceMm: getal5(
       `Tolerantie in mm (${VERBINDINGSTOLERANTIE_MIN_MM}\u2013${VERBINDINGSTOLERANTIE_MAX_MM}); weglaten = ${OPEN_FEM_3D_MERGE_TOLERANCE_MM} mm, de verbindingstolerantie van de app.`,
       { minimum: VERBINDINGSTOLERANTIE_MIN_MM, maximum: VERBINDINGSTOLERANTIE_MAX_MM }
     ),
@@ -39515,9 +39582,9 @@ var plaatToevoegen = documentCommando({
   beschrijving: "Een vlakke 3D-plaat (schaalelementen) toevoegen op bestaande knopen in \xE9\xE9n vlak.",
   invoer: obj({
     nodeIds: contour("de plaat"),
-    thicknessM: getal4("Dikte in m.", { exclusiveMinimum: 0 }),
+    thicknessM: getal5("Dikte in m.", { exclusiveMinimum: 0 }),
     material: tekst('Materiaal, bijv. "C30/37".', { minLength: 1 }),
-    cornerRadiusM: getal4("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
+    cornerRadiusM: getal5("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
     boundary: lijst(randSegment, "Getekende contour met rechte stukken en bogen; ontbreekt = rechte randen tussen nodeIds."),
     bedding: plaatBedding
   }, ["nodeIds", "thicknessM"]),
@@ -39533,10 +39600,10 @@ var plaatWijzigen = documentCommando({
   beschrijving: "Dikte, materiaal, afronding, netgrootte, randopleggingen of bedding van een 3D-plaat wijzigen. bedding: null haalt de bedding weg.",
   invoer: obj({
     id: id("Id van de plaat."),
-    thicknessM: getal4("Dikte in m.", { exclusiveMinimum: 0 }),
+    thicknessM: getal5("Dikte in m.", { exclusiveMinimum: 0 }),
     material: tekst("Materiaal.", { minLength: 1 }),
-    cornerRadiusM: getal4("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
-    meshSizeM: getal4("Gewenste elementgrootte in m.", { exclusiveMinimum: 0 }),
+    cornerRadiusM: getal5("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
+    meshSizeM: getal5("Gewenste elementgrootte in m.", { exclusiveMinimum: 0 }),
     edgeSupports: lijst(
       obj({
         edge: geheel("Rand k: randstuk k van de contour (vanaf 0).", { minimum: 0 }),
@@ -39594,7 +39661,7 @@ var openingToevoegen = documentCommando({
   invoer: obj({
     plateId: id("Id van de plaat."),
     nodeIds: contour("de opening"),
-    cornerRadiusM: getal4("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
+    cornerRadiusM: getal5("Afrondingsstraal van de hoeken in m.", { minimum: 0 }),
     boundary: lijst(randSegment, "Getekende contour van de opening; ontbreekt = rechte randen.")
   }, ["plateId", "nodeIds"]),
   uitvoeren: ({ plateId, nodeIds, ...opties }, document2) => {
@@ -39632,12 +39699,12 @@ var MODEL3D_GEOMETRIE_COMMANDOS = [
 var concreteModulus = eenVan([
   obj({ kind: { const: "ecm" } }, ["kind"], "Normale E_cm van de betonklasse."),
   obj(
-    { kind: { const: "creep" }, phi: getal4("Kruipco\xEBffici\xEBnt \u03C6 \u2265 0; E_eff = E_cm/(1+\u03C6).", { minimum: 0 }) },
+    { kind: { const: "creep" }, phi: getal5("Kruipco\xEBffici\xEBnt \u03C6 \u2265 0; E_eff = E_cm/(1+\u03C6).", { minimum: 0 }) },
     ["kind", "phi"],
     "Effectieve E met kruip."
   ),
   obj(
-    { kind: { const: "custom" }, eMpa: getal4("Eigen analyse-E in MPa (= N/mm\xB2).", { exclusiveMinimum: 0 }) },
+    { kind: { const: "custom" }, eMpa: getal5("Eigen analyse-E in MPa (= N/mm\xB2).", { exclusiveMinimum: 0 }) },
     ["kind", "eMpa"],
     "Eigen analyse-E."
   )
@@ -39648,7 +39715,7 @@ var MODEL3D_ANALYSIS_MATERIAL_COMMANDOS = [documentCommando({
   invoer: obj({
     material: tekst("Bestaande materiaalnaam in het 3D-model, bijvoorbeeld C30/37.", { minLength: 1 }),
     concreteModulus: ofNull(concreteModulus, "E_cm, E_cm/(1+\u03C6), eigen E of null om de keuze te wissen."),
-    nu: ofNull(getal4("Dwarscontractieco\xEBffici\xEBnt \u03BD van dit materiaal, 0 \u2264 \u03BD < 0,5; null gebruikt de standaardwaarde.", { minimum: 0, exclusiveMaximum: 0.5 }))
+    nu: ofNull(getal5("Dwarscontractieco\xEBffici\xEBnt \u03BD van dit materiaal, 0 \u2264 \u03BD < 0,5; null gebruikt de standaardwaarde.", { minimum: 0, exclusiveMaximum: 0.5 }))
   }, ["material"]),
   uitvoeren: ({ material, concreteModulus: concreteModulus2, nu }, document2) => {
     const model = model3dVan(document2);
@@ -39955,44 +40022,44 @@ var vrijheidsgraden = {
   rz: jaNee("Rotatie om Z verhinderd.")
 };
 var veren = {
-  kxKnPerM: getal4("Veer in X, kN/m.", { exclusiveMinimum: 0 }),
-  kyKnPerM: getal4("Veer in Y, kN/m.", { exclusiveMinimum: 0 }),
-  kzKnPerM: getal4("Veer in Z, kN/m.", { exclusiveMinimum: 0 }),
-  krxKnmPerRad: getal4("Rotatieveer om X, kNm/rad.", { exclusiveMinimum: 0 }),
-  kryKnmPerRad: getal4("Rotatieveer om Y, kNm/rad.", { exclusiveMinimum: 0 }),
-  krzKnmPerRad: getal4("Rotatieveer om Z, kNm/rad.", { exclusiveMinimum: 0 })
+  kxKnPerM: getal5("Veer in X, kN/m.", { exclusiveMinimum: 0 }),
+  kyKnPerM: getal5("Veer in Y, kN/m.", { exclusiveMinimum: 0 }),
+  kzKnPerM: getal5("Veer in Z, kN/m.", { exclusiveMinimum: 0 }),
+  krxKnmPerRad: getal5("Rotatieveer om X, kNm/rad.", { exclusiveMinimum: 0 }),
+  kryKnmPerRad: getal5("Rotatieveer om Y, kNm/rad.", { exclusiveMinimum: 0 }),
+  krzKnmPerRad: getal5("Rotatieveer om Z, kNm/rad.", { exclusiveMinimum: 0 })
 };
 var opgelegd = {
-  uxM: getal4("Opgelegde verplaatsing in X, m."),
-  uyM: getal4("Opgelegde verplaatsing in Y, m."),
-  uzM: getal4("Opgelegde verplaatsing in Z, m."),
-  rxRad: getal4("Opgelegde rotatie om X, rad."),
-  ryRad: getal4("Opgelegde rotatie om Y, rad."),
-  rzRad: getal4("Opgelegde rotatie om Z, rad.")
+  uxM: getal5("Opgelegde verplaatsing in X, m."),
+  uyM: getal5("Opgelegde verplaatsing in Y, m."),
+  uzM: getal5("Opgelegde verplaatsing in Z, m."),
+  rxRad: getal5("Opgelegde rotatie om X, rad."),
+  ryRad: getal5("Opgelegde rotatie om Y, rad."),
+  rzRad: getal5("Opgelegde rotatie om Z, rad.")
 };
 var knoopLastVelden = {
-  fx: getal4("Kracht in X, kN."),
-  fy: getal4("Kracht in Y, kN."),
-  fz: getal4("Kracht in Z, kN (negatief = omlaag)."),
-  mx: getal4("Moment om X, kNm."),
-  my: getal4("Moment om Y, kNm."),
-  mz: getal4("Moment om Z, kNm.")
+  fx: getal5("Kracht in X, kN."),
+  fy: getal5("Kracht in Y, kN."),
+  fz: getal5("Kracht in Z, kN (negatief = omlaag)."),
+  mx: getal5("Moment om X, kNm."),
+  my: getal5("Moment om Y, kNm."),
+  mz: getal5("Moment om Z, kNm.")
 };
 var globaleRichting = keuze(
   [...OPEN_FEM_3D_GLOBAL_DIRECTIONS],
   "Globale richting van de last: x, y of z. Met dit veld is het een globale lijnlast (qStart/qEnd langs die as, de kern zet hem om naar de staaf); zonder is het een lokale last (qy/qz)."
 );
 var lijnLastVelden = {
-  qyStart: getal4("Lijnlast in lokale y aan het begin, kN/m. Alleen bij een lokale last."),
-  qyEnd: getal4("Lijnlast in lokale y aan het eind, kN/m."),
-  qzStart: getal4("Lijnlast in lokale z aan het begin, kN/m. Alleen bij een lokale last."),
-  qzEnd: getal4("Lijnlast in lokale z aan het eind, kN/m."),
+  qyStart: getal5("Lijnlast in lokale y aan het begin, kN/m. Alleen bij een lokale last."),
+  qyEnd: getal5("Lijnlast in lokale y aan het eind, kN/m."),
+  qzStart: getal5("Lijnlast in lokale z aan het begin, kN/m. Alleen bij een lokale last."),
+  qzEnd: getal5("Lijnlast in lokale z aan het eind, kN/m."),
   globalDirection: globaleRichting,
-  qStart: getal4("Globale lijnlast aan het begin, kN/m, met teken langs de globale as (z negatief = omlaag). Alleen met globalDirection."),
-  qEnd: getal4("Globale lijnlast aan het eind, kN/m; ontbreekt bij toevoegen = qStart."),
+  qStart: getal5("Globale lijnlast aan het begin, kN/m, met teken langs de globale as (z negatief = omlaag). Alleen met globalDirection."),
+  qEnd: getal5("Globale lijnlast aan het eind, kN/m; ontbreekt bij toevoegen = qStart."),
   perProjection: jaNee("Alleen met globalDirection. true: per meter projectie van de staaf op het vlak loodrecht op de lastrichting (sneeuw op een schuin dak: per horizontale meter); false of ontbreekt: per meter staaflengte."),
-  startPositionM: getal4("Begin van de last in m vanaf de beginknoop; ontbreekt = 0.", { minimum: 0 }),
-  endPositionM: getal4("Eind van de last in m vanaf de beginknoop; ontbreekt = de staaflengte.", { exclusiveMinimum: 0 })
+  startPositionM: getal5("Begin van de last in m vanaf de beginknoop; ontbreekt = 0.", { minimum: 0 }),
+  endPositionM: getal5("Eind van de last in m vanaf de beginknoop; ontbreekt = de staaflengte.", { exclusiveMinimum: 0 })
 };
 var lijnLastWijzigVelden = {
   ...lijnLastVelden,
@@ -40042,23 +40109,23 @@ function lijnLastWaarden(invoer, oud, lengte) {
   return { qyStart, qyEnd: invoer.qyEnd ?? qyStart, qzStart, qzEnd: invoer.qzEnd ?? qzStart, startPositionM, endPositionM };
 }
 var puntLastVelden = {
-  py: getal4("Puntlast in lokale y, kN."),
-  pz: getal4("Puntlast in lokale z, kN."),
-  positionM: getal4("Plaats in m vanaf de beginknoop.", { minimum: 0 })
+  py: getal5("Puntlast in lokale y, kN."),
+  pz: getal5("Puntlast in lokale z, kN."),
+  positionM: getal5("Plaats in m vanaf de beginknoop.", { minimum: 0 })
 };
 var temperatuurVelden = {
-  deltaTUniformK: getal4("Gelijkmatige temperatuurverandering, K."),
-  deltaTGradientYK: getal4("Temperatuurverschil over de hoogte in lokale y, K."),
-  deltaTGradientZK: getal4("Temperatuurverschil over de hoogte in lokale z, K.")
+  deltaTUniformK: getal5("Gelijkmatige temperatuurverandering, K."),
+  deltaTGradientYK: getal5("Temperatuurverschil over de hoogte in lokale y, K."),
+  deltaTGradientZK: getal5("Temperatuurverschil over de hoogte in lokale z, K.")
 };
 var vlakLastVelden = {
-  qx: getal4("Vlaklast in X, kN/m\xB2."),
-  qy: getal4("Vlaklast in Y, kN/m\xB2."),
-  qz: getal4("Vlaklast in Z, kN/m\xB2 (negatief = omlaag).")
+  qx: getal5("Vlaklast in X, kN/m\xB2."),
+  qy: getal5("Vlaklast in Y, kN/m\xB2."),
+  qz: getal5("Vlaklast in Z, kN/m\xB2 (negatief = omlaag).")
 };
-var vector = obj({ x: getal4(), y: getal4(), z: getal4() }, ["x", "y", "z"], "Richting in globale assen.");
+var vector = obj({ x: getal5(), y: getal5(), z: getal5() }, ["x", "y", "z"], "Richting in globale assen.");
 var vlakVelden = {
-  q: getal4("Belasting op het vlak, kN/m\xB2."),
+  q: getal5("Belasting op het vlak, kN/m\xB2."),
   direction: keuze(["gravity", "normal", "verticalSurface"], "gravity = verticaal per horizontale projectie; normal = loodrecht op het vlak; verticalSurface = verticaal per werkelijk vlakoppervlak."),
   distribution: keuze(["oneWay", "twoWay"], "Afdracht: oneWay naar de liggers dwars op de overspanning, twoWay naar alle randliggers."),
   spanDirection: vector,
@@ -40076,7 +40143,7 @@ var schilVelden = {
   distribution: vlakVelden.distribution,
   spanDirection: vector,
   openings: vlakVelden.openings,
-  claddingWeightKnPerM2: getal4("Bekledingsgewicht per werkelijk vlakoppervlak, kN/m\xB2.", { minimum: 0 })
+  claddingWeightKnPerM2: getal5("Bekledingsgewicht per werkelijk vlakoppervlak, kN/m\xB2.", { minimum: 0 })
 };
 var PRESETS = Object.keys(OPEN_FEM_3D_SUPPORT_PRESETS);
 var opleggingZetten = documentCommando({
@@ -40153,16 +40220,16 @@ var opleggingWeg = documentCommando({
 });
 var VEERRICHTINGEN = ["kx", "ky", "kz", "krx", "kry", "krz"];
 var coordinaten = {
-  x: getal4("x in m (globaal)."),
-  y: getal4("y in m (globaal)."),
-  z: getal4("z in m (globaal, omhoog).")
+  x: getal5("x in m (globaal)."),
+  y: getal5("y in m (globaal)."),
+  z: getal5("z in m (globaal, omhoog).")
 };
 var knoopDoel = obj({ kind: { const: "node" }, nodeId: knoopId2 }, ["kind", "nodeId"], "Een bestaande knoop.");
 var staafDoel = (wat) => obj({
   kind: { const: "beam" },
   beamId: staafId,
-  t: getal4("Plek als fractie van de staaflengte: 0 = beginknoop, 1 = eindknoop.", { minimum: 0, maximum: 1 }),
-  positionM: getal4("Plek in m vanaf de beginknoop.", { minimum: 0 })
+  t: getal5("Plek als fractie van de staaflengte: 0 = beginknoop, 1 = eindknoop.", { minimum: 0, maximum: 1 }),
+  positionM: getal5("Plek in m vanaf de beginknoop.", { minimum: 0 })
 }, ["kind", "beamId"], `Een plek op een staaf: t \xF3f positionM. ${wat}`);
 function naarDoel(model, doel) {
   switch (doel.kind) {
@@ -40199,7 +40266,7 @@ var opleggingPlaatsen = documentCommando({
     ], "Waar de oplegging of veer komt."),
     preset: keuze(PRESETS, "Oplegging: fixed (inklemming), pinned (scharnier), x-/y-/zRoller, revoluteX/Y/Z."),
     springAxis: keuze(VEERRICHTINGEN, "Veer: kx, ky, kz (translatie, kN/m) of krx, kry, krz (rotatie, kNm/rad), in globale assen. Andere veren op de knoop blijven."),
-    stiffness: getal4("Stijfheid van de veer; ontbreekt = 10 000 kN/m (translatie) of 1000 kNm/rad (rotatie).", { exclusiveMinimum: 0 })
+    stiffness: getal5("Stijfheid van de veer; ontbreekt = 10 000 kN/m (translatie) of 1000 kNm/rad (rotatie).", { exclusiveMinimum: 0 })
   }, ["target"]),
   uitvoeren: ({ target, preset, springAxis, stiffness }, document2) => {
     const model = model3dVan(document2);
@@ -40484,7 +40551,7 @@ var schilLastMaken = documentCommando({
   invoer: obj({
     id: id("Id van het paneel."),
     caseId: gevalId,
-    q: getal4("Lastintensiteit in kN/m\xB2; bij normal positief naar buiten."),
+    q: getal5("Lastintensiteit in kN/m\xB2; bij normal positief naar buiten."),
     direction: vlakVelden.direction
   }, ["id", "q", "direction"]),
   uitvoeren: ({ id: panelId, caseId, q, direction }, document2) => {
@@ -42100,7 +42167,7 @@ function zonder3DLastenVanGeval(model, caseId) {
 var gevalType2 = keuze(GEVALTYPEN, "dead = blijvend; live = gebruiksbelasting; snow; wind; other.");
 var categorie = keuze(CATEGORIEEN, "Gebruikscategorie (NB tabel NB.2\u2013A1.1), alleen bij type live; ontbreekt = A.");
 var factoren = lijst(
-  obj({ caseId: id("Bestaand belastinggeval."), factor: getal4("Factor.") }, ["caseId", "factor"]),
+  obj({ caseId: id("Bestaand belastinggeval."), factor: getal5("Factor.") }, ["caseId", "factor"]),
   "Factor per belastinggeval; een niet genoemd geval telt niet mee.",
   { minItems: 1 }
 );
@@ -42285,14 +42352,14 @@ var MODEL3D_ENVELOPE_LOAD_COMMANDOS = [documentCommando({
     windCodeId: keuze([NEDERLANDSE_WINDROUTE], "Expliciete windnormroute; ontbrekend betekent de historische Nederlandse route."),
     windgebied: keuze(["I", "II", "III"], "Nederlands windgebied. Windgeneratie vraagt ook terreincategorie."),
     terreincategorie: keuze(["0", "I", "II", "III", "IV"], "Terreincategorie voor wind. Windgeneratie vraagt ook windgebied."),
-    manualPressureKnPerM2: getal4("Handmatig onderbouwde stuwdruk q_p in kN/m\xB2; alternatief voor windgebied en terreincategorie.", { exclusiveMinimum: 0 }),
+    manualPressureKnPerM2: getal5("Handmatig onderbouwde stuwdruk q_p in kN/m\xB2; alternatief voor windgebied en terreincategorie.", { exclusiveMinimum: 0 }),
     manualPressureSource: tekst("Herleidbare bron van de handmatig ingevoerde stuwdruk."),
-    structuralFactor: getal4("Constructiefactor c_s\xB7c_d; standaard 1.", { exclusiveMinimum: 0 }),
-    backgroundPermeabilityFraction: getal4("Aangenomen achtergrondlekkage als fractie van het schiloppervlak, standaard 0,001 (0,1%).", { minimum: 0, maximum: 0.01 }),
-    groundSnowKnPerM2: getal4("Karakteristieke grondsneeuwlast s_k in kN/m\xB2; ontbreekt of 0 slaat sneeuw over.", { minimum: 0 }),
-    snowExposure: getal4("Sneeuwblootstellingsfactor C_e; standaard 1.", { exclusiveMinimum: 0 }),
-    snowThermal: getal4("Sneeuwtemperatuurfactor C_t; standaard 1.", { exclusiveMinimum: 0 }),
-    imposedRoofKnPerM2: getal4("Optionele dakgebruikslast categorie H in kN/m\xB2 horizontale projectie.", { minimum: 0 })
+    structuralFactor: getal5("Constructiefactor c_s\xB7c_d; standaard 1.", { exclusiveMinimum: 0 }),
+    backgroundPermeabilityFraction: getal5("Aangenomen achtergrondlekkage als fractie van het schiloppervlak, standaard 0,001 (0,1%).", { minimum: 0, maximum: 0.01 }),
+    groundSnowKnPerM2: getal5("Karakteristieke grondsneeuwlast s_k in kN/m\xB2; ontbreekt of 0 slaat sneeuw over.", { minimum: 0 }),
+    snowExposure: getal5("Sneeuwblootstellingsfactor C_e; standaard 1.", { exclusiveMinimum: 0 }),
+    snowThermal: getal5("Sneeuwtemperatuurfactor C_t; standaard 1.", { exclusiveMinimum: 0 }),
+    imposedRoofKnPerM2: getal5("Optionele dakgebruikslast categorie H in kN/m\xB2 horizontale projectie.", { minimum: 0 })
   }),
   uitvoeren: (input, document2) => {
     const manualWind = input.manualPressureKnPerM2 !== void 0;
@@ -43073,20 +43140,20 @@ var MODEL3D_NBC_2025_WIND_COMMANDOS = [documentCommando({
   beschrijving: "Bereken een NBC 2025-proefplan voor een rechthoekig laag gebouw met plat dak: UGT/BGT-druk per schilvlak, exacte 3D-driehoeklasten en horizontale \xA74.1.7.9-acties. Wijzigt het project niet en kiest geen provinciaal geldende norm; bron voor q, Ct, Cpi en eigenfrequentie is verplicht.",
   invoer: obj({
     windCodeId: keuze(["ca-nbc-2025"], "Expliciet gekozen norm voor deze proefberekening."),
-    widthXM: getal4("Buitenmaat X in m.", { exclusiveMinimum: 0 }),
-    widthYM: getal4("Buitenmaat Y in m.", { exclusiveMinimum: 0 }),
-    heightM: getal4("Gebouwhoogte in m; maximaal 20 m en kleiner dan beide plattegrondmaten.", { exclusiveMinimum: 0 }),
-    naturalFrequencyHz: getal4("Laagste eigenfrequentie in Hz; minimaal 1 Hz.", { exclusiveMinimum: 0 }),
+    widthXM: getal5("Buitenmaat X in m.", { exclusiveMinimum: 0 }),
+    widthYM: getal5("Buitenmaat Y in m.", { exclusiveMinimum: 0 }),
+    heightM: getal5("Gebouwhoogte in m; maximaal 20 m en kleiner dan beide plattegrondmaten.", { exclusiveMinimum: 0 }),
+    naturalFrequencyHz: getal5("Laagste eigenfrequentie in Hz; minimaal 1 Hz.", { exclusiveMinimum: 0 }),
     naturalFrequencySource: tekst("Herleidbare bron van de laagste eigenfrequentie.", { minLength: 1 }),
     noWakeOrChannelling: jaNee("Bevestig dat er geen wake- of kanaaleffect is."),
-    referencePressureKPa: getal4("Projectspecifieke NBC-referentiedruk q met jaarlijkse overschrijdingskans 1/500 in kPa.", { exclusiveMinimum: 0 }),
+    referencePressureKPa: getal5("Projectspecifieke NBC-referentiedruk q met jaarlijkse overschrijdingskans 1/500 in kPa.", { exclusiveMinimum: 0 }),
     referencePressureSource: tekst("Herleidbare bron van q, inclusief plaats en kaarteditie.", { minLength: 1 }),
     importanceCategory: keuze(["low", "normal", "high", "post-disaster"], "NBC-belangcategorie."),
     terrain: keuze(["open", "rough"], "NBC-terreinprofiel; overgangsterrein wordt niet ondersteund."),
-    topographicFactor: getal4("NBC-topografiefactor Ct, minimaal 1.", { minimum: 1 }),
+    topographicFactor: getal5("NBC-topografiefactor Ct, minimaal 1.", { minimum: 1 }),
     topographicFactorSource: tekst("Herleidbare bron van Ct.", { minLength: 1 }),
-    internalPressureCoefficientMin: getal4("Onderbouwde minimumwaarde van Cpi."),
-    internalPressureCoefficientMax: getal4("Onderbouwde maximumwaarde van Cpi."),
+    internalPressureCoefficientMin: getal5("Onderbouwde minimumwaarde van Cpi."),
+    internalPressureCoefficientMax: getal5("Onderbouwde maximumwaarde van Cpi."),
     internalCoefficientSource: tekst("Herleidbare bron van de Cpi-grenzen.", { minLength: 1 })
   }, [
     "windCodeId",
@@ -43406,8 +43473,8 @@ var criteriumSchema = eenVan([
   obj({
     property: { const: "length" },
     mode: modus,
-    fromMm: getal4("Vanaf deze lengte, mm (telt mee).", { minimum: 0 }),
-    toMm: getal4("Tot en met deze lengte, mm.", { minimum: 0 })
+    fromMm: getal5("Vanaf deze lengte, mm (telt mee).", { minimum: 0 }),
+    toMm: getal5("Tot en met deze lengte, mm.", { minimum: 0 })
   }, ["property", "mode"], "Lengte van een staaf in mm; van en/of tot.")
 ], "Een criterium.");
 var selectieFilteren = {
@@ -43747,15 +43814,15 @@ var selectieVelden = {
 };
 var as = keuze(["x", "y", "z"], "Globale as.");
 var transformatie = eenVan([
-  obj({ kind: { const: "move" }, dx: getal4("m"), dy: getal4("m"), dz: getal4("m") }, ["kind", "dx", "dy", "dz"], "Verplaatsen."),
-  obj({ kind: { const: "copy" }, dx: getal4("m"), dy: getal4("m"), dz: getal4("m") }, ["kind", "dx", "dy", "dz"], "Kopi\xEBren met deze verschuiving."),
+  obj({ kind: { const: "move" }, dx: getal5("m"), dy: getal5("m"), dz: getal5("m") }, ["kind", "dx", "dy", "dz"], "Verplaatsen."),
+  obj({ kind: { const: "copy" }, dx: getal5("m"), dy: getal5("m"), dz: getal5("m") }, ["kind", "dx", "dy", "dz"], "Kopi\xEBren met deze verschuiving."),
   obj(
-    { kind: { const: "rotate" }, axis: as, angleDeg: getal4("Hoek in graden; positief volgens de rechterhandregel (tegen de klok in, gezien vanaf de positieve kant van de as).") },
+    { kind: { const: "rotate" }, axis: as, angleDeg: getal5("Hoek in graden; positief volgens de rechterhandregel (tegen de klok in, gezien vanaf de positieve kant van de as).") },
     ["kind", "axis", "angleDeg"],
     "Roteren om een globale as door het gemiddelde van de geselecteerde knopen."
   ),
   obj(
-    { kind: { const: "mirror" }, axis: as, offset: getal4("Plaats van het spiegelvlak op die as, m.") },
+    { kind: { const: "mirror" }, axis: as, offset: getal5("Plaats van het spiegelvlak op die as, m.") },
     ["kind", "axis", "offset"],
     "Spiegelen in het vlak loodrecht op de as."
   )
@@ -43800,7 +43867,7 @@ var levelsZetten = documentCommando({
   beschrijving: "De levels (bouwlagen) zetten: elk een naam en een hoogte in m. Een level met een bestaande naam houdt zijn koppelingen; gekoppelde knopen en platen schuiven mee met de hoogte. Een level dat verdwijnt, laat zijn knopen los.",
   invoer: obj({
     levels: lijst(obj(
-      { label: tekst('Naam van het level, bijv. "vloer 1".', { minLength: 1 }), heightM: getal4("Hoogte in m.") },
+      { label: tekst('Naam van het level, bijv. "vloer 1".', { minLength: 1 }), heightM: getal5("Hoogte in m.") },
       ["label", "heightM"]
     ), "Alle levels; vervangt de huidige lijst.")
   }, ["levels"]),
@@ -43857,7 +43924,7 @@ var stramienUit = (grid) => ({
 });
 var as2 = obj({
   label: tekst('Naam van de as, bijv. "A" of "1".', { minLength: 1 }),
-  positionM: getal4("Positie in m.")
+  positionM: getal5("Positie in m.")
 }, ["label", "positionM"]);
 function assenNaarMm(assen, huidig, voorvoegsel, veld) {
   try {
@@ -43912,7 +43979,7 @@ var APP_COMMANDOS = [
   alleenInApp(
     "app.view3d.explode",
     "De 3D-weergave per level uiteentrekken, zonder het rekenmodel te veranderen. 0 mm zet de normale weergave terug.",
-    obj({ mode: { const: "levels" }, amountMm: getal4("Afstand per level in mm (0\u201310000).", { minimum: 0, maximum: 1e4 }) }, ["mode", "amountMm"])
+    obj({ mode: { const: "levels" }, amountMm: getal5("Afstand per level in mm (0\u201310000).", { minimum: 0, maximum: 1e4 }) }, ["mode", "amountMm"])
   ),
   alleenInApp("app.undo", "De laatste modelwijziging ongedaan maken (zoals Ctrl+Z)."),
   alleenInApp("app.redo", "De ongedaan gemaakte wijziging opnieuw doen (zoals Ctrl+Y)."),
@@ -44414,7 +44481,11 @@ var CHECKCONFIG_VELDEN = [
   "cltKdefBron",
   // Issue #232: de gedeclareerde rolschuifsterkte van kruislaaghout met bron.
   "cltFvRolK",
-  "cltFvRolKBron"
+  "cltFvRolKBron",
+  // Aluminium (NEN-EN 1999-1-1, issue #5): lasstatus en de verklaring dat
+  // kip niet kan optreden. `aluminiumCheckBuilder` leest ze.
+  "aluLasstatus",
+  "aluZijdelingsGesteund"
 ];
 var LTB_LASTPOSITIES = ["centreOfGravity", "compressionEdge", "tensionEdge"];
 var SCHUINE_RANDEN = ["Boven", "Onder", "Beide"];
@@ -44902,6 +44973,10 @@ function keurCheckConfig(waarde, cpad) {
   keurEnum(cc.betonStaaltak, STAALTAKKEN, `${cpad}.betonStaaltak`, fouten);
   keurGetal(cc.betonStroken, `${cpad}.betonStroken`, fouten, { positief: true });
   keurGetal(cc.spanningSigmaZ, `${cpad}.spanningSigmaZ`, fouten);
+  keurEnum(cc.aluLasstatus, ["geen", "gelast"], `${cpad}.aluLasstatus`, fouten);
+  if (cc.aluZijdelingsGesteund !== void 0 && typeof cc.aluZijdelingsGesteund !== "boolean") {
+    fouten.push(`${cpad}.aluZijdelingsGesteund: moet true of false zijn.`);
+  }
   keurKorf(cc.betonKorf, `${cpad}.betonKorf`, fouten);
   keurZones(cc.betonZones, `${cpad}.betonZones`, fouten);
   keurKolom(cc.betonKolom, `${cpad}.betonKolom`, fouten);

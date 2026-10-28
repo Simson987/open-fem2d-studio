@@ -619,6 +619,9 @@ export const SPIEGELREGELS_TOETSCONFIG: { [K in keyof Required<BeamCheckConfig>]
   cltKdefBron: "gelijk",
   cltFvRolK: "gelijk",
   cltFvRolKBron: "gelijk",
+  // Aluminium: een lasstatus en een verklaring over de hele staaf.
+  aluLasstatus: "gelijk",
+  aluZijdelingsGesteund: "gelijk",
   // Boven en onder zijn ZIJDEN in de referentierichting, geen posities.
   betonKorf: "gelijk",
   betonMilieuklasse: "gelijk",
