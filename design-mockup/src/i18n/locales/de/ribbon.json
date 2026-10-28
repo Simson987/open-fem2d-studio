@@ -1630,6 +1630,7 @@
     "basisTimber": "Holz: {{norm}}",
     "basisConcrete": "Beton: {{norm}}",
     "basisAluminium": "Aluminium: {{norm}}",
+    "basisKoudgevormd": "Kaltprofile: {{norm}}",
     "aluLasstatus": "Schweißnähte",
     "aluLasOnbekend": "unbekannt",
     "aluLasGeen": "keine",

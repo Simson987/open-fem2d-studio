@@ -365,6 +365,13 @@ export interface BeamCheckConfig {
    * hele lengte zijdelings gesteund. Leeg = nee; kip blijft dan niet getoetst.
    */
   aluZijdelingsGesteund?: boolean;
+  // Koudgevormde profielen (NEN-EN 1993-1-3, issue #4)
+  /**
+   * Verklaring dat de koudgevormde staaf over de hele lengte zijdelings en
+   * tegen wringen gesteund is (bijv. door dakbeschot): kip (§6.2.4) kan dan
+   * niet optreden. Leeg = nee; kip blijft dan niet getoetst.
+   */
+  kvZijdelingsGesteund?: boolean;
 }
 
 /**

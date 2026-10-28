@@ -61,6 +61,8 @@ import { betonDoorsnedeGrootheden } from "./betonDoorsnedeGrootheden";
 import { parseVrijMateriaal } from "./vrijMateriaal";
 import { isAluminiumMateriaal, parseAluminiumMateriaal } from "./aluminiumMateriaal";
 import { aluminiumGrootheden, parseAluminiumProfiel } from "./aluminiumProfiel";
+import { isKoudgevormdMateriaal, parseKoudgevormdMateriaal } from "./koudgevormdMateriaal";
+import { koudgevormdGrootheden, parseKoudgevormdProfiel } from "./koudgevormdProfiel";
 import { STEEL_GRADES } from "./steelGrades";
 import { profielSleutel } from "./strip";
 
@@ -182,6 +184,8 @@ export interface ResolvedSection {
     | "aluminium-catalogus"
     /** Aluminium extrusieprofiel uit de profielnaam ("ALU-I …", "ALU-K …"). */
     | "aluminium-profiel"
+    /** Koudgevormd profiel uit de profielnaam ("KV-C …", "KV-Z …", "KV-U …"), issue #4. */
+    | "koudgevormd-profiel"
     | "vrij"
     | "default";
   /**
@@ -267,7 +271,7 @@ function betonDoorsnede(
 }
 
 /** Waar de E-modulus van een staaf vandaan komt. */
-type Materiaalsoort = "vrij" | "hout" | "beton" | "staal" | "aluminium" | "onbekend";
+type Materiaalsoort = "vrij" | "hout" | "beton" | "staal" | "aluminium" | "koudgevormd" | "onbekend";
 
 /**
  * De E-modulus die bij het MATERIAAL hoort, los van de doorsnede.
@@ -282,6 +286,9 @@ export function eVanMateriaal(material: string): { E: number; soort: Materiaalso
   if (vrij) return { E: vrij.eMod, soort: "vrij" };
   const aluminium = parseAluminiumMateriaal(material);
   if (aluminium) return { E: aluminium.eMod, soort: "aluminium" };
+  const kv = parseKoudgevormdMateriaal(material);
+  if (kv) return { E: kv.eMod, soort: "koudgevormd" };
+  if (isKoudgevormdMateriaal(material)) return { E: NaN, soort: "onbekend" };
   if (isAluminiumMateriaal(material)) return { E: NaN, soort: "onbekend" };
   // Een ontbrekend materiaal komt hier niet meer: `resolveSection` houdt het
   // vooraf tegen met een reden, in plaats van het als S235 te lezen.
@@ -303,6 +310,7 @@ function voorbeeldProfiel(soort: Materiaalsoort): string {
     case "beton": return 'een rechthoek als "300x500", een T of L als "T 400x450 bw=200 hf=50", of een eigen doorsnede uit de profieleditor';
     case "vrij":  return 'een rechthoek als "100x200", een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
     case "staal": return 'een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
+    case "koudgevormd": return 'een koudgevormd profiel als "KV-C 200x70x20x2 r3", "KV-Z 200x70x20x2 r3" of "KV-U 150x50x3 r3"';
     case "aluminium": return 'een extrusieprofiel als "ALU-I 200x100x6x10" of "ALU-K 120x60x4", een rechthoek als "100x200" of een eigen doorsnede uit de profieleditor';
     case "onbekend": return "een herkend constructiemateriaal";
   }
@@ -361,7 +369,16 @@ export function resolveSection(material: string | undefined, profile: string | u
   }
 
   // ── 2. Doorsnede uit de profielnaam, per materiaalsoort ───────────────
-  if (soort === "vrij" || soort === "aluminium") {
+  if (soort === "koudgevormd") {
+    // Koudgevormd (EN 1993-1-3): dezelfde A en I_y (hartlijnmodel, δ van
+    // §5.1(4)) als de toetskern. Alleen KV-profielen: een catalogusprofiel is
+    // warmgewalst en hoort bij een gewone staalsoort.
+    const kv = parseKoudgevormdProfiel(profile);
+    if (kv) {
+      const g = koudgevormdGrootheden(kv);
+      return { E, A: g.A, I: g.Iy, bron: "koudgevormd-profiel" };
+    }
+  } else if (soort === "vrij" || soort === "aluminium") {
     // Aluminium extrusieprofiel ("ALU-I …", "ALU-K …"): dezelfde A en I_y
     // (zonder afrondingsstralen) als de EN 1999-toetskern gebruikt.
     const alu = soort === "aluminium" ? parseAluminiumProfiel(profile) : null;
@@ -509,6 +526,8 @@ export function dichtheidVanMateriaal(material: string | undefined): number {
   if (vrij) return vrij.dichtheid;
   const aluminium = parseAluminiumMateriaal(material);
   if (aluminium) return aluminium.dichtheid;
+  const kv = parseKoudgevormdMateriaal(material);
+  if (kv) return kv.dichtheid;
   if (mat in TIMBER_RHO_MEAN) return TIMBER_RHO_MEAN[mat];
   if (mat in CONCRETE_E_CM) return RHO_BETON;
   if (STEEL_GRADES.includes(mat)) return RHO_STAAL;
@@ -761,7 +780,7 @@ export function bepaalVerloop(
       "alleen een rechthoek b×h of een I/H-profiel uit de staalcatalogus kan verlopen",
   });
   if (soort === "beton") return nietOndersteund("beton");
-  if (soort === "onbekend" || soort === "aluminium") return nietOndersteund(soort);
+  if (soort === "onbekend" || soort === "aluminium" || soort === "koudgevormd") return nietOndersteund(soort);
   if (isCltProfiel(profile) || isCltProfiel(eind)) return nietOndersteund("kruislaaghout");
 
   // Een eigen doorsnede is alleen bruikbaar als hij een gelast,

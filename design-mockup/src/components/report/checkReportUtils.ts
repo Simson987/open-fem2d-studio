@@ -528,6 +528,8 @@ export interface GebruikteKaders {
   vrij: boolean;
   /** Aluminium, NEN-EN 1999-1-1 (issue #5). */
   aluminium: boolean;
+  /** Koudgevormde profielen, NEN-EN 1993-1-3 (issue #4). */
+  koudgevormd: boolean;
 }
 
 /**
@@ -545,15 +547,18 @@ const VLAG_PER_SOORT: Record<CheckSoort, keyof GebruikteKaders> = {
   beton: "concrete",
   spanning: "vrij",
   aluminium: "aluminium",
+  koudgevormd: "koudgevormd",
 };
 
 /** De aanduiding van de aluminiumkern (`nen_en_1999_1_1::NORM`). */
 const ALUMINIUM_NORM_FULL = "NEN-EN 1999-1-1:2007+A1:2009";
+/** De aanduiding van de kern voor koudgevormde profielen (`nen_en_1993_1_3::NORM`). */
+const KOUDGEVORMD_NORM_FULL = "NEN-EN 1993-1-3:2006";
 
 /** Welke normen daadwerkelijk in de resultaten voorkomen. */
 export function usedNorms(results: MemberCheckResult[]): GebruikteKaders {
   const uit: GebruikteKaders = {
-    steel: false, timber: false, concrete: false, vrij: false, aluminium: false,
+    steel: false, timber: false, concrete: false, vrij: false, aluminium: false, koudgevormd: false,
   };
   for (const r of results) {
     const soort = checkSoort(r);
@@ -581,8 +586,8 @@ export function basisText(
   /** De nationale bijlage uit de projectgegevens, zoals gelezen; weglaten = niet ingesteld. */
   bijlage?: unknown,
 ): string | null {
-  const { steel, timber, concrete, aluminium } = usedNorms(results);
-  if (!steel && !timber && !concrete && !aluminium) return null;
+  const { steel, timber, concrete, aluminium, koudgevormd } = usedNorms(results);
+  if (!steel && !timber && !concrete && !aluminium && !koudgevormd) return null;
   let a: NormAanduidingen;
   try {
     a = normAanduidingenVoor(bijlage);
@@ -604,6 +609,8 @@ export function basisText(
   if (concrete) parts.push(t("report.basisConcrete", `beton: ${CONCRETE_NORM_FULL}`, { norm: CONCRETE_NORM_FULL }));
   // Aluminium: γ_M uit tabel 6.1 (aanbevolen waarden); geen NB verwerkt.
   if (aluminium) parts.push(t("report.basisAluminium", "aluminium: {{norm}}", { norm: ALUMINIUM_NORM_FULL }));
+  // Koudgevormd: γ_M uit §2(3) (aanbevolen waarden); geen NB verwerkt.
+  if (koudgevormd) parts.push(t("report.basisKoudgevormd", "koudgevormd staal: {{norm}}", { norm: KOUDGEVORMD_NORM_FULL }));
   if (parts.length === 0) return null;
   const label = t("report.basisLabel", "Toetsbasis");
   // De zin over de bijlage is PROZA en staat per taal in i18n; hij is niet

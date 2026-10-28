@@ -398,8 +398,9 @@ log("\n[12] Elk toetsresultaat krijgt de norm van zijn eigen rekenkern");
   checkGelijk("vrije spanningstoets", checkSoort(spanningToets), "spanning");
   checkGelijk("een onbekende vorm", checkSoort(nieuweSoort), null);
 
-  // Issue #5: de aluminiumvlag (EN 1999-1-1) hoort bij elke uitkomst.
-  const geen = { steel: false, timber: false, concrete: false, vrij: false, aluminium: false };
+  // Issue #5: de aluminiumvlag (EN 1999-1-1) hoort bij elke uitkomst; issue #4
+  // voegt de vlag voor koudgevormde profielen (EN 1993-1-3) toe.
+  const geen = { steel: false, timber: false, concrete: false, vrij: false, aluminium: false, koudgevormd: false };
   checkGelijk("staal zet de staalvlag", usedNorms([staalToets]), { ...geen, steel: true });
   checkGelijk("hout zet de houtvlag", usedNorms([houtToets]), { ...geen, timber: true });
   checkGelijk("kruislaaghout deelt de houtvlag",
@@ -410,9 +411,11 @@ log("\n[12] Elk toetsresultaat krijgt de norm van zijn eigen rekenkern");
   checkGelijk("een nieuwe resultaatsoort valt niet in de laatste emmer",
     usedNorms([nieuweSoort]), geen);
   checkGelijk("alles door elkaar", usedNorms(ALLE_TOETSEN),
-    { steel: true, timber: true, concrete: true, vrij: true, aluminium: false });
+    { steel: true, timber: true, concrete: true, vrij: true, aluminium: false, koudgevormd: false });
   checkGelijk("aluminium zet de aluminiumvlag (EN 1999-1-1)",
     usedNorms([{ beam_id: 99, legering: "EN AW-6063 T6", checks: [] }]), { ...geen, aluminium: true });
+  checkGelijk("koudgevormd zet de eigen vlag (EN 1993-1-3)",
+    usedNorms([{ beam_id: 98, koudgevormd_staalsoort: "S350GD", checks: [] }]), { ...geen, koudgevormd: true });
 
   // De gemelde fout, van toetsresultaat tot in de rapportkop: één staaf van
   // een vrij materiaal, geen enkele stand aangeraakt.

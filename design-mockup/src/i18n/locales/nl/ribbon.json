@@ -1630,6 +1630,7 @@
     "basisTimber": "hout: {{norm}}",
     "basisConcrete": "beton: {{norm}}",
     "basisAluminium": "aluminium: {{norm}}",
+    "basisKoudgevormd": "koudgevormd staal: {{norm}}",
     "aluLasstatus": "lassen",
     "aluLasOnbekend": "onbekend",
     "aluLasGeen": "geen",

@@ -1630,6 +1630,7 @@
     "basisTimber": "timber: {{norm}}",
     "basisConcrete": "concrete: {{norm}}",
     "basisAluminium": "aluminium: {{norm}}",
+    "basisKoudgevormd": "cold-formed steel: {{norm}}",
     "aluLasstatus": "welds",
     "aluLasOnbekend": "unknown",
     "aluLasGeen": "none",

@@ -24,6 +24,7 @@ import {
   isSteelCheckResult,
   isStressCheckResult,
   isAluminiumCheckResult,
+  isKoudgevormdCheckResult,
   normLabel,
   sectionLabel,
   type MemberCheckResult,
@@ -209,7 +210,7 @@ function MemberCard({ result, focusToken, namen, onToon }: {
 
       {/* Aluminium (EN 1999-1-1): wat voor deze staaf NIET getoetst is, met
           reden — zonder klikken zichtbaar, want de status blijft dan "n.v.t.". */}
-      {isAluminiumCheckResult(result) && result.niet_getoetst.length > 0 && (
+      {(isAluminiumCheckResult(result) || isKoudgevormdCheckResult(result)) && result.niet_getoetst.length > 0 && (
         <div className="cp-card-onuitgevoerd">
           {t("nietUitgevoerd")}: {result.niet_getoetst.join("; ")}
         </div>

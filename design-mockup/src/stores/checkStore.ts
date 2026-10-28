@@ -5,7 +5,8 @@
  * hout (`check_timber_beams`), kruislaaghout (`check_clt_beams`), beton
  * (`check_concrete_beams`) en de vrije spanningstoets
  * (`check_stress_beams`) — plus aluminium (`check_aluminium_beams`,
- * NEN-EN 1999-1-1) — en merget de resultaten op staaf-id in één lijst
+ * NEN-EN 1999-1-1) en koudgevormde profielen (`check_koudgevormd_beams`,
+ * NEN-EN 1993-1-3, issue #4) — en merget de resultaten op staaf-id in één lijst
  * met hetzelfde NamedCheck-contract. Niet-toetsbare staven komen met
  * expliciete reden in `skipped` (zichtbaar in het toetsingspaneel) — geen
  * stille aannames.
@@ -38,6 +39,7 @@ import type { CltBeamCheckResult } from "../lib/types/timber/CltBeamCheckResult"
 import type { ConcreteBeamCheckResult } from "../lib/types/concrete/ConcreteBeamCheckResult";
 import type { SpanningBeamCheckResult } from "../lib/types/spanning/SpanningBeamCheckResult";
 import type { AluminiumBeamCheckResult } from "../lib/types/aluminium/AluminiumBeamCheckResult";
+import type { KoudgevormdBeamCheckResult } from "../lib/types/koudgevormd/KoudgevormdBeamCheckResult";
 import type { ConcreteClass } from "../lib/types/concrete/ConcreteClass";
 import type { SteelProfile } from "../lib/types/steel/SteelProfile";
 import type { MemberCheckResult, CheckSkip } from "../lib/checkTypes";
@@ -69,6 +71,8 @@ import type { PlateCheckResult } from "../lib/types/plaat/PlateCheckResult";
 import { isVrijMateriaal } from "../lib/vrijMateriaal";
 import { isAluminiumMateriaal } from "../lib/aluminiumMateriaal";
 import { buildAluminiumCheckInputs } from "../lib/aluminiumCheckBuilder";
+import { isKoudgevormdMateriaal } from "../lib/koudgevormdMateriaal";
+import { buildKoudgevormdCheckInputs } from "../lib/koudgevormdCheckBuilder";
 import type { NationaleBijlageCode } from "../lib/normAanduidingen";
 import {
   bepaalKruipPerStaaf,
@@ -358,6 +362,7 @@ interface CheckState {
     beton: ReturnType<typeof buildBetonCheckInputs>["inputs"];
     spanning: ReturnType<typeof buildSpanningCheckInputs>["inputs"];
     aluminium: ReturnType<typeof buildAluminiumCheckInputs>["inputs"];
+    koudgevormd: ReturnType<typeof buildKoudgevormdCheckInputs>["inputs"];
     plaat: ReturnType<typeof buildPlaatCheckInputs>["inputs"];
   } | null;
 
@@ -532,7 +537,7 @@ export const useCheckStore = create<CheckState>((set) => ({
       // weggefilterd.
       const steel = buildSteelCheckInputs({
         ...data,
-        beams: data.beams.filter((b) => !isVrijMateriaal(b.material) && !isAluminiumMateriaal(b.material)),
+        beams: data.beams.filter((b) => !isVrijMateriaal(b.material) && !isAluminiumMateriaal(b.material) && !isKoudgevormdMateriaal(b.material)),
         alleBeams: data.beams,
         profileDb,
       });
@@ -572,6 +577,8 @@ export const useCheckStore = create<CheckState>((set) => ({
       const spanning = buildSpanningCheckInputs(data);
       // Aluminium (NEN-EN 1999-1-1): alleen staven met een `ALU:`-materiaal.
       const aluminium = buildAluminiumCheckInputs(data);
+      // Koudgevormd (NEN-EN 1993-1-3): alleen staven met een `KV:`-materiaal.
+      const koudgevormd = buildKoudgevormdCheckInputs(data);
       // Platen: alleen volledige platen (met id) — zie `CheckRunData.plates`.
       const plaat = buildPlaatCheckInputs({
         nodes: data.nodes,
@@ -588,7 +595,7 @@ export const useCheckStore = create<CheckState>((set) => ({
 
       // Eerlijkheid: elke staaf die nergens terechtkwam expliciet melden.
       const bouwers: { inputs: { beam_id: number }[]; skipped: CheckSkip[] }[] = [
-        steel, timber, clt, beton, spanning, aluminium,
+        steel, timber, clt, beton, spanning, aluminium, koudgevormd,
       ];
       const covered = new Set<number>(
         bouwers.flatMap((b) => [
@@ -610,7 +617,7 @@ export const useCheckStore = create<CheckState>((set) => ({
         console.info(`[Toetsing] staaf ${s.beamId} overgeslagen — ${s.reason}`);
       }
 
-      const [steelResults, timberResults, cltResults, betonResults, spanningResults, plaatResults, aluminiumResults] =
+      const [steelResults, timberResults, cltResults, betonResults, spanningResults, plaatResults, aluminiumResults, koudgevormdResults] =
         await Promise.all([
           steel.inputs.length > 0
             ? roepKern<BeamCheckResult[]>("check_steel_beams", steel.inputs)
@@ -633,6 +640,9 @@ export const useCheckStore = create<CheckState>((set) => ({
           aluminium.inputs.length > 0
             ? roepKern<AluminiumBeamCheckResult[]>("check_aluminium_beams", aluminium.inputs)
             : Promise.resolve<AluminiumBeamCheckResult[]>([]),
+          koudgevormd.inputs.length > 0
+            ? roepKern<KoudgevormdBeamCheckResult[]>("check_koudgevormd_beams", koudgevormd.inputs)
+            : Promise.resolve<KoudgevormdBeamCheckResult[]>([]),
         ]);
 
       const merged: MemberCheckResult[] = [
@@ -642,6 +652,7 @@ export const useCheckStore = create<CheckState>((set) => ({
         ...betonResults,
         ...spanningResults,
         ...aluminiumResults,
+        ...koudgevormdResults,
       ].sort((a, b) => a.beam_id - b.beam_id);
 
       if (ingehaald()) return;
@@ -680,6 +691,7 @@ export const useCheckStore = create<CheckState>((set) => ({
           beton: beton.inputs,
           spanning: spanning.inputs,
           aluminium: aluminium.inputs,
+          koudgevormd: koudgevormd.inputs,
           plaat: plaat.inputs,
         },
       });
@@ -770,6 +782,7 @@ export function anyCheckableBeams(beams: Beam[]): boolean {
     (b) =>
       isVrijMateriaal(b.material) ||
       isAluminiumMateriaal(b.material) ||
+      isKoudgevormdMateriaal(b.material) ||
       isSteelProfile(b.profile) ||
       isCltProfiel(b.profile) ||
       matchSupportedTimberGrade(b.material) !== null ||
