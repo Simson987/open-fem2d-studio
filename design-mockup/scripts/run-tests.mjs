@@ -671,6 +671,8 @@ const ALLEEN_BRON = new Map([
     "frame3d-volume-material-app-route", "frame3d-volumes", "mixed3d-irregular-app", "mixed3d-workbench",
     // Ook uit cf107758, daar nog niet geplaatst: dezelfde 3D-app- en Rust-kernroute.
     "frame3d-gl24h-app-route", "frame3d-volume-diagrams", "frame3d-volume-finite-j2-dkt-app-route",
+    // Native Rust-3D-route vanuit het Open FEM 3D-model (volumes, rekenkeuze).
+    "open-fem3d-native-route",
   ].map((name) => [name, "3D-app, Three-weergave of aparte Rust-kern; geen module van de 2D-sidecarbundel."]),
   // Deze routes toetsen de getypeerde native-fem-client, de Rust-dispatcher
   // en de app-adapters. De sidecarbundel bevat alleen de TypeScript 2D-kern.

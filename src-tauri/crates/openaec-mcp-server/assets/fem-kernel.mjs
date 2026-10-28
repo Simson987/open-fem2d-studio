@@ -26462,49 +26462,214 @@ function resolveOpenFem3DAnalysisMaterial(material, baseEMpa, baseNu, model) {
   return { eMpa, nu: settings?.nu ?? baseNu, source: choice?.kind ?? "default" };
 }
 
-// src/components/openFem3d/openFem3dModel.ts
-var OPEN_FEM_3D_GLOBAL_DIRECTIONS = ["x", "y", "z"];
-function isOpenFem3DGlobalMemberLoad(load) {
-  return load.globalDirection !== void 0;
+// src/components/frame3d/frame3dModel.ts
+init_sectionResolver();
+
+// src/components/frame3d/frame3dCircularArc.ts
+var TAU2 = 2 * Math.PI;
+var positiveAngle2 = (angle) => (angle % TAU2 + TAU2) % TAU2;
+function circularArcThroughPoints2D2(start, through, end) {
+  const ux = through.x - start.x, uy = through.y - start.y;
+  const vx = end.x - start.x, vy = end.y - start.y;
+  const determinant = 2 * (ux * vy - uy * vx);
+  const scaleSquared = Math.max(ux * ux + uy * uy, vx * vx + vy * vy);
+  if (!(scaleSquared > 0) || Math.abs(determinant) <= 1e-12 * scaleSquared) return null;
+  const uSquared = ux * ux + uy * uy, vSquared = vx * vx + vy * vy;
+  const center = {
+    x: start.x + (uSquared * vy - vSquared * uy) / determinant,
+    y: start.y + (vSquared * ux - uSquared * vx) / determinant
+  };
+  const radius = Math.hypot(start.x - center.x, start.y - center.y);
+  if (!Number.isFinite(radius) || radius <= 0) return null;
+  const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
+  const middleAngle = Math.atan2(through.y - center.y, through.x - center.x);
+  const endAngle = Math.atan2(end.y - center.y, end.x - center.x);
+  const ccwToMiddle = positiveAngle2(middleAngle - startAngle);
+  const ccwToEnd = positiveAngle2(endAngle - startAngle);
+  const clockwise = ccwToMiddle > ccwToEnd;
+  return {
+    center,
+    radius,
+    startAngle,
+    endAngle,
+    clockwise,
+    sweep: clockwise ? ccwToEnd - TAU2 : ccwToEnd
+  };
 }
-function openFem3DGlobalDirectionVector(direction) {
-  return direction === "x" ? [1, 0, 0] : direction === "y" ? [0, 1, 0] : [0, 0, 1];
+function sampleCircularArc3D2(start, through, end, steps = 24) {
+  const chord = { x: end.x - start.x, y: end.y - start.y, z: end.z - start.z };
+  const length = Math.hypot(chord.x, chord.y, chord.z);
+  if (!(length > 0)) return null;
+  const u = { x: chord.x / length, y: chord.y / length, z: chord.z / length };
+  const middle = { x: through.x - start.x, y: through.y - start.y, z: through.z - start.z };
+  const along = middle.x * u.x + middle.y * u.y + middle.z * u.z;
+  const perpendicular = {
+    x: middle.x - along * u.x,
+    y: middle.y - along * u.y,
+    z: middle.z - along * u.z
+  };
+  const height = Math.hypot(perpendicular.x, perpendicular.y, perpendicular.z);
+  if (height <= 1e-12 * Math.max(length, Math.hypot(middle.x, middle.y, middle.z))) return null;
+  const v = { x: perpendicular.x / height, y: perpendicular.y / height, z: perpendicular.z / height };
+  const arc = circularArcThroughPoints2D2({ x: 0, y: 0 }, { x: along, y: height }, { x: length, y: 0 });
+  if (!arc) return null;
+  return Array.from({ length: Math.max(2, steps) + 1 }, (_, index) => {
+    const angle = arc.startAngle + arc.sweep * index / Math.max(2, steps);
+    const x = arc.center.x + arc.radius * Math.cos(angle);
+    const y = arc.center.y + arc.radius * Math.sin(angle);
+    return {
+      x: start.x + x * u.x + y * v.x,
+      y: start.y + x * u.y + y * v.y,
+      z: start.z + x * u.z + y * v.z
+    };
+  });
 }
-function openFem3DGlobalMemberLoadFactor(ex, direction, perProjection) {
-  if (!perProjection) return 1;
-  const d = openFem3DGlobalDirectionVector(direction);
-  return Math.hypot(ex[1] * d[2] - ex[2] * d[1], ex[2] * d[0] - ex[0] * d[2], ex[0] * d[1] - ex[1] * d[0]);
+
+// src/components/frame3d/frame3dVolumeFaces.ts
+var TET_FACES = [[0, 2, 1], [0, 1, 3], [1, 2, 3], [2, 0, 3]];
+var HEX_FACES = [
+  [0, 3, 2, 1],
+  [4, 5, 6, 7],
+  [0, 1, 5, 4],
+  [1, 2, 6, 5],
+  [2, 3, 7, 6],
+  [3, 0, 4, 7]
+];
+function frame3DVolumeFaces(kind) {
+  return kind === "tet4" ? TET_FACES : HEX_FACES;
 }
-var EMPTY_OPEN_FEM_3D = {
-  nodes: [],
-  beams: [],
-  supports: [],
-  loads: [],
-  memberLoads: [],
-  memberPointLoads: [],
-  thermalLoads: [],
-  plates: [],
-  surfaceLoads: [],
-  loadPanels: [],
-  envelopePanels: []
-};
-function nextEntityId(items) {
-  let maximum = 0;
-  for (const item of items) if (item.id > maximum) maximum = item.id;
-  return maximum + 1;
+
+// src/components/frame3d/frame3dModel.ts
+function readPlateReinforcement(value, plateId, thicknessM) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`3D-plaat ${plateId}: ongeldige wapeningsinvoer.`);
+  }
+  const raw = value;
+  if (raw.limitState !== "ultimate" && raw.limitState !== "service") {
+    throw new Error(`3D-plaat ${plateId}: kies UGT of BGT voor de wapeningscontrole.`);
+  }
+  const positive4 = ["fckMpa", "fctmMpa", "gammaC", "fydMpa", "fywdMpa", "esMpa", "barDiameterMm"];
+  const nonnegative = ["coverMm", "topXMm2PerM", "topYMm2PerM", "bottomXMm2PerM", "bottomYMm2PerM"];
+  for (const key of positive4) {
+    if (typeof raw[key] !== "number" || !Number.isFinite(raw[key]) || raw[key] <= 0) {
+      throw new Error(`3D-plaat ${plateId}: ${key} moet een positief eindig getal zijn.`);
+    }
+  }
+  for (const key of nonnegative) {
+    if (typeof raw[key] !== "number" || !Number.isFinite(raw[key]) || raw[key] < 0) {
+      throw new Error(`3D-plaat ${plateId}: ${key} moet een niet-negatief eindig getal zijn.`);
+    }
+  }
+  const optionalPositive = ["leverArmMm", "cRdc", "crackLimitMm"];
+  for (const key of optionalPositive) {
+    if (raw[key] !== void 0 && (typeof raw[key] !== "number" || !Number.isFinite(raw[key]) || raw[key] <= 0)) {
+      throw new Error(`3D-plaat ${plateId}: ${key} moet een positief eindig getal zijn.`);
+    }
+  }
+  if (raw.shearMm2PerM2 !== void 0 && (typeof raw.shearMm2PerM2 !== "number" || !Number.isFinite(raw.shearMm2PerM2) || raw.shearMm2PerM2 < 0)) {
+    throw new Error(`3D-plaat ${plateId}: shearMm2PerM2 moet niet-negatief zijn.`);
+  }
+  const tanTheta = raw.tanTheta ?? 1, alphaCc = raw.alphaCc ?? 1;
+  if (typeof tanTheta !== "number" || !Number.isFinite(tanTheta) || tanTheta < 0.4 || tanTheta > 1 || typeof alphaCc !== "number" || !Number.isFinite(alphaCc) || alphaCc <= 0 || raw.longTerm !== void 0 && typeof raw.longTerm !== "boolean" || raw.fckMpa >= 250 || thicknessM * 1e3 <= 2 * raw.coverMm + raw.barDiameterMm || raw.leverArmMm !== void 0 && raw.leverArmMm >= thicknessM * 1e3) {
+    throw new Error(`3D-plaat ${plateId}: ongeldige beton-/wapeningsparameters voor de plaatdikte.`);
+  }
+  return {
+    limitState: raw.limitState,
+    fckMpa: raw.fckMpa,
+    fctmMpa: raw.fctmMpa,
+    gammaC: raw.gammaC,
+    fydMpa: raw.fydMpa,
+    fywdMpa: raw.fywdMpa,
+    esMpa: raw.esMpa,
+    coverMm: raw.coverMm,
+    barDiameterMm: raw.barDiameterMm,
+    topXMm2PerM: raw.topXMm2PerM,
+    topYMm2PerM: raw.topYMm2PerM,
+    bottomXMm2PerM: raw.bottomXMm2PerM,
+    bottomYMm2PerM: raw.bottomYMm2PerM,
+    ...raw.shearMm2PerM2 !== void 0 ? { shearMm2PerM2: raw.shearMm2PerM2 } : {},
+    ...raw.leverArmMm !== void 0 ? { leverArmMm: raw.leverArmMm } : {},
+    ...raw.cRdc !== void 0 ? { cRdc: raw.cRdc } : {},
+    ...raw.crackLimitMm !== void 0 ? { crackLimitMm: raw.crackLimitMm } : {},
+    tanTheta,
+    alphaCc,
+    longTerm: raw.longTerm === true
+  };
 }
-var OPEN_FEM_3D_SUPPORT_PRESETS = {
-  fixed: { ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
-  pinned: { ux: true, uy: true, uz: true, rx: false, ry: false, rz: false },
-  /** Ruimtelijke rolpresets blokkeren precies de genoemde globale translatie. */
-  xRoller: { ux: true, uy: false, uz: false, rx: false, ry: false, rz: false },
-  yRoller: { ux: false, uy: true, uz: false, rx: false, ry: false, rz: false },
-  zRoller: { ux: false, uy: false, uz: true, rx: false, ry: false, rz: false },
-  /** Translatievast; alleen rotatie om de gekozen globale as blijft vrij. */
-  revoluteX: { ux: true, uy: true, uz: true, rx: false, ry: true, rz: true },
-  revoluteY: { ux: true, uy: true, uz: true, rx: true, ry: false, rz: true },
-  revoluteZ: { ux: true, uy: true, uz: true, rx: true, ry: true, rz: false }
-};
+function readPlateThreeLayer(value, plateId, thicknessM) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`3D-plaat ${plateId}: ongeldige drielageninvoer.`);
+  }
+  const raw = value;
+  const positive4 = ["topSkinMm", "bottomSkinMm", "fcdMpa", "fydMpa", "nuPrime"];
+  const readReinforcement = (key) => {
+    const entry = raw[key];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`3D-plaat ${plateId}: ongeldige drielageninvoer voor ${key}.`);
+    }
+    const reinforcement = entry;
+    for (const direction of ["asX", "asY"]) {
+      const area3 = reinforcement[direction];
+      if (typeof area3 !== "number" || !Number.isFinite(area3) || area3 < 0) {
+        throw new Error(`3D-plaat ${plateId}: ${key}.${direction} moet niet-negatief en eindig zijn.`);
+      }
+    }
+    return { asX: reinforcement.asX, asY: reinforcement.asY };
+  };
+  const topReinforcement = readReinforcement("topReinforcement");
+  const bottomReinforcement = readReinforcement("bottomReinforcement");
+  for (const key of positive4) {
+    if (typeof raw[key] !== "number" || !Number.isFinite(raw[key]) || raw[key] <= 0) {
+      throw new Error(`3D-plaat ${plateId}: drielagenveld ${key} moet positief en eindig zijn.`);
+    }
+  }
+  if (raw.topSkinMm + raw.bottomSkinMm >= thicknessM * 1e3 || raw.nuPrime > 1 || raw.compressionModel !== "blaauwendraad2021" && raw.compressionModel !== "ec2AnnexF") {
+    throw new Error(`3D-plaat ${plateId}: huiddiktes, \u03BD\u2032 of drukmodel passen niet bij de plaat.`);
+  }
+  let core;
+  if (raw.core !== void 0) {
+    if (!raw.core || typeof raw.core !== "object" || Array.isArray(raw.core)) {
+      throw new Error(`3D-plaat ${plateId}: ongeldige drielagen-kerninvoer.`);
+    }
+    const c = raw.core;
+    for (const key of ["vRdcKnPerM", "diagonalLimitMpa"]) {
+      if (typeof c[key] !== "number" || !Number.isFinite(c[key]) || c[key] <= 0) {
+        throw new Error(`3D-plaat ${plateId}: kernveld ${key} moet positief en eindig zijn.`);
+      }
+    }
+    if (typeof c.tanTheta !== "number" || !Number.isFinite(c.tanTheta) || c.tanTheta < 0.4 || c.tanTheta > 1 || typeof c.providedShearMm2PerM2 !== "number" || !Number.isFinite(c.providedShearMm2PerM2) || c.providedShearMm2PerM2 < 0) {
+      throw new Error(`3D-plaat ${plateId}: tan \u03B8 moet 0,4\u20131 zijn en Asv niet-negatief.`);
+    }
+    core = {
+      vRdcKnPerM: c.vRdcKnPerM,
+      tanTheta: c.tanTheta,
+      providedShearMm2PerM2: c.providedShearMm2PerM2,
+      diagonalLimitMpa: c.diagonalLimitMpa
+    };
+  }
+  return {
+    topSkinMm: raw.topSkinMm,
+    bottomSkinMm: raw.bottomSkinMm,
+    topReinforcement,
+    bottomReinforcement,
+    fcdMpa: raw.fcdMpa,
+    fydMpa: raw.fydMpa,
+    nuPrime: raw.nuPrime,
+    compressionModel: raw.compressionModel,
+    ...core ? { core } : {}
+  };
+}
+var FRAME3D_VOLUME_BACKENDS = [
+  "automatic",
+  "matrixFreePcg",
+  "sparsePcg",
+  "sparseDirect",
+  "frontalWave",
+  "dense",
+  "sparseGmres",
+  "matrixFreeGmres",
+  "matrixFreeGmresLarge"
+];
 var SUPPORT_DOF = ["ux", "uy", "uz", "rx", "ry", "rz"];
 var SPRING_DOF = ["kxKnPerM", "kyKnPerM", "kzKnPerM", "krxKnmPerRad", "kryKnmPerRad", "krzKnmPerRad"];
 var PRESCRIBED_DOF = ["uxM", "uyM", "uzM", "rxRad", "ryRad", "rzRad"];
@@ -26521,42 +26686,21 @@ function readEndReleases(value) {
   }
   return Object.fromEntries(RELEASE_DOF.map((axis) => [axis, releases[axis] === true]));
 }
-function openFem3DMemberAxes(start, end, rollAngleRad = 0) {
-  const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
-  if (!(length > 0) || !Number.isFinite(rollAngleRad)) throw new Error("Een 3D-staaf heeft ongeldige lokale assen.");
-  const ex = [(end.x - start.x) / length, (end.y - start.y) / length, (end.z - start.z) / length];
-  const up = Math.abs(ex[2]) > 0.999 ? [1, 0, 0] : [0, 0, 1];
-  const projection = ex[0] * up[0] + ex[1] * up[1] + ex[2] * up[2];
-  const ezBase = [
-    up[0] - projection * ex[0],
-    up[1] - projection * ex[1],
-    up[2] - projection * ex[2]
-  ];
-  const ezLength = Math.hypot(...ezBase);
-  const ez0 = [ezBase[0] / ezLength, ezBase[1] / ezLength, ezBase[2] / ezLength];
-  const ey0 = [
-    ez0[1] * ex[2] - ez0[2] * ex[1],
-    ez0[2] * ex[0] - ez0[0] * ex[2],
-    ez0[0] * ex[1] - ez0[1] * ex[0]
-  ];
-  const cosine = Math.cos(rollAngleRad), sine = Math.sin(rollAngleRad);
-  const ey = [
-    cosine * ey0[0] + sine * ez0[0],
-    cosine * ey0[1] + sine * ez0[1],
-    cosine * ey0[2] + sine * ez0[2]
-  ];
-  const ez = [
-    cosine * ez0[0] - sine * ey0[0],
-    cosine * ez0[1] - sine * ey0[1],
-    cosine * ez0[2] - sine * ey0[2]
-  ];
-  return { ex, ey, ez };
-}
-function readOptionalLevelId(value, label) {
-  if (value === void 0 || value === null) return void 0;
-  if (typeof value !== "string") throw new Error(`${label} heeft een ongeldige levelverwijzing.`);
-  const trimmed = value.trim();
-  return trimmed ? trimmed : void 0;
+function readNonlinearLaw(value) {
+  if (value === void 0) return void 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-staaf bevat een ongeldige FNL-materiaalwet.");
+  }
+  const law = value;
+  const positive4 = (number) => typeof number === "number" && Number.isFinite(number) && number > 0;
+  const ratio = (number) => typeof number === "number" && Number.isFinite(number) && number >= 0 && number <= 1;
+  if (law.kind === "steelBilinear" && positive4(law.yieldMpa) && ratio(law.hardeningRatio)) {
+    return { kind: "steelBilinear", yieldMpa: law.yieldMpa, hardeningRatio: law.hardeningRatio };
+  }
+  if (law.kind === "concreteCracking" && positive4(law.tensileMpa) && ratio(law.residualRatio)) {
+    return { kind: "concreteCracking", tensileMpa: law.tensileMpa, residualRatio: law.residualRatio };
+  }
+  throw new Error("Een 3D-staaf heeft ongeldige FNL-parameters: sterkte > 0 MPa en stijfheidsverhouding 0\u20261 vereist.");
 }
 function readOptionalCaseId(value) {
   if (value === void 0) return void 0;
@@ -26564,60 +26708,6 @@ function readOptionalCaseId(value) {
     throw new Error("Een 3D-belasting heeft een ongeldig belastinggeval.");
   }
   return Number(value);
-}
-function openFem3DLoadCaseId(load) {
-  return load.caseId ?? 1;
-}
-function withOpenFem3DSelfWeight(model, caseId) {
-  if (!Number.isSafeInteger(caseId) || caseId <= 0) throw new Error("Het belastinggeval voor 3D-eigen gewicht is ongeldig.");
-  const loads = [...model.loads ?? []];
-  const memberLoads = [...model.memberLoads ?? []];
-  let nextLoadId = nextEntityId(loads);
-  let nextMemberLoadId = nextEntityId(memberLoads);
-  for (const beam of model.beams) {
-    const start = model.nodes.find((node) => node.id === beam.startNodeId);
-    const end = model.nodes.find((node) => node.id === beam.endNodeId);
-    const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
-    const resolved = resolveSection(beam.material?.trim() ?? "", beam.profileName?.trim() ?? "");
-    if (resolved.bron === "default") {
-      throw new Error(`Staaf ${beam.id}: eigen gewicht kan niet worden bepaald: ${resolved.reden ?? "doorsnede onbekend"}.`);
-    }
-    const indeling = openFem3DVerloopDelen(beam, length);
-    const delen = indeling ? indeling.delen.map((deel) => ({ tStart: deel.tStart, tEnd: deel.tEnd, areaMm2: deel.doorsnede.areaMm2 })) : [{ tStart: 0, tEnd: 1, areaMm2: resolved.aBruto ?? resolved.A }];
-    const rho = dichtheidVanMateriaal(beam.material);
-    const qVan = (areaMm2) => -(rho * (areaMm2 * 1e-6) * G) / 1e3;
-    if (beam.tensionOnly) {
-      const endForce = delen.reduce((som, deel) => som + qVan(deel.areaMm2) * (deel.tEnd - deel.tStart) * length, 0) / 2;
-      if (endForce !== 0) {
-        for (const nodeId of [beam.startNodeId, beam.endNodeId]) {
-          loads.push({ id: nextLoadId++, nodeId, caseId, fx: 0, fy: 0, fz: endForce, mx: 0, my: 0, mz: 0 });
-        }
-      }
-      continue;
-    }
-    for (const deel of delen) {
-      const q = qVan(deel.areaMm2);
-      if (q === 0) continue;
-      memberLoads.push({
-        id: nextMemberLoadId++,
-        beamId: beam.id,
-        caseId,
-        globalDirection: "z",
-        qStart: q,
-        qEnd: q,
-        startPositionM: deel.tStart * length,
-        endPositionM: deel.tEnd * length
-      });
-    }
-  }
-  const surfaceLoads = [...model.surfaceLoads ?? []];
-  let nextSurfaceLoadId = nextEntityId(surfaceLoads);
-  for (const plate of model.plates ?? []) {
-    const material = resolveOpenFem3DPlateMaterial(plate);
-    const qz = -(material.rhoKgM3 * G * plate.thicknessM) / 1e3;
-    if (qz !== 0) surfaceLoads.push({ id: nextSurfaceLoadId++, plateId: plate.id, caseId, qx: 0, qy: 0, qz });
-  }
-  return { ...model, loads, memberLoads, ...model.plates?.length ? { surfaceLoads } : {} };
 }
 function readSupportRestraints(value) {
   if (SUPPORT_DOF.some((axis) => typeof value[axis] !== "boolean")) {
@@ -26665,11 +26755,6 @@ function readNodalLoadComponents(value) {
   }
   return Object.fromEntries(LOAD_DOF.map((axis) => [axis, value[axis]]));
 }
-function requireNode(model, nodeId) {
-  if (!model.nodes.some((node) => node.id === nodeId)) {
-    throw new Error(`3D-knoop ${nodeId} bestaat niet.`);
-  }
-}
 function beamLength(model, beamId) {
   const beam = model.beams.find((item) => item.id === beamId);
   if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
@@ -26677,55 +26762,17 @@ function beamLength(model, beamId) {
   const end = model.nodes.find((node) => node.id === beam.endNodeId);
   return Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
 }
-var LOCAL_MEMBER_LOAD_COMPONENTS = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
-function readMemberLoadRange(value, model, beamId) {
+function readMemberLoad(value, model, id2, beamId) {
+  const components = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
+  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) || components.every((name) => value[name] === 0)) {
+    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
   const length = beamLength(model, beamId);
   const startPositionM = Number(value.startPositionM);
   const endPositionM = Number(value.endPositionM);
   if (!Number.isFinite(startPositionM) || !Number.isFinite(endPositionM) || startPositionM < 0 || endPositionM <= startPositionM || endPositionM > length + 1e-9) {
     throw new Error(`Een 3D-staafbelasting moet binnen de staaflengte van ${length} m liggen.`);
   }
-  return { startPositionM, endPositionM };
-}
-function readGlobalMemberLoad(value, model, id2, beamId) {
-  const globalDirection = value.globalDirection;
-  if (!OPEN_FEM_3D_GLOBAL_DIRECTIONS.includes(globalDirection)) {
-    throw new Error(`Een 3D-staafbelasting heeft een ongeldige globale richting ${JSON.stringify(globalDirection)}; kies x, y of z.`);
-  }
-  if (LOCAL_MEMBER_LOAD_COMPONENTS.some((name) => value[name] !== void 0 && value[name] !== 0)) {
-    throw new Error("Een globale 3D-staafbelasting heeft geen lokale waarden (qy, qz); geef qStart en qEnd langs de globale as.");
-  }
-  const { qStart, qEnd } = value;
-  if (typeof qStart !== "number" || typeof qEnd !== "number" || !Number.isFinite(qStart) || !Number.isFinite(qEnd) || qStart === 0 && qEnd === 0) {
-    throw new Error("Een globale 3D-staafbelasting moet een eindige qStart en qEnd en minstens \xE9\xE9n niet-nulwaarde hebben.");
-  }
-  if (value.perProjection !== void 0 && typeof value.perProjection !== "boolean") {
-    throw new Error("perProjection van een globale 3D-staafbelasting is ja of nee (true/false).");
-  }
-  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
-  const caseId = readOptionalCaseId(value.caseId);
-  return {
-    id: id2,
-    beamId,
-    ...caseId !== void 0 ? { caseId } : {},
-    globalDirection,
-    qStart,
-    qEnd,
-    ...value.perProjection === true ? { perProjection: true } : {},
-    startPositionM,
-    endPositionM
-  };
-}
-function readMemberLoad(value, model, id2, beamId) {
-  if (value.globalDirection !== void 0) return readGlobalMemberLoad(value, model, id2, beamId);
-  if (value.qStart !== void 0 || value.qEnd !== void 0 || value.perProjection !== void 0) {
-    throw new Error("qStart, qEnd en perProjection horen bij een globale 3D-staafbelasting; geef ook globalDirection (x, y of z).");
-  }
-  const components = LOCAL_MEMBER_LOAD_COMPONENTS;
-  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) || components.every((name) => value[name] === 0)) {
-    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
-  }
-  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
   const caseId = readOptionalCaseId(value.caseId);
   return {
     id: id2,
@@ -26795,13 +26842,6 @@ function repairCopiedBoundary(value, loop, templates, nodes) {
   if (!segmentIds.every((id2) => idMap.has(Number(id2)))) return value;
   return value.map((segment) => segment.kind === "arc" ? { ...segment, startNodeId: idMap.get(segment.startNodeId), controlNodeId: idMap.get(segment.controlNodeId), endNodeId: idMap.get(segment.endNodeId) } : { ...segment, startNodeId: idMap.get(segment.startNodeId), endNodeId: idMap.get(segment.endNodeId) });
 }
-function hasCopiedBoundaryReference(value, loop) {
-  return Array.isArray(value) && value.some((segment) => {
-    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return false;
-    const part = segment;
-    return !loop.includes(Number(part.startNodeId)) || !loop.includes(Number(part.endNodeId)) || part.kind === "arc" && !loop.includes(Number(part.controlNodeId));
-  });
-}
 function readPlateBoundary(value, loop, nodeIds, nodes, label) {
   if (value === void 0) return void 0;
   if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} bevat geen geldige getekende contour.`);
@@ -26862,6 +26902,1175 @@ function validatePlatePlane(nodes, nodeIds, label) {
   }
 }
 function validateOpeningInsidePlate(nodes, plateLoop, plateBoundary, openingLoop, openingBoundary, label) {
+  const contour2 = (loop, boundary) => {
+    if (!boundary) return loop.map((id2) => nodes.get(id2));
+    const points = [nodes.get(boundary[0].startNodeId)];
+    for (const segment of boundary) {
+      if (segment.kind === "line") points.push(nodes.get(segment.endNodeId));
+      else {
+        const arc = sampleCircularArc3D2(
+          nodes.get(segment.startNodeId),
+          nodes.get(segment.controlNodeId),
+          nodes.get(segment.endNodeId),
+          32
+        );
+        if (!arc) throw new Error(`${label} bevat een ongeldige cirkelboog.`);
+        points.push(...arc.slice(1));
+      }
+    }
+    points.pop();
+    return points;
+  };
+  const outer = contour2(plateLoop, plateBoundary);
+  const opening = contour2(openingLoop, openingBoundary);
+  const origin = nodes.get(plateLoop[0]);
+  let normal = null;
+  for (let index = 1; index < plateLoop.length - 1 && !normal; index += 1) {
+    const a = nodes.get(plateLoop[index]), b = nodes.get(plateLoop[index + 1]);
+    const ax = a.x - origin.x, ay = a.y - origin.y, az = a.z - origin.z;
+    const bx = b.x - origin.x, by = b.y - origin.y, bz = b.z - origin.z;
+    const cross6 = [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx];
+    if (Math.hypot(...cross6) > 1e-12) normal = cross6;
+  }
+  if (!normal) throw new Error(`${label} heeft geen vlakke buitencontour.`);
+  const norm5 = Math.hypot(...normal);
+  const drop = Math.abs(normal[0]) > Math.abs(normal[1]) ? Math.abs(normal[0]) > Math.abs(normal[2]) ? "x" : "z" : Math.abs(normal[1]) > Math.abs(normal[2]) ? "y" : "z";
+  const project = (point) => drop === "x" ? [point.y, point.z] : drop === "y" ? [point.x, point.z] : [point.x, point.y];
+  const outline = outer.map(project);
+  const span = outer.reduce((largest, point) => Math.max(
+    largest,
+    Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z)
+  ), 1);
+  const tolerance = span * 1e-8;
+  const inside = (point) => {
+    let contained = false;
+    for (let index = 0; index < outline.length; index += 1) {
+      const a = outline[index], b = outline[(index + 1) % outline.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared > 0 ? Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared)) : 0;
+      if (Math.hypot(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy) <= tolerance) return false;
+      if (a[1] > point[1] !== b[1] > point[1] && point[0] < a[0] + (point[1] - a[1]) * dx / dy) contained = !contained;
+    }
+    return contained;
+  };
+  for (const point of [...opening, ...openingLoop.map((id2) => nodes.get(id2))]) {
+    const planeDistance = Math.abs(
+      (point.x - origin.x) * normal[0] + (point.y - origin.y) * normal[1] + (point.z - origin.z) * normal[2]
+    ) / norm5;
+    if (planeDistance > tolerance || !inside(project(point))) {
+      throw new Error(`${label} moet volledig binnen de plaat liggen, zonder de buitenrand te raken.`);
+    }
+  }
+}
+var HEX8_SIGNS = [
+  [-1, -1, -1],
+  [1, -1, -1],
+  [1, 1, -1],
+  [-1, 1, -1],
+  [-1, -1, 1],
+  [1, -1, 1],
+  [1, 1, 1],
+  [-1, 1, 1]
+];
+function volumeDeterminant(a, b, c) {
+  return a[0] * (b[1] * c[2] - b[2] * c[1]) + a[1] * (b[2] * c[0] - b[0] * c[2]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+}
+function validateVolumeGeometry(volume, nodeIndex) {
+  const points = volume.nodeIds.map((nodeId) => nodeIndex.get(nodeId));
+  const origin = points[0];
+  const size = Math.max(...points.flatMap((point) => [
+    Math.abs(point.x - origin.x),
+    Math.abs(point.y - origin.y),
+    Math.abs(point.z - origin.z)
+  ]));
+  if (!(size > 0) || !Number.isFinite(size)) throw new Error(`3D-volume ${volume.id} heeft geen geldige afmeting.`);
+  const floor = 1e-12 * size ** 3;
+  if (volume.kind === "tet4") {
+    const edges = points.slice(1).map((point) => [point.x - origin.x, point.y - origin.y, point.z - origin.z]);
+    const edgeSize = Math.max(...edges.map((edge) => Math.hypot(...edge)));
+    const det = volumeDeterminant(edges[0], edges[1], edges[2]);
+    if (!Number.isFinite(det) || Math.abs(det) <= 1e-12 * edgeSize ** 3) {
+      throw new Error(`3D-volume ${volume.id}: Tet4 is plat of ontaard.`);
+    }
+    return;
+  }
+  const gauss = 1 / Math.sqrt(3);
+  for (const xi of [-gauss, gauss]) for (const eta of [-gauss, gauss]) for (const zeta of [-gauss, gauss]) {
+    const columns = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (let i = 0; i < 8; i += 1) {
+      const [sx, sy, sz] = HEX8_SIGNS[i];
+      const derivatives = [
+        sx * (1 + sy * eta) * (1 + sz * zeta) / 8,
+        sy * (1 + sx * xi) * (1 + sz * zeta) / 8,
+        sz * (1 + sx * xi) * (1 + sy * eta) / 8
+      ];
+      const point = points[i];
+      for (let axis = 0; axis < 3; axis += 1) {
+        columns[axis][0] += (point.x - origin.x) * derivatives[axis];
+        columns[axis][1] += (point.y - origin.y) * derivatives[axis];
+        columns[axis][2] += (point.z - origin.z) * derivatives[axis];
+      }
+    }
+    const det = volumeDeterminant(columns[0], columns[1], columns[2]);
+    if (!Number.isFinite(det) || det <= floor) {
+      throw new Error(`3D-volume ${volume.id}: Hex8 heeft een omgekeerde of ontaarde Jacobiaan.`);
+    }
+  }
+}
+function parseFrame3DModel(value) {
+  if (value === void 0) return { nodes: [], beams: [] };
+  if (!value || typeof value !== "object") throw new Error("Het 3D-model is geen object.");
+  const raw = value;
+  if (raw.volumeBackend !== void 0 && !FRAME3D_VOLUME_BACKENDS.includes(raw.volumeBackend)) {
+    throw new Error("Het 3D-model bevat een ongeldige volume-oplosstrategie.");
+  }
+  if (raw.volumeMaterialKinematics !== void 0 && raw.volumeMaterialKinematics !== "smallStrain" && raw.volumeMaterialKinematics !== "finiteStrain") {
+    throw new Error("Het 3D-model bevat een ongeldige materiaal-FNL-kinematica.");
+  }
+  if (raw.volumeThreads !== void 0 && (!Number.isSafeInteger(raw.volumeThreads) || Number(raw.volumeThreads) < 1 || Number(raw.volumeThreads) > 32)) {
+    throw new Error("Het 3D-model vereist 1 tot 32 solverthreads.");
+  }
+  if (raw.volumeResidualTolerance !== void 0 && (typeof raw.volumeResidualTolerance !== "number" || !Number.isFinite(raw.volumeResidualTolerance) || raw.volumeResidualTolerance < 1e-12 || raw.volumeResidualTolerance > 1e-4)) {
+    throw new Error("De Newton-tolerantie voor volume-FNL moet tussen 1e-12 en 1e-4 liggen.");
+  }
+  if (raw.materialLoadPath !== void 0 && (!Array.isArray(raw.materialLoadPath) || raw.materialLoadPath.length === 0 || raw.materialLoadPath.length > 100 || raw.materialLoadPath.some((factor) => typeof factor !== "number" || !Number.isFinite(factor)))) {
+    throw new Error("Het 3D-model bevat een ongeldig FNL-lastpad (1\u2013100 eindige getallen vereist).");
+  }
+  if (!Array.isArray(raw.nodes) || !Array.isArray(raw.beams)) {
+    throw new Error("Het 3D-model mist de lijsten nodes en beams.");
+  }
+  const nodes = [];
+  const nodeIds = /* @__PURE__ */ new Set();
+  for (const item of raw.nodes) {
+    if (!item || typeof item !== "object") throw new Error("Het 3D-model bevat een ongeldige knoop.");
+    const node = item;
+    if (!Number.isSafeInteger(node.id) || Number(node.id) <= 0 || ![node.x, node.y, node.z].every((n2) => typeof n2 === "number" && Number.isFinite(n2)) || nodeIds.has(Number(node.id))) {
+      throw new Error("Het 3D-model bevat een knoop met ongeldige of dubbele id/co\xF6rdinaten.");
+    }
+    const id2 = Number(node.id);
+    nodes.push({ id: id2, x: Number(node.x), y: Number(node.y), z: Number(node.z) });
+    nodeIds.add(id2);
+  }
+  const nodeIndex = new Map(nodes.map((node) => [node.id, node]));
+  const volumes = [];
+  const volumeIds = /* @__PURE__ */ new Set();
+  if (raw.volumes !== void 0 && !Array.isArray(raw.volumes)) throw new Error("Het 3D-model bevat geen geldige lijst volumes.");
+  for (const item of raw.volumes ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldig volume-element.");
+    const volume = item;
+    const id2 = Number(volume.id);
+    if (!Number.isSafeInteger(volume.id) || id2 <= 0 || volumeIds.has(id2)) {
+      throw new Error("Het 3D-model bevat een volume-element met een ongeldige of dubbele id.");
+    }
+    const kind = volume.kind;
+    if (kind !== "tet4" && kind !== "hex8" || !Array.isArray(volume.nodeIds) || volume.nodeIds.length !== (kind === "tet4" ? 4 : 8) || volume.nodeIds.some((nodeId) => !Number.isSafeInteger(nodeId) || !nodeIds.has(nodeId)) || new Set(volume.nodeIds).size !== volume.nodeIds.length) {
+      throw new Error(`3D-volume ${id2} heeft ongeldige of dubbele knoopverwijzingen.`);
+    }
+    if (typeof volume.eMpa !== "number" || !Number.isFinite(volume.eMpa) || volume.eMpa <= 0 || typeof volume.poisson !== "number" || !Number.isFinite(volume.poisson) || volume.poisson < 0 || volume.poisson >= 0.5) {
+      throw new Error(`3D-volume ${id2} vereist een positieve eindige E en Poisson in [0, 0,5).`);
+    }
+    if (volume.densityKgPerM3 !== void 0 && (typeof volume.densityKgPerM3 !== "number" || !Number.isFinite(volume.densityKgPerM3) || volume.densityKgPerM3 <= 0)) {
+      throw new Error(`3D-volume ${id2} vereist een positieve eindige dichtheid in kg/m\xB3.`);
+    }
+    if (volume.energyBeta !== void 0 && (kind !== "tet4" || typeof volume.energyBeta !== "number" || !Number.isFinite(volume.energyBeta))) {
+      throw new Error(`3D-volume ${id2}: rekafhankelijke \u03B2 vereist Tet4 en een eindige waarde.`);
+    }
+    let materialLaw;
+    if (volume.materialLaw !== void 0) {
+      if (volume.energyBeta !== void 0 || !volume.materialLaw || typeof volume.materialLaw !== "object" || Array.isArray(volume.materialLaw)) {
+        throw new Error(`3D-volume ${id2}: materiaal-FNL vereist een geldige materiaalwet zonder hyperelastische \u03B2.`);
+      }
+      const law = volume.materialLaw;
+      const positive4 = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0;
+      if (law.kind === "steelJ2" && positive4(law.yieldMpa) && typeof law.hardeningMpa === "number" && Number.isFinite(law.hardeningMpa) && law.hardeningMpa >= 0) {
+        materialLaw = { kind: "steelJ2", yieldMpa: law.yieldMpa, hardeningMpa: law.hardeningMpa };
+      } else if (kind === "tet4" && law.kind === "concreteTensionDamage" && positive4(law.tensileStrengthMpa) && positive4(law.fractureEnergyNPerM) && positive4(law.crackBandWidthM)) {
+        materialLaw = {
+          kind: "concreteTensionDamage",
+          tensileStrengthMpa: law.tensileStrengthMpa,
+          fractureEnergyNPerM: law.fractureEnergyNPerM,
+          crackBandWidthM: law.crackBandWidthM
+        };
+      } else {
+        throw new Error(`3D-volume ${id2}: ongeldige staal-J2- of betontrekschadeparameters; Hex8 ondersteunt hier alleen staal-J2.`);
+      }
+    }
+    const parsed = {
+      id: id2,
+      kind,
+      nodeIds: [...volume.nodeIds],
+      eMpa: volume.eMpa,
+      poisson: volume.poisson,
+      ...volume.densityKgPerM3 !== void 0 ? { densityKgPerM3: volume.densityKgPerM3 } : {},
+      ...volume.energyBeta !== void 0 ? { energyBeta: volume.energyBeta } : {},
+      ...materialLaw ? { materialLaw } : {}
+    };
+    validateVolumeGeometry(parsed, nodeIndex);
+    volumes.push(parsed);
+    volumeIds.add(id2);
+  }
+  const beams = [];
+  const beamIds = /* @__PURE__ */ new Set();
+  for (const item of raw.beams) {
+    if (!item || typeof item !== "object") throw new Error("Het 3D-model bevat een ongeldige staaf.");
+    const beam = item;
+    const id2 = Number(beam.id);
+    const startNodeId = Number(beam.startNodeId);
+    const endNodeId = Number(beam.endNodeId);
+    if (!Number.isSafeInteger(beam.id) || id2 <= 0 || beamIds.has(id2) || !Number.isSafeInteger(beam.startNodeId) || !Number.isSafeInteger(beam.endNodeId) || !nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId) {
+      throw new Error("Het 3D-model bevat een staaf met ongeldige id of knoopverwijzing.");
+    }
+    const start = nodeIndex.get(startNodeId);
+    const end = nodeIndex.get(endNodeId);
+    if (start.x === end.x && start.y === end.y && start.z === end.z) {
+      throw new Error("Het 3D-model bevat een staaf zonder lengte.");
+    }
+    if (beam.axialOnly !== void 0 && typeof beam.axialOnly !== "boolean") {
+      throw new Error(`3D-staaf ${id2}: axialOnly moet een boolean zijn.`);
+    }
+    if (beam.axialOnly === true && beam.releases !== void 0 && Object.values(readEndReleases(beam.releases)).some(Boolean)) {
+      throw new Error(`3D-trekstaaf ${id2}: eindscharnieren zijn niet van toepassing.`);
+    }
+    beams.push({
+      id: id2,
+      startNodeId,
+      endNodeId,
+      ...typeof beam.profileName === "string" && beam.profileName.trim() ? { profileName: beam.profileName.trim() } : {},
+      ...typeof beam.material === "string" && beam.material.trim() ? { material: beam.material.trim() } : {},
+      ...beam.axialOnly === true ? { axialOnly: true } : {},
+      ...beam.checkConfig && typeof beam.checkConfig === "object" && !Array.isArray(beam.checkConfig) ? { checkConfig: beam.checkConfig } : {},
+      ...beam.nonlinearLaw !== void 0 ? { nonlinearLaw: readNonlinearLaw(beam.nonlinearLaw) } : {},
+      ...beam.rollAngleRad !== void 0 ? typeof beam.rollAngleRad === "number" && Number.isFinite(beam.rollAngleRad) ? { rollAngleRad: beam.rollAngleRad } : (() => {
+        throw new Error("Een 3D-staaf bevat een ongeldige profielrotatie.");
+      })() : {},
+      ...beam.releases !== void 0 ? { releases: readEndReleases(beam.releases) } : {}
+    });
+    beamIds.add(id2);
+  }
+  const plates = [];
+  const plateIds = /* @__PURE__ */ new Set();
+  const boundaryTemplates = /* @__PURE__ */ new Map();
+  if (raw.plates !== void 0 && !Array.isArray(raw.plates)) throw new Error("Het 3D-model bevat geen geldige lijst plates.");
+  for (const item of raw.plates ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige plaat.");
+    const plate = item;
+    const id2 = Number(plate.id);
+    if (!Number.isSafeInteger(plate.id) || id2 <= 0 || plateIds.has(id2)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
+    const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id2}`);
+    validatePlatePlane(nodes, loop, `3D-plaat ${id2}`);
+    const boundary = readPlateBoundary(repairCopiedBoundary(plate.boundary, loop, boundaryTemplates, nodeIndex), loop, nodeIds, nodeIndex, `3D-plaat ${id2}`);
+    const thicknessM = Number(plate.thicknessM ?? 0.2);
+    const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
+    if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
+      throw new Error(`3D-plaat ${id2} heeft een ongeldige dikte of randstraal.`);
+    }
+    const maxCellSizeM = plate.maxCellSizeM;
+    if (maxCellSizeM !== void 0 && (typeof maxCellSizeM !== "number" || !Number.isFinite(maxCellSizeM) || maxCellSizeM <= 0)) {
+      throw new Error(`3D-plaat ${id2}: de maximale roostermaat moet positief en eindig zijn.`);
+    }
+    let edgeSupports;
+    const rawEdgeSupports = plate.edgeSupports;
+    if (rawEdgeSupports !== void 0) {
+      if (loop.length !== 4) {
+        throw new Error(`3D-plaat ${id2}: vier randopleggingen vereisen vier buitenste hoekknopen.`);
+      }
+      if (!Array.isArray(rawEdgeSupports) || rawEdgeSupports.length !== 4 || Array.from({ length: 4 }, (_, index) => rawEdgeSupports[index]).some((kind) => !["free", "simplySupported", "clamped"].includes(kind))) {
+        throw new Error(`3D-plaat ${id2}: geef voor de vier plaatranden een vrije, scharnierende of ingeklemde oplegging op.`);
+      }
+      edgeSupports = [...rawEdgeSupports];
+    }
+    let modulusCurve;
+    if (plate.modulusCurve !== void 0) {
+      if (!Array.isArray(plate.modulusCurve) || plate.modulusCurve.length < 2 || plate.modulusCurve.length > 100) {
+        throw new Error(`3D-plaat ${id2}: de E-rekcurve moet 2\u2013100 punten bevatten.`);
+      }
+      modulusCurve = plate.modulusCurve.map((rawPoint, index) => {
+        if (!rawPoint || typeof rawPoint !== "object" || Array.isArray(rawPoint)) {
+          throw new Error(`3D-plaat ${id2}: E-rekpunt ${index + 1} is ongeldig.`);
+        }
+        const point = rawPoint;
+        const strain = point.strain, eMpa = point.eMpa;
+        if (typeof strain !== "number" || !Number.isFinite(strain) || strain < 0 || typeof eMpa !== "number" || !Number.isFinite(eMpa) || eMpa <= 0) {
+          throw new Error(`3D-plaat ${id2}: E-rekpunt ${index + 1} vereist eindige positieve E en niet-negatieve rek.`);
+        }
+        return { strain, eMpa };
+      });
+      if (modulusCurve[0].strain !== 0 || modulusCurve.some((point, index) => index > 0 && (point.strain <= modulusCurve[index - 1].strain || point.eMpa > modulusCurve[index - 1].eMpa))) {
+        throw new Error(`3D-plaat ${id2}: de E-rekcurve begint bij rek 0, met stijgende rek en niet-toenemende E.`);
+      }
+      const baseE = eVanMateriaal(typeof plate.material === "string" ? plate.material.trim() : "").E;
+      if (Number.isFinite(baseE) && Math.abs(modulusCurve[0].eMpa - baseE) > baseE * 1e-10) {
+        throw new Error(`3D-plaat ${id2}: de E-rekcurve moet bij rek 0 beginnen met materiaaleigen E = ${baseE} MPa.`);
+      }
+    }
+    const reinforcement = plate.reinforcement === void 0 ? void 0 : readPlateReinforcement(plate.reinforcement, id2, thicknessM);
+    const nonlinearLaw = plate.nonlinearLaw === void 0 ? void 0 : readNonlinearLaw(plate.nonlinearLaw);
+    if (plate.nonlinearLaw !== void 0 && !nonlinearLaw) {
+      throw new Error(`3D-plaat ${id2}: de opgegeven materiaalwet is ongeldig.`);
+    }
+    if (reinforcement) {
+      const material = typeof plate.material === "string" ? plate.material.trim() : "";
+      const fck = Number(/^C(\d+)\//.exec(material)?.[1] ?? NaN);
+      if (!(material in CONCRETE_E_CM) || reinforcement.fckMpa !== fck) {
+        throw new Error(`3D-plaat ${id2}: de wapeningscontrole vereist een herkende betonklasse en dezelfde fck als het plaatmateriaal.`);
+      }
+    }
+    const threeLayer = plate.threeLayer === void 0 ? void 0 : readPlateThreeLayer(plate.threeLayer, id2, thicknessM);
+    if (threeLayer && (!(typeof plate.material === "string") || !(plate.material.trim() in CONCRETE_E_CM))) {
+      throw new Error(`3D-plaat ${id2}: de Blaauwendraad-drielagencontrole vereist beton.`);
+    }
+    const openingIds = /* @__PURE__ */ new Set();
+    const openings = [];
+    if (plate.openings !== void 0 && !Array.isArray(plate.openings)) throw new Error(`3D-plaat ${id2} bevat geen geldige lijst openingen.`);
+    for (const rawOpening of plate.openings ?? []) {
+      if (!rawOpening || typeof rawOpening !== "object" || Array.isArray(rawOpening)) throw new Error(`3D-plaat ${id2} bevat een ongeldige opening.`);
+      const opening = rawOpening;
+      const openingId = Number(opening.id);
+      if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id2} bevat een opening met ongeldige of dubbele id.`);
+      const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id2}`);
+      validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id2}`);
+      const openingBoundary = readPlateBoundary(repairCopiedBoundary(opening.boundary, openingLoop, boundaryTemplates, nodeIndex), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id2}`);
+      validateOpeningInsidePlate(
+        nodeIndex,
+        loop,
+        boundary,
+        openingLoop,
+        openingBoundary,
+        `Opening ${openingId} van 3D-plaat ${id2}`
+      );
+      const openingRadius = Number(opening.cornerRadiusM ?? 0);
+      if (openingRadius < 0 || !Number.isFinite(openingRadius)) throw new Error(`Opening ${openingId} heeft een ongeldige randstraal.`);
+      openings.push({
+        id: openingId,
+        nodeIds: openingLoop,
+        ...openingBoundary ? { boundary: openingBoundary } : {},
+        ...openingRadius > 0 ? { cornerRadiusM: openingRadius } : {}
+      });
+      openingIds.add(openingId);
+    }
+    if (plate.membraneOnly !== void 0 && typeof plate.membraneOnly !== "boolean") {
+      throw new Error(`3D-plaat ${id2}: membraankeuze moet ja of nee zijn.`);
+    }
+    if (plate.membraneOnly) {
+      if (loop.length !== 3 || openings.length > 0 || cornerRadiusM > 0 || boundary?.some((segment) => segment.kind !== "line") || edgeSupports || maxCellSizeM !== void 0 || modulusCurve || reinforcement || threeLayer) {
+        throw new Error(`3D-plaat ${id2}: een gekoppeld Tri3-membraan vereist drie rechte hoekknopen zonder openingen, buigrandvoorwaarden of niet-lineaire plaatopties.`);
+      }
+      if (nonlinearLaw && (nonlinearLaw.kind !== "steelBilinear" || nonlinearLaw.hardeningRatio >= 1)) {
+        throw new Error(`3D-plaat ${id2}: een gekoppeld Tri3-membraan ondersteunt alleen bilineaire staalplastificatie met verhardingsratio kleiner dan 1.`);
+      }
+      if (typeof plate.membraneEMpa !== "number" || !Number.isFinite(plate.membraneEMpa) || plate.membraneEMpa <= 0 || typeof plate.membranePoisson !== "number" || !Number.isFinite(plate.membranePoisson) || plate.membranePoisson < 0 || plate.membranePoisson >= 0.5) {
+        throw new Error(`3D-plaat ${id2}: Tri3-membraan vereist positieve E en Poisson in [0, 0,5).`);
+      }
+    } else if (plate.membraneEMpa !== void 0 || plate.membranePoisson !== void 0) {
+      throw new Error(`3D-plaat ${id2}: membraan-E en Poisson vereisen de Tri3-membraankeuze.`);
+    }
+    plates.push({
+      id: id2,
+      nodeIds: loop,
+      thicknessM,
+      ...plate.membraneOnly ? {
+        membraneOnly: true,
+        membraneEMpa: plate.membraneEMpa,
+        membranePoisson: plate.membranePoisson
+      } : {},
+      ...boundary ? { boundary } : {},
+      ...typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {},
+      ...cornerRadiusM > 0 ? { cornerRadiusM } : {},
+      ...openings.length ? { openings } : {},
+      ...modulusCurve ? { modulusCurve } : {},
+      ...reinforcement ? { reinforcement } : {},
+      ...nonlinearLaw ? { nonlinearLaw } : {},
+      ...threeLayer ? { threeLayer } : {},
+      ...edgeSupports ? { edgeSupports } : {},
+      ...maxCellSizeM ? { maxCellSizeM } : {}
+    });
+    plateIds.add(id2);
+  }
+  const supports = [];
+  const supportedNodes = /* @__PURE__ */ new Set();
+  if (raw.supports !== void 0 && !Array.isArray(raw.supports)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst supports.");
+  }
+  for (const item of raw.supports ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige oplegging.");
+    }
+    const support = item;
+    const nodeId = Number(support.nodeId);
+    if (!Number.isSafeInteger(support.nodeId) || !nodeIds.has(nodeId) || supportedNodes.has(nodeId)) {
+      throw new Error("Het 3D-model bevat een oplegging met ongeldige, dubbele of ontbrekende knoopverwijzing.");
+    }
+    const restraints = readSupportRestraints(support);
+    const springs = readSupportSprings(support.springs);
+    const prescribed = readPrescribedDisplacements(support.prescribed);
+    if (!SUPPORT_DOF.some((axis) => restraints[axis]) && !springs) {
+      throw new Error("Een 3D-oplegging moet minstens \xE9\xE9n vrijheidsgraad blokkeren of veren.");
+    }
+    for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
+      if (restraints[SUPPORT_DOF[index]] && springs?.[SPRING_DOF[index]] !== void 0) {
+        throw new Error("Een 3D-oplegging kan dezelfde vrijheidsgraad niet tegelijk blokkeren en veren.");
+      }
+      if (prescribed?.[PRESCRIBED_DOF[index]] !== void 0 && !restraints[SUPPORT_DOF[index]]) {
+        throw new Error("Een opgelegde 3D-verplaatsing vereist een geblokkeerde vrijheidsgraad.");
+      }
+    }
+    supports.push({ nodeId, ...restraints, ...springs ? { springs } : {}, ...prescribed ? { prescribed } : {} });
+    supportedNodes.add(nodeId);
+  }
+  const loads = [];
+  const loadIds = /* @__PURE__ */ new Set();
+  if (raw.loads !== void 0 && !Array.isArray(raw.loads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst loads.");
+  }
+  for (const item of raw.loads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige knoopbelasting.");
+    }
+    const load = item;
+    const id2 = Number(load.id);
+    const nodeId = Number(load.nodeId);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || loadIds.has(id2) || !Number.isSafeInteger(load.nodeId) || !nodeIds.has(nodeId)) {
+      throw new Error("Het 3D-model bevat een knoopbelasting met ongeldige, dubbele of ontbrekende knoopverwijzing.");
+    }
+    const caseId = readOptionalCaseId(load.caseId);
+    loads.push({ id: id2, nodeId, ...readNodalLoadComponents(load), ...caseId !== void 0 ? { caseId } : {} });
+    loadIds.add(id2);
+  }
+  const model = {
+    nodes,
+    beams,
+    ...raw.plates !== void 0 ? { plates } : {},
+    ...raw.volumes !== void 0 ? { volumes } : {},
+    supports,
+    loads,
+    ...raw.volumeBodyLoads !== void 0 ? { volumeBodyLoads: [] } : {},
+    ...raw.volumeFaceLoads !== void 0 ? { volumeFaceLoads: [] } : {},
+    ...raw.volumeBackend !== void 0 ? { volumeBackend: raw.volumeBackend } : {},
+    ...raw.volumeMaterialKinematics !== void 0 ? { volumeMaterialKinematics: raw.volumeMaterialKinematics } : {},
+    ...raw.volumeThreads !== void 0 ? { volumeThreads: Number(raw.volumeThreads) } : {},
+    ...raw.volumeResidualTolerance !== void 0 ? { volumeResidualTolerance: raw.volumeResidualTolerance } : {},
+    ...raw.materialLoadPath !== void 0 ? { materialLoadPath: [...raw.materialLoadPath] } : {},
+    ...raw.memberLoads !== void 0 ? { memberLoads: [] } : {},
+    ...raw.memberPointLoads !== void 0 ? { memberPointLoads: [] } : {},
+    ...raw.thermalLoads !== void 0 ? { thermalLoads: [] } : {},
+    ...raw.surfaceLoads !== void 0 ? { surfaceLoads: [] } : {},
+    ...raw.plateEdgeLoads !== void 0 ? { plateEdgeLoads: [] } : {}
+  };
+  const memberLoadIds = /* @__PURE__ */ new Set();
+  if (raw.memberLoads !== void 0 && !Array.isArray(raw.memberLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst memberLoads.");
+  }
+  for (const item of raw.memberLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige staafbelasting.");
+    }
+    const load = item;
+    const id2 = Number(load.id);
+    const beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || memberLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+      throw new Error("Het 3D-model bevat een staafbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
+    }
+    model.memberLoads.push(readMemberLoad(load, model, id2, beamId));
+    memberLoadIds.add(id2);
+  }
+  const memberPointLoadIds = /* @__PURE__ */ new Set();
+  if (raw.memberPointLoads !== void 0 && !Array.isArray(raw.memberPointLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst memberPointLoads.");
+  }
+  for (const item of raw.memberPointLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige staafpuntlast.");
+    }
+    const load = item;
+    const id2 = Number(load.id), beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || memberPointLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+      throw new Error("Het 3D-model bevat een staafpuntlast met ongeldige, dubbele of ontbrekende staafverwijzing.");
+    }
+    model.memberPointLoads.push(readMemberPointLoad(load, model, id2, beamId));
+    memberPointLoadIds.add(id2);
+  }
+  const thermalLoadIds = /* @__PURE__ */ new Set();
+  if (raw.thermalLoads !== void 0 && !Array.isArray(raw.thermalLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst thermalLoads.");
+  }
+  for (const item of raw.thermalLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Het 3D-model bevat een ongeldige temperatuurbelasting.");
+    }
+    const load = item;
+    const id2 = Number(load.id), beamId = Number(load.beamId);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || thermalLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
+      throw new Error("Het 3D-model bevat een temperatuurbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
+    }
+    model.thermalLoads.push(readThermalLoad(load, model, id2, beamId));
+    thermalLoadIds.add(id2);
+  }
+  const surfaceLoadIds = /* @__PURE__ */ new Set();
+  const volumeBodyLoadIds = /* @__PURE__ */ new Set();
+  if (raw.volumeBodyLoads !== void 0 && !Array.isArray(raw.volumeBodyLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst volumeBodyLoads.");
+  }
+  for (const item of raw.volumeBodyLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige volumekracht.");
+    const load = item;
+    const id2 = Number(load.id), volumeId = Number(load.volumeId);
+    const force = load.forceKnPerM3;
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || volumeBodyLoadIds.has(id2) || !Number.isSafeInteger(load.volumeId) || !volumeIds.has(volumeId) || !Array.isArray(force) || force.length !== 3 || force.some((component) => typeof component !== "number" || !Number.isFinite(component)) || force.every((component) => component === 0)) {
+      throw new Error("Het 3D-model bevat een volumekracht met ongeldige waarden of volumeverwijzing.");
+    }
+    const caseId = readOptionalCaseId(load.caseId);
+    model.volumeBodyLoads.push({
+      id: id2,
+      volumeId,
+      ...caseId !== void 0 ? { caseId } : {},
+      forceKnPerM3: [...force]
+    });
+    volumeBodyLoadIds.add(id2);
+  }
+  const volumeFaceLoadIds = /* @__PURE__ */ new Set();
+  const volumeById = new Map(volumes.map((volume) => [volume.id, volume]));
+  if (raw.volumeFaceLoads !== void 0 && !Array.isArray(raw.volumeFaceLoads)) {
+    throw new Error("Het 3D-model bevat geen geldige lijst volumeFaceLoads.");
+  }
+  for (const item of raw.volumeFaceLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige volumevlaktractie.");
+    const load = item;
+    const id2 = Number(load.id), volumeId = Number(load.volumeId), faceIndex = Number(load.faceIndex);
+    const volume = volumeById.get(volumeId);
+    const traction = load.tractionKnPerM2;
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || volumeFaceLoadIds.has(id2) || !Number.isSafeInteger(load.volumeId) || !volume || !Number.isSafeInteger(load.faceIndex) || faceIndex < 0 || faceIndex >= frame3DVolumeFaces(volume.kind).length || !Array.isArray(traction) || traction.length !== 3 || traction.some((component) => typeof component !== "number" || !Number.isFinite(component)) || traction.every((component) => component === 0)) {
+      throw new Error("Het 3D-model bevat een volumevlaktractie met ongeldige waarden, vlak of volumeverwijzing.");
+    }
+    const caseId = readOptionalCaseId(load.caseId);
+    model.volumeFaceLoads.push({
+      id: id2,
+      volumeId,
+      faceIndex,
+      ...caseId !== void 0 ? { caseId } : {},
+      tractionKnPerM2: [...traction]
+    });
+    volumeFaceLoadIds.add(id2);
+  }
+  if (raw.surfaceLoads !== void 0 && !Array.isArray(raw.surfaceLoads)) throw new Error("Het 3D-model bevat geen geldige lijst surfaceLoads.");
+  for (const item of raw.surfaceLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige oppervlaktebelasting.");
+    const load = item;
+    const id2 = Number(load.id), plateId = Number(load.plateId);
+    const qx = Number(load.qx ?? 0), qy = Number(load.qy ?? 0), qz = Number(load.qz ?? 0);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || surfaceLoadIds.has(id2) || !Number.isSafeInteger(load.plateId) || !plateIds.has(plateId) || ![qx, qy, qz].every(Number.isFinite) || [qx, qy, qz].every((component) => component === 0)) {
+      throw new Error("Het 3D-model bevat een oppervlaktebelasting met ongeldige waarden of plaatverwijzing.");
+    }
+    const caseId = readOptionalCaseId(load.caseId);
+    model.surfaceLoads.push({ id: id2, plateId, ...caseId !== void 0 ? { caseId } : {}, qx, qy, qz });
+    surfaceLoadIds.add(id2);
+  }
+  const plateEdgeLoadIds = /* @__PURE__ */ new Set();
+  if (raw.plateEdgeLoads !== void 0 && !Array.isArray(raw.plateEdgeLoads)) throw new Error("Het 3D-model bevat geen geldige lijst plateEdgeLoads.");
+  for (const item of raw.plateEdgeLoads ?? []) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Het 3D-model bevat een ongeldige plaatrandbelasting.");
+    const load = item;
+    const id2 = Number(load.id), plateId = Number(load.plateId), edgeIndex = Number(load.edgeIndex);
+    const startKnPerM = Number(load.startKnPerM), endKnPerM = Number(load.endKnPerM);
+    if (!Number.isSafeInteger(load.id) || id2 <= 0 || plateEdgeLoadIds.has(id2) || !Number.isSafeInteger(load.plateId) || !plateIds.has(plateId) || !Number.isSafeInteger(load.edgeIndex) || edgeIndex < 0 || edgeIndex > 3 || ![startKnPerM, endKnPerM].every(Number.isFinite) || startKnPerM === 0 && endKnPerM === 0) {
+      throw new Error("Het 3D-model bevat een plaatrandbelasting met ongeldige waarden of plaatverwijzing.");
+    }
+    const caseId = readOptionalCaseId(load.caseId);
+    model.plateEdgeLoads.push({ id: id2, plateId, edgeIndex, ...caseId !== void 0 ? { caseId } : {}, startKnPerM, endKnPerM });
+    plateEdgeLoadIds.add(id2);
+  }
+  return model;
+}
+
+// src/components/openFem3d/openFem3dNativeModel.ts
+var OPEN_FEM_3D_NATIVE_MODEL_KEYS = [
+  "volumes",
+  "volumeBodyLoads",
+  "volumeFaceLoads",
+  "plateEdgeLoads",
+  "materialLoadPath",
+  "volumeBackend",
+  "volumeMaterialKinematics",
+  "volumeThreads",
+  "volumeResidualTolerance"
+];
+var OPEN_FEM_3D_NATIVE_BEAM_KEYS = ["axialOnly", "nonlinearLaw"];
+var OPEN_FEM_3D_NATIVE_PLATE_KEYS = [
+  "membraneOnly",
+  "membraneEMpa",
+  "membranePoisson",
+  "modulusCurve",
+  "nonlinearLaw",
+  "maxCellSizeM",
+  "reinforcement",
+  "threeLayer"
+];
+var AXES = ["x", "y", "z"];
+var TRANSLATION = { x: "ux", y: "uy", z: "uz" };
+var ROTATION = { x: "rx", y: "ry", z: "rz" };
+var NO_RESTRAINTS = { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
+var isRecord = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+function hasOpenFem3DNativeFields(raw) {
+  if (!isRecord(raw)) return false;
+  if (OPEN_FEM_3D_NATIVE_MODEL_KEYS.some((key) => raw[key] !== void 0)) return true;
+  const beams = Array.isArray(raw.beams) ? raw.beams : [];
+  if (beams.some((beam) => isRecord(beam) && OPEN_FEM_3D_NATIVE_BEAM_KEYS.some((key) => beam[key] !== void 0))) return true;
+  const plates = Array.isArray(raw.plates) ? raw.plates : [];
+  return plates.some((plate) => isRecord(plate) && OPEN_FEM_3D_NATIVE_PLATE_KEYS.some((key) => plate[key] !== void 0));
+}
+function plateNormalAxis(points) {
+  const normal = [0, 0, 0];
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    normal[0] += (a.y - b.y) * (a.z + b.z);
+    normal[1] += (a.z - b.z) * (a.x + b.x);
+    normal[2] += (a.x - b.x) * (a.y + b.y);
+  }
+  const length = Math.hypot(normal[0], normal[1], normal[2]);
+  if (!(length > 0)) return null;
+  for (let axis = 0; axis < 3; axis += 1) {
+    if (Math.abs(normal[axis]) / length > 1 - 1e-9) return AXES[axis];
+  }
+  return null;
+}
+function restraintsForKind(kind, axis) {
+  const restraints = { ...NO_RESTRAINTS, [TRANSLATION[axis]]: true };
+  if (kind === "clamped") {
+    for (const other of AXES) if (other !== axis) restraints[ROTATION[other]] = true;
+  }
+  return restraints;
+}
+function legacyFrame3DEdgeSupportsToOpenFem3D(kinds, loop, nodeIndex, label) {
+  if (loop.length !== 4 || kinds.length !== 4 || kinds.some((kind) => kind !== "free" && kind !== "simplySupported" && kind !== "clamped")) {
+    throw new Error(`${label} bevat een ongeldige randoplegging: het frame3d-formaat vraagt vier randen (vrij, scharnier of inklemming) bij vier hoekknopen.`);
+  }
+  if (kinds.every((kind) => kind === "free")) return [];
+  const axis = plateNormalAxis(loop.map((id2) => nodeIndex.get(id2)));
+  if (axis === null) {
+    throw new Error(`${label} bevat een randoplegging in plaatassen (frame3d-formaat); die is alleen om te zetten bij een plaat evenwijdig aan een globaal co\xF6rdinatenvlak.`);
+  }
+  const supports = [];
+  kinds.forEach((kind, edge) => {
+    if (kind === "free") return;
+    supports.push({ edge, ...restraintsForKind(kind, axis) });
+  });
+  return supports;
+}
+function openFem3DEdgeSupportsToFrame3D(plate, nodeIndex) {
+  const supports = plate.edgeSupports ?? [];
+  if (supports.length === 0) return void 0;
+  const label = `3D-plaat ${plate.id}`;
+  const straightQuad = plate.nodeIds.length === 4 && (!plate.boundary || plate.boundary.length === 4 && plate.boundary.every((segment, index) => segment.kind === "line" && segment.startNodeId === plate.nodeIds[index]));
+  if (!straightQuad) {
+    throw new Error(`${label}: Open FEM Rust rekent randopleggingen alleen op een plaat met vier rechte randen.`);
+  }
+  const axis = plateNormalAxis(plate.nodeIds.map((id2) => nodeIndex.get(id2)));
+  if (axis === null) {
+    throw new Error(`${label}: Open FEM Rust rekent randopleggingen alleen op een plaat evenwijdig aan een globaal co\xF6rdinatenvlak.`);
+  }
+  const kinds = ["free", "free", "free", "free"];
+  const keys = ["ux", "uy", "uz", "rx", "ry", "rz"];
+  for (const support of supports) {
+    const kind = ["simplySupported", "clamped"].find((candidate) => {
+      const expected = restraintsForKind(candidate, axis);
+      return keys.every((key) => expected[key] === support[key]);
+    });
+    if (!kind) {
+      throw new Error(`${label}: de randoplegging op rand ${support.edge + 1} is in Open FEM Rust niet te rekenen (alleen scharnierend of ingeklemd loodrecht op de plaat).`);
+    }
+    kinds[support.edge] = kind;
+  }
+  return kinds;
+}
+function pick(source2, keys) {
+  const result = {};
+  for (const key of keys) if (source2[key] !== void 0) result[key] = source2[key];
+  return result;
+}
+function attachOpenFem3DNativeFields(raw, model) {
+  if (!isRecord(raw) || !hasOpenFem3DNativeFields(raw)) return;
+  const nodeIndex = new Map(model.nodes.map((node) => [node.id, node]));
+  const rawBeams = Array.isArray(raw.beams) ? raw.beams : [];
+  const rawPlates = Array.isArray(raw.plates) ? raw.plates : [];
+  const rawBeamById = new Map(rawBeams.map((beam) => [beam.id, beam]));
+  const rawPlateById = new Map(rawPlates.map((plate) => [plate.id, plate]));
+  const reduced = {
+    ...pick(raw, OPEN_FEM_3D_NATIVE_MODEL_KEYS),
+    nodes: model.nodes.map(({ id: id2, x, y, z }) => ({ id: id2, x, y, z })),
+    beams: model.beams.map((beam) => ({
+      id: beam.id,
+      startNodeId: beam.startNodeId,
+      endNodeId: beam.endNodeId,
+      ...beam.profileName !== void 0 ? { profileName: beam.profileName } : {},
+      ...beam.material !== void 0 ? { material: beam.material } : {},
+      ...beam.rollAngleRad !== void 0 ? { rollAngleRad: beam.rollAngleRad } : {},
+      ...beam.releases !== void 0 ? { releases: beam.releases } : {},
+      ...pick(rawBeamById.get(beam.id) ?? {}, OPEN_FEM_3D_NATIVE_BEAM_KEYS)
+    })),
+    plates: (model.plates ?? []).map((plate) => {
+      let edgeSupports;
+      try {
+        edgeSupports = openFem3DEdgeSupportsToFrame3D(plate, nodeIndex);
+      } catch {
+        edgeSupports = void 0;
+      }
+      return {
+        id: plate.id,
+        nodeIds: plate.nodeIds,
+        thicknessM: plate.thicknessM,
+        ...plate.boundary !== void 0 ? { boundary: plate.boundary } : {},
+        ...plate.material !== void 0 ? { material: plate.material } : {},
+        ...plate.cornerRadiusM !== void 0 ? { cornerRadiusM: plate.cornerRadiusM } : {},
+        ...plate.openings !== void 0 ? { openings: plate.openings } : {},
+        ...edgeSupports !== void 0 && rawPlateById.get(plate.id)?.membraneOnly !== true ? { edgeSupports } : {},
+        ...pick(rawPlateById.get(plate.id) ?? {}, OPEN_FEM_3D_NATIVE_PLATE_KEYS)
+      };
+    })
+  };
+  const native = parseFrame3DModel(reduced);
+  const target = model;
+  for (const key of OPEN_FEM_3D_NATIVE_MODEL_KEYS) {
+    const value = native[key];
+    if (value === void 0 || Array.isArray(value) && value.length === 0 && key !== "materialLoadPath") continue;
+    target[key] = value;
+  }
+  native.beams.forEach((nativeBeam, index) => {
+    const beam = model.beams[index];
+    for (const key of OPEN_FEM_3D_NATIVE_BEAM_KEYS) {
+      const value = nativeBeam[key];
+      if (value !== void 0) beam[key] = value;
+    }
+  });
+  (native.plates ?? []).forEach((nativePlate, index) => {
+    const plate = model.plates[index];
+    for (const key of OPEN_FEM_3D_NATIVE_PLATE_KEYS) {
+      const value = nativePlate[key];
+      if (value !== void 0) plate[key] = value;
+    }
+  });
+}
+function openFem3DNativeFeatures(model) {
+  const features = [];
+  if ((model.volumes?.length ?? 0) > 0) features.push("volumes");
+  if ((model.volumeBodyLoads?.length ?? 0) + (model.volumeFaceLoads?.length ?? 0) > 0) features.push("volumeLoads");
+  if ((model.plateEdgeLoads?.length ?? 0) > 0) features.push("plateEdgeLoads");
+  if (model.beams.some((beam) => beam.axialOnly)) features.push("axialOnly");
+  if (model.beams.some((beam) => beam.nonlinearLaw) || (model.plates ?? []).some((plate) => plate.nonlinearLaw)) {
+    features.push("nonlinearLaw");
+  }
+  const plates = model.plates ?? [];
+  if (plates.some((plate) => plate.membraneOnly)) features.push("membraneOnly");
+  if (plates.some((plate) => plate.modulusCurve)) features.push("modulusCurve");
+  if (plates.some((plate) => plate.reinforcement)) features.push("reinforcement");
+  if (plates.some((plate) => plate.threeLayer)) features.push("threeLayer");
+  if (model.materialLoadPath !== void 0) features.push("materialLoadPath");
+  return features;
+}
+function isFrame3DEdgeSupportTuple(value) {
+  return Array.isArray(value) && value.every((kind) => typeof kind === "string");
+}
+
+// src/components/openFem3d/openFem3dModel.ts
+var OPEN_FEM_3D_GLOBAL_DIRECTIONS = ["x", "y", "z"];
+function isOpenFem3DGlobalMemberLoad(load) {
+  return load.globalDirection !== void 0;
+}
+function openFem3DGlobalDirectionVector(direction) {
+  return direction === "x" ? [1, 0, 0] : direction === "y" ? [0, 1, 0] : [0, 0, 1];
+}
+function openFem3DGlobalMemberLoadFactor(ex, direction, perProjection) {
+  if (!perProjection) return 1;
+  const d = openFem3DGlobalDirectionVector(direction);
+  return Math.hypot(ex[1] * d[2] - ex[2] * d[1], ex[2] * d[0] - ex[0] * d[2], ex[0] * d[1] - ex[1] * d[0]);
+}
+var EMPTY_OPEN_FEM_3D = {
+  nodes: [],
+  beams: [],
+  supports: [],
+  loads: [],
+  memberLoads: [],
+  memberPointLoads: [],
+  thermalLoads: [],
+  plates: [],
+  surfaceLoads: [],
+  loadPanels: [],
+  envelopePanels: []
+};
+function nextEntityId(items) {
+  let maximum = 0;
+  for (const item of items) if (item.id > maximum) maximum = item.id;
+  return maximum + 1;
+}
+var OPEN_FEM_3D_SUPPORT_PRESETS = {
+  fixed: { ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
+  pinned: { ux: true, uy: true, uz: true, rx: false, ry: false, rz: false },
+  /** Ruimtelijke rolpresets blokkeren precies de genoemde globale translatie. */
+  xRoller: { ux: true, uy: false, uz: false, rx: false, ry: false, rz: false },
+  yRoller: { ux: false, uy: true, uz: false, rx: false, ry: false, rz: false },
+  zRoller: { ux: false, uy: false, uz: true, rx: false, ry: false, rz: false },
+  /** Translatievast; alleen rotatie om de gekozen globale as blijft vrij. */
+  revoluteX: { ux: true, uy: true, uz: true, rx: false, ry: true, rz: true },
+  revoluteY: { ux: true, uy: true, uz: true, rx: true, ry: false, rz: true },
+  revoluteZ: { ux: true, uy: true, uz: true, rx: true, ry: true, rz: false }
+};
+var SUPPORT_DOF2 = ["ux", "uy", "uz", "rx", "ry", "rz"];
+var SPRING_DOF2 = ["kxKnPerM", "kyKnPerM", "kzKnPerM", "krxKnmPerRad", "kryKnmPerRad", "krzKnmPerRad"];
+var PRESCRIBED_DOF2 = ["uxM", "uyM", "uzM", "rxRad", "ryRad", "rzRad"];
+var LOAD_DOF2 = ["fx", "fy", "fz", "mx", "my", "mz"];
+var RELEASE_DOF2 = ["myStart", "myEnd", "mzStart", "mzEnd", "torsionStart", "torsionEnd"];
+function readEndReleases2(value) {
+  if (value === void 0) return void 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-staaf bevat ongeldige eindscharnieren.");
+  }
+  const releases = value;
+  if (RELEASE_DOF2.some((axis) => releases[axis] !== void 0 && typeof releases[axis] !== "boolean")) {
+    throw new Error("Een 3D-staaf bevat een ongeldig eindscharnier.");
+  }
+  return Object.fromEntries(RELEASE_DOF2.map((axis) => [axis, releases[axis] === true]));
+}
+function openFem3DMemberAxes(start, end, rollAngleRad = 0) {
+  const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+  if (!(length > 0) || !Number.isFinite(rollAngleRad)) throw new Error("Een 3D-staaf heeft ongeldige lokale assen.");
+  const ex = [(end.x - start.x) / length, (end.y - start.y) / length, (end.z - start.z) / length];
+  const up = Math.abs(ex[2]) > 0.999 ? [1, 0, 0] : [0, 0, 1];
+  const projection = ex[0] * up[0] + ex[1] * up[1] + ex[2] * up[2];
+  const ezBase = [
+    up[0] - projection * ex[0],
+    up[1] - projection * ex[1],
+    up[2] - projection * ex[2]
+  ];
+  const ezLength = Math.hypot(...ezBase);
+  const ez0 = [ezBase[0] / ezLength, ezBase[1] / ezLength, ezBase[2] / ezLength];
+  const ey0 = [
+    ez0[1] * ex[2] - ez0[2] * ex[1],
+    ez0[2] * ex[0] - ez0[0] * ex[2],
+    ez0[0] * ex[1] - ez0[1] * ex[0]
+  ];
+  const cosine = Math.cos(rollAngleRad), sine = Math.sin(rollAngleRad);
+  const ey = [
+    cosine * ey0[0] + sine * ez0[0],
+    cosine * ey0[1] + sine * ez0[1],
+    cosine * ey0[2] + sine * ez0[2]
+  ];
+  const ez = [
+    cosine * ez0[0] - sine * ey0[0],
+    cosine * ez0[1] - sine * ey0[1],
+    cosine * ez0[2] - sine * ey0[2]
+  ];
+  return { ex, ey, ez };
+}
+function readOptionalLevelId(value, label) {
+  if (value === void 0 || value === null) return void 0;
+  if (typeof value !== "string") throw new Error(`${label} heeft een ongeldige levelverwijzing.`);
+  const trimmed = value.trim();
+  return trimmed ? trimmed : void 0;
+}
+function readOptionalCaseId2(value) {
+  if (value === void 0) return void 0;
+  if (!Number.isSafeInteger(value) || Number(value) <= 0) {
+    throw new Error("Een 3D-belasting heeft een ongeldig belastinggeval.");
+  }
+  return Number(value);
+}
+function openFem3DLoadCaseId(load) {
+  return load.caseId ?? 1;
+}
+function withOpenFem3DSelfWeight(model, caseId) {
+  if (!Number.isSafeInteger(caseId) || caseId <= 0) throw new Error("Het belastinggeval voor 3D-eigen gewicht is ongeldig.");
+  const loads = [...model.loads ?? []];
+  const memberLoads = [...model.memberLoads ?? []];
+  let nextLoadId = nextEntityId(loads);
+  let nextMemberLoadId = nextEntityId(memberLoads);
+  for (const beam of model.beams) {
+    const start = model.nodes.find((node) => node.id === beam.startNodeId);
+    const end = model.nodes.find((node) => node.id === beam.endNodeId);
+    const length = Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+    const resolved = resolveSection(beam.material?.trim() ?? "", beam.profileName?.trim() ?? "");
+    if (resolved.bron === "default") {
+      throw new Error(`Staaf ${beam.id}: eigen gewicht kan niet worden bepaald: ${resolved.reden ?? "doorsnede onbekend"}.`);
+    }
+    const indeling = openFem3DVerloopDelen(beam, length);
+    const delen = indeling ? indeling.delen.map((deel) => ({ tStart: deel.tStart, tEnd: deel.tEnd, areaMm2: deel.doorsnede.areaMm2 })) : [{ tStart: 0, tEnd: 1, areaMm2: resolved.aBruto ?? resolved.A }];
+    const rho = dichtheidVanMateriaal(beam.material);
+    const qVan = (areaMm2) => -(rho * (areaMm2 * 1e-6) * G) / 1e3;
+    if (beam.tensionOnly) {
+      const endForce = delen.reduce((som, deel) => som + qVan(deel.areaMm2) * (deel.tEnd - deel.tStart) * length, 0) / 2;
+      if (endForce !== 0) {
+        for (const nodeId of [beam.startNodeId, beam.endNodeId]) {
+          loads.push({ id: nextLoadId++, nodeId, caseId, fx: 0, fy: 0, fz: endForce, mx: 0, my: 0, mz: 0 });
+        }
+      }
+      continue;
+    }
+    for (const deel of delen) {
+      const q = qVan(deel.areaMm2);
+      if (q === 0) continue;
+      memberLoads.push({
+        id: nextMemberLoadId++,
+        beamId: beam.id,
+        caseId,
+        globalDirection: "z",
+        qStart: q,
+        qEnd: q,
+        startPositionM: deel.tStart * length,
+        endPositionM: deel.tEnd * length
+      });
+    }
+  }
+  const surfaceLoads = [...model.surfaceLoads ?? []];
+  let nextSurfaceLoadId = nextEntityId(surfaceLoads);
+  for (const plate of model.plates ?? []) {
+    const material = resolveOpenFem3DPlateMaterial(plate);
+    const qz = -(material.rhoKgM3 * G * plate.thicknessM) / 1e3;
+    if (qz !== 0) surfaceLoads.push({ id: nextSurfaceLoadId++, plateId: plate.id, caseId, qx: 0, qy: 0, qz });
+  }
+  return { ...model, loads, memberLoads, ...model.plates?.length ? { surfaceLoads } : {} };
+}
+function readSupportRestraints2(value) {
+  if (SUPPORT_DOF2.some((axis) => typeof value[axis] !== "boolean")) {
+    throw new Error("Een 3D-oplegging moet zes geldige vrijheidsgraden hebben.");
+  }
+  return Object.fromEntries(SUPPORT_DOF2.map((axis) => [axis, value[axis]]));
+}
+function readSupportSprings2(value) {
+  if (value === void 0) return void 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-oplegging bevat ongeldige veerstijfheden.");
+  }
+  const raw = value;
+  const springs = {};
+  for (const key of SPRING_DOF2) {
+    const stiffness = raw[key];
+    if (stiffness === void 0) continue;
+    if (typeof stiffness !== "number" || !Number.isFinite(stiffness) || stiffness <= 0) {
+      throw new Error(`Een 3D-oplegging bevat een ongeldige positieve veerstijfheid ${key}.`);
+    }
+    springs[key] = stiffness;
+  }
+  return Object.keys(springs).length > 0 ? springs : void 0;
+}
+function readPrescribedDisplacements2(value) {
+  if (value === void 0) return void 0;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Een 3D-oplegging bevat ongeldige opgelegde verplaatsingen.");
+  }
+  const raw = value;
+  const prescribed = {};
+  for (const key of PRESCRIBED_DOF2) {
+    const displacement = raw[key];
+    if (displacement === void 0) continue;
+    if (typeof displacement !== "number" || !Number.isFinite(displacement)) {
+      throw new Error(`Een 3D-oplegging bevat een ongeldige opgelegde waarde ${key}.`);
+    }
+    if (displacement !== 0) prescribed[key] = displacement;
+  }
+  return Object.keys(prescribed).length > 0 ? prescribed : void 0;
+}
+function readNodalLoadComponents2(value) {
+  if (LOAD_DOF2.some((axis) => typeof value[axis] !== "number" || !Number.isFinite(value[axis])) || !LOAD_DOF2.some((axis) => value[axis] !== 0)) {
+    throw new Error("Een 3D-knoopbelasting moet zes eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  return Object.fromEntries(LOAD_DOF2.map((axis) => [axis, value[axis]]));
+}
+function requireNode(model, nodeId) {
+  if (!model.nodes.some((node) => node.id === nodeId)) {
+    throw new Error(`3D-knoop ${nodeId} bestaat niet.`);
+  }
+}
+function beamLength2(model, beamId) {
+  const beam = model.beams.find((item) => item.id === beamId);
+  if (!beam) throw new Error(`3D-staaf ${beamId} bestaat niet.`);
+  const start = model.nodes.find((node) => node.id === beam.startNodeId);
+  const end = model.nodes.find((node) => node.id === beam.endNodeId);
+  return Math.hypot(end.x - start.x, end.y - start.y, end.z - start.z);
+}
+var LOCAL_MEMBER_LOAD_COMPONENTS = ["qyStart", "qyEnd", "qzStart", "qzEnd"];
+function readMemberLoadRange(value, model, beamId) {
+  const length = beamLength2(model, beamId);
+  const startPositionM = Number(value.startPositionM);
+  const endPositionM = Number(value.endPositionM);
+  if (!Number.isFinite(startPositionM) || !Number.isFinite(endPositionM) || startPositionM < 0 || endPositionM <= startPositionM || endPositionM > length + 1e-9) {
+    throw new Error(`Een 3D-staafbelasting moet binnen de staaflengte van ${length} m liggen.`);
+  }
+  return { startPositionM, endPositionM };
+}
+function readGlobalMemberLoad(value, model, id2, beamId) {
+  const globalDirection = value.globalDirection;
+  if (!OPEN_FEM_3D_GLOBAL_DIRECTIONS.includes(globalDirection)) {
+    throw new Error(`Een 3D-staafbelasting heeft een ongeldige globale richting ${JSON.stringify(globalDirection)}; kies x, y of z.`);
+  }
+  if (LOCAL_MEMBER_LOAD_COMPONENTS.some((name) => value[name] !== void 0 && value[name] !== 0)) {
+    throw new Error("Een globale 3D-staafbelasting heeft geen lokale waarden (qy, qz); geef qStart en qEnd langs de globale as.");
+  }
+  const { qStart, qEnd } = value;
+  if (typeof qStart !== "number" || typeof qEnd !== "number" || !Number.isFinite(qStart) || !Number.isFinite(qEnd) || qStart === 0 && qEnd === 0) {
+    throw new Error("Een globale 3D-staafbelasting moet een eindige qStart en qEnd en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  if (value.perProjection !== void 0 && typeof value.perProjection !== "boolean") {
+    throw new Error("perProjection van een globale 3D-staafbelasting is ja of nee (true/false).");
+  }
+  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
+  const caseId = readOptionalCaseId2(value.caseId);
+  return {
+    id: id2,
+    beamId,
+    ...caseId !== void 0 ? { caseId } : {},
+    globalDirection,
+    qStart,
+    qEnd,
+    ...value.perProjection === true ? { perProjection: true } : {},
+    startPositionM,
+    endPositionM
+  };
+}
+function readMemberLoad2(value, model, id2, beamId) {
+  if (value.globalDirection !== void 0) return readGlobalMemberLoad(value, model, id2, beamId);
+  if (value.qStart !== void 0 || value.qEnd !== void 0 || value.perProjection !== void 0) {
+    throw new Error("qStart, qEnd en perProjection horen bij een globale 3D-staafbelasting; geef ook globalDirection (x, y of z).");
+  }
+  const components = LOCAL_MEMBER_LOAD_COMPONENTS;
+  if (components.some((name) => typeof value[name] !== "number" || !Number.isFinite(value[name])) || components.every((name) => value[name] === 0)) {
+    throw new Error("Een 3D-staafbelasting moet vier eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  const { startPositionM, endPositionM } = readMemberLoadRange(value, model, beamId);
+  const caseId = readOptionalCaseId2(value.caseId);
+  return {
+    id: id2,
+    beamId,
+    ...caseId !== void 0 ? { caseId } : {},
+    qyStart: Number(value.qyStart),
+    qyEnd: Number(value.qyEnd),
+    qzStart: Number(value.qzStart),
+    qzEnd: Number(value.qzEnd),
+    startPositionM,
+    endPositionM
+  };
+}
+function readMemberPointLoad2(value, model, id2, beamId) {
+  const py = Number(value.py), pz = Number(value.pz), positionM = Number(value.positionM);
+  if (![py, pz].every(Number.isFinite) || py === 0 && pz === 0) {
+    throw new Error("Een 3D-staafpuntlast moet twee eindige componenten en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  const length = beamLength2(model, beamId);
+  if (!Number.isFinite(positionM) || positionM < 0 || positionM > length + 1e-9) {
+    throw new Error(`Een 3D-staafpuntlast moet binnen de staaflengte van ${length} m liggen.`);
+  }
+  const caseId = readOptionalCaseId2(value.caseId);
+  return { id: id2, beamId, ...caseId !== void 0 ? { caseId } : {}, py, pz, positionM };
+}
+function readThermalLoad2(value, model, id2, beamId) {
+  beamLength2(model, beamId);
+  const deltaTUniformK = Number(value.deltaTUniformK);
+  const deltaTGradientYK = Number(value.deltaTGradientYK ?? 0);
+  const deltaTGradientZK = Number(value.deltaTGradientZK ?? 0);
+  if (![deltaTUniformK, deltaTGradientYK, deltaTGradientZK].every(Number.isFinite) || [deltaTUniformK, deltaTGradientYK, deltaTGradientZK].every((component) => component === 0)) {
+    throw new Error("Een 3D-temperatuurbelasting moet eindige waarden en minstens \xE9\xE9n niet-nulwaarde hebben.");
+  }
+  const caseId = readOptionalCaseId2(value.caseId);
+  return { id: id2, beamId, ...caseId !== void 0 ? { caseId } : {}, deltaTUniformK, deltaTGradientYK, deltaTGradientZK };
+}
+function readPlateNodeLoop2(value, nodeIds, label) {
+  if (!Array.isArray(value) || value.length < 3) throw new Error(`${label} moet minstens drie hoekknopen hebben.`);
+  const result = value.map(Number);
+  if (result.some((id2, index) => !Number.isSafeInteger(id2) || !nodeIds.has(id2) || result.indexOf(id2) !== index)) {
+    throw new Error(`${label} bevat een ongeldige, ontbrekende of dubbele knoop.`);
+  }
+  return result;
+}
+function repairCopiedBoundary2(value, loop, templates, nodes) {
+  if (!Array.isArray(value) || !value.length) return value;
+  const segmentIds = value.flatMap((segment) => {
+    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return [];
+    const part = segment;
+    return [part.startNodeId, part.endNodeId, ...part.kind === "arc" ? [part.controlNodeId] : []];
+  });
+  const key = JSON.stringify(value);
+  if (segmentIds.every((id2) => loop.includes(Number(id2)))) {
+    templates.set(key, loop);
+    return value;
+  }
+  const sourceLoop = templates.get(key);
+  if (!sourceLoop || sourceLoop.length !== loop.length) return value;
+  const source2 = nodes.get(sourceLoop[0]), target = nodes.get(loop[0]);
+  if (!source2 || !target) return value;
+  const delta = [target.x - source2.x, target.y - source2.y, target.z - source2.z];
+  if (!sourceLoop.every((id2, index) => {
+    const from = nodes.get(id2), to = nodes.get(loop[index]);
+    return from && to && Math.abs(to.x - from.x - delta[0]) < 1e-8 && Math.abs(to.y - from.y - delta[1]) < 1e-8 && Math.abs(to.z - from.z - delta[2]) < 1e-8;
+  })) return value;
+  const idMap = new Map(sourceLoop.map((id2, index) => [id2, loop[index]]));
+  if (!segmentIds.every((id2) => idMap.has(Number(id2)))) return value;
+  return value.map((segment) => segment.kind === "arc" ? { ...segment, startNodeId: idMap.get(segment.startNodeId), controlNodeId: idMap.get(segment.controlNodeId), endNodeId: idMap.get(segment.endNodeId) } : { ...segment, startNodeId: idMap.get(segment.startNodeId), endNodeId: idMap.get(segment.endNodeId) });
+}
+function hasCopiedBoundaryReference(value, loop) {
+  return Array.isArray(value) && value.some((segment) => {
+    if (!segment || typeof segment !== "object" || Array.isArray(segment)) return false;
+    const part = segment;
+    return !loop.includes(Number(part.startNodeId)) || !loop.includes(Number(part.endNodeId)) || part.kind === "arc" && !loop.includes(Number(part.controlNodeId));
+  });
+}
+function readPlateBoundary2(value, loop, nodeIds, nodes, label) {
+  if (value === void 0) return void 0;
+  if (!Array.isArray(value) || value.length < 2) throw new Error(`${label} bevat geen geldige getekende contour.`);
+  const segments = value.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${label} bevat een ongeldig randsegment.`);
+    const segment = raw;
+    const startNodeId = Number(segment.startNodeId), endNodeId = Number(segment.endNodeId);
+    if (!nodeIds.has(startNodeId) || !nodeIds.has(endNodeId) || startNodeId === endNodeId || !loop.includes(startNodeId) || !loop.includes(endNodeId)) {
+      throw new Error(`${label} bevat een randsegment met een ongeldige knoopverwijzing.`);
+    }
+    if (segment.kind === "line") return { kind: "line", startNodeId, endNodeId };
+    if (segment.kind === "arc") {
+      const controlNodeId = Number(segment.controlNodeId);
+      if (!nodeIds.has(controlNodeId) || !loop.includes(controlNodeId) || controlNodeId === startNodeId || controlNodeId === endNodeId) {
+        throw new Error(`${label} bevat een boog met een ongeldige stuurknoop.`);
+      }
+      const start = nodes.get(startNodeId), control = nodes.get(controlNodeId), end = nodes.get(endNodeId);
+      const first = [control.x - start.x, control.y - start.y, control.z - start.z];
+      const second = [end.x - start.x, end.y - start.y, end.z - start.z];
+      const cross6 = Math.hypot(
+        first[1] * second[2] - first[2] * second[1],
+        first[2] * second[0] - first[0] * second[2],
+        first[0] * second[1] - first[1] * second[0]
+      );
+      if (cross6 <= 1e-12 * Math.hypot(...first) * Math.hypot(...second)) {
+        throw new Error(`${label} bevat een boog waarvan begin-, stuur- en eindpunt op \xE9\xE9n lijn liggen.`);
+      }
+      return { kind: "arc", startNodeId, controlNodeId, endNodeId };
+    }
+    throw new Error(`${label} bevat een onbekend randsegment op positie ${index + 1}.`);
+  });
+  for (let index = 0; index < segments.length; index += 1) {
+    const current = segments[index], next = segments[(index + 1) % segments.length];
+    if (current.endNodeId !== next.startNodeId) throw new Error(`${label} moet \xE9\xE9n aansluitende gesloten contour vormen.`);
+  }
+  return segments;
+}
+function validatePlatePlane2(nodes, nodeIds, label) {
+  const points = nodeIds.map((id2) => nodes.find((node) => node.id === id2));
+  const a = points[0];
+  let normal = null;
+  for (let index = 1; index < points.length - 1 && !normal; index += 1) {
+    const b = points[index], c = points[index + 1];
+    const ab = [b.x - a.x, b.y - a.y, b.z - a.z];
+    const ac = [c.x - a.x, c.y - a.y, c.z - a.z];
+    const candidate = [
+      ab[1] * ac[2] - ab[2] * ac[1],
+      ab[2] * ac[0] - ab[0] * ac[2],
+      ab[0] * ac[1] - ab[1] * ac[0]
+    ];
+    if (Math.hypot(...candidate) > 1e-10) normal = candidate;
+  }
+  if (!normal) throw new Error(`${label} heeft geen oppervlakte.`);
+  const length = Math.hypot(...normal);
+  const scale4 = Math.max(1, ...points.map((point) => Math.hypot(point.x - a.x, point.y - a.y, point.z - a.z)));
+  if (points.some((point) => Math.abs((point.x - a.x) * normal[0] + (point.y - a.y) * normal[1] + (point.z - a.z) * normal[2]) / length > scale4 * 1e-7)) {
+    throw new Error(`${label} moet vlak zijn.`);
+  }
+}
+function validateOpeningInsidePlate2(nodes, plateLoop, plateBoundary, openingLoop, openingBoundary, label) {
   const contour2 = (loop, boundary) => {
     if (!boundary) return loop.map((id2) => nodes.get(id2));
     const points = [nodes.get(boundary[0].startNodeId)];
@@ -26994,7 +28203,7 @@ function parseOpenFem3DModel(value) {
       ...beam.shearDeformation !== void 0 ? typeof beam.shearDeformation === "boolean" ? beam.shearDeformation ? { shearDeformation: true } : {} : (() => {
         throw new Error(`3D-staaf ${id2} heeft een ongeldige waarde voor afschuifvervorming.`);
       })() : {},
-      ...beam.releases !== void 0 ? { releases: readEndReleases(beam.releases) } : {},
+      ...beam.releases !== void 0 ? { releases: readEndReleases2(beam.releases) } : {},
       ...beam.tensionOnly !== void 0 ? typeof beam.tensionOnly === "boolean" ? beam.tensionOnly ? { tensionOnly: true } : {} : (() => {
         throw new Error(`3D-staaf ${id2} heeft een ongeldige waarde voor trek-alleen.`);
       })() : {},
@@ -27020,9 +28229,9 @@ function parseOpenFem3DModel(value) {
     const plate = item;
     const id2 = Number(plate.id);
     if (!Number.isSafeInteger(plate.id) || id2 <= 0 || plateIds.has(id2)) throw new Error("Het 3D-model bevat een plaat met een ongeldige of dubbele id.");
-    const loop = readPlateNodeLoop(plate.nodeIds, nodeIds, `3D-plaat ${id2}`);
-    validatePlatePlane(nodes, loop, `3D-plaat ${id2}`);
-    const boundary = readPlateBoundary(repairCopiedBoundary(plate.boundary, loop, boundaryTemplates, nodeIndex), loop, nodeIds, nodeIndex, `3D-plaat ${id2}`);
+    const loop = readPlateNodeLoop2(plate.nodeIds, nodeIds, `3D-plaat ${id2}`);
+    validatePlatePlane2(nodes, loop, `3D-plaat ${id2}`);
+    const boundary = readPlateBoundary2(repairCopiedBoundary2(plate.boundary, loop, boundaryTemplates, nodeIndex), loop, nodeIds, nodeIndex, `3D-plaat ${id2}`);
     const thicknessM = Number(plate.thicknessM ?? 0.2);
     const cornerRadiusM = Number(plate.cornerRadiusM ?? 0);
     if (!(thicknessM > 0) || !Number.isFinite(thicknessM) || cornerRadiusM < 0 || !Number.isFinite(cornerRadiusM)) {
@@ -27037,7 +28246,8 @@ function parseOpenFem3DModel(value) {
       throw new Error(`3D-plaat ${id2} bevat geen geldige lijst randopleggingen.`);
     }
     const edgeSupports = [];
-    for (const rawSupport of plate.edgeSupports ?? []) {
+    const rawEdgeSupports = Array.isArray(plate.edgeSupports) && plate.edgeSupports.length > 0 && isFrame3DEdgeSupportTuple(plate.edgeSupports) ? legacyFrame3DEdgeSupportsToOpenFem3D(plate.edgeSupports, loop, nodeIndex, `3D-plaat ${id2}`) : plate.edgeSupports;
+    for (const rawSupport of rawEdgeSupports ?? []) {
       if (!rawSupport || typeof rawSupport !== "object" || Array.isArray(rawSupport)) {
         throw new Error(`3D-plaat ${id2} bevat een ongeldige randoplegging.`);
       }
@@ -27046,8 +28256,8 @@ function parseOpenFem3DModel(value) {
       if (!Number.isSafeInteger(support.edge) || edge < 0 || edge >= edgeCount || edgeSupports.some((item2) => item2.edge === edge)) {
         throw new Error(`3D-plaat ${id2} bevat een randoplegging op een ongeldige of dubbele rand.`);
       }
-      const restraints = readSupportRestraints(support);
-      if (!SUPPORT_DOF.some((axis) => restraints[axis])) {
+      const restraints = readSupportRestraints2(support);
+      if (!SUPPORT_DOF2.some((axis) => restraints[axis])) {
         throw new Error(`De randoplegging op rand ${edge + 1} van 3D-plaat ${id2} blokkeert niets.`);
       }
       edgeSupports.push({ edge, ...restraints });
@@ -27061,10 +28271,10 @@ function parseOpenFem3DModel(value) {
       const opening = rawOpening;
       const openingId = Number(opening.id);
       if (!Number.isSafeInteger(opening.id) || openingId <= 0 || openingIds.has(openingId)) throw new Error(`3D-plaat ${id2} bevat een opening met ongeldige of dubbele id.`);
-      const openingLoop = readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id2}`);
-      validatePlatePlane(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id2}`);
-      const openingBoundary = readPlateBoundary(repairCopiedBoundary(opening.boundary, openingLoop, boundaryTemplates, nodeIndex), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id2}`);
-      validateOpeningInsidePlate(
+      const openingLoop = readPlateNodeLoop2(opening.nodeIds, nodeIds, `Opening ${openingId} van 3D-plaat ${id2}`);
+      validatePlatePlane2(nodes, openingLoop, `Opening ${openingId} van 3D-plaat ${id2}`);
+      const openingBoundary = readPlateBoundary2(repairCopiedBoundary2(opening.boundary, openingLoop, boundaryTemplates, nodeIndex), openingLoop, nodeIds, nodeIndex, `Opening ${openingId} van 3D-plaat ${id2}`);
+      validateOpeningInsidePlate2(
         nodeIndex,
         loop,
         boundary,
@@ -27121,17 +28331,17 @@ function parseOpenFem3DModel(value) {
     if (!Number.isSafeInteger(support.nodeId) || !nodeIds.has(nodeId) || supportedNodes.has(nodeId)) {
       throw new Error("Het 3D-model bevat een oplegging met ongeldige, dubbele of ontbrekende knoopverwijzing.");
     }
-    const restraints = readSupportRestraints(support);
-    const springs = readSupportSprings(support.springs);
-    const prescribed = readPrescribedDisplacements(support.prescribed);
-    if (!SUPPORT_DOF.some((axis) => restraints[axis]) && !springs) {
+    const restraints = readSupportRestraints2(support);
+    const springs = readSupportSprings2(support.springs);
+    const prescribed = readPrescribedDisplacements2(support.prescribed);
+    if (!SUPPORT_DOF2.some((axis) => restraints[axis]) && !springs) {
       throw new Error("Een 3D-oplegging moet minstens \xE9\xE9n vrijheidsgraad blokkeren of veren.");
     }
-    for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
-      if (restraints[SUPPORT_DOF[index]] && springs?.[SPRING_DOF[index]] !== void 0) {
+    for (let index = 0; index < SUPPORT_DOF2.length; index += 1) {
+      if (restraints[SUPPORT_DOF2[index]] && springs?.[SPRING_DOF2[index]] !== void 0) {
         throw new Error("Een 3D-oplegging kan dezelfde vrijheidsgraad niet tegelijk blokkeren en veren.");
       }
-      if (prescribed?.[PRESCRIBED_DOF[index]] !== void 0 && !restraints[SUPPORT_DOF[index]]) {
+      if (prescribed?.[PRESCRIBED_DOF2[index]] !== void 0 && !restraints[SUPPORT_DOF2[index]]) {
         throw new Error("Een opgelegde 3D-verplaatsing vereist een geblokkeerde vrijheidsgraad.");
       }
     }
@@ -27153,7 +28363,7 @@ function parseOpenFem3DModel(value) {
     if (!Number.isSafeInteger(load.id) || id2 <= 0 || loadIds.has(id2) || !Number.isSafeInteger(load.nodeId) || !nodeIds.has(nodeId)) {
       throw new Error("Het 3D-model bevat een knoopbelasting met ongeldige, dubbele of ontbrekende knoopverwijzing.");
     }
-    const caseId = readOptionalCaseId(load.caseId);
+    const caseId = readOptionalCaseId2(load.caseId);
     let generated;
     if (load.generated !== void 0) {
       const origin = load.generated;
@@ -27165,7 +28375,7 @@ function parseOpenFem3DModel(value) {
     loads.push({
       id: id2,
       nodeId,
-      ...readNodalLoadComponents(load),
+      ...readNodalLoadComponents2(load),
       ...caseId !== void 0 ? { caseId } : {},
       ...generated ? { generated } : {}
     });
@@ -27204,7 +28414,7 @@ function parseOpenFem3DModel(value) {
     if (!Number.isSafeInteger(load.id) || id2 <= 0 || memberLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
       throw new Error("Het 3D-model bevat een staafbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
     }
-    model.memberLoads.push(readMemberLoad(load, model, id2, beamId));
+    model.memberLoads.push(readMemberLoad2(load, model, id2, beamId));
     memberLoadIds.add(id2);
   }
   const memberPointLoadIds = /* @__PURE__ */ new Set();
@@ -27220,7 +28430,7 @@ function parseOpenFem3DModel(value) {
     if (!Number.isSafeInteger(load.id) || id2 <= 0 || memberPointLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
       throw new Error("Het 3D-model bevat een staafpuntlast met ongeldige, dubbele of ontbrekende staafverwijzing.");
     }
-    model.memberPointLoads.push(readMemberPointLoad(load, model, id2, beamId));
+    model.memberPointLoads.push(readMemberPointLoad2(load, model, id2, beamId));
     memberPointLoadIds.add(id2);
   }
   const thermalLoadIds = /* @__PURE__ */ new Set();
@@ -27236,7 +28446,7 @@ function parseOpenFem3DModel(value) {
     if (!Number.isSafeInteger(load.id) || id2 <= 0 || thermalLoadIds.has(id2) || !Number.isSafeInteger(load.beamId) || !beamIds.has(beamId)) {
       throw new Error("Het 3D-model bevat een temperatuurbelasting met ongeldige, dubbele of ontbrekende staafverwijzing.");
     }
-    model.thermalLoads.push(readThermalLoad(load, model, id2, beamId));
+    model.thermalLoads.push(readThermalLoad2(load, model, id2, beamId));
     thermalLoadIds.add(id2);
   }
   const surfaceLoadIds = /* @__PURE__ */ new Set();
@@ -27249,7 +28459,7 @@ function parseOpenFem3DModel(value) {
     if (!Number.isSafeInteger(load.id) || id2 <= 0 || surfaceLoadIds.has(id2) || !Number.isSafeInteger(load.plateId) || !plateIds.has(plateId) || ![qx, qy, qz].every(Number.isFinite) || [qx, qy, qz].every((component) => component === 0)) {
       throw new Error("Het 3D-model bevat een oppervlaktebelasting met ongeldige waarden of plaatverwijzing.");
     }
-    const caseId = readOptionalCaseId(load.caseId);
+    const caseId = readOptionalCaseId2(load.caseId);
     model.surfaceLoads.push({ id: id2, plateId, ...caseId !== void 0 ? { caseId } : {}, qx, qy, qz });
     surfaceLoadIds.add(id2);
   }
@@ -27309,6 +28519,7 @@ function parseOpenFem3DModel(value) {
       if (layerId !== void 0) item.layerId = layerId;
     }
   }
+  attachOpenFem3DNativeFields(raw, model);
   return model;
 }
 var LOAD_PANEL_DIRECTIONS = ["gravity", "normal", "verticalSurface"];
@@ -27319,7 +28530,7 @@ function readEnvelopePanel(value, nodeIds) {
   const id2 = Number(raw.id);
   if (!Number.isSafeInteger(raw.id) || id2 <= 0) throw new Error("Het 3D-model bevat een schilpaneel met een ongeldige id.");
   const label = `3D-schilpaneel ${id2}`;
-  const loop = readPlateNodeLoop(raw.nodeIds, nodeIds, label);
+  const loop = readPlateNodeLoop2(raw.nodeIds, nodeIds, label);
   if (raw.type !== "facade" && raw.type !== "roof") throw new Error(`${label} heeft een ongeldig type.`);
   if (!LOAD_PANEL_DISTRIBUTIONS.includes(raw.distribution)) {
     throw new Error(`${label} heeft een ongeldige afdracht.`);
@@ -27352,7 +28563,7 @@ function readEnvelopePanel(value, nodeIds) {
         throw new Error(`${label} bevat een opening met een ongeldige of dubbele id.`);
       }
       openingIds.add(openingId);
-      return { id: openingId, nodeIds: readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
+      return { id: openingId, nodeIds: readPlateNodeLoop2(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
     });
   }
   return {
@@ -27375,7 +28586,7 @@ function readLoadPanel(value, nodeIds, beamIds) {
   const id2 = Number(raw.id);
   if (!Number.isSafeInteger(raw.id) || id2 <= 0) throw new Error("Het 3D-model bevat een belastingvlak met een ongeldige id.");
   const label = `3D-belastingvlak ${id2}`;
-  const loop = readPlateNodeLoop(raw.nodeIds, nodeIds, label);
+  const loop = readPlateNodeLoop2(raw.nodeIds, nodeIds, label);
   const q = raw.q;
   if (typeof q !== "number" || !Number.isFinite(q) || q === 0) {
     throw new Error(`${label} heeft een ongeldige intensiteit q; geef een eindige waarde ongelijk aan 0 in kN/m\xB2.`);
@@ -27406,7 +28617,7 @@ function readLoadPanel(value, nodeIds, beamIds) {
     }
     if (ids.length > 0) excludedBeamIds = ids;
   }
-  const caseId = readOptionalCaseId(raw.caseId);
+  const caseId = readOptionalCaseId2(raw.caseId);
   let generated;
   if (raw.generated !== void 0) {
     const value2 = raw.generated;
@@ -27454,7 +28665,7 @@ function readLoadPanel(value, nodeIds, beamIds) {
       const openingId = Number(opening.id);
       if (!Number.isSafeInteger(opening.id) || openingId <= 0 || ids.has(openingId)) throw new Error(`${label} bevat een opening met ongeldige of dubbele id.`);
       ids.add(openingId);
-      return { id: openingId, nodeIds: readPlateNodeLoop(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
+      return { id: openingId, nodeIds: readPlateNodeLoop2(opening.nodeIds, nodeIds, `Opening ${openingId} van ${label}`) };
     });
   }
   return {
@@ -27502,14 +28713,14 @@ function setOpenFem3DSupport(model, nodeId, restraints) {
   requireNode(model, nodeId);
   const previous = model.supports ?? [];
   const existing = previous.find((item) => item.nodeId === nodeId);
-  const parsed = readSupportRestraints(restraints);
+  const parsed = readSupportRestraints2(restraints);
   const springs = existing?.springs ? { ...existing.springs } : void 0;
   const prescribed = existing?.prescribed ? { ...existing.prescribed } : void 0;
-  for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
-    if (parsed[SUPPORT_DOF[index]]) {
-      if (springs) delete springs[SPRING_DOF[index]];
+  for (let index = 0; index < SUPPORT_DOF2.length; index += 1) {
+    if (parsed[SUPPORT_DOF2[index]]) {
+      if (springs) delete springs[SPRING_DOF2[index]];
     } else if (prescribed) {
-      delete prescribed[PRESCRIBED_DOF[index]];
+      delete prescribed[PRESCRIBED_DOF2[index]];
     }
   }
   const support = {
@@ -27525,18 +28736,18 @@ function setOpenFem3DSupport(model, nodeId, restraints) {
 }
 function setOpenFem3DSupportSprings(model, nodeId, springs) {
   requireNode(model, nodeId);
-  const parsed = readSupportSprings(springs);
+  const parsed = readSupportSprings2(springs);
   const previous = model.supports ?? [];
   const existing = previous.find((item) => item.nodeId === nodeId);
-  const restraints = existing ? Object.fromEntries(SUPPORT_DOF.map((axis) => [axis, existing[axis]])) : { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
+  const restraints = existing ? Object.fromEntries(SUPPORT_DOF2.map((axis) => [axis, existing[axis]])) : { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
   const prescribed = existing?.prescribed ? { ...existing.prescribed } : void 0;
-  for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
-    if (parsed?.[SPRING_DOF[index]] !== void 0) {
-      restraints[SUPPORT_DOF[index]] = false;
-      if (prescribed) delete prescribed[PRESCRIBED_DOF[index]];
+  for (let index = 0; index < SUPPORT_DOF2.length; index += 1) {
+    if (parsed?.[SPRING_DOF2[index]] !== void 0) {
+      restraints[SUPPORT_DOF2[index]] = false;
+      if (prescribed) delete prescribed[PRESCRIBED_DOF2[index]];
     }
   }
-  if (!parsed && !SUPPORT_DOF.some((axis) => restraints[axis])) return removeOpenFem3DSupport(model, nodeId);
+  if (!parsed && !SUPPORT_DOF2.some((axis) => restraints[axis])) return removeOpenFem3DSupport(model, nodeId);
   const support = {
     nodeId,
     ...restraints,
@@ -27550,16 +28761,16 @@ function setOpenFem3DSupportSprings(model, nodeId, springs) {
 }
 function setOpenFem3DSupportPrescribed(model, nodeId, values) {
   requireNode(model, nodeId);
-  const prescribed = readPrescribedDisplacements(values);
+  const prescribed = readPrescribedDisplacements2(values);
   const previous = model.supports ?? [];
   const existing = previous.find((item) => item.nodeId === nodeId);
   if (!existing && !prescribed) return model;
-  const restraints = existing ? Object.fromEntries(SUPPORT_DOF.map((axis) => [axis, existing[axis]])) : { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
+  const restraints = existing ? Object.fromEntries(SUPPORT_DOF2.map((axis) => [axis, existing[axis]])) : { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
   const springs = existing?.springs ? { ...existing.springs } : void 0;
-  for (let index = 0; index < SUPPORT_DOF.length; index += 1) {
-    if (prescribed?.[PRESCRIBED_DOF[index]] !== void 0) {
-      restraints[SUPPORT_DOF[index]] = true;
-      if (springs) delete springs[SPRING_DOF[index]];
+  for (let index = 0; index < SUPPORT_DOF2.length; index += 1) {
+    if (prescribed?.[PRESCRIBED_DOF2[index]] !== void 0) {
+      restraints[SUPPORT_DOF2[index]] = true;
+      if (springs) delete springs[SPRING_DOF2[index]];
     }
   }
   const support = {
@@ -27578,8 +28789,8 @@ function removeOpenFem3DSupport(model, nodeId) {
 }
 function addOpenFem3DNodalLoad(model, nodeId, components, caseId) {
   requireNode(model, nodeId);
-  const values = readNodalLoadComponents(components);
-  const validCaseId = readOptionalCaseId(caseId);
+  const values = readNodalLoadComponents2(components);
+  const validCaseId = readOptionalCaseId2(caseId);
   const previous = model.loads ?? [];
   const id2 = nextEntityId(previous);
   return { ...model, loads: [...previous, { id: id2, nodeId, ...values, ...validCaseId !== void 0 ? { caseId: validCaseId } : {} }] };
@@ -27587,7 +28798,7 @@ function addOpenFem3DNodalLoad(model, nodeId, components, caseId) {
 function updateOpenFem3DNodalLoad(model, loadId, components) {
   const previous = model.loads ?? [];
   if (!previous.some((load) => load.id === loadId)) throw new Error(`3D-knoopbelasting ${loadId} bestaat niet.`);
-  const values = readNodalLoadComponents(components);
+  const values = readNodalLoadComponents2(components);
   return {
     ...model,
     loads: previous.map((load) => load.id === loadId ? { ...load, ...values } : load)
@@ -27599,14 +28810,14 @@ function removeOpenFem3DNodalLoad(model, loadId) {
 function addOpenFem3DMemberLoad(model, beamId, values, caseId) {
   const previous = model.memberLoads ?? [];
   const id2 = nextEntityId(previous);
-  const load = readMemberLoad({ ...values, ...caseId !== void 0 ? { caseId } : {} }, model, id2, beamId);
+  const load = readMemberLoad2({ ...values, ...caseId !== void 0 ? { caseId } : {} }, model, id2, beamId);
   return { ...model, memberLoads: [...previous, load] };
 }
 function updateOpenFem3DMemberLoad(model, loadId, values) {
   const previous = model.memberLoads ?? [];
   const old = previous.find((load2) => load2.id === loadId);
   if (!old) throw new Error(`3D-staafbelasting ${loadId} bestaat niet.`);
-  const load = readMemberLoad({ ...values, ...old.caseId !== void 0 ? { caseId: old.caseId } : {} }, model, loadId, old.beamId);
+  const load = readMemberLoad2({ ...values, ...old.caseId !== void 0 ? { caseId: old.caseId } : {} }, model, loadId, old.beamId);
   return { ...model, memberLoads: previous.map((item) => item.id === loadId ? load : item) };
 }
 function removeOpenFem3DMemberLoad(model, loadId) {
@@ -27615,7 +28826,7 @@ function removeOpenFem3DMemberLoad(model, loadId) {
 function addOpenFem3DMemberPointLoad(model, beamId, values, caseId) {
   const previous = model.memberPointLoads ?? [];
   const id2 = nextEntityId(previous);
-  const load = readMemberPointLoad(
+  const load = readMemberPointLoad2(
     { ...values, ...caseId !== void 0 ? { caseId } : {} },
     model,
     id2,
@@ -27627,7 +28838,7 @@ function updateOpenFem3DMemberPointLoad(model, loadId, values) {
   const previous = model.memberPointLoads ?? [];
   const old = previous.find((load2) => load2.id === loadId);
   if (!old) throw new Error(`3D-staafpuntlast ${loadId} bestaat niet.`);
-  const load = readMemberPointLoad(
+  const load = readMemberPointLoad2(
     { ...values, ...old.caseId !== void 0 ? { caseId: old.caseId } : {} },
     model,
     loadId,
@@ -27641,7 +28852,7 @@ function removeOpenFem3DMemberPointLoad(model, loadId) {
 function addOpenFem3DThermalLoad(model, beamId, values, caseId) {
   const previous = model.thermalLoads ?? [];
   const id2 = nextEntityId(previous);
-  const load = readThermalLoad(
+  const load = readThermalLoad2(
     { ...values, ...caseId !== void 0 ? { caseId } : {} },
     model,
     id2,
@@ -27653,7 +28864,7 @@ function updateOpenFem3DThermalLoad(model, loadId, values) {
   const previous = model.thermalLoads ?? [];
   const old = previous.find((load2) => load2.id === loadId);
   if (!old) throw new Error(`3D-temperatuurbelasting ${loadId} bestaat niet.`);
-  const load = readThermalLoad(
+  const load = readThermalLoad2(
     { ...values, ...old.caseId !== void 0 ? { caseId: old.caseId } : {} },
     model,
     loadId,
@@ -27726,7 +28937,7 @@ function withBeamFields(beam, patch) {
     if (typeof patch.shearDeformation !== "boolean") throw new Error(`De afschuifvervorming van ${label} is ongeldig.`);
     set("shearDeformation", patch.shearDeformation ? true : void 0);
   }
-  if (patch.releases !== void 0) set("releases", patch.releases === null ? void 0 : readEndReleases(patch.releases));
+  if (patch.releases !== void 0) set("releases", patch.releases === null ? void 0 : readEndReleases2(patch.releases));
   if (patch.tensionOnly !== void 0) set("tensionOnly", patch.tensionOnly ? true : void 0);
   if (patch.name !== void 0) set("name", readOptionalName(patch.name, label));
   if (patch.group !== void 0) set("group", readOptionalName(patch.group, label));
@@ -27827,7 +29038,7 @@ var END_RELEASE_KEYS = {
 };
 function withReleases(beam, releases) {
   const { releases: _oud, ...rest } = beam;
-  return RELEASE_DOF.some((key) => releases[key]) ? { ...rest, releases } : rest;
+  return RELEASE_DOF2.some((key) => releases[key]) ? { ...rest, releases } : rest;
 }
 function withEndHinge(beam, end, hinged) {
   const keys = END_RELEASE_KEYS[end];
@@ -28886,7 +30097,8 @@ var PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING = 7;
 var PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS = 8;
 var PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS = 9;
 var PROJECT_FORMAT_VERSION_2D_TENSION_ONLY = 10;
-var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_2D_TENSION_ONLY;
+var PROJECT_FORMAT_VERSION_3D_NATIVE = 11;
+var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_NATIVE;
 var SOORTEN = ["6.10a", "6.10b", "6.14b", "6.15b", "6.16b"];
 function combinationsToFile(combos) {
   return combos.map((c) => ({
@@ -28961,7 +30173,7 @@ function serializeProject(state) {
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : void 0;
   const file = {
     format: PROJECT_FORMAT_ID,
-    version: state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0) ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS : model3d?.plates?.some((plate) => plate.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING : model3d?.beams.some((beam) => beam.profileNameEnd !== void 0) ? PROJECT_FORMAT_VERSION_3D_TAPERED : model3d?.beams.some((beam) => beam.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_BEDDING : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
+    version: model3d && hasOpenFem3DNativeFields(model3d) ? PROJECT_FORMAT_VERSION_3D_NATIVE : state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0) ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS : model3d?.plates?.some((plate) => plate.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING : model3d?.beams.some((beam) => beam.profileNameEnd !== void 0) ? PROJECT_FORMAT_VERSION_3D_TAPERED : model3d?.beams.some((beam) => beam.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_BEDDING : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
     ...state,
     modelDimension,
@@ -29064,13 +30276,6 @@ function deserializeProject(text) {
     }
   }
   if (parsed.model3d !== void 0) {
-    const raw3d = parsed.model3d;
-    const nietOndersteund = raw3d && typeof raw3d === "object" ? ["volumes", "volumeBodyLoads", "volumeFaceLoads", "plateEdgeLoads", "materialLoadPath"].filter((veld) => Array.isArray(raw3d[veld]) && raw3d[veld].length > 0) : [];
-    if (nietOndersteund.length > 0) {
-      throw new ProjectBestandFout([
-        `Het 3D-model bevat ${nietOndersteund.map((v) => `\`${v}\``).join(", ")}; deze uitgave kent die niet en opent het bestand niet, zodat ze niet stil verloren gaan.`
-      ]);
-    }
     try {
       parsed.model3d = parseOpenFem3DModel(parsed.model3d);
     } catch (error) {
@@ -31172,6 +32377,10 @@ function contractLoads(loads, angles = /* @__PURE__ */ new Map()) {
   };
 }
 function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, plateMesh, options = {}) {
+  const nativeFeatures = openFem3DNativeFeatures(input);
+  if (nativeFeatures.length > 0) {
+    throw new Error(`Dit 3D-model bevat onderdelen die alleen Open FEM Rust rekent (${nativeFeatures.join(", ")}); Open FEM 3D rekent het niet.`);
+  }
   const model = (input.loadPanels?.length ?? 0) > 0 ? withOpenFem3DLoadPanels(input).model : input;
   const plates = model.plates ?? [];
   if (plates.length > 0 && !plateMesh) {

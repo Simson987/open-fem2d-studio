@@ -562,7 +562,21 @@
       "done": "Calculé en {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} cas de charge · {{combinaties}} combinaisons",
       "doneMaxU": "|u| maximal = {{u}} mm ({{geval}})",
-      "showResults": "Afficher les résultats"
+      "showResults": "Afficher les résultats",
+      "nativeRouteTitle": "Calculé avec Open FEM Rust",
+      "nativeRouteText": "Ce modèle 3D contient des éléments que seul Open FEM Rust calcule ({{features}}) ; le calcul passe donc automatiquement par ce noyau au lieu d’Open FEM 3D.",
+      "nativeFeature": {
+        "volumes": "volumes (Tet4/Hex8)",
+        "volumeLoads": "charges volumiques",
+        "plateEdgeLoads": "charges de bord de plaque",
+        "axialOnly": "barres axiales",
+        "nonlinearLaw": "lois de matériau",
+        "membraneOnly": "plaques membranes",
+        "modulusCurve": "courbes E–déformation",
+        "reinforcement": "armature de plaque",
+        "threeLayer": "vérification à trois couches",
+        "materialLoadPath": "chemin de charge MNL"
+      }
     },
     "nonlinear": {
       "title": "Non-linéarité matérielle",
@@ -1313,7 +1327,14 @@
       "label": "Rechercher dans l’explorateur",
       "clear": "Effacer la recherche",
       "none": "Aucun résultat pour « {{q}} »."
-    }
+    },
+    "volumes": "Volumes",
+    "volumeLabel": "{{kind}} {{id}}",
+    "volumeValue": "{{count}} nœuds · E {{e}} MPa · ν {{nu}}",
+    "volumeBodyLoadLabel": "b#{{id}} · force volumique, volume {{volumeId}}",
+    "volumeFaceLoadLabel": "t#{{id}} · volume {{volumeId}} face {{face}}",
+    "plateEdgeLoadLabel": "r#{{id}} · plaque {{plateId}} bord {{edge}}",
+    "nativeVolumeResult": "Open FEM Rust : {{count}} éléments volumiques · σvm,max {{sigma}} MPa · {{membranes}} membranes"
   },
   "resultsOverlay": {
     "deflectionScale": "Échelle de déformée : {{schaal}}×"

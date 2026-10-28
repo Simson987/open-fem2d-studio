@@ -562,7 +562,21 @@
       "done": "Calculated in {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} load cases · {{combinaties}} combinations",
       "doneMaxU": "largest |u| = {{u}} mm ({{geval}})",
-      "showResults": "Show results"
+      "showResults": "Show results",
+      "nativeRouteTitle": "Calculated with Open FEM Rust",
+      "nativeRouteText": "This 3D model contains parts that only Open FEM Rust calculates ({{features}}); the calculation therefore runs automatically through that engine instead of Open FEM 3D.",
+      "nativeFeature": {
+        "volumes": "volumes (Tet4/Hex8)",
+        "volumeLoads": "volume loads",
+        "plateEdgeLoads": "plate edge loads",
+        "axialOnly": "axial members",
+        "nonlinearLaw": "material laws",
+        "membraneOnly": "membrane plates",
+        "modulusCurve": "E–strain curves",
+        "reinforcement": "plate reinforcement",
+        "threeLayer": "three-layer check",
+        "materialLoadPath": "MNL load path"
+      }
     },
     "nonlinear": {
       "title": "Physically non-linear",
@@ -1313,7 +1327,14 @@
       "label": "Search the explorer",
       "clear": "Clear search",
       "none": "Nothing found for “{{q}}”."
-    }
+    },
+    "volumes": "Volumes",
+    "volumeLabel": "{{kind}} {{id}}",
+    "volumeValue": "{{count}} nodes · E {{e}} MPa · ν {{nu}}",
+    "volumeBodyLoadLabel": "b#{{id}} · body force, volume {{volumeId}}",
+    "volumeFaceLoadLabel": "t#{{id}} · volume {{volumeId}} face {{face}}",
+    "plateEdgeLoadLabel": "r#{{id}} · plate {{plateId}} edge {{edge}}",
+    "nativeVolumeResult": "Open FEM Rust: {{count}} volume elements · σvm,max {{sigma}} MPa · {{membranes}} membranes"
   },
   "resultsOverlay": {
     "deflectionScale": "Deflection scale: {{schaal}}×"

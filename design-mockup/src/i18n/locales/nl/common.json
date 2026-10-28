@@ -562,7 +562,21 @@
       "done": "Berekend in {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} belastinggevallen · {{combinaties}} combinaties",
       "doneMaxU": "grootste |u| = {{u}} mm ({{geval}})",
-      "showResults": "Toon resultaten"
+      "showResults": "Toon resultaten",
+      "nativeRouteTitle": "Berekend met Open FEM Rust",
+      "nativeRouteText": "Dit 3D-model bevat onderdelen die alleen Open FEM Rust rekent ({{features}}); de berekening loopt daarom automatisch via die kern in plaats van Open FEM 3D.",
+      "nativeFeature": {
+        "volumes": "volumes (Tet4/Hex8)",
+        "volumeLoads": "volumelasten",
+        "plateEdgeLoads": "plaatrandlasten",
+        "axialOnly": "axiale staven",
+        "nonlinearLaw": "materiaalwetten",
+        "membraneOnly": "membraanplaten",
+        "modulusCurve": "E-rekcurves",
+        "reinforcement": "plaatwapening",
+        "threeLayer": "drielagencontrole",
+        "materialLoadPath": "FNL-lastpad"
+      }
     },
     "nonlinear": {
       "title": "Fysisch niet-lineair",
@@ -1313,7 +1327,14 @@
       "label": "Zoeken in de verkenner",
       "clear": "Zoekveld wissen",
       "none": "Niets gevonden voor “{{q}}”."
-    }
+    },
+    "volumes": "Volumes",
+    "volumeLabel": "{{kind}} {{id}}",
+    "volumeValue": "{{count}} knopen · E {{e}} MPa · ν {{nu}}",
+    "volumeBodyLoadLabel": "b#{{id}} · volumekracht, volume {{volumeId}}",
+    "volumeFaceLoadLabel": "t#{{id}} · volume {{volumeId}} vlak {{face}}",
+    "plateEdgeLoadLabel": "r#{{id}} · plaat {{plateId}} rand {{edge}}",
+    "nativeVolumeResult": "Open FEM Rust: {{count}} volume-elementen · σvm,max {{sigma}} MPa · {{membranes}} membranen"
   },
   "resultsOverlay": {
     "deflectionScale": "Vervormingsschaal: {{schaal}}×"

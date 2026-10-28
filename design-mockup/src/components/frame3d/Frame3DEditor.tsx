@@ -28,7 +28,8 @@ import { transformFrame3D, type Frame3DTransformCommand } from "./frame3dTransfo
 import { frame3DSelectionCount, type Frame3DSelection } from "./frame3dSelection";
 import type { Frame3DCameraState, Frame3DViewSet } from "./frame3dViewSets";
 import type { Frame3DEditMeta } from "./frame3dHistory";
-import { buildFrame3DFourFamilyExample, buildFrame3DVolumeExample, buildFrame3DVolumeMembraneExample,
+import { buildFrame3DFourFamilyExample } from "./frame3dFourFamilyExample";
+import { buildFrame3DVolumeExample, buildFrame3DVolumeMembraneExample,
   LARGE_FRAME3D_VOLUME_DIMENSIONS } from "./frame3dVolumeExample";
 import { LARGE_IRREGULAR_DIMENSIONS, MASSIVE_IRREGULAR_DIMENSIONS } from "../volume3d/irregularMixed3dModel";
 import { buildFrame3DSteelExample } from "./frame3dSteelExample";

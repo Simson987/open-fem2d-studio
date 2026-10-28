@@ -87,7 +87,10 @@ const close = (actual, expected, absolute, label) => assert.ok(
 try {
   const request = { schemaVersion: 1, dimension: "3d", analysis: "linear", elementFamilies: ["frame"] };
   assert.equal(resolveSolver("openaec-native-fem", request).id, "openaec-native-fem");
-  assert.equal(resolveSolver("automatic", request).id, "dedaliano");
+  // De Dedaliano-kern heet sinds de samenvoeging met release 2026.42
+  // "open-fem-3d" (SolverRegistry; een opgeslagen voorkeur "dedaliano" wordt
+  // zo gelezen). Zelfde kern, zelfde automatische keuze; geen rekenwaarde anders.
+  assert.equal(resolveSolver("automatic", request).id, "open-fem-3d");
   assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "p-delta" }).id,
     "openaec-native-fem");
   assert.equal(resolveSolver("openaec-native-fem", { ...request, analysis: "material-nonlinear" }).id,

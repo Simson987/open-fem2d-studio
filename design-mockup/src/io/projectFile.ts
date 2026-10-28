@@ -16,6 +16,7 @@ import type { EigenDoorsnede } from "../lib/profieleditor/types";
 import type { KruipInvoerProject } from "../lib/kruipcoefficient";
 import type { EigenCltOpbouw } from "../lib/profieleditor/cltOpbouwenStore";
 import { parseOpenFem3DModel, type OpenFem3DModel } from "../components/openFem3d/openFem3dModel";
+import { hasOpenFem3DNativeFields } from "../components/openFem3d/openFem3dNativeModel";
 import {
   parseOpenFem3DStandaardViewsUitRapport, parseOpenFem3DViewSets,
   type OpenFem3DStandaardViewId, type OpenFem3DViewSet,
@@ -201,6 +202,17 @@ export function voorgesteldeProjectnaam(pad: string | null | undefined): string 
  *      met beide schoren actief rekenen (de trekschoor ongeveer de helft van
  *      de kracht). Alleen een bestand met minstens één trek-alleen 2D-staaf
  *      krijgt versie 10; zonder blijft het 2 (of de 3D-versie).
+ * 11 — native Rust-3D-route in `model3d`: `volumes` (Tet4/Hex8),
+ *      `volumeBodyLoads`, `volumeFaceLoads`, `plateEdgeLoads`,
+ *      `materialLoadPath`, `volumeBackend`/`volumeMaterialKinematics`/
+ *      `volumeThreads`/`volumeResidualTolerance`, `beams[].axialOnly`/
+ *      `nonlinearLaw` en `plates[].membraneOnly`/`membraneEMpa`/
+ *      `membranePoisson`/`modulusCurve`/`nonlinearLaw`/`maxCellSizeM`/
+ *      `reinforcement`/`threeLayer` (formaat van het ontwikkelspoor
+ *      `frame3d`). Alleen een bestand met zo'n veld krijgt versie 11; bestanden
+ *      van het ontwikkelspoor (versie 3) laden ongewijzigd. De frame3d-vorm van
+ *      `plates[].edgeSupports` (vier randtypen in plaatassen) wordt bij het
+ *      lezen omgezet naar de globale Open FEM 3D-vorm.
  *  8 — `model3d.analysisMaterials`: gekozen E en ν per materiaal voor de
  *      ruimtelijke analyse (issue #62). Een oudere uitgave zou de instelling
  *      stil overslaan en met een andere stijfheid rekenen. Alleen een 3D-model
@@ -257,8 +269,15 @@ export const PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS = 9;
  * rekenen — de getrokken schoor kreeg dan ongeveer de helft van de kracht.
  */
 export const PROJECT_FORMAT_VERSION_2D_TENSION_ONLY = 10;
+/**
+ * Onderdelen van de native Rust-3D-route in `model3d` (volumes, volume- en
+ * plaatrandlasten, axiale staven, materiaalwetten, membraanplaten, FNL-
+ * lastpad; zie openFem3dNativeModel). Een uitgave zonder die route zou ze
+ * stil overslaan en het model anders rekenen.
+ */
+export const PROJECT_FORMAT_VERSION_3D_NATIVE = 11;
 /** De hoogste versie die deze uitgave kan lezen. */
-export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_2D_TENSION_ONLY;
+export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_NATIVE;
 
 /** JSON-vorm van één belastingcombinatie: `factors` als { caseId: factor }. */
 export interface ProjectFileCombination {
@@ -549,7 +568,8 @@ export function serializeProject(state: Omit<ProjectFile, "format" | "version" |
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : undefined;
   const file: ProjectFile = {
     format: PROJECT_FORMAT_ID,
-    version: state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY
+    version: model3d && hasOpenFem3DNativeFields(model3d) ? PROJECT_FORMAT_VERSION_3D_NATIVE
+      : state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY
       : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
       : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0)
         ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS
@@ -685,19 +705,8 @@ export function deserializeProject(text: string): ProjectFile {
   }
   if (parsed.model3d !== undefined) {
     // Het ontwikkelspoor `frame3d` bewaarde ook volumes, volumelasten,
-    // plaatrandlasten en een materiaallastpad in `model3d`. Open FEM 3D kent
-    // die niet; het model ermee openen zou ze stil laten vallen.
-    const raw3d = parsed.model3d as Record<string, unknown> | null;
-    const nietOndersteund = raw3d && typeof raw3d === "object"
-      ? ["volumes", "volumeBodyLoads", "volumeFaceLoads", "plateEdgeLoads", "materialLoadPath"]
-        .filter((veld) => Array.isArray(raw3d[veld]) && (raw3d[veld] as unknown[]).length > 0)
-      : [];
-    if (nietOndersteund.length > 0) {
-      throw new ProjectBestandFout([
-        `Het 3D-model bevat ${nietOndersteund.map((v) => `\`${v}\``).join(", ")}; deze uitgave kent die niet `
-          + "en opent het bestand niet, zodat ze niet stil verloren gaan.",
-      ]);
-    }
+    // plaatrandlasten en een materiaallastpad in `model3d`; die leest
+    // parseOpenFem3DModel mee (openFem3dNativeModel) voor de native Rust-route.
     try {
       parsed.model3d = parseOpenFem3DModel(parsed.model3d);
     } catch (error) {

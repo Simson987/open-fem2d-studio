@@ -185,6 +185,12 @@ const thermisch = ["model3d.load.thermal.add", "model3d.load.thermal.update"];
 const vlaklast = ["model3d.load.surface.add", "model3d.load.surface.update"];
 const vlak = ["model3d.loadPanel.add", "model3d.loadPanel.update"];
 const gevalBijToevoegen = (commando: string) => veld(commando, "caseId");
+/**
+ * Velden van de native Rust-3D-route (volumes, materiaalwetten, membraanplaten;
+ * openFem3dNativeModel): ze komen uit een projectbestand en worden bewaard,
+ * maar hebben nog geen API-commando.
+ */
+const NATIVE_ROUTE: Dekking = { fase: 3, reden: "native Rust-3D-route (volumes, FNL): via het projectbestand; API-commando's volgen" };
 const modelLaag: Dekking = { fase: 2, reden: "3D-modellaag wordt in het project bewaard; API-commando's voor toewijzing volgen." };
 
 type BoogRand = Extract<OpenFem3DPlateBoundarySegment, { kind: "arc" }>;
@@ -208,6 +214,15 @@ export const VELDEN_3D = {
     diaphragms: { commando: "model3d.diaphragm.add" },
     tensionOnlyFitAfterPermanent: veld("model3d.settings.update", "tensionOnlyFitAfterPermanent"),
     tensionOnlyCrossRule: veld("model3d.settings.update", "tensionOnlyCrossRule"),
+    volumes: NATIVE_ROUTE,
+    volumeBodyLoads: NATIVE_ROUTE,
+    volumeFaceLoads: NATIVE_ROUTE,
+    plateEdgeLoads: NATIVE_ROUTE,
+    materialLoadPath: NATIVE_ROUTE,
+    volumeBackend: NATIVE_ROUTE,
+    volumeMaterialKinematics: NATIVE_ROUTE,
+    volumeThreads: NATIVE_ROUTE,
+    volumeResidualTolerance: NATIVE_ROUTE,
   } satisfies Record<keyof OpenFem3DModel, Dekking>,
   knoop: {
     id: ID,
@@ -236,6 +251,8 @@ export const VELDEN_3D = {
     bedding: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding"),
     name: veld(staafAddUpdate, "name"),
     group: veld(staafAddUpdate, "group"),
+    axialOnly: NATIVE_ROUTE,
+    nonlinearLaw: NATIVE_ROUTE,
   } satisfies Record<keyof OpenFem3DBeam, Dekking>,
   bedding: {
     kKnPerM3: veld([...staafAddUpdate, "model3d.beam.setBedding"], "bedding.kKnPerM3"),
@@ -346,6 +363,14 @@ export const VELDEN_3D = {
     edgeSupports: veld("model3d.plate.update", "edgeSupports"),
     // Plaat op bedding (#107); voor meer platen tegelijk ook model3d.plate.setBedding.
     bedding: veld([...plaatAddUpdate, "model3d.plate.setBedding"], "bedding"),
+    membraneOnly: NATIVE_ROUTE,
+    membraneEMpa: NATIVE_ROUTE,
+    membranePoisson: NATIVE_ROUTE,
+    modulusCurve: NATIVE_ROUTE,
+    nonlinearLaw: NATIVE_ROUTE,
+    maxCellSizeM: NATIVE_ROUTE,
+    reinforcement: NATIVE_ROUTE,
+    threeLayer: NATIVE_ROUTE,
   } satisfies Record<keyof OpenFem3DPlate, Dekking>,
   plaatbedding: {
     kKnPerM3: veld([...plaatAddUpdate, "model3d.plate.setBedding"], "bedding.kKnPerM3"),

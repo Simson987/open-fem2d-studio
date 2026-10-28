@@ -562,7 +562,21 @@
       "done": "Berechnet in {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} Lastfälle · {{combinaties}} Kombinationen",
       "doneMaxU": "größte |u| = {{u}} mm ({{geval}})",
-      "showResults": "Ergebnisse anzeigen"
+      "showResults": "Ergebnisse anzeigen",
+      "nativeRouteTitle": "Mit Open FEM Rust berechnet",
+      "nativeRouteText": "Dieses 3D-Modell enthält Bestandteile, die nur Open FEM Rust berechnet ({{features}}); die Berechnung läuft deshalb automatisch über diesen Kern statt über Open FEM 3D.",
+      "nativeFeature": {
+        "volumes": "Volumen (Tet4/Hex8)",
+        "volumeLoads": "Volumenlasten",
+        "plateEdgeLoads": "Plattenrandlasten",
+        "axialOnly": "Fachwerkstäbe",
+        "nonlinearLaw": "Materialgesetze",
+        "membraneOnly": "Membranplatten",
+        "modulusCurve": "E-Dehnungskurven",
+        "reinforcement": "Plattenbewehrung",
+        "threeLayer": "Dreischichtennachweis",
+        "materialLoadPath": "MNL-Lastpfad"
+      }
     },
     "nonlinear": {
       "title": "Physikalisch nichtlinear",
@@ -1313,7 +1327,14 @@
       "label": "Im Explorer suchen",
       "clear": "Suche löschen",
       "none": "Nichts gefunden für „{{q}}“."
-    }
+    },
+    "volumes": "Volumen",
+    "volumeLabel": "{{kind}} {{id}}",
+    "volumeValue": "{{count}} Knoten · E {{e}} MPa · ν {{nu}}",
+    "volumeBodyLoadLabel": "b#{{id}} · Volumenkraft, Volumen {{volumeId}}",
+    "volumeFaceLoadLabel": "t#{{id}} · Volumen {{volumeId}} Fläche {{face}}",
+    "plateEdgeLoadLabel": "r#{{id}} · Platte {{plateId}} Rand {{edge}}",
+    "nativeVolumeResult": "Open FEM Rust: {{count}} Volumenelemente · σvm,max {{sigma}} MPa · {{membranes}} Membranen"
   },
   "resultsOverlay": {
     "deflectionScale": "Verformungsmaßstab: {{schaal}}×"

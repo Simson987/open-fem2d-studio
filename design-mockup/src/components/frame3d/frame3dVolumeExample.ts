@@ -1,14 +1,13 @@
 import { buildIrregularMixed3DModel, SMALL_IRREGULAR_DIMENSIONS,
   type IrregularDimensions } from "../volume3d/irregularMixed3dModel";
 import { parseFrame3DModel, type Frame3DModel, type Frame3DSupport } from "./frame3dModel";
-import fourFamilyProject from "../../../../docs/verificatie/3d-volume/tet4-hex8-tri3-raamwerk-j2-gekoppeld.ifcfem2d?raw";
 
 /** A reproducible mixed solid/frame example for the ordinary 3D editor. */
 export const LARGE_FRAME3D_VOLUME_DIMENSIONS: IrregularDimensions = { nx: 12, ny: 8, nz: 8 };
 
-/** The saved four-family verification model, available directly in the 3D editor. */
-export function buildFrame3DFourFamilyExample(): Frame3DModel {
-  const project = JSON.parse(fourFamilyProject) as { model3d?: unknown };
+/** Parse the saved four-family verification project (text of the .ifcfem2d file). */
+export function parseFrame3DFourFamilyExample(projectText: string): Frame3DModel {
+  const project = JSON.parse(projectText) as { model3d?: unknown };
   if (!project.model3d) throw new Error("Vier-families-proefmodel mist model3d.");
   return parseFrame3DModel(project.model3d);
 }

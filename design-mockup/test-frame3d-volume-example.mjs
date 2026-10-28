@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { buildFrame3DVolumeExample } from "./src/components/frame3d/frame3dVolumeExample.ts";
+import { readFileSync } from "node:fs";
+import { buildFrame3DVolumeExample, parseFrame3DFourFamilyExample } from "./src/components/frame3d/frame3dVolumeExample.ts";
 import { withFrame3DSelfWeight } from "./src/components/frame3d/frame3dModel.ts";
 import { solveFrame3D } from "./src/components/frame3d/frame3dSolver.ts";
+
+// Het vier-families-voorbeeld: in de app via een Vite-`?raw`-import
+// (frame3dFourFamilyExample.ts), hier via fs; dezelfde parser.
+const fourFamily = parseFrame3DFourFamilyExample(readFileSync(new URL(
+  "../docs/verificatie/3d-volume/tet4-hex8-tri3-raamwerk-j2-gekoppeld.ifcfem2d", import.meta.url), "utf8"));
+assert.deepEqual(fourFamily.volumes.map(({ kind }) => kind).sort(), ["hex8", "tet4"]);
+assert.equal(fourFamily.beams.length, 1);
+assert.equal(fourFamily.plates.length, 1);
+assert.equal(fourFamily.plates[0].membraneOnly, true);
 
 const binary = fileURLToPath(new URL("../src-tauri/target/debug/native-mixed3d", import.meta.url));
 const model = buildFrame3DVolumeExample();
