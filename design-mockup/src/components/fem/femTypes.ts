@@ -1936,9 +1936,13 @@ export const DEFAULT_STRUCTURAL_GRID: StructuralGrid = {
     { id: "Y-A", label: "1", position: 0 },
     { id: "Y-B", label: "2", position: 6000 },
   ],
+  // De levels heten anders dan de Y-assen (issue #244, punt 001): met "1" en
+  // "2" droegen een Y-as en een level in een nieuw project dezelfde naam. De
+  // id's blijven "1" en "2" — knopen en platen verwijzen ernaar (`levelId`).
+  // Een niet-numerieke naam staat in 2D vóór de peilmaat (`niveauLabel`).
   zAxes: [
-    { id: "1", label: "1", position: 0 },
-    { id: "2", label: "2", position: 5000 },
+    { id: "1", label: "Peil 0", position: 0 },
+    { id: "2", label: "Peil 1", position: 5000 },
   ],
 };
 

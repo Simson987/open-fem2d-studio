@@ -109,18 +109,25 @@ fn invoer(
         profile_name: profielnaam.to_string(),
         steel_grade: "S235".to_string(),
         length_m: 6.0,
-        forces_envelope: vec![ForcePoint {
-            combination_id: 11,
-            position_mm: 3000.0,
-            forces: InternalForces {
-                n_ed: n_ed_kn,
-                vy_ed: 0.0,
-                vz_ed: vz_ed_kn,
-                mt_ed: 0.0,
-                my_ed: my_ed_knm,
-                mz_ed: 0.0,
-            },
-        }],
+        // Constante krachten over de hele staaf, ook op beide staafeinden.
+        // Tot issue #243 (punt 089) stond hier alleen x = 3000 mm en hield de
+        // kern dat punt naar de einden vast — met precies dezelfde getallen.
+        // Nu zou de staaf daarmee NIET VOLLEDIG GETOETST zijn; de einden staan
+        // er dus expliciet bij en geen enkele UC verandert.
+        forces_envelope: [0.0, 3000.0, 6000.0]
+            .map(|x| ForcePoint {
+                combination_id: 11,
+                position_mm: x,
+                forces: InternalForces {
+                    n_ed: n_ed_kn,
+                    vy_ed: 0.0,
+                    vz_ed: vz_ed_kn,
+                    mt_ed: 0.0,
+                    my_ed: my_ed_knm,
+                    mz_ed: 0.0,
+                },
+            })
+            .to_vec(),
         lateral_bracing: LateralBracing {
             top_flange_positions: vec![],
             bottom_flange_positions: vec![],

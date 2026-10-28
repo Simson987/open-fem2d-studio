@@ -168,6 +168,12 @@ const EENHEDEN = {
   verplaatsing: "mm",
   rotatie: "rad",
   teken: "N positief = trek; z positief omhoog",
+  // Issue #244 (punt 053): de momentafspraak, en dat de 3D-kern een andere
+  // heeft. Eén afspraak voor 2D en 3D zou alle uitvoer, rapporten en toetsen
+  // van één van beide raken; de controle laat ook "een expliciete vermelding
+  // van de toegepaste afspraak" toe, en dat is deze.
+  teken_momenten:
+    "Knoop- en reactiemomenten en rotaties (my, ry): positief tegen de klok in, gezien met x naar rechts en z omhoog. Staafkrachten in lokale staafassen (x van begin- naar eindknoop, +y 90 graden tegen de klok in): M positief = trek aan de -y-zijde (een ligger van links naar rechts: trek onder), V = dM/dx. Let op: solve_open_fem_3d volgt de rechterhandregel om de globale assen (X, Y, Z rechtshandig, Z omhoog); daar heeft M_y van een model in het XZ-vlak het tegengestelde teken (reacties en rotaties om Y), en de staafmomenten volgen de lokale assen van de 3D-kern.",
 } as const;
 
 // ── Zelf-hash ──────────────────────────────────────────────────────────────
@@ -200,6 +206,42 @@ function zelfHash(): string | null {
     };
     const bytes = fs.readFileSync(pad);
     return `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SHA-256 van de INVOER van deze berekening (issue #244, punt 063), in
+ * `sha256:<hex>`-vorm: het verzoek als JSON met de sleutels op elk niveau
+ * gesorteerd, zodat dezelfde invoer in een andere sleutelvolgorde dezelfde
+ * hash geeft. `bundle_hash` is iets anders: de hash van de solverbundel, gelijk
+ * voor elk model dat met dezelfde bundel gerekend wordt. Samen identificeren
+ * ze een uitkomst: wélk model, met wélke rekenkern. `null` zonder
+ * `process.getBuiltinModule` (Node < 22.3), net als `zelfHash`.
+ */
+export function invoerHash(payload: unknown): string | null {
+  const haal = process.getBuiltinModule;
+  if (typeof haal !== "function") return null;
+  const geordend = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(geordend);
+    if (v !== null && typeof v === "object") {
+      const uit: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        uit[k] = geordend((v as Record<string, unknown>)[k]);
+      }
+      return uit;
+    }
+    return v;
+  };
+  try {
+    const crypto = haal("node:crypto") as {
+      createHash(alg: string): {
+        update(data: string): { digest(codering: string): string };
+      };
+    };
+    const tekst = JSON.stringify(geordend(payload)) ?? "null";
+    return `sha256:${crypto.createHash("sha256").update(tekst).digest("hex")}`;
   } catch {
     return null;
   }
@@ -1451,7 +1493,10 @@ function opSolve(payload: Record<string, unknown>) {
 
   const antwoord = {
     solver_version: PAKKET_VERSIE,
+    // De hash van de SOLVERBUNDEL (zelfde voor elk model met deze bundel);
+    // `model_hash` is die van de invoer (issue #244, punt 063).
     bundle_hash: zelfHash(),
+    model_hash: invoerHash(payload),
     units: EENHEDEN,
     nonlinear_used: d.nonlinear,
     cases_requested: d.gevraagd,

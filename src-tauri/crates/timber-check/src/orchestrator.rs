@@ -441,6 +441,27 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
         )));
     }
 
+    // Issue #243 (punt 074): uit welke EDITIE de karakteristieke waarden
+    // komen. EN 338:2009 en :2016 verschillen in f_t,0,k (C24: 14,0 tegen
+    // 14,5 N/mm²); zonder editie kan de lezer f_t,0,d niet narekenen.
+    let bron = format!(
+        "Karakteristieke waarden van {} uit {}: f_m,k = {:.1}, f_t,0,k = {:.1}, \
+         f_c,0,k = {:.1}, f_v,k = {:.1} N/mm².",
+        mat.name,
+        mat.bron(),
+        mat.f_mk,
+        mat.f_t0k,
+        mat.f_c0k,
+        mat.f_vk,
+    );
+    for c in checks.iter_mut() {
+        if let CheckKind::Resistance(r) = &mut c.kind {
+            if r.id.starts_with("6.1.") {
+                r.notes.push(bron.clone());
+            }
+        }
+    }
+
     checks
 }
 

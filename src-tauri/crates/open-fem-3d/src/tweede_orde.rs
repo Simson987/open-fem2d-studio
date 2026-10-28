@@ -768,6 +768,77 @@ pub(crate) fn singulier(input: &SolverInput3D) -> Result<Option<String>, String>
     Ok(None)
 }
 
+/// De nulvorm (mechanismevorm) van de stijfheidsmatrix van `input`, per
+/// (knoop, lokale vrijheidsgraad 0..6) — issue #243, punt 081.
+///
+/// Dicht opgelost en dus alleen op de foutroute en voor een klein stelsel
+/// (`MAX_NULVORM` vrije vrijheidsgraden). Werkwijze: symmetrisch schalen met
+/// de diagonaal (translaties en draaiingen hebben stijfheden van een andere
+/// orde), Gauss-eliminatie met volledige pivotering tot de grootste
+/// overgebleven spil onder `1e-9` ligt, de eerste vrije kolom op 1 en
+/// terugsubstitueren. `None` als het stelsel regulier is of te groot.
+pub(crate) fn nulvorm(input: &SolverInput3D) -> Option<Vec<(usize, usize, f64)>> {
+    const MAX_NULVORM: usize = 600;
+    let stelsel = Stelsel::bouw(input).ok()?;
+    let k_s = stelsel.reduceer_matrix(&stelsel.k_ff);
+    let n = k_s.n;
+    if n == 0 || n > MAX_NULVORM { return None; }
+    let mut a = vec![vec![0.0_f64; n]; n];
+    for j in 0..n {
+        for k in k_s.col_ptr[j]..k_s.col_ptr[j + 1] {
+            let i = k_s.row_idx[k];
+            a[i][j] += k_s.values[k];
+            if i != j { a[j][i] += k_s.values[k]; }
+        }
+    }
+    // Diagonaalschaling: D^-1/2·K·D^-1/2; een nuldiagonaal blijft 1.
+    let schaal: Vec<f64> = (0..n).map(|i| {
+        let d = a[i][i].abs();
+        if d > 0.0 { 1.0 / d.sqrt() } else { 1.0 }
+    }).collect();
+    for i in 0..n { for j in 0..n { a[i][j] *= schaal[i] * schaal[j]; } }
+
+    let mut kolommen: Vec<usize> = (0..n).collect();
+    let mut rang = n;
+    for p in 0..n {
+        let (mut ri, mut ci, mut grootste) = (p, p, 0.0);
+        for (i, rij) in a.iter().enumerate().skip(p) {
+            for (j, &waarde) in rij.iter().enumerate().skip(p) {
+                if waarde.abs() > grootste { grootste = waarde.abs(); ri = i; ci = j; }
+            }
+        }
+        if grootste < 1e-9 { rang = p; break; }
+        a.swap(p, ri);
+        if ci != p {
+            for rij in a.iter_mut() { rij.swap(p, ci); }
+            kolommen.swap(p, ci);
+        }
+        for i in p + 1..n {
+            let factor = a[i][p] / a[p][p];
+            if factor == 0.0 { continue; }
+            for j in p..n { a[i][j] -= factor * a[p][j]; }
+        }
+    }
+    if rang == n { return None; }
+    // Eerste vrije kolom op 1, de overige vrije op 0, en terug.
+    let mut x = vec![0.0; n];
+    x[rang] = 1.0;
+    for i in (0..rang).rev() {
+        let mut som = 0.0;
+        for j in i + 1..n { som += a[i][j] * x[j]; }
+        x[i] = -som / a[i][i];
+    }
+    let mut w = vec![0.0; n];
+    for (p, &kolom) in kolommen.iter().enumerate() { w[kolom] = x[p] * schaal[kolom]; }
+    let u_f = stelsel.breid_uit(&w);
+    let mut uit: Vec<(usize, usize, f64)> = stelsel.dof.map.iter()
+        .filter(|(_, &index)| index < stelsel.nf)
+        .map(|(&(knoop, lokaal), &index)| (knoop, lokaal, u_f[index]))
+        .collect();
+    uit.sort_by_key(|&(knoop, lokaal, _)| (knoop, lokaal));
+    Some(uit)
+}
+
 /// Knikanalyse bij een lineaire berekening: de eerste-ordetoestand komt uit
 /// de reeds berekende uitkomst van de kern.
 pub(crate) fn knik_bij_eerste_orde(

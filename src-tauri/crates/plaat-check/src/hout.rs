@@ -347,8 +347,9 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
         tekst(gamma_m, 2),
         klasse.name,
         match klasse.timber_type {
-            TimberType::Solid => "massief hout, EN 338",
-            TimberType::Glulam => "gelijmd gelamineerd hout, EN 14080",
+            // Met editie (issue #243, punt 074).
+            TimberType::Solid => format!("massief hout, {}", klasse.bron()),
+            TimberType::Glulam => format!("gelijmd gelamineerd hout, {}", klasse.bron()),
         }
     ));
     notes.push(

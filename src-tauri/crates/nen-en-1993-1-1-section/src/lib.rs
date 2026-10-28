@@ -213,20 +213,30 @@ fn nl_mm(v: f64) -> String {
     s.strip_suffix(".0").unwrap_or(&s).replace('.', ",")
 }
 
+/// De staalsoort bij naam, HOOFDLETTERONGEVOELIG ("s355" = "S355"), net als
+/// de profielnaam (issue #243, punt 084). Verder wordt niets genormaliseerd:
+/// "S355J2", "S 355" of " S355" blijven onbekend en worden geweigerd, want
+/// daar zou de kern moeten raden.
 pub fn grade_by_name(name: &str) -> Option<SteelGrade> {
-    match name {
-        "S235" => Some(S235),
-        "S275" => Some(S275),
-        "S355" => Some(S355),
-        "S420" => Some(S420),
-        "S460" => Some(S460),
-        _ => None,
-    }
+    [S235, S275, S355, S420, S460]
+        .into_iter()
+        .find(|g| g.name.eq_ignore_ascii_case(name))
 }
 
 #[cfg(test)]
 mod dikte_tests {
     use super::*;
+
+    /// Issue #243, punt 084(b): "s355" is S355, zoals "ipe300" IPE300 is.
+    #[test]
+    fn staalsoort_is_hoofdletterongevoelig_maar_niet_ruim() {
+        assert_eq!(grade_by_name("s355").unwrap().fy_mpa, 355.0);
+        assert_eq!(grade_by_name("s460").unwrap().name, "S460");
+        assert_eq!(grade_by_name("S235").unwrap().name, "S235");
+        for fout in ["S690", "S355J2", "S 355", " S355", "", "355"] {
+            assert!(grade_by_name(fout).is_none(), "{fout:?} hoort onbekend te zijn");
+        }
+    }
 
     /// γ_M0, γ_M1 en γ_M2 komen uit de normnaad en niet uit een los getal bij
     /// de staalsoort. De bron wordt naast de gebruikte waarde gelegd, ook voor

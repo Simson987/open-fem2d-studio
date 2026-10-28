@@ -1,6 +1,5 @@
 ---
 source: crates/steel-check/tests/portal_beam4.rs
-assertion_line: 290
 expression: run()
 ---
 {
@@ -1634,6 +1633,6 @@ expression: run()
     }
   ],
   "uc_max": 0.6215382864944817,
-  "status": "Ok",
-  "governing_check_id": "6.2.5_bending_y"
+  "status": "NotApplicable",
+  "governing_check_id": "NIET VOLLEDIG GETOETST: de kip (6.3.2) berust op eindmomenten die niet gemeten maar doorgetrokken zijn: de krachtenomhullende van combinaties 21, 11 reikt niet tot beide staafeinden, terwijl β en B* (NB.NB.4.3) uit de momenten op de staafeinden volgen; geef de omhullende ook op x = 0 en x = L"
 }

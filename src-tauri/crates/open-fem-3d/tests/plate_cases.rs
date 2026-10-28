@@ -626,3 +626,37 @@ fn shells_reject_p_delta_and_mechanisms_with_clear_messages() {
     version_one.schema_version = 1;
     assert!(solve(version_one).unwrap_err().contains("contractversie 2"));
 }
+
+/// Issue #244, punt 069: een wandschijf 4 × 4 m in het XZ-vlak, 4 × 4 MITC4,
+/// t = 0,2 m, E = 30 000 N/mm², ν = 0,2, voet ingeklemd. Koplasten in x op de
+/// vijf bovenknopen 12,5/25/25/25/12,5 kN, samen 100 kN. Verwacht:
+/// `loadResultantKn` = [100, 0, 0] (was [0, 0, 0]); ΣR_x = −100 kN en het
+/// voetmoment ΣM = 100·4 = 400 kNm (evenwicht, ongewijzigd).
+#[test]
+fn knooplasten_op_een_wandschijf_tellen_in_de_lastresultante() {
+    let mut nodes = Vec::new();
+    let g = grid(4, 4, [0.0; 3], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], 4.0, 4.0, &mut nodes);
+    let mut input = request(nodes, 30_000.0, 0.2, 0.2, quads(&g, 1, 1));
+    let mut supports: Vec<Support3D> = (0..=4).map(|i| support(g.id(i, 0), [true; 6])).collect();
+    for j in 1..=4 { for i in 0..=4 { add_support(&mut supports, g.id(i, j), [false, true, false, true, false, true]); } }
+    input.supports = supports;
+    input.nodal_loads = (0..=4).map(|i| NodalLoad3D {
+        id: i + 1, node_id: g.id(i, 4), fx: if i == 0 || i == 4 { 12.5 } else { 25.0 }, fy: 0.0, fz: 0.0,
+        mx: 0.0, my: 0.0, mz: 0.0,
+    }).collect();
+    let result = solve(input).unwrap();
+    let plaat = result.plates.iter().find(|p| p.plate_id == 1).expect("plaat 1");
+    for (gemeten, verwacht) in plaat.load_resultant_kn.iter().zip([100.0, 0.0, 0.0]) {
+        assert!((gemeten - verwacht).abs() < 1e-9, "loadResultantKn {:?}", plaat.load_resultant_kn);
+    }
+    let rx: f64 = result.reactions.iter().map(|r| r.fx).sum();
+    assert!((rx + 100.0).abs() < 1e-6, "ΣR_x = {rx}");
+    // Voetmoment om de y-as door (0,0,0): M_y = z·F_x − x·F_z. De last geeft
+    // 4 m · 100 kN = +400 kNm; de reacties (alle op z = 0, knoop (i,0) op
+    // x = i m) houden dat met −400 kNm in evenwicht.
+    let m: f64 = result.reactions.iter().map(|r| {
+        let x = ((r.node_id - g.first_id) % 5) as f64;
+        r.my - x * r.fz
+    }).sum();
+    assert!((m + 400.0).abs() < 1e-6, "voetmoment {m}");
+}

@@ -308,7 +308,8 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
             reden: format!(
                 "In deze plaat is wapening nodig: tot {} kN/m in x (element {}, combinatie {}) en tot \
                  {} kN/m in z (element {}, combinatie {}), als trekkracht f'_td·t volgens (F.2)/(F.3) \
-                 of (F.5)/(F.6). De aanwezige wapening van een wand kent de app nog niet, dus \
+                 of (F.5)/(F.6). De aanwezige wapening is niet ingevoerd (invoerveld \
+                 `wapening_aanwezig`; in de app: Wapening bij de eigenschappen van de plaat), dus \
                  ρ·f_yd ≥ f'_td (F.1) is NIET getoetst; de plaat heet daarom niet \"voldoet\".",
                 tekst(max_x.n_td_x_kn_per_m, 1),
                 max_x.element_id,
@@ -325,7 +326,8 @@ pub fn toets(input: &PlateCheckInput) -> PlateCheckResult {
             "9.6_wandwapening",
             "Minimum- en maximumwapening van wanden (9.6)",
             "9.6.2 en 9.6.3 stellen eisen aan de verticale en horizontale wapening van een wand, los \
-             van de berekende wapening; niet getoetst.",
+             van de berekende wapening; niet getoetst, want de aanwezige wapening is niet ingevoerd \
+             (invoerveld `wapening_aanwezig`).",
         ),
         ("7.3_scheurwijdte", "Scheurwijdte (7.3)", "De bruikbaarheidsgrenstoestand is niet getoetst."),
         (

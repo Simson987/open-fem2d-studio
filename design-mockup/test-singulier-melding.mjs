@@ -152,5 +152,44 @@ log("\n[4] Een geldig gemengd model blijft gewoon rekenen");
   ok("N in staaf 2 ≈ −14,142 kN (druk, trek-positief op de adapterrand)", Math.abs(N + 14142) < 150, `${N} N`);
 }
 
+log("\n[5] Issue #243 punt 111: ligger op scharnier + xRoller (bedoeld zRoller), geen releases");
+{
+  // IPE200, L = 4 m, q = 10 kN/m. De rol op knoop 2 houdt alleen x tegen, dus
+  // de ligger draait als star lichaam om knoop 1: w_2 = L·θ. De vrije
+  // vrijheidsgraad die de gebruiker moet tegenhouden is u_z van knoop 2 — niet
+  // "knoop 2 kan vrij draaien … waarschijnlijk release Ry": er is geen release.
+  const ligger = (metSchijf) => ({
+    ...basis,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 4000, z: 0 }, ...(metSchijf ? schijfKnopen : [])],
+    beams: [st(1, 1, 2, { profile: "IPE200" })],
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "xRoller" }, ...(metSchijf ? schijfSteun : [])],
+    plates: metSchijf ? schijf : [],
+    loads: [{ id: 1, type: "lineLoad", caseId: 1, beamId: 1, q: -10 }],
+  });
+  for (const [pad, metSchijf] of [["raamwerkpad", false], ["gemengd pad", true]]) {
+    const m = melding(ligger(metSchijf)) ?? "GEEN FOUT";
+    ok(`${pad}: knoop 2 kan vrij verticaal verschuiven (z)`,
+      /knoop 2 op \(4000, 0\) mm kan vrij verticaal verschuiven \(z\)/.test(m), m);
+    ok(`${pad}: geen verwijzing naar een release die niet bestaat`, !/release/.test(m), m);
+    ok(`${pad}: noemt het mechanisme en de opleggingen`, /mechanisme/.test(m) && /opleggingen/.test(m), m);
+  }
+}
+
+log("\n[6] Een release wordt alleen genoemd als hij er is");
+{
+  // Een dwarskrachthuls (endTz) is hier de enige verbinding met knoop 2 → de
+  // melding mag Tx/Tz noemen. Knoop 2 is een vrije uitkraging aan een huls.
+  const m = melding({
+    ...basis,
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }],
+    beams: [st(1, 1, 2, { releases: { endTz: true } })],
+    supports: [{ nodeId: 1, type: "fixed" }],
+    plates: [],
+    loads: [{ id: 1, type: "pointForce", caseId: 1, nodeId: 2, fz: -10 }],
+  }) ?? "GEEN FOUT";
+  ok("dwarskrachthuls: knoop 2 kan vrij verticaal verschuiven", /knoop 2 .* kan vrij verticaal verschuiven/.test(m), m);
+  ok("dwarskrachthuls: de melding noemt release Tx/Tz", /release Tx\/Tz/.test(m), m);
+}
+
 log(`\n${passed} geslaagd, ${failed} gefaald`);
 process.exit(failed > 0 ? 1 : 0);

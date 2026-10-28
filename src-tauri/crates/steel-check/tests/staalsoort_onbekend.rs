@@ -118,7 +118,9 @@ fn weerstand(r: &BeamCheckResult, id: &str) -> f64 {
 
 #[test]
 fn een_onbekende_staalsoort_wordt_geweigerd_en_niet_stil_s235() {
-    for naam in ["S355J2", "s355", "S 355", "", "onzin", "S690"] {
+    // "s355" staat hier niet meer in: sinds issue #243 (punt 084) is de
+    // staalsoort hoofdletterongevoelig, zie de test hieronder.
+    for naam in ["S355J2", "S 355", "", "onzin", "S690", "s690"] {
         let r = check_beam(invoer(naam));
         assert!(
             r.checks.is_empty(),
@@ -168,4 +170,17 @@ fn de_bekende_staalsoorten_rekenen_en_de_staalsoort_telt_mee() {
         (n355 - 1275.472 * 355.0 / 235.0).abs() / 1926.78 < 1e-3,
         "N_c,Rd S355 = {n355}, verwacht 1275,472·355/235 = 1926,78 kN"
     );
+}
+
+/// Issue #243, punt 084(b): "s355" rekent als S355 (bit-identiek), net als
+/// "ipe300" als IPE300 wordt herkend; het resultaat draagt de naam "S355".
+#[test]
+fn kleine_letters_rekenen_als_de_staalsoort() {
+    let klein = check_beam(invoer("s355"));
+    let groot = check_beam(invoer("S355"));
+    assert!(!klein.checks.is_empty(), "{:?}", klein.governing_check_id);
+    assert_eq!(klein.steel_grade, "S355");
+    assert_eq!(klein.uc_max.to_bits(), groot.uc_max.to_bits());
+    assert_eq!(klein.status, groot.status);
+    assert_eq!(klein.governing_check_id, groot.governing_check_id);
 }

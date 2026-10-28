@@ -569,6 +569,29 @@ if (existsSync(BUNDEL)) {
   log(`  (overgeslagen: ${BUNDEL} ontbreekt — bouw hem met npm run build:sidecar)`);
 }
 
+log("[7] model_hash is modelspecifiek, bundle_hash niet (issue #244, punt 063)");
+{
+  // Een tweede model: dezelfde portaal met een andere Q. Dezelfde invoer met
+  // de sleutels in omgekeerde volgorde moet dezelfde model_hash geven.
+  const anders = { ...PORTAAL, loads: [PORTAAL.loads[0], { ...PORTAAL.loads[1], q: -7 }] };
+  const omgekeerd = Object.fromEntries(Object.entries(PORTAAL).reverse());
+  const r = await roepAan([
+    verzoek(1, "solve", { model: PORTAAL, combinations: COMBI_12G_15Q }),
+    verzoek(2, "solve", { model: anders, combinations: COMBI_12G_15Q }),
+    verzoek(3, "solve", { combinations: COMBI_12G_15Q, model: omgekeerd }),
+  ]);
+  const [a, b, c] = [1, 2, 3].map((i) => r.antwoorden.find((x) => x.id === i)?.result ?? {});
+  ok("model_hash heeft de vorm sha256:<64 hex>", /^sha256:[0-9a-f]{64}$/.test(String(a.model_hash)), String(a.model_hash));
+  ok("ander model → andere model_hash", a.model_hash !== b.model_hash, `${a.model_hash} / ${b.model_hash}`);
+  ok("zelfde model, andere sleutelvolgorde → zelfde model_hash", a.model_hash === c.model_hash, `${a.model_hash} / ${c.model_hash}`);
+  ok("bundle_hash is voor beide modellen gelijk (het is de bundel)", a.bundle_hash === b.bundle_hash, `${a.bundle_hash} / ${b.bundle_hash}`);
+  // Issue #244, punt 053: de momentafspraak staat in het antwoord, met de
+  // verwijzing naar de afwijkende afspraak van de 3D-kern.
+  const tm = String(a.units?.teken_momenten ?? "");
+  ok("units.teken_momenten noemt de 2D-afspraak en de 3D-afwijking",
+    /tegen de klok in/.test(tm) && /M positief = trek aan de -y-zijde/.test(tm) && /solve_open_fem_3d/.test(tm) && /rechterhandregel/.test(tm), tm);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 log("");
 log(`${passed} geslaagd, ${failed} gefaald`);

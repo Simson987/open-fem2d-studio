@@ -3959,13 +3959,29 @@ function App() {
       await laadProjectTekst(tekst);
       setProjectPath("");
     },
+    // `false` = er was geen stap (issue #244, punt 001); het API-antwoord
+    // meldt dat dan in plaats van `done: true`.
     ongedaanMaken: () => {
       if (modelDimension === "3d" && explodeAmountRef.current > 0) throw new Error("Schakel Exploderen uit voor Ongedaan maken.");
-      if (modelDimension === "3d") undoRedoOpenFem3D("undo"); else fem.undo();
+      if (modelDimension === "3d") {
+        if (openFem3dHistoryRef.current.past.length === 0) return false;
+        undoRedoOpenFem3D("undo");
+        return true;
+      }
+      if (!fem.canUndo) return false;
+      fem.undo();
+      return true;
     },
     opnieuw: () => {
       if (modelDimension === "3d" && explodeAmountRef.current > 0) throw new Error("Schakel Exploderen uit voor Opnieuw.");
-      if (modelDimension === "3d") undoRedoOpenFem3D("redo"); else fem.redo();
+      if (modelDimension === "3d") {
+        if (openFem3dHistoryRef.current.future.length === 0) return false;
+        undoRedoOpenFem3D("redo");
+        return true;
+      }
+      if (!fem.canRedo) return false;
+      fem.redo();
+      return true;
     },
     opslaan: async (pad) => {
       const doel = pad ?? projectPath;

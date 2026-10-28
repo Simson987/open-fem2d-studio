@@ -27,6 +27,17 @@ check("aan, met assen in X en Y in m", start.enabled === true && start.xAxes.len
   JSON.stringify(start));
 check("de levels staan erbij, in m", Array.isArray(start.levels) && start.levels.every((l) => typeof l.heightM === "number"));
 check("lezen verandert het document niet", doc === docVoor);
+// Issue #244, punt 001: in een nieuw project heten Y-assen en levels niet
+// hetzelfde (was: Y-assen "1", "2" en levels "1", "2").
+{
+  const yNamen = new Set(start.yAxes.map((as) => as.label));
+  const dubbel = start.levels.filter((l) => yNamen.has(l.label)).map((l) => l.label);
+  check("nieuw project: geen level met de naam van een Y-as", dubbel.length === 0,
+    `Y ${JSON.stringify([...yNamen])}, levels ${JSON.stringify(start.levels.map((l) => l.label))}`);
+  const xNamen = new Set(start.xAxes.map((as) => as.label));
+  check("nieuw project: alle asnamen en levelnamen verschillend",
+    new Set([...xNamen, ...yNamen, ...start.levels.map((l) => l.label)]).size === xNamen.size + yNamen.size + start.levels.length);
+}
 
 console.log("\n[2] assen zetten");
 const eersteX = start.xAxes[0];
