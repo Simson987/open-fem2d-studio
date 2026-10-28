@@ -31,6 +31,9 @@ pub mod shear;
 /// §6.2.3 — trek voor elke doorsnede (met of zonder nettodoorsnede), en het
 /// draadeind van een trekstaaf van rond staal.
 pub mod trek;
+/// §6.2.7 — wringing (Saint-Venant), V_pl,T,Rd (6.26)/(6.28) en de vloeigrens
+/// naast de wringschuifspanning (6.2.1(5)).
+pub mod wringing;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
