@@ -1324,6 +1324,17 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, res
               ? <code>k = {beam.bedding.k} kN/m³ · b = {beam.bedding.b} mm</code>
               : <code>{t("props.beam.beddingNone")}</code>}
           </Row>
+          {/* Trek-alleen (issue #234): alleen `true` gaat het bestand in. */}
+          <Row label={t("props.beam.tensionOnly")}>
+            <input
+              type="checkbox" className="fem-prop-checkbox"
+              checked={beam.tensionOnly === true}
+              onChange={(e) => updateBeam?.(beam.id, { tensionOnly: e.target.checked ? true : undefined })}
+            />
+          </Row>
+          {beam.tensionOnly === true && (
+            <div className="fem-prop-hint" role="note">{t("props.beam.tensionOnlyHint")}</div>
+          )}
         </Section>
 
         <Section title={t("props.multi.loads")} defaultOpen={false}>

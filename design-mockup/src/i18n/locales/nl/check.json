@@ -1273,6 +1273,8 @@
       "connectionEnd": "Aansluiting eind",
       "bedding": "Bedding",
       "beddingNone": "geen",
+      "tensionOnly": "Alleen trek",
+      "tensionOnlyHint": "Valt uit zolang hij op druk staat (N = 0); combinaties als geheel doorgerekend, alleen trek getoetst (6.2.3).",
       "noLoads": "Geen lasten op deze staaf"
     },
     "load": {
@@ -1488,6 +1490,8 @@
     "startA": "Start A",
     "endB": "Eind B",
     "connectionsHint": "Per einde N, V en M: vast, scharnier (los) of veer met stijfheid — N en V in kN/mm, M in kNm/rad.",
+    "tensionOnly": "Alleen trek (bijv. windverband van strip of rondstaal)",
+    "tensionOnlyHint": "De staaf valt per belastinggeval en per combinatie uit zolang hij op druk staat (N = 0); combinaties worden dan als geheel doorgerekend. Getoetst wordt alleen trek (NEN-EN 1993-1-1 6.2.3), geen knik.",
     "foundation": "Staaf op bedding",
     "foundationToggle": "Verend gesteund over de hele lengte (Winkler)",
     "foundationModulus": "Beddingsconstante k",

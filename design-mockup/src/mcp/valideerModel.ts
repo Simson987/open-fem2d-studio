@@ -132,6 +132,9 @@ const BEAM_VELDEN = [
   // waar deze lijst voor is: niet een tikfout tegenhouden, maar een geldig
   // model weigeren, waarna de drie wegen verschillende antwoorden geven.
   "veren", "bedding",
+  // Trek-alleen staaf (issue #234): valt uit zolang hij op druk staat. Zelfde
+  // spiegel in `schema_beams` (fem_tools.rs).
+  "tensionOnly",
 ] as const;
 
 const RELEASE_VELDEN = [
@@ -909,6 +912,9 @@ export function controleerVelden(rauw: unknown): string[] {
     }
     keurVeren(b.veren, `${pad}.veren`, fouten);
     keurBedding(b.bedding, `${pad}.bedding`, fouten);
+    if (b.tensionOnly !== undefined && typeof b.tensionOnly !== "boolean") {
+      fouten.push(`${pad}.tensionOnly: moet true of false zijn.`);
+    }
     if (b.checkConfig !== undefined) {
       fouten.push(...keurCheckConfig(b.checkConfig, `${pad}.checkConfig`));
     }

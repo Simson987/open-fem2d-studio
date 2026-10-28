@@ -472,6 +472,15 @@ export interface Beam {
    * met de hand doet.
    */
   bedding?: BeamBedding;
+  /**
+   * Trek-alleen staaf (issue #234), bijvoorbeeld de schoor van een
+   * windverband van strip of rondstaal. De berekening schakelt hem per
+   * belastinggeval en per combinatie uit zolang hij op druk staat (N = 0),
+   * de staaltoets toetst alleen trek (6.2.3) en α_cr rekent met de actieve
+   * staven. ONTBREEKT het veld — alle bestaande projectbestanden — dan is het
+   * een gewone staaf. Alleen `true` wordt bewaard.
+   */
+  tensionOnly?: boolean;
 }
 
 /** Bedding onder een staaf: beddingsconstante en contactbreedte. */

@@ -497,6 +497,8 @@ export function bouwMultiInput(model: FemModelInvoer): MultiInput {
         ...(b.bedding && b.bedding.k > 0 && b.bedding.b > 0
           ? { bedding: { kLijn: b.bedding.k * 1e-6 * b.bedding.b } }
           : {}),
+        // Trek-alleen (issue #234); alleen aanwezig als het aan staat.
+        ...(b.tensionOnly === true ? { tensionOnly: true } : {}),
       };
     }),
     supports: model.supports.map(s => ({ nodeId: s.nodeId, type: s.type, k: liftSpringK(s) })),

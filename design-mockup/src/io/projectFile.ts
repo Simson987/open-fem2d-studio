@@ -196,6 +196,11 @@ export function voorgesteldeProjectnaam(pad: string | null | undefined): string 
  *      minstens één plaat op bedding krijgt versie 7 (ook met verlopende staven,
  *      staven op bedding of belastingvlakken); zonder plaatbedding blijft het
  *      3, 4, 5 of 6.
+ * 10 — `beams[].tensionOnly`: trek-alleen staven in het 2D-model (issue #234).
+ *      Een eerdere uitgave zou het veld stil overslaan en een kruisverband
+ *      met beide schoren actief rekenen (de trekschoor ongeveer de helft van
+ *      de kracht). Alleen een bestand met minstens één trek-alleen 2D-staaf
+ *      krijgt versie 10; zonder blijft het 2 (of de 3D-versie).
  *  8 — `model3d.analysisMaterials`: gekozen E en ν per materiaal voor de
  *      ruimtelijke analyse (issue #62). Een oudere uitgave zou de instelling
  *      stil overslaan en met een andere stijfheid rekenen. Alleen een 3D-model
@@ -246,8 +251,14 @@ export const PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING = 7;
 export const PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS = 8;
 /** Gevel- en dakpanelen zonder stijfheid; oudere lezers mogen ze niet stil negeren. */
 export const PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS = 9;
+/**
+ * Trek-alleen staven in het 2D-model (issue #234). Een eerdere uitgave zou het
+ * veld stil overslaan en beide schoren van een kruisverband als gewone staaf
+ * rekenen — de getrokken schoor kreeg dan ongeveer de helft van de kracht.
+ */
+export const PROJECT_FORMAT_VERSION_2D_TENSION_ONLY = 10;
 /** De hoogste versie die deze uitgave kan lezen. */
-export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS;
+export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_2D_TENSION_ONLY;
 
 /** JSON-vorm van één belastingcombinatie: `factors` als { caseId: factor }. */
 export interface ProjectFileCombination {
@@ -538,7 +549,8 @@ export function serializeProject(state: Omit<ProjectFile, "format" | "version" |
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : undefined;
   const file: ProjectFile = {
     format: PROJECT_FORMAT_ID,
-    version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
+    version: state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY
+      : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
       : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0)
         ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS
       : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS

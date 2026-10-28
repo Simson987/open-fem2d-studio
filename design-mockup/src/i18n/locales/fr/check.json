@@ -1273,6 +1273,8 @@
       "connectionEnd": "Liaison fin",
       "bedding": "Appui élastique",
       "beddingNone": "aucun",
+      "tensionOnly": "Traction seule",
+      "tensionOnlyHint": "Désactivée tant qu'elle est comprimée (N = 0) ; combinaisons calculées dans leur ensemble, seule la traction vérifiée (6.2.3).",
       "noLoads": "Aucune charge sur cette barre"
     },
     "load": {
@@ -1488,6 +1490,8 @@
     "startA": "Début A",
     "endB": "Fin B",
     "connectionsHint": "Par extrémité N, V et M : encastré, rotule (libéré) ou ressort avec raideur — N et V en kN/mm, M en kNm/rad.",
+    "tensionOnly": "Traction seule (p. ex. contreventement en plat ou en rond)",
+    "tensionOnlyHint": "La barre est désactivée par cas de charge et par combinaison tant qu'elle est comprimée (N = 0) ; les combinaisons sont alors calculées dans leur ensemble. Seule la traction est vérifiée (EN 1993-1-1 6.2.3), pas le flambement.",
     "foundation": "Barre sur appui élastique",
     "foundationToggle": "Appui élastique sur toute la longueur (Winkler)",
     "foundationModulus": "Module de réaction k",

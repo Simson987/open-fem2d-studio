@@ -1555,6 +1555,11 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
       steel_grade: grade.toUpperCase(),
       length_m: lengthMm / 1000,
       forces_envelope: forcesEnvelope,
+      // Trek-alleen staaf (issue #234): de kern toetst dan alleen trek
+      // (NEN-EN 1993-1-1 6.2.3) en meldt de grootste drukkracht zonder haar te
+      // toetsen; knik (6.3.1) van een uitgeschakelde schoor vervalt. Alleen
+      // meegeven als het aan staat, zodat elke andere invoer byte-gelijk blijft.
+      ...(beam.tensionOnly === true ? { tension_only: true } : {}),
       // Dezelfde afleiding als het tekenvlak toont (`lib/kipsteunen.ts`): wat
       // hier de kern in gaat, staat als symbool op de staaf.
       lateral_bracing: kipsteunenVanStaaf(cfg, lengthMm, "staal").lateral_bracing,

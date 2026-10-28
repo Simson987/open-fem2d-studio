@@ -139,6 +139,22 @@ export interface IBeamElement extends IElement {
   distributedLoads?: IBeamDistributedLoad[];
   // Point loads on the beam (will cause automatic beam splitting)
   pointLoads?: IBeamPointLoad[];
+  /**
+   * TREK-ALLEEN staaf (issue #234), bijvoorbeeld een windverband of een
+   * kruisschoor van strip. De solver lost iteratief op: een staaf(groep) die
+   * op druk komt wordt axiaal losgemaakt (normaalkrachthuls aan één eind,
+   * dezelfde condensatie als release Tx) en het stelsel opnieuw opgelost,
+   * tot de verzameling uitgeschakelde staven niet meer verandert. Een
+   * uitgeschakelde staaf wordt weer actief zodra zijn eindknopen uit elkaar
+   * gaan (verlenging > 0). Zie `solveNonlinear` in NonlinearSolver.ts.
+   */
+  tensionOnly?: boolean;
+  /**
+   * De groep waartoe dit rekenelement behoort voor de trek-alleen-beslissing:
+   * een modelstaaf die de adapter in deelelementen knipt valt als GEHEEL uit
+   * of niet. Ontbreekt = het element is zijn eigen groep (sleutel = id).
+   */
+  tensionOnlyGroup?: number;
   // Beam end releases (hinges) - legacy boolean format
   endReleases?: {
     startMoment: boolean;  // Release rotation at start node
@@ -462,6 +478,13 @@ export interface ISolverResult {
   maxVonMises: number;
   minVonMises: number;
   loadCaseId?: number;              // Which load case was solved (optional)
+  /**
+   * Trek-alleen staafgroepen (`IBeamElement.tensionOnlyGroup`, anders het
+   * element-id) die in de geconvergeerde stand op druk stonden en dus zijn
+   * uitgeschakeld (N = 0). Ontbreekt = het model heeft geen trek-alleen
+   * staven. Zie issue #234.
+   */
+  axiaalUitgeschakeld?: number[];
   combinationId?: number;           // Which load combination was solved (optional)
   maxMoment?: number;               // For plate bending color scale
   minMoment?: number;

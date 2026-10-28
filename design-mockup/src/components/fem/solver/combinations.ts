@@ -40,6 +40,7 @@ import {
   getScheefstandRichtingen,
   getSecondOrderState,
   solveCombinationSecondOrder,
+  trekAlleenCombinatieResultaat,
 } from "./engine";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "../../../lib/normAanduidingen";
 import {
@@ -425,6 +426,12 @@ export function combineResults(
     } else {
       return res;
     }
+  } else {
+    // ── Trek-alleen staven (issue #234) ──────────────────────────────────
+    // Eerste orde, maar niet lineair: de combinatie als geheel oplossen.
+    // Zonder trek-alleen staven geeft dit `undefined` en volgt superpositie.
+    const ta = trekAlleenCombinatieResultaat(perCase, combo);
+    if (ta) return ta;
   }
 
   // ── 1e-orde-pad: lineaire superpositie ──────────────────────────────────

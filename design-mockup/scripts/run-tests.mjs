@@ -759,6 +759,10 @@ const ALLEEN_BRON = new Map([
     "toetst de geometrische stijfheid van de wandschijven op matrixniveau en bouwt zijn modellen met Mesh + PlateRegion; Triangle, Quad4 en PlateRegion staan bewust niet in de barrel (PlateRegion zou TriangleService en window.location de bundel in trekken). Het engine-pad dat hij aan het eind wél aanroept, is daar niet los van te knippen",
   ],
   [
+    "trek-alleen",
+    "trek-alleen staven in 2D (issue #234): naast engine, combinaties en de sidecar (in de barrel) ook de projectserialisatie (io/projectFile), α_cr en de Rust 2D-raamwerkroute (nativeFrame2DRoute met de native-frame2d-binary) — die staan niet in de barrel. De MCP-kant (valideerModel, sidecar solve) wordt in-proces op de bron getoetst; het schema in fem_tools.rs bewaakt de Rust-test schema_beams_spiegelt_de_staafpoort_van_de_sidecar",
+  ],
+  [
     "bedding",
     "toetst de staaf op bedding door de adapter en de projectserialisatie (io/projectFile, lib/modelNaarSolverInput) — die twee staan niet in de barrel; de engine-kant zelf zit erin, maar de test is één geheel",
   ],

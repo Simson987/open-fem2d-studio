@@ -1273,6 +1273,8 @@
       "connectionEnd": "Connection end",
       "bedding": "Elastic foundation",
       "beddingNone": "none",
+      "tensionOnly": "Tension only",
+      "tensionOnlyHint": "Drops out while in compression (N = 0); combinations solved as a whole, only tension checked (6.2.3).",
       "noLoads": "No loads on this member"
     },
     "load": {
@@ -1488,6 +1490,8 @@
     "startA": "Start A",
     "endB": "End B",
     "connectionsHint": "Per end N, V and M: fixed, hinge (released) or spring with stiffness — N and V in kN/mm, M in kNm/rad.",
+    "tensionOnly": "Tension only (e.g. wind bracing of flat bar or round bar)",
+    "tensionOnlyHint": "The member drops out per load case and per combination while it is in compression (N = 0); combinations are then solved as a whole. Only tension is checked (EN 1993-1-1 6.2.3), no buckling.",
     "foundation": "Member on elastic foundation",
     "foundationToggle": "Elastically supported over the full length (Winkler)",
     "foundationModulus": "Modulus of subgrade reaction k",

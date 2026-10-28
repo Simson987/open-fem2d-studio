@@ -65,6 +65,7 @@ import {
   applyBoundaryConditions,
   assembleGlobalStiffnessWithGeometric,
   countNonPositivePivots,
+  schakelAxiaalGroepenUit,
 } from "../../../core/solver/NonlinearSolver";
 import { buildMesh } from "./engine";
 import type { LoadCombination } from "./combinations";
@@ -193,43 +194,51 @@ export function bepaalAlphaCr(
       uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "geen_druk" });
       continue;
     }
+    // Trek-alleen staven die in deze combinatie op druk stonden, doen ook
+    // hier niet mee (issue #234): α_cr hoort bij de constructie zoals zij in
+    // deze combinatie werkt, dus met de actieve staven. Zelfde losmaking als
+    // in de solver; na deze combinatie terug.
+    const herstel = schakelAxiaalGroepenUit(mesh, res.trekAlleenUitgeschakeld ?? []);
+    try {
+      const instabiel = (alpha: number): boolean => {
+        const geschaald = new Map<number, number>();
+        for (const [id, n] of axiaal) geschaald.set(id, n * alpha);
+        const k = assembleGlobalStiffnessWithGeometric(mesh, geschaald, true);
+        const { K } = applyBoundaryConditions(k, nul, mesh);
+        return countNonPositivePivots(K) > 0;
+      };
 
-    const instabiel = (alpha: number): boolean => {
-      const geschaald = new Map<number, number>();
-      for (const [id, n] of axiaal) geschaald.set(id, n * alpha);
-      const k = assembleGlobalStiffnessWithGeometric(mesh, geschaald, true);
-      const { K } = applyBoundaryConditions(k, nul, mesh);
-      return countNonPositivePivots(K) > 0;
-    };
-
-    // Zonder normaalkracht hoort het stelsel stabiel te zijn; is het dat niet,
-    // dan is het model een mechanisme en zegt α_cr niets.
-    if (instabiel(1e-9)) {
-      uit.push({
-        combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "niet_bepaald",
-        reden: "het stelsel is zonder normaalkracht al niet positief definiet (mechanisme of ontbrekende oplegging)",
-      });
-      continue;
-    }
-    let laag: number;
-    let hoog: number;
-    if (!instabiel(ALPHA_CR_GRENS_EERSTE_ORDE)) {
-      if (!instabiel(ALPHA_CR_ZOEKGRENS)) {
-        uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "boven_grens", grens: ALPHA_CR_ZOEKGRENS });
+      // Zonder normaalkracht hoort het stelsel stabiel te zijn; is het dat niet,
+      // dan is het model een mechanisme en zegt α_cr niets.
+      if (instabiel(1e-9)) {
+        uit.push({
+          combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "niet_bepaald",
+          reden: "het stelsel is zonder normaalkracht al niet positief definiet (mechanisme of ontbrekende oplegging)",
+        });
         continue;
       }
-      laag = ALPHA_CR_GRENS_EERSTE_ORDE;
-      hoog = ALPHA_CR_ZOEKGRENS;
-    } else {
-      laag = 0;
-      hoog = ALPHA_CR_GRENS_EERSTE_ORDE;
+      let laag: number;
+      let hoog: number;
+      if (!instabiel(ALPHA_CR_GRENS_EERSTE_ORDE)) {
+        if (!instabiel(ALPHA_CR_ZOEKGRENS)) {
+          uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "boven_grens", grens: ALPHA_CR_ZOEKGRENS });
+          continue;
+        }
+        laag = ALPHA_CR_GRENS_EERSTE_ORDE;
+        hoog = ALPHA_CR_ZOEKGRENS;
+      } else {
+        laag = 0;
+        hoog = ALPHA_CR_GRENS_EERSTE_ORDE;
+      }
+      // Bisectie tot een relatieve nauwkeurigheid van ~0,1 % op de grens van 10.
+      for (let i = 0; i < 16; i++) {
+        const mid = (laag + hoog) / 2;
+        if (instabiel(mid)) hoog = mid; else laag = mid;
+      }
+      uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: (laag + hoog) / 2, status: "bepaald" });
+    } finally {
+      herstel();
     }
-    // Bisectie tot een relatieve nauwkeurigheid van ~0,1 % op de grens van 10.
-    for (let i = 0; i < 16; i++) {
-      const mid = (laag + hoog) / 2;
-      if (instabiel(mid)) hoog = mid; else laag = mid;
-    }
-    uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: (laag + hoog) / 2, status: "bepaald" });
   }
   return uit;
 }
