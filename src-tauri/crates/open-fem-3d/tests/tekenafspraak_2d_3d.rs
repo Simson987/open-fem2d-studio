@@ -45,7 +45,7 @@ fn reactiemoment_my_heeft_het_tegengestelde_teken_van_2d() {
         supports: vec![vast(1), vast(4), uit_vlak(2), uit_vlak(3)],
         nodal_loads: vec![NodalLoad3D { id: 1, node_id: 2, fx: 10.0, fy: 0.0, fz: 0.0, mx: 0.0, my: 0.0, mz: 0.0 }],
         member_loads: vec![], member_point_loads: vec![], thermal_loads: vec![], plates: vec![],
-        shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], tension_only_fit: None,
+        shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], node_links: vec![], tension_only_fit: None,
         tension_only_cross_rule: false, max_iterations: 100, tolerance: 1e-10, buckling_modes: 0,
     }).expect("oplosbaar");
     let rx: f64 = r.reactions.iter().filter(|x| x.node_id == 1 || x.node_id == 4).map(|x| x.fx).sum();

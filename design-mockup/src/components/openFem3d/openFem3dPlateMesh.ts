@@ -109,6 +109,19 @@ export function defaultOpenFem3DPlateMeshSizeM(shortestSpanM: number): number {
   return Math.min(0.5, Math.max(0.1, shortestSpanM / 10));
 }
 
+/**
+ * Standaard-elementgrootte van een metselwerkwand (#97): hoogstens 0,1 m.
+ * Met E horizontaal ≈ 0 geven grove, scheve elementen (het driehoekspad
+ * rond een opening met latei) parasitaire afschuiving boven de opening. Bij
+ * 0,27 m kwam 22 % van de last boven de opening niet via de latei; bij 0,1 m
+ * 6 %, bij 0,05 m 3 % (test-open-fem3d-metselwerkwand.mjs). De lateitoets
+ * rekent daarom met de analytische lateibelasting (openFem3DLintelDesign).
+ */
+function defaultPlateMeshSizeM(plate: OpenFem3DPlate, shortestSpanM: number): number {
+  const size = defaultOpenFem3DPlateMeshSizeM(shortestSpanM);
+  return plate.masonry ? Math.min(size, 0.1) : size;
+}
+
 // ── Knoopregister: coördinaten → id ─────────────────────────────────────────
 
 class PointRegistry {
@@ -416,7 +429,7 @@ export function classifyOpenFem3DPlatePoint(
 ): "inside" | "boundary" | "opening" | "outside" {
   const byId = new Map(model.nodes.map((node) => [node.id, node]));
   const { frame, shortest } = plateFrame(plate, byId);
-  const meshSize = plate.meshSizeM ?? defaultOpenFem3DPlateMeshSizeM(shortest);
+  const meshSize = plate.meshSizeM ?? defaultPlateMeshSizeM(plate, shortest);
   const { outer, holes } = plateContours(plate, byId, 2 * meshSize, frame);
   const region: Region = {
     outer: contourPolyline(outer).map((p) => toLocal(frame, p)),
@@ -482,7 +495,7 @@ export async function meshOpenFem3DPlates(
   }
   const meshSizes = new Map<number, number>();
   for (const plate of plates) {
-    const size = plate.meshSizeM ?? defaultOpenFem3DPlateMeshSizeM(sizes.get(plate.id)!.shortest);
+    const size = plate.meshSizeM ?? defaultPlateMeshSizeM(plate, sizes.get(plate.id)!.shortest);
     if (!(size > 0) || !Number.isFinite(size)) throw new Error(`3D-plaat ${plate.id} heeft een ongeldige meshgrootte.`);
     meshSizes.set(plate.id, size);
   }

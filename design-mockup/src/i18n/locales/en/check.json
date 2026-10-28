@@ -1606,6 +1606,7 @@
     }
   },
   "masonry": {
+    "from3d": { "wall": "From the 3D model", "wallOption": "Masonry wall (plate {{id}})", "take": "Take over" },
     "title": "Check masonry wall (EN 1996-1-1)",
     "intro": "Checks a single-leaf wall or pier: compressive strength f_k, slenderness, vertical load with Φ at top, middle and bottom, a concentrated load, shear and out-of-plane bending. The masonry wall as a model object follows later (#97); enter the forces here.",
     "material": "Material",

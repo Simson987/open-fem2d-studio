@@ -27,7 +27,7 @@ fn uitkraging(p: f64) -> SolveRequest3D {
         supports: vec![Support3D { node_id: 1, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true, ..Default::default() }],
         nodal_loads: vec![NodalLoad3D { id: 1, node_id: 2, fx: 0.0, fy: 0.0, fz: -p, mx: 0.0, my: 0.0, mz: 0.0 }],
         member_loads: vec![], member_point_loads: vec![], thermal_loads: vec![], plates: vec![],
-        shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], tension_only_fit: None,
+        shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], node_links: vec![], tension_only_fit: None,
         tension_only_cross_rule: false, max_iterations: 100, tolerance: 1e-10, buckling_modes: 0,
     }
 }

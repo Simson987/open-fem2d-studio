@@ -390,6 +390,15 @@ const PLAATBEDDING_KANAAL = { k_kn_per_m3: "kKnPerM3", compression_only: "compre
  * `plates[].bedding` van model_3d_bouwen in modelvorm (#107). Een onbekend
  * veld is een tikfout en wordt geweigerd; de waarden keurt parseOpenFem3DModel.
  */
+/** Metselwerkwand uit het kanaal (snake_case) naar het model (#97). */
+function metselwerkVanKanaal(value: unknown, plaat: number): { unitWeightKnM3: unknown; eMpa: unknown } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`3D-plaat ${plaat}: masonry is ongeldig`);
+  const raw = value as Record<string, unknown>;
+  const onbekend = Object.keys(raw).filter((key) => key !== "unit_weight_kn_m3" && key !== "e_mpa");
+  if (onbekend.length > 0) throw new Error(`3D-plaat ${plaat}: onbekend veld in masonry: ${onbekend.join(", ")}`);
+  return { unitWeightKnM3: raw.unit_weight_kn_m3, eMpa: raw.e_mpa };
+}
+
 function plaatBeddingVanKanaal(waarde: unknown, plaat: number): Record<string, unknown> {
   if (!waarde || typeof waarde !== "object" || Array.isArray(waarde)) {
     throw new Error(`3D-plaat ${plaat}: bedding moet een object zijn (k_kn_per_m3, compression_only)`);
@@ -751,7 +760,9 @@ export async function voerUit(
           ...(openings !== undefined ? { openings } : {}),
           ...(levelId ? { levelId } : {}),
           // Plaat op bedding (#107); null of weggelaten = geen bedding.
-          ...(plate.bedding !== undefined && plate.bedding !== null ? { bedding: plaatBeddingVanKanaal(plate.bedding, index + 1) } : {}) };
+          ...(plate.bedding !== undefined && plate.bedding !== null ? { bedding: plaatBeddingVanKanaal(plate.bedding, index + 1) } : {}),
+          // Metselwerkwand (#97); de modelpoort keurt γ en E.
+          ...(plate.masonry !== undefined && plate.masonry !== null ? { masonry: metselwerkVanKanaal(plate.masonry, index + 1) } : {}) };
       });
       // Een plaat op een level neemt al haar knopen mee (ook die van de
       // openingen); een knoop die zelf aan een ander level hangt, is strijdig.

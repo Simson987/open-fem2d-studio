@@ -4,6 +4,10 @@ import { sampleCircularArc3D, type ArcPoint3D } from "./openFem3dCircularArc";
 import type { OpenFem3DSelection } from "./openFem3dSelection";
 import { OPEN_FEM_3D_DEFAULT_LAYER, parseOpenFem3DLayers, readOpenFem3DLayerId, type OpenFem3DLayer } from "./openFem3dLayers";
 import { resolveOpenFem3DPlateMaterial } from "./openFem3dPlateMaterial";
+import {
+  OPEN_FEM_3D_LINTEL_DEFAULT, openFem3DLintelEnds, openFem3DWallFrame, readOpenFem3DMasonryWall, readOpenFem3DOpeningLintel,
+  type OpenFem3DLintelLoadSpread, type OpenFem3DMasonryWall, type OpenFem3DOpeningLintel,
+} from "./openFem3dMetselwerkwand";
 import { openFem3DBeamVerloop, openFem3DVerloopDelen } from "./openFem3dVerloop";
 import { splitsVerlopendProfiel, tussenProfielVoorSplitsing } from "../../lib/verloopSplitsen";
 import { readOpenFem3DAnalysisMaterials, type OpenFem3DAnalysisMaterials } from "./openFem3dAnalysisMaterial";
@@ -311,6 +315,12 @@ export interface OpenFem3DPlateOpening {
   /** Getekende gesloten contour. Een boog gebruikt begin-, stuur- en eindknoop. */
   boundary?: OpenFem3DPlateBoundarySegment[];
   cornerRadiusM?: number;
+  /**
+   * Latei boven deze opening (metselwerkwand, issue #97): een gewone staaf
+   * van het model, plus opleglengte en lastspreiding voor de lateitoets.
+   * Zie openFem3dMetselwerkwand.
+   */
+  lintel?: OpenFem3DOpeningLintel;
 }
 
 export type OpenFem3DPlateBoundarySegment =
@@ -352,6 +362,12 @@ export interface OpenFem3DPlate extends OpenFem3DNativePlateFields {
    * {@link OpenFem3DPlateBedding}.
    */
   bedding?: OpenFem3DPlateBedding;
+  /**
+   * Metselwerkwand (issue #97): de plaat rekent orthotroop (E verticaal =
+   * E metselwerk, E horizontaal ≈ 0, G = 0,4·E) en haar eigen gewicht is
+   * γ·t. `material` doet dan niet mee. Zie openFem3dMetselwerkwand.
+   */
+  masonry?: OpenFem3DMasonryWall;
 }
 
 /**
@@ -1245,15 +1261,22 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
         `Opening ${openingId} van 3D-plaat ${id}`);
       const openingRadius = Number(opening.cornerRadiusM ?? 0);
       if (openingRadius < 0 || !Number.isFinite(openingRadius)) throw new Error(`Opening ${openingId} heeft een ongeldige randstraal.`);
+      // Latei (#97): een latei waarvan de staaf weg is, valt weg (zoals een losgeraakt level).
+      const lintel = opening.lintel === undefined || opening.lintel === null
+        ? undefined : readOpenFem3DOpeningLintel(opening.lintel, `Opening ${openingId} van 3D-plaat ${id}`);
       openings.push({ id: openingId, nodeIds: openingLoop,
         ...(openingBoundary ? { boundary: openingBoundary } : {}),
-        ...(openingRadius > 0 ? { cornerRadiusM: openingRadius } : {}) });
+        ...(openingRadius > 0 ? { cornerRadiusM: openingRadius } : {}),
+        ...(lintel && beamIds.has(lintel.beamId) ? { lintel } : {}) });
       openingIds.add(openingId);
     }
     const levelId = readOptionalLevelId(plate.levelId, `3D-plaat ${id}`);
     // Plaat op bedding (#107); null in een bestand telt als geen bedding.
     const bedding = plate.bedding === undefined || plate.bedding === null
       ? undefined : readOpenFem3DPlateBedding(plate.bedding, `3D-plaat ${id}`);
+    // Metselwerkwand (#97); null in een bestand telt als geen metselwerk.
+    const masonry = plate.masonry === undefined || plate.masonry === null
+      ? undefined : readOpenFem3DMasonryWall(plate.masonry, `3D-plaat ${id}`);
     plates.push({ id, nodeIds: loop, thicknessM,
       ...(boundary ? { boundary } : {}),
       ...(typeof plate.material === "string" && plate.material.trim() ? { material: plate.material.trim() } : {}),
@@ -1261,7 +1284,8 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
       ...(levelId !== undefined ? { levelId } : {}),
       ...(meshSizeM !== undefined ? { meshSizeM } : {}),
       ...(edgeSupports.length ? { edgeSupports } : {}),
-      ...(bedding ? { bedding } : {}) });
+      ...(bedding ? { bedding } : {}),
+      ...(masonry ? { masonry } : {}) });
     plateIds.add(id);
   }
   // Een plaat ligt pas op een level als AL haar knopen (ook die van de
@@ -3119,10 +3143,29 @@ function withoutExcludedBeams(
   });
 }
 
+/** Platen zonder de lateien die naar een van deze (weggehaalde) staven verwijzen. */
+function withoutLintelsOf(plates: OpenFem3DPlate[] | undefined, beamIds: ReadonlySet<number>): OpenFem3DPlate[] | undefined {
+  if (!plates || !plates.some((plate) => (plate.openings ?? []).some((o) => o.lintel && beamIds.has(o.lintel.beamId)))) {
+    return plates;
+  }
+  return plates.map((plate) => ({
+    ...plate,
+    ...(plate.openings ? {
+      openings: plate.openings.map((opening) => {
+        if (!opening.lintel || !beamIds.has(opening.lintel.beamId)) return opening;
+        const { lintel: _removed, ...rest } = opening;
+        return rest;
+      }),
+    } : {}),
+  }));
+}
+
 export function removeOpenFem3DBeam(model: OpenFem3DModel, beamId: number): OpenFem3DModel {
   const loadPanels = withoutExcludedBeams(model.loadPanels, new Set([beamId]));
+  const plates = withoutLintelsOf(model.plates, new Set([beamId]));
   return {
     ...model,
+    ...(plates ? { plates } : {}),
     beams: model.beams.filter((beam) => beam.id !== beamId),
     memberLoads: (model.memberLoads ?? []).filter((load) => load.beamId !== beamId),
     memberPointLoads: (model.memberPointLoads ?? []).filter((load) => load.beamId !== beamId),
@@ -3228,6 +3271,98 @@ export function addOpenFem3DPlateOpening(
   };
 }
 
+/**
+ * Maak van een plaat een metselwerkwand (#97) of zet haar terug (`null`).
+ * De plaat moet verticaal staan. Terugzetten haalt ook de lateien weg (de
+ * staven zelf blijven staan als gewone staven).
+ */
+export function setOpenFem3DPlateMasonry(
+  model: OpenFem3DModel, plateId: number, masonry: OpenFem3DMasonryWall | null,
+): OpenFem3DModel {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  if (masonry === null) {
+    const { masonry: _removed, ...rest } = plate;
+    const openings = rest.openings?.map(({ lintel: _lintel, ...opening }) => opening);
+    return { ...model, plates: (model.plates ?? []).map((item) => item.id === plateId
+      ? { ...rest, ...(openings ? { openings } : {}) } : item) };
+  }
+  const checked = readOpenFem3DMasonryWall(masonry, `3D-plaat ${plateId}`);
+  // De wand moet verticaal staan; dezelfde keuring als bij het rekenen.
+  openFem3DWallFrame(model, plate);
+  return { ...model, plates: (model.plates ?? []).map((item) => item.id === plateId ? { ...item, masonry: checked } : item) };
+}
+
+export interface OpenFem3DLintelInput {
+  bearingM: number;
+  loadSpread: OpenFem3DLintelLoadSpread;
+  /** Doorsnede en materiaal van een NIEUWE lateistaaf; standaard S235 HEA 100. */
+  profileName?: string;
+  material?: string;
+}
+
+/**
+ * Zet een latei boven een opening van een metselwerkwand (#97), of wijzig
+ * haar. De latei is een gewone staaf van de bovenrand van de opening, aan
+ * beide zijden met de opleglengte verlengd; haar eindknopen worden
+ * toegevoegd (of hergebruikt als er al een knoop op die plek ligt). Bij een
+ * andere opleglengte gaat de staaf naar de nieuwe eindpunten.
+ */
+export function setOpenFem3DOpeningLintel(
+  model: OpenFem3DModel, plateId: number, openingId: number, input: OpenFem3DLintelInput,
+): OpenFem3DModel {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  if (!plate.masonry) throw new Error(`3D-plaat ${plateId} is geen metselwerkwand.`);
+  const opening = (plate.openings ?? []).find((item) => item.id === openingId);
+  if (!opening) throw new Error(`Opening ${openingId} van 3D-plaat ${plateId} bestaat niet.`);
+  if (input.loadSpread !== "triangle60" && input.loadSpread !== "fullHeight") {
+    throw new Error(`Onbekende lastspreiding "${String(input.loadSpread)}".`);
+  }
+  const [startPoint, endPoint] = openFem3DLintelEnds(model, plate, opening, input.bearingM);
+  let next = model;
+  const nodeAt = (p: [number, number, number]) => {
+    const existing = nodeAtSamePosition(next, p[0], p[1], p[2]);
+    if (existing) return existing.id;
+    const added = addOpenFem3DNode(next, { x: p[0], y: p[1], z: p[2] });
+    next = added.model;
+    return added.node.id;
+  };
+  const startNodeId = nodeAt(startPoint);
+  const endNodeId = nodeAt(endPoint);
+  const current = opening.lintel && next.beams.find((beam) => beam.id === opening.lintel!.beamId);
+  let beamId: number;
+  if (current) {
+    beamId = current.id;
+    if (current.startNodeId !== startNodeId || current.endNodeId !== endNodeId) {
+      next = updateOpenFem3DBeam(next, beamId, { startNodeId, endNodeId });
+    }
+  } else {
+    const added = addOpenFem3DBeam(next, {
+      startNodeId, endNodeId,
+      profileName: input.profileName ?? OPEN_FEM_3D_LINTEL_DEFAULT.profileName,
+      material: input.material ?? OPEN_FEM_3D_LINTEL_DEFAULT.material,
+    });
+    next = added.model;
+    beamId = added.beam.id;
+  }
+  const lintel: OpenFem3DOpeningLintel = { beamId, bearingM: input.bearingM, loadSpread: input.loadSpread };
+  return {
+    ...next,
+    plates: (next.plates ?? []).map((item) => item.id !== plateId ? item : {
+      ...item,
+      openings: (item.openings ?? []).map((o) => o.id === openingId ? { ...o, lintel } : o),
+    }),
+  };
+}
+
+/** Haal de latei boven een opening weg, met haar staaf. */
+export function removeOpenFem3DOpeningLintel(model: OpenFem3DModel, plateId: number, openingId: number): OpenFem3DModel {
+  const opening = (model.plates ?? []).find((item) => item.id === plateId)?.openings?.find((item) => item.id === openingId);
+  if (!opening?.lintel) return model;
+  return removeOpenFem3DBeam(model, opening.lintel.beamId);
+}
+
 export function removeOpenFem3DPlate(model: OpenFem3DModel, plateId: number): OpenFem3DModel {
   return { ...model, plates: (model.plates ?? []).filter((plate) => plate.id !== plateId),
     surfaceLoads: (model.surfaceLoads ?? []).filter((load) => load.plateId !== plateId) };
@@ -3274,7 +3409,7 @@ export function removeOpenFem3DNode(model: OpenFem3DModel, nodeId: number): Open
     memberLoads: (model.memberLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
     memberPointLoads: (model.memberPointLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
     thermalLoads: (model.thermalLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
-    plates: (model.plates ?? []).filter((plate) => !removedPlateIds.has(plate.id)),
+    plates: (withoutLintelsOf(model.plates, removedBeamIds) ?? []).filter((plate) => !removedPlateIds.has(plate.id)),
     surfaceLoads: (model.surfaceLoads ?? []).filter((load) => !removedPlateIds.has(load.plateId)),
     ...(loadPanels ? { loadPanels } : {}),
     ...(envelopePanels ? { envelopePanels } : {}),

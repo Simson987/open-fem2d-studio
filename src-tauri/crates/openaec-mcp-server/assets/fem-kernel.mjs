@@ -27263,7 +27263,239 @@ function readOpenFem3DLayerId(value, layers, label2) {
 
 // src/components/openFem3d/openFem3dPlateMaterial.ts
 init_plaatMateriaal();
+
+// src/components/openFem3d/openFem3dMetselwerkwand.ts
+var OPEN_FEM_3D_MASONRY_E_X_FACTOR = 1e-6;
+var OPEN_FEM_3D_MASONRY_G_FACTOR = 0.4;
+var OPEN_FEM_3D_LINTEL_DEFAULT = { material: "S235", profileName: "HEA 100" };
+var isRecord = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+function readOpenFem3DMasonryWall(value, label2) {
+  if (!isRecord(value)) throw new Error(`${label2}: ongeldige metselwerkwand.`);
+  const unitWeightKnM3 = Number(value.unitWeightKnM3);
+  const eMpa = Number(value.eMpa);
+  if (!(Number.isFinite(unitWeightKnM3) && unitWeightKnM3 > 0 && unitWeightKnM3 <= 100)) {
+    throw new Error(`${label2}: het volumegewicht van het metselwerk moet tussen 0 en 100 kN/m\xB3 liggen.`);
+  }
+  if (!(Number.isFinite(eMpa) && eMpa > 0)) {
+    throw new Error(`${label2}: de elasticiteitsmodulus van het metselwerk moet groter dan 0 zijn.`);
+  }
+  return { unitWeightKnM3, eMpa };
+}
+function readOpenFem3DOpeningLintel(value, label2) {
+  if (!isRecord(value)) throw new Error(`${label2}: ongeldige latei.`);
+  const beamId = Number(value.beamId);
+  const bearingM = Number(value.bearingM);
+  if (!Number.isSafeInteger(value.beamId) || beamId <= 0) throw new Error(`${label2}: de latei verwijst niet naar een geldige staaf.`);
+  if (!(Number.isFinite(bearingM) && bearingM > 0)) throw new Error(`${label2}: de opleglengte van de latei moet groter dan 0 zijn.`);
+  const loadSpread = value.loadSpread ?? "triangle60";
+  if (loadSpread !== "triangle60" && loadSpread !== "fullHeight") {
+    throw new Error(`${label2}: onbekende lastspreiding "${String(loadSpread)}" (triangle60 of fullHeight).`);
+  }
+  return { beamId, bearingM, loadSpread };
+}
+function openFem3DMasonryOrthotropy(wall) {
+  return {
+    eXMpa: wall.eMpa * OPEN_FEM_3D_MASONRY_E_X_FACTOR,
+    eYMpa: wall.eMpa,
+    gXyMpa: OPEN_FEM_3D_MASONRY_G_FACTOR * wall.eMpa,
+    nuXy: 0
+  };
+}
+function openFem3DMasonryMaterialName(wall) {
+  return `Metselwerk E=${wall.eMpa} \u03B3=${wall.unitWeightKnM3}`;
+}
+var pointOf = (node) => [node.x, node.y, node.z];
+function openFem3DWallFrame(model, plate) {
+  const index = new Map(model.nodes.map((node) => [node.id, node]));
+  const points = plate.nodeIds.map((id2) => {
+    const node = index.get(id2);
+    if (!node) throw new Error(`3D-plaat ${plate.id}: knoop ${id2} bestaat niet.`);
+    return pointOf(node);
+  });
+  const normal = [0, 0, 0];
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    normal[0] += (a[1] - b[1]) * (a[2] + b[2]);
+    normal[1] += (a[2] - b[2]) * (a[0] + b[0]);
+    normal[2] += (a[0] - b[0]) * (a[1] + b[1]);
+  }
+  const length = Math.hypot(...normal);
+  if (!(length > 0)) throw new Error(`3D-plaat ${plate.id} heeft geen eenduidig vlak.`);
+  const n2 = [normal[0] / length, normal[1] / length, normal[2] / length];
+  if (Math.abs(n2[2]) > 1e-3) {
+    throw new Error(`3D-plaat ${plate.id}: een metselwerkwand moet verticaal staan.`);
+  }
+  const project = (axis) => {
+    const d = axis[0] * n2[0] + axis[1] * n2[1] + axis[2] * n2[2];
+    return [axis[0] - d * n2[0], axis[1] - d * n2[1], axis[2] - d * n2[2]];
+  };
+  let u = project([1, 0, 0]);
+  if (Math.hypot(...u) < 1e-3) u = project([0, 1, 0]);
+  const ul = Math.hypot(...u);
+  return { origin: points[0], u: [u[0] / ul, u[1] / ul, u[2] / ul], normal: n2 };
+}
+function openFem3DWallCoordinates(frame, p2) {
+  return [(p2[0] - frame.origin[0]) * frame.u[0] + (p2[1] - frame.origin[1]) * frame.u[1] + (p2[2] - frame.origin[2]) * frame.u[2], p2[2]];
+}
+function insidePolygon(p2, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
+    if (yi > p2[1] !== yj > p2[1] && p2[0] < (xj - xi) * (p2[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function wallTopAt(polygon, s) {
+  let top;
+  for (let i = 0; i < polygon.length; i += 1) {
+    const [x1, z1] = polygon[i], [x2, z2] = polygon[(i + 1) % polygon.length];
+    if ((x1 - s) * (x2 - s) > 0 || x1 === x2) continue;
+    const z = z1 + (z2 - z1) * (s - x1) / (x2 - x1);
+    top = top === void 0 ? z : Math.max(top, z);
+  }
+  return top;
+}
+function openFem3DOpeningGeometry(model, plate, opening) {
+  const frame = openFem3DWallFrame(model, plate);
+  const index = new Map(model.nodes.map((node) => [node.id, node]));
+  const local = (id2) => openFem3DWallCoordinates(frame, pointOf(index.get(id2)));
+  const points = opening.nodeIds.map(local);
+  const sMin = Math.min(...points.map((p2) => p2[0]));
+  const sMax = Math.max(...points.map((p2) => p2[0]));
+  const zTop = Math.max(...points.map((p2) => p2[1]));
+  const tol = 1e-6;
+  const hasCorner = (s) => points.some((p2) => Math.abs(p2[0] - s) <= tol && Math.abs(p2[1] - zTop) <= tol);
+  if (opening.boundary?.some((segment) => segment.kind === "arc") || !hasCorner(sMin) || !hasCorner(sMax)) {
+    throw new Error(`Opening ${opening.id} van 3D-plaat ${plate.id}: een latei past alleen boven een opening met een rechte, horizontale bovenrand.`);
+  }
+  const outline = plate.nodeIds.map(local);
+  const top = wallTopAt(outline, (sMin + sMax) / 2);
+  return { frame, sMin, sMax, zTop, heightAboveM: Math.max(0, (top ?? zTop) - zTop) };
+}
+function openFem3DLintelEnds(model, plate, opening, bearingM) {
+  if (!(Number.isFinite(bearingM) && bearingM > 0)) throw new Error("De opleglengte van de latei moet groter dan 0 zijn.");
+  const g = openFem3DOpeningGeometry(model, plate, opening);
+  const index = new Map(model.nodes.map((node) => [node.id, node]));
+  const local = (id2) => openFem3DWallCoordinates(g.frame, pointOf(index.get(id2)));
+  const outline = plate.nodeIds.map(local);
+  const holes = (plate.openings ?? []).map((item) => item.nodeIds.map(local));
+  const toGlobal2 = (s) => {
+    const base = [g.frame.origin[0] + s * g.frame.u[0], g.frame.origin[1] + s * g.frame.u[1], 0];
+    return [base[0], base[1], g.zTop];
+  };
+  const ends = [[g.sMin - bearingM, g.zTop], [g.sMax + bearingM, g.zTop]];
+  for (const end of ends) {
+    const probe = [end[0] + (end[0] < g.sMin ? 1e-6 : -1e-6), end[1] - 1e-6];
+    if (!insidePolygon(probe, outline) || holes.some((hole) => insidePolygon(probe, hole))) {
+      throw new Error(`Opening ${opening.id} van 3D-plaat ${plate.id}: de oplegging van de latei (${bearingM.toFixed(3)} m) valt buiten het metselwerk.`);
+    }
+  }
+  return [toGlobal2(ends[0][0]), toGlobal2(ends[1][0])];
+}
+function openFem3DLintelDesign(model, plate, opening) {
+  if (!plate.masonry || !opening.lintel) return null;
+  const g = openFem3DOpeningGeometry(model, plate, opening);
+  const clearSpanM = g.sMax - g.sMin;
+  const spanM = clearSpanM + opening.lintel.bearingM;
+  const gamma = plate.masonry.unitWeightKnM3 * plate.thicknessM;
+  const triangleHeightM = spanM * Math.sqrt(3) / 2;
+  const fullQ = gamma * g.heightAboveM;
+  const modelLoadKn = fullQ * spanM;
+  const modelMomentKnm = fullQ * spanM * spanM / 8;
+  const modelSupportKn = modelLoadKn / 2;
+  const requested = opening.lintel.loadSpread;
+  const fits = g.heightAboveM >= triangleHeightM - 1e-9;
+  const applied = requested === "triangle60" && fits ? "triangle60" : "fullHeight";
+  const note = requested === "triangle60" && !fits ? `Boven de latei staat ${g.heightAboveM.toFixed(2)} m metselwerk, minder dan de driehoek van 60\xB0 (${triangleHeightM.toFixed(2)} m): de last op de wandkop valt binnen de driehoek, dus gerekend met de volle hoogte.` : void 0;
+  if (applied === "fullHeight") {
+    return {
+      clearSpanM,
+      spanM,
+      requested,
+      applied,
+      triangleHeightM,
+      heightAboveM: g.heightAboveM,
+      loadKn: modelLoadKn,
+      momentKnm: modelMomentKnm,
+      supportKn: modelSupportKn,
+      modelLoadKn,
+      modelMomentKnm,
+      modelSupportKn,
+      ...note ? { note } : {}
+    };
+  }
+  const loadKn = gamma * spanM * triangleHeightM / 2;
+  return {
+    clearSpanM,
+    spanM,
+    requested,
+    applied,
+    triangleHeightM,
+    heightAboveM: g.heightAboveM,
+    loadKn,
+    momentKnm: loadKn * spanM / 6,
+    supportKn: loadKn / 2,
+    modelLoadKn,
+    modelMomentKnm,
+    modelSupportKn
+  };
+}
+function withOpenFem3DLintelLinks(model, nodes, members) {
+  const lintels = [];
+  for (const plate of model.plates ?? []) {
+    if (!plate.masonry) continue;
+    for (const opening of plate.openings ?? []) if (opening.lintel) lintels.push({ beamId: opening.lintel.beamId, plate });
+  }
+  if (lintels.length === 0) return { nodes, members, nodeLinks: [], notices: [] };
+  const outNodes = [...nodes];
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  let nextId2 = nodes.reduce((max, node) => Math.max(max, node.id), 0) + 1;
+  const nodeLinks = [];
+  const notices = [];
+  const outMembers = members.map((member) => {
+    const lintel = lintels.find((item) => item.beamId === member.id);
+    if (!lintel) return member;
+    const frame = openFem3DWallFrame(model, lintel.plate);
+    const alongX = Math.abs(frame.u[0]) > 1 - 1e-9;
+    const alongY = Math.abs(frame.u[1]) > 1 - 1e-9;
+    if (!alongX && !alongY) {
+      notices.push(`Latei (staaf ${member.id}) in een schuine wand: in alle richtingen aan de wand gekoppeld; zij kan daar de penanten koppelen.`);
+    }
+    const chain = [member.startNodeId, ...member.intermediateNodeIds ?? [], member.endNodeId];
+    const twins = chain.map((masterNodeId, index) => {
+      const master = byId.get(masterNodeId);
+      if (!master) throw new Error(`Latei (staaf ${member.id}): rekenknoop ${masterNodeId} ontbreekt.`);
+      const twin = { ...master, id: nextId2++ };
+      outNodes.push(twin);
+      const first = index === 0;
+      const link = { id: nodeLinks.length + 1, masterNodeId, slaveNodeId: twin.id, uz: true };
+      if (alongX) Object.assign(link, { uy: true, rx: true, ...first ? { ux: true } : {} });
+      else if (alongY) Object.assign(link, { ux: true, ry: true, ...first ? { uy: true } : {} });
+      else Object.assign(link, { ux: true, uy: true });
+      nodeLinks.push(link);
+      return twin.id;
+    });
+    return {
+      ...member,
+      startNodeId: twins[0],
+      endNodeId: twins[twins.length - 1],
+      ...twins.length > 2 ? { intermediateNodeIds: twins.slice(1, -1) } : {}
+    };
+  });
+  return { nodes: outNodes, members: outMembers, nodeLinks, notices };
+}
+
+// src/components/openFem3d/openFem3dPlateMaterial.ts
+init_sectionResolver();
 function resolveOpenFem3DPlateMaterial(plate) {
+  if (plate.masonry) {
+    return {
+      name: openFem3DMasonryMaterialName(plate.masonry),
+      eMpa: plate.masonry.eMpa,
+      nu: 0,
+      rhoKgM3: plate.masonry.unitWeightKnM3 * 1e3 / G
+    };
+  }
   const name = plate.material?.trim() ?? "";
   if (!name) throw new Error(`3D-plaat ${plate.id}: wijs eerst een materiaal toe.`);
   const outcome = bepaalPlaatStijfheid({ materiaal: name });
@@ -28589,14 +28821,14 @@ var AXES = ["x", "y", "z"];
 var TRANSLATION = { x: "ux", y: "uy", z: "uz" };
 var ROTATION = { x: "rx", y: "ry", z: "rz" };
 var NO_RESTRAINTS = { ux: false, uy: false, uz: false, rx: false, ry: false, rz: false };
-var isRecord = (value) => !!value && typeof value === "object" && !Array.isArray(value);
+var isRecord2 = (value) => !!value && typeof value === "object" && !Array.isArray(value);
 function hasOpenFem3DNativeFields(raw) {
-  if (!isRecord(raw)) return false;
+  if (!isRecord2(raw)) return false;
   if (OPEN_FEM_3D_NATIVE_MODEL_KEYS.some((key) => raw[key] !== void 0)) return true;
   const beams = Array.isArray(raw.beams) ? raw.beams : [];
-  if (beams.some((beam) => isRecord(beam) && OPEN_FEM_3D_NATIVE_BEAM_KEYS.some((key) => beam[key] !== void 0))) return true;
+  if (beams.some((beam) => isRecord2(beam) && OPEN_FEM_3D_NATIVE_BEAM_KEYS.some((key) => beam[key] !== void 0))) return true;
   const plates = Array.isArray(raw.plates) ? raw.plates : [];
-  return plates.some((plate) => isRecord(plate) && OPEN_FEM_3D_NATIVE_PLATE_KEYS.some((key) => plate[key] !== void 0));
+  return plates.some((plate) => isRecord2(plate) && OPEN_FEM_3D_NATIVE_PLATE_KEYS.some((key) => plate[key] !== void 0));
 }
 function plateNormalAxis(points) {
   const normal = [0, 0, 0];
@@ -28669,7 +28901,7 @@ function pick(source2, keys) {
   return result;
 }
 function attachOpenFem3DNativeFields(raw, model) {
-  if (!isRecord(raw) || !hasOpenFem3DNativeFields(raw)) return;
+  if (!isRecord2(raw) || !hasOpenFem3DNativeFields(raw)) return;
   const nodeIndex = new Map(model.nodes.map((node) => [node.id, node]));
   const rawBeams = Array.isArray(raw.beams) ? raw.beams : [];
   const rawPlates = Array.isArray(raw.plates) ? raw.plates : [];
@@ -29364,16 +29596,19 @@ function parseOpenFem3DModel(value) {
       );
       const openingRadius = Number(opening.cornerRadiusM ?? 0);
       if (openingRadius < 0 || !Number.isFinite(openingRadius)) throw new Error(`Opening ${openingId} heeft een ongeldige randstraal.`);
+      const lintel = opening.lintel === void 0 || opening.lintel === null ? void 0 : readOpenFem3DOpeningLintel(opening.lintel, `Opening ${openingId} van 3D-plaat ${id2}`);
       openings.push({
         id: openingId,
         nodeIds: openingLoop,
         ...openingBoundary ? { boundary: openingBoundary } : {},
-        ...openingRadius > 0 ? { cornerRadiusM: openingRadius } : {}
+        ...openingRadius > 0 ? { cornerRadiusM: openingRadius } : {},
+        ...lintel && beamIds.has(lintel.beamId) ? { lintel } : {}
       });
       openingIds.add(openingId);
     }
     const levelId = readOptionalLevelId(plate.levelId, `3D-plaat ${id2}`);
     const bedding2 = plate.bedding === void 0 || plate.bedding === null ? void 0 : readOpenFem3DPlateBedding(plate.bedding, `3D-plaat ${id2}`);
+    const masonry = plate.masonry === void 0 || plate.masonry === null ? void 0 : readOpenFem3DMasonryWall(plate.masonry, `3D-plaat ${id2}`);
     plates.push({
       id: id2,
       nodeIds: loop,
@@ -29385,7 +29620,8 @@ function parseOpenFem3DModel(value) {
       ...levelId !== void 0 ? { levelId } : {},
       ...meshSizeM !== void 0 ? { meshSizeM } : {},
       ...edgeSupports.length ? { edgeSupports } : {},
-      ...bedding2 ? { bedding: bedding2 } : {}
+      ...bedding2 ? { bedding: bedding2 } : {},
+      ...masonry ? { masonry } : {}
     });
     plateIds.add(id2);
   }
@@ -30595,10 +30831,27 @@ function withoutExcludedBeams(panels, removedBeamIds) {
     return excludedBeamIds.length > 0 ? { ...rest, excludedBeamIds } : rest;
   });
 }
+function withoutLintelsOf(plates, beamIds) {
+  if (!plates || !plates.some((plate) => (plate.openings ?? []).some((o) => o.lintel && beamIds.has(o.lintel.beamId)))) {
+    return plates;
+  }
+  return plates.map((plate) => ({
+    ...plate,
+    ...plate.openings ? {
+      openings: plate.openings.map((opening) => {
+        if (!opening.lintel || !beamIds.has(opening.lintel.beamId)) return opening;
+        const { lintel: _removed, ...rest } = opening;
+        return rest;
+      })
+    } : {}
+  }));
+}
 function removeOpenFem3DBeam(model, beamId) {
   const loadPanels = withoutExcludedBeams(model.loadPanels, /* @__PURE__ */ new Set([beamId]));
+  const plates = withoutLintelsOf(model.plates, /* @__PURE__ */ new Set([beamId]));
   return {
     ...model,
+    ...plates ? { plates } : {},
     beams: model.beams.filter((beam) => beam.id !== beamId),
     memberLoads: (model.memberLoads ?? []).filter((load) => load.beamId !== beamId),
     memberPointLoads: (model.memberPointLoads ?? []).filter((load) => load.beamId !== beamId),
@@ -30674,6 +30927,69 @@ function addOpenFem3DPlateOpening(model, plateId, nodeIds, cornerRadiusOrOptions
     plates: (model.plates ?? []).map((item) => item.id === plateId ? updatedPlate : item)
   };
 }
+function setOpenFem3DPlateMasonry(model, plateId, masonry) {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  if (masonry === null) {
+    const { masonry: _removed, ...rest } = plate;
+    const openings = rest.openings?.map(({ lintel: _lintel, ...opening }) => opening);
+    return { ...model, plates: (model.plates ?? []).map((item) => item.id === plateId ? { ...rest, ...openings ? { openings } : {} } : item) };
+  }
+  const checked = readOpenFem3DMasonryWall(masonry, `3D-plaat ${plateId}`);
+  openFem3DWallFrame(model, plate);
+  return { ...model, plates: (model.plates ?? []).map((item) => item.id === plateId ? { ...item, masonry: checked } : item) };
+}
+function setOpenFem3DOpeningLintel(model, plateId, openingId, input) {
+  const plate = (model.plates ?? []).find((item) => item.id === plateId);
+  if (!plate) throw new Error(`3D-plaat ${plateId} bestaat niet.`);
+  if (!plate.masonry) throw new Error(`3D-plaat ${plateId} is geen metselwerkwand.`);
+  const opening = (plate.openings ?? []).find((item) => item.id === openingId);
+  if (!opening) throw new Error(`Opening ${openingId} van 3D-plaat ${plateId} bestaat niet.`);
+  if (input.loadSpread !== "triangle60" && input.loadSpread !== "fullHeight") {
+    throw new Error(`Onbekende lastspreiding "${String(input.loadSpread)}".`);
+  }
+  const [startPoint, endPoint] = openFem3DLintelEnds(model, plate, opening, input.bearingM);
+  let next = model;
+  const nodeAt = (p2) => {
+    const existing = nodeAtSamePosition(next, p2[0], p2[1], p2[2]);
+    if (existing) return existing.id;
+    const added = addOpenFem3DNode(next, { x: p2[0], y: p2[1], z: p2[2] });
+    next = added.model;
+    return added.node.id;
+  };
+  const startNodeId = nodeAt(startPoint);
+  const endNodeId = nodeAt(endPoint);
+  const current = opening.lintel && next.beams.find((beam) => beam.id === opening.lintel.beamId);
+  let beamId;
+  if (current) {
+    beamId = current.id;
+    if (current.startNodeId !== startNodeId || current.endNodeId !== endNodeId) {
+      next = updateOpenFem3DBeam(next, beamId, { startNodeId, endNodeId });
+    }
+  } else {
+    const added = addOpenFem3DBeam(next, {
+      startNodeId,
+      endNodeId,
+      profileName: input.profileName ?? OPEN_FEM_3D_LINTEL_DEFAULT.profileName,
+      material: input.material ?? OPEN_FEM_3D_LINTEL_DEFAULT.material
+    });
+    next = added.model;
+    beamId = added.beam.id;
+  }
+  const lintel = { beamId, bearingM: input.bearingM, loadSpread: input.loadSpread };
+  return {
+    ...next,
+    plates: (next.plates ?? []).map((item) => item.id !== plateId ? item : {
+      ...item,
+      openings: (item.openings ?? []).map((o) => o.id === openingId ? { ...o, lintel } : o)
+    })
+  };
+}
+function removeOpenFem3DOpeningLintel(model, plateId, openingId) {
+  const opening = (model.plates ?? []).find((item) => item.id === plateId)?.openings?.find((item) => item.id === openingId);
+  if (!opening?.lintel) return model;
+  return removeOpenFem3DBeam(model, opening.lintel.beamId);
+}
 function removeOpenFem3DPlate(model, plateId) {
   return {
     ...model,
@@ -30709,7 +31025,7 @@ function removeOpenFem3DNode(model, nodeId) {
     memberLoads: (model.memberLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
     memberPointLoads: (model.memberPointLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
     thermalLoads: (model.thermalLoads ?? []).filter((load) => !removedBeamIds.has(load.beamId)),
-    plates: (model.plates ?? []).filter((plate) => !removedPlateIds.has(plate.id)),
+    plates: (withoutLintelsOf(model.plates, removedBeamIds) ?? []).filter((plate) => !removedPlateIds.has(plate.id)),
     surfaceLoads: (model.surfaceLoads ?? []).filter((load) => !removedPlateIds.has(load.plateId)),
     ...loadPanels ? { loadPanels } : {},
     ...envelopePanels ? { envelopePanels } : {},
@@ -31188,7 +31504,8 @@ var PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS = 8;
 var PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS = 9;
 var PROJECT_FORMAT_VERSION_2D_TENSION_ONLY = 10;
 var PROJECT_FORMAT_VERSION_3D_NATIVE = 11;
-var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_NATIVE;
+var PROJECT_FORMAT_VERSION_3D_MASONRY = 12;
+var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_MASONRY;
 var SOORTEN = ["6.10a", "6.10b", "6.14b", "6.15b", "6.16b"];
 function combinationsToFile(combos) {
   return combos.map((c) => ({
@@ -31275,7 +31592,7 @@ function serializeProject(state) {
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : void 0;
   const file = {
     format: PROJECT_FORMAT_ID,
-    version: model3d && hasOpenFem3DNativeFields(model3d) ? PROJECT_FORMAT_VERSION_3D_NATIVE : state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0) ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS : model3d?.plates?.some((plate) => plate.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING : model3d?.beams.some((beam) => beam.profileNameEnd !== void 0) ? PROJECT_FORMAT_VERSION_3D_TAPERED : model3d?.beams.some((beam) => beam.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_BEDDING : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
+    version: model3d?.plates?.some((plate) => plate.masonry !== void 0) ? PROJECT_FORMAT_VERSION_3D_MASONRY : model3d && hasOpenFem3DNativeFields(model3d) ? PROJECT_FORMAT_VERSION_3D_NATIVE : state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0) ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS : model3d?.plates?.some((plate) => plate.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING : model3d?.beams.some((beam) => beam.profileNameEnd !== void 0) ? PROJECT_FORMAT_VERSION_3D_TAPERED : model3d?.beams.some((beam) => beam.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_BEDDING : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
     ...state,
     modelDimension,
@@ -32891,9 +33208,13 @@ var unit = (a) => {
   const l = norm(a);
   return [a[0] / l, a[1] / l, a[2] / l];
 };
-var pointOf = (node) => [node.x, node.y, node.z];
+var pointOf2 = (node) => [node.x, node.y, node.z];
 function defaultOpenFem3DPlateMeshSizeM(shortestSpanM) {
   return Math.min(0.5, Math.max(0.1, shortestSpanM / 10));
+}
+function defaultPlateMeshSizeM(plate, shortestSpanM) {
+  const size = defaultOpenFem3DPlateMeshSizeM(shortestSpanM);
+  return plate.masonry ? Math.min(size, 0.1) : size;
 }
 function toLocal(frame, p2) {
   const d = sub(p2, frame.origin);
@@ -32955,11 +33276,11 @@ function contourFromBoundary(boundary, byId, spacing, frame) {
     const start = byId.get(segment.startNodeId), end = byId.get(segment.endNodeId);
     if (!start || !end) return null;
     if (segment.kind === "line") {
-      pieces.push({ kind: "line", a: pointOf(start), b: pointOf(end) });
+      pieces.push({ kind: "line", a: pointOf2(start), b: pointOf2(end) });
     } else {
       const control = byId.get(segment.controlNodeId);
       if (!control) return null;
-      const sampled = arcPoints(pointOf(start), pointOf(control), pointOf(end), spacing, frame);
+      const sampled = arcPoints(pointOf2(start), pointOf2(control), pointOf2(end), spacing, frame);
       if (!sampled) return null;
       pieces.push({ kind: "curve", points: sampled.points, arc: { center: sampled.center, radius: sampled.radius } });
     }
@@ -33010,7 +33331,7 @@ function distanceToSegment2(p2, a, b) {
   const t = l2 > 0 ? Math.max(0, Math.min(1, ((p2[0] - a[0]) * dx + (p2[1] - a[1]) * dy) / l2)) : 0;
   return Math.hypot(p2[0] - a[0] - t * dx, p2[1] - a[1] - t * dy);
 }
-function insidePolygon(p2, polygon) {
+function insidePolygon2(p2, polygon) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const a = polygon[i], b = polygon[j];
@@ -33024,13 +33345,13 @@ function classify(p2, region) {
       if (distanceToSegment2(p2, loop[i], loop[(i + 1) % loop.length]) <= TOL) return "boundary";
     }
   }
-  if (!insidePolygon(p2, region.outer)) return "outside";
-  return region.holes.some((hole) => insidePolygon(p2, hole)) ? "outside" : "inside";
+  if (!insidePolygon2(p2, region.outer)) return "outside";
+  return region.holes.some((hole) => insidePolygon2(p2, hole)) ? "outside" : "inside";
 }
 function plateFrame(plate, byId) {
   const loop = plate.nodeIds.map((id2) => byId.get(id2));
   if (loop.some((node) => !node)) throw new Error(`3D-plaat ${plate.id} verwijst naar een ontbrekende knoop.`);
-  const points = loop.map((node) => pointOf(node));
+  const points = loop.map((node) => pointOf2(node));
   const normal = newellNormal(points);
   if (!(norm(normal) > 1e-12)) throw new Error(`3D-plaat ${plate.id} heeft geen oppervlakte.`);
   const e1 = unit(sub(points[1], points[0]));
@@ -33041,11 +33362,11 @@ function plateFrame(plate, byId) {
   return { frame, normal, shortest: Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) };
 }
 function plateContours(plate, byId, spacing, frame) {
-  const outer = plate.boundary ? contourFromBoundary(plate.boundary, byId, spacing, frame) : contourFromLoop(plate.nodeIds.map((id2) => pointOf(byId.get(id2))), plate.cornerRadiusM ?? 0, spacing);
+  const outer = plate.boundary ? contourFromBoundary(plate.boundary, byId, spacing, frame) : contourFromLoop(plate.nodeIds.map((id2) => pointOf2(byId.get(id2))), plate.cornerRadiusM ?? 0, spacing);
   if (!outer) throw new Error(`3D-plaat ${plate.id}: de rand is niet op te bouwen.`);
   const holes = [];
   for (const opening of plate.openings ?? []) {
-    const contour2 = opening.boundary ? contourFromBoundary(opening.boundary, byId, spacing, frame) : contourFromLoop(opening.nodeIds.map((id2) => pointOf(byId.get(id2))), opening.cornerRadiusM ?? 0, spacing);
+    const contour2 = opening.boundary ? contourFromBoundary(opening.boundary, byId, spacing, frame) : contourFromLoop(opening.nodeIds.map((id2) => pointOf2(byId.get(id2))), opening.cornerRadiusM ?? 0, spacing);
     if (!contour2) throw new Error(`Opening ${opening.id} van 3D-plaat ${plate.id} is niet op te bouwen.`);
     holes.push(contour2);
   }
@@ -33059,7 +33380,7 @@ function openFem3DPlatePlane(model, plate) {
 function classifyOpenFem3DPlatePoint(model, plate, point) {
   const byId = new Map(model.nodes.map((node) => [node.id, node]));
   const { frame, shortest } = plateFrame(plate, byId);
-  const meshSize = plate.meshSizeM ?? defaultOpenFem3DPlateMeshSizeM(shortest);
+  const meshSize = plate.meshSizeM ?? defaultPlateMeshSizeM(plate, shortest);
   const { outer, holes } = plateContours(plate, byId, 2 * meshSize, frame);
   const region = {
     outer: contourPolyline(outer).map((p2) => toLocal(frame, p2)),
@@ -33068,7 +33389,7 @@ function classifyOpenFem3DPlatePoint(model, plate, point) {
   const q = toLocal(frame, [point.x, point.y, point.z]);
   const state = classify(q, region);
   if (state !== "outside") return state;
-  return insidePolygon(q, region.outer) && region.holes.some((hole) => insidePolygon(q, hole)) ? "opening" : "outside";
+  return insidePolygon2(q, region.outer) && region.holes.some((hole) => insidePolygon2(q, hole)) ? "opening" : "outside";
 }
 
 // src/components/openFem3d/openFem3dUitkraging.ts
@@ -34417,7 +34738,15 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
       });
     }
     const bedding2 = plate.bedding ? readOpenFem3DPlateBedding(plate.bedding, `3D-plaat ${plate.id}`) : void 0;
-    return { id: plate.id, materialId, thicknessM: plate.thicknessM, ...bedding2 ? { bedding: bedding2 } : {} };
+    if (plate.masonry) openFem3DWallFrame(model, plate);
+    const orthotropy = plate.masonry ? openFem3DMasonryOrthotropy(plate.masonry) : void 0;
+    return {
+      id: plate.id,
+      materialId,
+      thicknessM: plate.thicknessM,
+      ...bedding2 ? { bedding: bedding2 } : {},
+      ...orthotropy ? { orthotropy } : {}
+    };
   });
   const shellElements = (plateMesh?.elements ?? []).map((element) => ({
     id: element.id,
@@ -34469,6 +34798,8 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
       }
     }
   }
+  const lintels = withOpenFem3DLintelLinks(model, nodes, members);
+  nodes = lintels.nodes;
   const usesContract2 = plateEntries.length > 0 || members.some((member) => "intermediateNodeIds" in member);
   return {
     schemaVersion: usesContract2 ? 2 : 1,
@@ -34478,7 +34809,7 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
     nodes: nodes.map(({ id: id2, x, y, z }) => ({ id: id2, x, y, z })),
     materials,
     sections,
-    members,
+    members: lintels.members,
     supports: supports.map(({ springs, prescribed, layerId: _layerId, ...support }) => ({
       ...support,
       ...springs ?? {},
@@ -34500,6 +34831,7 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
     // de velden rekent de kern precies als voorheen.
     ...fit ? { tensionOnlyFit: { ...contractLoads(fit, principalAngles), ...plateEntries.length > 0 ? { surfaceLoads: fit.surfaceLoads } : {} } } : {},
     ...tensionOnly && model.tensionOnlyCrossRule ? { tensionOnlyCrossRule: true } : {},
+    ...lintels.nodeLinks.length > 0 ? { nodeLinks: lintels.nodeLinks } : {},
     maxIterations: 50,
     tolerance: 1e-8,
     bucklingModes: 3
@@ -46449,6 +46781,51 @@ var plaatBeddingZetten = documentCommando({
     return { uitkomst: metWaarschuwingen({ plateIds: ids, bedding: bedding2 }, model, ids), document: metModel3d(document2, model) };
   }
 });
+var metselwerkwand = obj({
+  unitWeightKnM3: getal7("Volumegewicht \u03B3 in kN/m\xB3 (kalkzandsteen ca. 18\u201320); het eigen gewicht is \u03B3\xB7t per m\xB2 wand.", { exclusiveMinimum: 0, maximum: 100 }),
+  eMpa: getal7("E van het metselwerk in verticale richting, N/mm\xB2 (E = K_E\xB7f_k, NEN-EN 1996-1-1 \xA73.7.2).", { exclusiveMinimum: 0 })
+}, ["unitWeightKnM3", "eMpa"], "Metselwerkwand (#97): de plaat rekent orthotroop met E verticaal = eMpa, E horizontaal = 1e-6\xB7eMpa (de wand werkt niet als hoge ligger met de funderingsbalk samen) en G = 0,4\xB7eMpa (NEN-EN 1996-1-1 \xA73.7.3; wind in het vlak gaat via afschuiving naar de fundering). De plaat moet verticaal staan; het materiaal van de plaat doet dan niet mee.");
+var plaatMetselwerk = documentCommando({
+  naam: "model3d.plate.setMasonry",
+  beschrijving: "Een verticale 3D-plaat tot metselwerkwand maken (#97), of terugzetten met null (dan verdwijnen ook de lateien van haar openingen; de lateistaven blijven als gewone staven staan).",
+  invoer: obj({
+    plateId: id("Id van de plaat."),
+    masonry: ofNull(metselwerkwand, "De metselwerkwand; null zet de plaat terug.")
+  }, ["plateId", "masonry"]),
+  uitvoeren: ({ plateId, masonry }, document2) => {
+    const huidig = model3dVan(document2);
+    vindPlaat(huidig, plateId);
+    const model = setOpenFem3DPlateMasonry(huidig, plateId, masonry);
+    return { uitkomst: { plate: vindPlaat(model, plateId) }, document: metModel3d(document2, model) };
+  }
+});
+var latei = obj({
+  bearingM: getal7("Opleglengte aan elke zijde van de opening, m.", { exclusiveMinimum: 0 }),
+  loadSpread: keuze(["triangle60", "fullHeight"], "Lateibelasting in de lateitoets: triangle60 = driehoek met hoeken van 60\xB0 (alleen als het metselwerk boven de latei minstens zo hoog is, anders volle hoogte), fullHeight = het metselwerk over de volle hoogte. Het rekenmodel legt altijd de volle hoogte op de latei (E horizontaal \u2248 0 vormt geen boog)."),
+  profileName: tekst(`Profiel van een nieuwe lateistaaf (standaard "${OPEN_FEM_3D_LINTEL_DEFAULT.profileName}"); een bestaande latei wijzig je met model3d.beam.update.`, { minLength: 1 }),
+  material: tekst(`Materiaal van een nieuwe lateistaaf (standaard "${OPEN_FEM_3D_LINTEL_DEFAULT.material}").`, { minLength: 1 })
+}, ["bearingM", "loadSpread"], "Latei boven een opening: een gewone staaf langs de bovenrand van de opening, aan beide zijden met de opleglengte de wand in.");
+var openingLatei = documentCommando({
+  naam: "model3d.plate.setLintel",
+  beschrijving: "Een latei boven een opening van een metselwerkwand zetten, wijzigen of weghalen (null; dan verdwijnt ook de lateistaaf). De opening moet een rechte, horizontale bovenrand hebben en de opleggingen moeten in het metselwerk liggen. De uitkomst geeft de staaf (beamId) en de lateibelasting voor de toets (design: karakteristiek eigen gewicht van het metselwerk, met de gekozen en de toegepaste spreiding).",
+  invoer: obj({
+    plateId: id("Id van de metselwerkwand."),
+    openingId: id("Id van de opening in die plaat."),
+    lintel: ofNull(latei, "De latei; null haalt haar weg.")
+  }, ["plateId", "openingId", "lintel"]),
+  uitvoeren: ({ plateId, openingId, lintel }, document2) => {
+    const huidig = model3dVan(document2);
+    const plate = vindPlaat(huidig, plateId);
+    if (!(plate.openings ?? []).some((opening2) => opening2.id === openingId)) throw nietGevonden("opening", openingId);
+    const model = lintel === null ? removeOpenFem3DOpeningLintel(huidig, plateId, openingId) : setOpenFem3DOpeningLintel(huidig, plateId, openingId, lintel);
+    const na2 = vindPlaat(model, plateId);
+    const opening = (na2.openings ?? []).find((item) => item.id === openingId);
+    return {
+      uitkomst: { plateId, opening, design: openFem3DLintelDesign(model, na2, opening) },
+      document: metModel3d(document2, model)
+    };
+  }
+});
 var plaatVerwijderen = documentCommando({
   naam: "model3d.plate.delete",
   beschrijving: "Een 3D-plaat verwijderen, met haar openingen en oppervlaktelasten. De knopen blijven.",
@@ -46496,7 +46873,9 @@ var MODEL3D_GEOMETRIE_COMMANDOS = [
   plaatWijzigen,
   plaatBeddingZetten,
   plaatVerwijderen,
-  openingToevoegen
+  openingToevoegen,
+  plaatMetselwerk,
+  openingLatei
 ];
 
 // src/api/commands/model3dAnalysisMaterial.ts

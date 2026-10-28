@@ -134,6 +134,24 @@ fn bedding_schema() -> Value {
     })
 }
 
+/// Orthotrope plaat (#79, #97): dezelfde velden als `Plate3D.orthotropy` van
+/// de kern. Stijfheden groter dan 0; een tikfout weigert het schema.
+fn plate_orthotropy_schema() -> Value {
+    json!({
+        "type": "object", "additionalProperties": false,
+        "required": ["eXMpa", "eYMpa", "gXyMpa"],
+        "description": "Orthotrope plaat (vlakke spanning, hoofdassen langs de plaatassen; bij een verticale wand is y omhoog en x horizontaal in het vlak). Vervangt E en ν van het materiaal voor membraan (A = Q·t), buiging (D = Q·t³/12) en dwarskracht (5/6·G·t). Q11 = Ex/(1−νxy·νyx), Q22 = Ey/(1−νxy·νyx), Q12 = νxy·Ey/(1−νxy·νyx), Q66 = Gxy, νyx = νxy·Ey/Ex. Metselwerkwand (#97): eYMpa = E van het metselwerk, eXMpa ≈ 0 (bijv. 1e-6·Ey; 0 is niet toegestaan), gXyMpa = 0,4·E.",
+        "properties": {
+            "eXMpa": { "type": "number", "exclusiveMinimum": 0, "description": "E in plaat-x (N/mm²)." },
+            "eYMpa": { "type": "number", "exclusiveMinimum": 0, "description": "E in plaat-y (N/mm²)." },
+            "gXyMpa": { "type": "number", "exclusiveMinimum": 0, "description": "Schuifmodulus in het vlak (N/mm²)." },
+            "nuXy": { "type": "number", "default": 0, "description": "Dwarscontractie νxy (rek in y door spanning in x); eis νxy² < Ex/Ey." },
+            "gXzMpa": { "type": "number", "exclusiveMinimum": 0, "description": "Dwarskracht-schuifmodulus xz (N/mm²); standaard gXyMpa." },
+            "gYzMpa": { "type": "number", "exclusiveMinimum": 0, "description": "Dwarskracht-schuifmodulus yz (N/mm²); standaard gXyMpa." }
+        }
+    })
+}
+
 /// Plaat op bedding (issue #107): dezelfde velden als `Plate3D.bedding` van
 /// de kern. k verplicht en groter dan 0; een tikfout weigert het schema.
 fn plate_bedding_schema() -> Value {
@@ -279,7 +297,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                 "thermalLoads": thermal_loads_schema(),
                 "plates": {
                     "type": "array", "default": [],
-                    "description": "Vlakke platen: dikte in m en een isotroop materiaal. De elementen van een plaat liggen in één vlak.",
+                    "description": "Vlakke platen: dikte in m en een isotroop materiaal, of met orthotropy een orthotrope stijfheid in plaatassen. De elementen van een plaat liggen in één vlak.",
                     "items": {
                         "type": "object", "additionalProperties": false,
                         "required": ["id", "materialId", "thicknessM"],
@@ -287,7 +305,8 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                             "id": { "type": "integer", "minimum": 1 },
                             "materialId": { "type": "integer", "minimum": 1 },
                             "thicknessM": { "type": "number", "exclusiveMinimum": 0 },
-                            "bedding": plate_bedding_schema()
+                            "bedding": plate_bedding_schema(),
+                            "orthotropy": plate_orthotropy_schema()
                         }
                     }
                 },
@@ -314,6 +333,25 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                         "properties": {
                             "id": { "type": "integer", "minimum": 1 },
                             "nodeIds": { "type": "array", "minItems": 2, "items": { "type": "integer", "minimum": 1 } }
+                        }
+                    }
+                },
+                "nodeLinks": {
+                    "type": "array", "default": [],
+                    "description": "Knoopkoppelingen (#97): de slaafknoop volgt de meesterknoop in de gekozen globale vrijheidsgraden (EqualDOF). Beide knopen liggen op dezelfde plek (binnen 1e-6 m), minstens één vrijheidsgraad, een slaaf heeft één meester en is zelf geen meester, zit in geen schijf en is in de gekoppelde vrijheidsgraden niet opgelegd. Voorbeeld: een latei die het metselwerk boven een opening alleen verticaal en loodrecht op de wand draagt, zonder de penanten horizontaal te koppelen.",
+                    "items": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["id", "masterNodeId", "slaveNodeId"],
+                        "properties": {
+                            "id": { "type": "integer", "minimum": 1 },
+                            "masterNodeId": { "type": "integer", "minimum": 1 },
+                            "slaveNodeId": { "type": "integer", "minimum": 1 },
+                            "ux": { "type": "boolean", "default": false },
+                            "uy": { "type": "boolean", "default": false },
+                            "uz": { "type": "boolean", "default": false },
+                            "rx": { "type": "boolean", "default": false },
+                            "ry": { "type": "boolean", "default": false },
+                            "rz": { "type": "boolean", "default": false }
                         }
                     }
                 },
@@ -442,6 +480,46 @@ mod tests {
             "diaphragms": [{ "id": 1, "nodeId": [1, 2] }]
         }));
         assert!(tikfout.is_err(), "een tikfout in een schijfveld hoort geweigerd te worden");
+    }
+
+    /// Orthotrope plaat (#79, #97): strikt object, drie stijfheden verplicht;
+    /// de kern leest het veld en weigert een tikfout.
+    #[test]
+    fn schema_kent_orthotrope_plaat_strikt() {
+        let definition = &tool_definitions()[0];
+        let schema = &definition["inputSchema"]["properties"]["plates"]["items"]["properties"]["orthotropy"];
+        assert_eq!(schema["additionalProperties"], false);
+        assert_eq!(schema["required"], json!(["eXMpa", "eYMpa", "gXyMpa"]));
+        let velden: Vec<&str> = schema["properties"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(velden.len(), 6);
+        let plaat = |orthotropy: Value| json!({
+            "schemaVersion": 2, "analysis": "linear",
+            "nodes": [], "materials": [],
+            "plates": [{ "id": 1, "materialId": 1, "thicknessM": 0.1, "orthotropy": orthotropy }]
+        });
+        let gelezen = serde_json::from_value::<open_fem_3d::SolveRequest3D>(
+            plaat(json!({ "eXMpa": 0.005, "eYMpa": 5000, "gXyMpa": 2000 }))).unwrap();
+        let o = gelezen.plates[0].orthotropy.as_ref().unwrap();
+        assert_eq!((o.e_x_mpa, o.e_y_mpa, o.g_xy_mpa, o.nu_xy, o.g_xz_mpa), (0.005, 5000.0, 2000.0, 0.0, None));
+        assert!(serde_json::from_value::<open_fem_3d::SolveRequest3D>(
+            plaat(json!({ "eXMpa": 1, "eYMpa": 5000, "gxyMpa": 2000 }))).is_err());
+    }
+
+    /// Knoopkoppelingen (#97): strikt; de kern leest ze en weigert een tikfout.
+    #[test]
+    fn schema_kent_knoopkoppelingen_strikt() {
+        let definition = &tool_definitions()[0];
+        let item = &definition["inputSchema"]["properties"]["nodeLinks"]["items"];
+        assert_eq!(item["additionalProperties"], false);
+        assert_eq!(item["required"], json!(["id", "masterNodeId", "slaveNodeId"]));
+        let gelezen = serde_json::from_value::<open_fem_3d::SolveRequest3D>(json!({
+            "nodes": [], "materials": [],
+            "nodeLinks": [{ "id": 1, "masterNodeId": 1, "slaveNodeId": 2, "uz": true }]
+        })).unwrap();
+        assert!(gelezen.node_links[0].uz && !gelezen.node_links[0].ux);
+        assert!(serde_json::from_value::<open_fem_3d::SolveRequest3D>(json!({
+            "nodes": [], "materials": [], "nodeLinks": [{ "id": 1, "masterNode": 1, "slaveNodeId": 2 }]
+        })).is_err());
     }
 
     /// Staaf op bedding (#106): strikt object met widthM verplicht, de vier

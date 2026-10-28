@@ -875,6 +875,26 @@
       "lifted": "Sans contact",
       "totalReaction": "Somme des ressorts de sol",
       "noResult": "Le noyau de calcul n'a fourni aucune sortie de fondation de plaque pour ce résultat."
+    },
+    "masonry": {
+      "title": "Mur en maçonnerie",
+      "toggle": "Mur en maçonnerie (sans rigidité horizontale)",
+      "unitWeight": "γ (kN/m³)",
+      "unitWeightTitle": "Poids volumique de la maçonnerie ; poids propre = γ·t",
+      "modulus": "E vertical (N/mm²)",
+      "modulusTitle": "E de la maçonnerie, E = K_E·f_k (EN 1996-1-1 §3.7.2)",
+      "hint": "Voile orthotrope : E vertical = E, E horizontal ≈ 0 (le mur ne travaille pas en poutre-cloison avec la longrine), G = 0,4·E (§3.7.3). La plaque doit être verticale.",
+      "lintel": "Linteau au-dessus de l’ouverture {{opening}}",
+      "lintelBeam": "Barre du linteau",
+      "bearing": "Longueur d’appui (mm)",
+      "loadSpread": "Charge au-dessus de l’ouverture",
+      "spread": {
+        "triangle60": "Triangle 60°",
+        "fullHeight": "Hauteur totale"
+      },
+      "design": "Vérification du linteau ({{spread}}) : L = {{span}} m, charge {{load}} kN, M = {{moment}} kNm, réaction d’appui {{support}} kN (caractéristique, poids propre de la maçonnerie).",
+      "fallback": "Il y a {{above}} m de maçonnerie au-dessus du linteau, moins que le triangle ({{triangle}} m) : calcul sur la hauteur totale.",
+      "lintelHint": "Le modèle de calcul met toujours la hauteur totale sur le linteau (sans rigidité horizontale la maçonnerie ne forme pas de voûte). Le choix s’applique à la charge du linteau dans la vérification. Modifiez section et matériau sur la barre du linteau."
     }
   },
   "frame3d": {

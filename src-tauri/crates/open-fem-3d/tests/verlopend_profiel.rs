@@ -73,7 +73,7 @@ fn verzoek(nodes: Vec<Node3D>, members: Vec<Member3D>, sections: Vec<Section3D>,
         schema_version: 2, analysis: AnalysisKind::Linear, nodes,
         materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: E / 1000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections, members, supports, nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],
-        thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
+        thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], node_links: vec![],
         tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 100, tolerance: 1e-10, buckling_modes: 0,
     }
 }
@@ -565,7 +565,7 @@ fn e_bedding_plaatknopen_en_globale_lasten() {
     let mut r = verzoek(nodes, members, sections,
         vec![steun(id(0, 0), [true, true, false, false, false, false]), steun(id(n, 0), [false, true, false, false, false, false])]);
     r.materials[0] = Material3D { id: 1, name: "beton".into(), e_mpa: 30_000.0, nu: 0.2, g_mpa: None, alpha_per_k: None };
-    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None });
+    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None });
     r.shell_elements = shell_elements;
     r.surface_loads.push(SurfaceLoad3D { id: 1, plate_id: 1, qx_kn_per_m2: 0.0, qy_kn_per_m2: 0.0, qz_kn_per_m2: -5.0 });
     r.member_loads.push(globaal(1, 1, GlobalDirection3D::Z, [-8.0, -8.0], None));

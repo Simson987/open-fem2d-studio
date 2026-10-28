@@ -741,6 +741,7 @@ const ALLEEN_BRON = new Map([
   ["metselwerk-check", "issue #98: EN 1996-1-1. De metselwerkbouwer (formulier) staat niet in de barrel, en de kern draait in de toetsbrug als apart proces."],
   ["natuursteen-check", "issue #99: natuurstenen elementen. De natuursteenbouwer (formulier) staat niet in de barrel, en de kern draait in de toetsbrug als apart proces."],
   ["koudgevormd-check", "issue #4: EN 1993-1-3-keten. De bouwer voor koudgevormde profielen staat niet in de barrel, en de kern draait in de toetsbrug als apart proces."],
+  ["open-fem3d-metselwerkwand", "issue #97: metselwerkwand met latei langs de API, het plaatnet (Triangle) en de 3D-kern als apart proces; buiten de sidecarbarrel."],
   ["drie-lagen-beton-verificatie", "Specifieke betontoets buiten de sidecarbarrel."],
   ["ifc-3d", "3D-projectopslag en IFC-export buiten de sidecarbarrel."],
   [

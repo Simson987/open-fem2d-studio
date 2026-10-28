@@ -196,6 +196,9 @@ pub(crate) fn validate_shells(
         if !plate.thickness_m.is_finite() || plate.thickness_m <= 0.0 {
             return Err(format!("plaat {} heeft een ongeldige dikte {} m", plate.id, plate.thickness_m));
         }
+        if let Some(orthotropy) = &plate.orthotropy {
+            orthotropy.validate(plate.id)?;
+        }
     }
     let mut element_ids = std::collections::HashSet::new();
     let mut per_plate: BTreeMap<usize, Vec<&ShellElement3D>> = BTreeMap::new();
@@ -408,8 +411,8 @@ fn values_from(resultants: Resultants, shear: Option<[f64; 2]>, thickness: f64) 
 /// Transversale dwarskracht van MITC4 in het elementmidden, uit dezelfde
 /// aangenomen (ANS) dwarskrachtrek als de stijfheid van de kern: covariante
 /// rekken in de vier bindpunten, geïnterpoleerd naar ξ = η = 0 en met J⁻¹
-/// naar fysieke rekken gebracht. v = κ·G·t·γ met κ = 5/6.
-fn mitc4_centre_shear(local: &[[f64; 2]; 4], u_local: &[f64], e: f64, nu: f64, t: f64) -> [f64; 2] {
+/// naar fysieke rekken gebracht (γxz, γyz); de dwarskracht is v = S·γ.
+fn mitc4_centre_shear_strain(local: &[[f64; 2]; 4], u_local: &[f64]) -> [f64; 2] {
     let shape = |xi: f64, eta: f64| [
         0.25 * (1.0 - xi) * (1.0 - eta), 0.25 * (1.0 + xi) * (1.0 - eta),
         0.25 * (1.0 + xi) * (1.0 + eta), 0.25 * (1.0 - xi) * (1.0 + eta),
@@ -454,8 +457,7 @@ fn mitc4_centre_shear(local: &[[f64; 2]; 4], u_local: &[f64], e: f64, nu: f64, t
     let inv = [[j[1][1] / det, -j[0][1] / det], [-j[1][0] / det, j[0][0] / det]];
     let gamma_xz = inv[0][0] * e_xi + inv[0][1] * e_eta;
     let gamma_yz = inv[1][0] * e_xi + inv[1][1] * e_eta;
-    let shear_rigidity = 5.0 / 6.0 * e / (2.0 * (1.0 + nu)) * t;
-    [shear_rigidity * gamma_xz, shear_rigidity * gamma_yz]
+    [gamma_xz, gamma_yz]
 }
 
 struct ElementOutcome {
@@ -465,6 +467,12 @@ struct ElementOutcome {
 }
 
 fn row_vector(t: &[f64], n: usize, row: usize) -> V3 { [t[row * n], t[row * n + 1], t[row * n + 2]] }
+
+/// Eigen assen (e1, e2) van een MITC4-element in de kern.
+pub(crate) fn element_axes(coords: &[V3; 4]) -> (V3, V3) {
+    let transform = quad_transform_3d(coords);
+    (row_vector(&transform, 24, 0), row_vector(&transform, 24, 1))
+}
 
 fn mat_vec(t: &[f64], u: &[f64], n: usize) -> Vec<f64> {
     (0..n).map(|i| (0..n).map(|j| t[i * n + j] * u[j]).sum()).collect()
@@ -478,6 +486,7 @@ fn element_outcome(
     nu: f64,
     thickness: f64,
     axes: &PlateAxes3D,
+    orthotropy: Option<&crate::orthotroop::Stiffness>,
 ) -> ElementOutcome {
     let coords = [points[0], points[1], points[2], points[3]];
     let transform = quad_transform_3d(&coords);
@@ -492,19 +501,48 @@ fn element_outcome(
             [QUAD_MOMENT_SIGN * mx, QUAD_MOMENT_SIGN * my, QUAD_MOMENT_SIGN * mxy], e1, e2, axes);
         Resultants { n, m: [flip * m[0], flip * m[1], flip * m[2]] }
     };
-    let centre = quad_stresses(&coords, &u_local, e_kn_m2, nu, thickness, 0.0, 0.0, 0.0);
-    let corners = quad_stress_at_nodes(&coords, &u_local, e_kn_m2, nu, thickness, 0.0, 0.0, 0.0)
-        .into_iter()
-        .map(|s| convert(s.sigma_xx, s.sigma_yy, s.tau_xy, s.mx, s.my, s.mxy))
-        .collect();
     let local2d: [[f64; 2]; 4] = std::array::from_fn(|i| {
         let d = sub(points[i], points[0]);
         [dot(d, e1), dot(d, e2)]
     });
-    let shear_local = mitc4_centre_shear(&local2d, &u_local, e_kn_m2, nu, thickness);
+    let gamma = mitc4_centre_shear_strain(&local2d, &u_local);
+    let (centre, corners, shear_local) = match orthotropy {
+        None => {
+            let centre = quad_stresses(&coords, &u_local, e_kn_m2, nu, thickness, 0.0, 0.0, 0.0);
+            let corners: Vec<Resultants> = quad_stress_at_nodes(&coords, &u_local, e_kn_m2, nu, thickness, 0.0, 0.0, 0.0)
+                .into_iter()
+                .map(|s| convert(s.sigma_xx, s.sigma_yy, s.tau_xy, s.mx, s.my, s.mxy))
+                .collect();
+            let rigidity = 5.0 / 6.0 * e_kn_m2 / (2.0 * (1.0 + nu)) * thickness;
+            let centre = convert(centre.sigma_xx, centre.sigma_yy, centre.tau_xy, centre.mx, centre.my, centre.mxy);
+            (centre, corners, [rigidity * gamma[0], rigidity * gamma[1]])
+        }
+        Some(plate_stiffness) => {
+            // Orthotroop (#79, #97): de kernfuncties met E = 1, ν = 0 geven
+            // de rekken (σ = ε, τ = γ/2) en krommingen (m = t³/12·κ, mxy =
+            // t³/24·κxy) in elementassen; de krachten volgen uit A en D.
+            let element = crate::orthotroop::element_stiffness(plate_stiffness, e1, e2, axes);
+            let bending = thickness * thickness * thickness / 12.0;
+            let resultants = |sxx: f64, syy: f64, txy: f64, mx: f64, my: f64, mxy: f64| {
+                let (n, m) = crate::orthotroop::element_forces(
+                    &element,
+                    [sxx, syy, 2.0 * txy],
+                    [mx / bending, my / bending, 2.0 * mxy / bending],
+                );
+                convert(n[0] / thickness, n[1] / thickness, n[2] / thickness, m[0], m[1], m[2])
+            };
+            let centre = quad_stresses(&coords, &u_local, 1.0, 0.0, thickness, 0.0, 0.0, 0.0);
+            let corners: Vec<Resultants> = quad_stress_at_nodes(&coords, &u_local, 1.0, 0.0, thickness, 0.0, 0.0, 0.0)
+                .into_iter()
+                .map(|s| resultants(s.sigma_xx, s.sigma_yy, s.tau_xy, s.mx, s.my, s.mxy))
+                .collect();
+            let centre = resultants(centre.sigma_xx, centre.sigma_yy, centre.tau_xy, centre.mx, centre.my, centre.mxy);
+            (centre, corners, crate::orthotroop::element_shear(&element, gamma))
+        }
+    };
     let shear = vector_to_plate(shear_local, e1, e2, axes);
     ElementOutcome {
-        centre: convert(centre.sigma_xx, centre.sigma_yy, centre.tau_xy, centre.mx, centre.my, centre.mxy),
+        centre,
         corners,
         shear: Some([flip * shear[0], flip * shear[1]]),
     }
@@ -634,7 +672,9 @@ pub(crate) fn recover_shell_results(
         for id in &element.node_ids {
             u_global.extend_from_slice(&displacements.get(id).copied().unwrap_or([0.0; 6]));
         }
-        let outcome = element_outcome(&points, &u_global, e, nu, plate.thickness_m, axes);
+        let orthotropy = plate.orthotropy.as_ref()
+            .map(|o| crate::orthotroop::plate_stiffness(o, plate.thickness_m));
+        let outcome = element_outcome(&points, &u_global, e, nu, plate.thickness_m, axes, orthotropy.as_ref());
         let centroid = scale(points.iter().fold([0.0; 3], |sum, p| add(sum, *p)), 1.0 / points.len() as f64);
         let shear = outcome.shear.unwrap_or([0.0; 2]);
         for id in &element.node_ids {

@@ -1606,6 +1606,7 @@
     }
   },
   "masonry": {
+    "from3d": { "wall": "Aus dem 3D-Modell", "wallOption": "Mauerwerkswand (Platte {{id}})", "take": "Übernehmen" },
     "title": "Mauerwerkswand nachweisen (EN 1996-1-1)",
     "intro": "Weist eine einschalige Wand oder einen Pfeiler nach: Druckfestigkeit f_k, Schlankheit, Vertikallast mit Φ oben, Mitte und unten, eine Einzellast, Schub und Biegung rechtwinklig zur Wandebene. Die Mauerwerkswand als Modellobjekt folgt später (#97); geben Sie die Schnittgrößen hier ein.",
     "material": "Material",

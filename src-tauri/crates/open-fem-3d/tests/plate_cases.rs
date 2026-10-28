@@ -89,10 +89,10 @@ fn request(nodes: Vec<Node3D>, e_mpa: f64, nu: f64, thickness: f64, elements: Ve
         member_loads: vec![],
         member_point_loads: vec![],
         thermal_loads: vec![],
-        plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: thickness, bedding: None }],
+        plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: thickness, bedding: None, orthotropy: None }],
         shell_elements: elements,
         surface_loads: vec![],
-        diaphragms: vec![],
+        diaphragms: vec![], node_links: vec![],
         tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 50,
         tolerance: 1e-10,
@@ -541,7 +541,7 @@ fn split_member_equals_unsplit_member() {
             ..Default::default()
         }],
         member_point_loads: vec![open_fem_3d::MemberPointLoad3D { id: 1, member_id: 7, py_kn: 0.0, pz_kn: -12.0, position_m: 2.5 }],
-        thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,
+        thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], node_links: vec![], tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,
     };
     // De tussenknopen hangen in het ongeknipte geval nergens aan; geef ze een

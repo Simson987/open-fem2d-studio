@@ -377,6 +377,8 @@ export const VELDEN_3D = {
     maxCellSizeM: NATIVE_ROUTE,
     reinforcement: NATIVE_ROUTE,
     threeLayer: NATIVE_ROUTE,
+    // Metselwerkwand (#97).
+    masonry: veld("model3d.plate.setMasonry", "masonry"),
   } satisfies Record<keyof OpenFem3DPlate, Dekking>,
   plaatbedding: {
     kKnPerM3: veld([...plaatAddUpdate, "model3d.plate.setBedding"], "bedding.kKnPerM3"),
@@ -393,6 +395,8 @@ export const VELDEN_3D = {
     nodeIds: veld("model3d.plate.addOpening", "nodeIds"),
     boundary: veld("model3d.plate.addOpening", "boundary"),
     cornerRadiusM: veld("model3d.plate.addOpening", "cornerRadiusM"),
+    // Latei boven de opening van een metselwerkwand (#97).
+    lintel: veld("model3d.plate.setLintel", "lintel"),
   } satisfies Record<keyof OpenFem3DPlateOpening, Dekking>,
   randoplegging: {
     edge: veld("model3d.plate.update", "edgeSupports.edge"),

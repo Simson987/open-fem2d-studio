@@ -294,8 +294,14 @@ export const PROJECT_FORMAT_VERSION_2D_TENSION_ONLY = 10;
  * stil overslaan en het model anders rekenen.
  */
 export const PROJECT_FORMAT_VERSION_3D_NATIVE = 11;
+/**
+ * Metselwerkwanden met lateien in het 3D-model (#97). Een eerdere uitgave zou
+ * `masonry` stil overslaan en de wand als isotrope betonplaat rekenen: dan
+ * werkt zij als hoge ligger mee met de funderingsbalk.
+ */
+export const PROJECT_FORMAT_VERSION_3D_MASONRY = 12;
 /** De hoogste versie die deze uitgave kan lezen. */
-export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_NATIVE;
+export const PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_MASONRY;
 
 /** JSON-vorm van één belastingcombinatie: `factors` als { caseId: factor }. */
 export interface ProjectFileCombination {
@@ -630,7 +636,8 @@ export function serializeProject(state: Omit<ProjectFile, "format" | "version" |
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : undefined;
   const file: ProjectFile = {
     format: PROJECT_FORMAT_ID,
-    version: model3d && hasOpenFem3DNativeFields(model3d) ? PROJECT_FORMAT_VERSION_3D_NATIVE
+    version: model3d?.plates?.some((plate) => plate.masonry !== undefined) ? PROJECT_FORMAT_VERSION_3D_MASONRY
+      : model3d && hasOpenFem3DNativeFields(model3d) ? PROJECT_FORMAT_VERSION_3D_NATIVE
       : state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY
       : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION
       : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0)

@@ -2737,6 +2737,124 @@
       "kind": "document"
     },
     {
+      "name": "model3d.plate.setLintel",
+      "description": "Een latei boven een opening van een metselwerkwand zetten, wijzigen of weghalen (null; dan verdwijnt ook de lateistaaf). De opening moet een rechte, horizontale bovenrand hebben en de opleggingen moeten in het metselwerk liggen. De uitkomst geeft de staaf (beamId) en de lateibelasting voor de toets (design: karakteristiek eigen gewicht van het metselwerk, met de gekozen en de toegepaste spreiding).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plateId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de metselwerkwand."
+          },
+          "openingId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de opening in die plaat."
+          },
+          "lintel": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "bearingM": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Opleglengte aan elke zijde van de opening, m."
+                  },
+                  "loadSpread": {
+                    "type": "string",
+                    "enum": [
+                      "triangle60",
+                      "fullHeight"
+                    ],
+                    "description": "Lateibelasting in de lateitoets: triangle60 = driehoek met hoeken van 60° (alleen als het metselwerk boven de latei minstens zo hoog is, anders volle hoogte), fullHeight = het metselwerk over de volle hoogte. Het rekenmodel legt altijd de volle hoogte op de latei (E horizontaal ≈ 0 vormt geen boog)."
+                  },
+                  "profileName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Profiel van een nieuwe lateistaaf (standaard \"HEA 100\"); een bestaande latei wijzig je met model3d.beam.update."
+                  },
+                  "material": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Materiaal van een nieuwe lateistaaf (standaard \"S235\")."
+                  }
+                },
+                "required": [
+                  "bearingM",
+                  "loadSpread"
+                ],
+                "additionalProperties": false,
+                "description": "Latei boven een opening: een gewone staaf langs de bovenrand van de opening, aan beide zijden met de opleglengte de wand in."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "De latei; null haalt haar weg."
+          }
+        },
+        "required": [
+          "plateId",
+          "openingId",
+          "lintel"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "model3d.plate.setMasonry",
+      "description": "Een verticale 3D-plaat tot metselwerkwand maken (#97), of terugzetten met null (dan verdwijnen ook de lateien van haar openingen; de lateistaven blijven als gewone staven staan).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "plateId": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Id van de plaat."
+          },
+          "masonry": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "unitWeightKnM3": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100,
+                    "description": "Volumegewicht γ in kN/m³ (kalkzandsteen ca. 18–20); het eigen gewicht is γ·t per m² wand."
+                  },
+                  "eMpa": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "E van het metselwerk in verticale richting, N/mm² (E = K_E·f_k, NEN-EN 1996-1-1 §3.7.2)."
+                  }
+                },
+                "required": [
+                  "unitWeightKnM3",
+                  "eMpa"
+                ],
+                "additionalProperties": false,
+                "description": "Metselwerkwand (#97): de plaat rekent orthotroop met E verticaal = eMpa, E horizontaal = 1e-6·eMpa (de wand werkt niet als hoge ligger met de funderingsbalk samen) en G = 0,4·eMpa (NEN-EN 1996-1-1 §3.7.3; wind in het vlak gaat via afschuiving naar de fundering). De plaat moet verticaal staan; het materiaal van de plaat doet dan niet mee."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "De metselwerkwand; null zet de plaat terug."
+          }
+        },
+        "required": [
+          "plateId",
+          "masonry"
+        ],
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
       "name": "model3d.plate.toLoadPanels",
       "description": "Een plaat omzetten in belastingvlakken: de plaat verdwijnt, haar omtrek draagt alleen nog last af. Openingen, bogen of een schuine last worden geweigerd.",
       "inputSchema": {

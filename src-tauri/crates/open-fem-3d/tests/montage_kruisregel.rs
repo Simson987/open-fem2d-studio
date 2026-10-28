@@ -61,7 +61,7 @@ fn verzoek(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>,
         materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![doorsnede(1, A_KOLOM, I_KOLOM, I_KOLOM), doorsnede(2, A_STRIP, 1e-8, 1e-8)],
         members, supports, nodal_loads, member_loads: vec![], member_point_loads: vec![],
-        thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
+        thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![], node_links: vec![],
         tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,
     }

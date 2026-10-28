@@ -1606,6 +1606,7 @@
     }
   },
   "masonry": {
+    "from3d": { "wall": "Uit het 3D-model", "wallOption": "Metselwerkwand (plaat {{id}})", "take": "Neem over" },
     "title": "Metselwerkwand toetsen (NEN-EN 1996-1-1)",
     "intro": "Toetst een enkelsteens wand of penant: druksterkte f_k, slankheid, verticale belasting met Φ boven, midden en onder, een geconcentreerde last, afschuiving en buiging uit het vlak. De metselwerkwand als modelobject volgt later (#97); vul de krachten hier in.",
     "material": "Materiaal",

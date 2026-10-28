@@ -16,6 +16,10 @@ mod opleggingen;
 mod plaatbedding;
 mod schijven;
 mod shell;
+mod orthotroop;
+mod koppelingen;
+pub use koppelingen::NodeLink3D;
+pub use orthotroop::PlateOrthotropy3D;
 mod trek_alleen;
 mod tweede_orde;
 mod veldmaximum;
@@ -369,6 +373,10 @@ pub struct Plate3D {
     /// Bedding (grond) onder de plaat; zie de module `plaatbedding` (#107).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bedding: Option<PlateBedding3D>,
+    /// Orthotrope stijfheid in plaatassen (#79, #97). Ontbreekt het veld, dan
+    /// rekent de plaat isotroop met E en ν van haar materiaal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orthotropy: Option<PlateOrthotropy3D>,
 }
 
 /// Bedding (Winkler) van een plaat: grondveren loodrecht op het plaatvlak in
@@ -461,6 +469,10 @@ pub struct SolveRequest3D {
     pub surface_loads: Vec<SurfaceLoad3D>,
     #[serde(default)]
     pub diaphragms: Vec<Diaphragm3D>,
+    /// Knoopkoppelingen (#97): een slaafknoop volgt een meesterknoop op
+    /// dezelfde plek in de gekozen globale vrijheidsgraden. Zie `koppelingen`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub node_links: Vec<NodeLink3D>,
     /// Trek-alleen staven gemonteerd onder deze lasten: hun spanningsloze
     /// lengte volgt de koorde in die toestand. Ontbreekt het veld, dan zijn
     /// ze spanningsloos in de onvervormde stand, zoals voorheen.
@@ -1037,6 +1049,7 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
         .map(|node| (node.id, [node.x, node.y, node.z])).collect();
     let plate_geometry = shell::validate_shells(request, &coordinates)?;
     schijven::valideer(request)?;
+    koppelingen::valideer(request)?;
     Ok(plate_geometry)
 }
 
@@ -1507,17 +1520,33 @@ fn to_engine_input(
     let mut shell_elements: Vec<&ShellElement3D> = request.shell_elements.iter().collect();
     shell_elements.sort_by_key(|element| element.id);
     let mut shell_engine_ids = HashSet::new();
+    // Orthotrope platen (#79, #97): de stijfheid in plaatassen, per element
+    // naar de eigen elementassen van de kern gedraaid.
+    let orthotropic_axes = if request.plates.iter().any(|plate| plate.orthotropy.is_some()) {
+        shell::validate_shells(request, &coordinates)?
+    } else {
+        HashMap::new()
+    };
     for element in shell_elements {
         let plate = plate_by_id[&element.plate_id];
         let engine_id = next_engine_id;
         next_engine_id += 1;
         shell_engine_ids.insert(engine_id);
         if element.node_ids.len() == 4 {
+            let nodes = [element.node_ids[0], element.node_ids[1], element.node_ids[2], element.node_ids[3]];
+            let constitutive = plate.orthotropy.as_ref().map(|orthotropy| {
+                let coords = nodes.map(|id| coordinates[&id]);
+                let (e1, e2) = shell::element_axes(&coords);
+                let in_plate = orthotroop::plate_stiffness(orthotropy, plate.thickness_m);
+                let axes = &orthotropic_axes[&element.plate_id].axes;
+                orthotroop::to_engine(&orthotroop::element_stiffness(&in_plate, e1, e2, axes))
+            });
             quads.insert(engine_id.to_string(), SolverQuadElement {
                 id: engine_id,
-                nodes: [element.node_ids[0], element.node_ids[1], element.node_ids[2], element.node_ids[3]],
+                nodes,
                 material_id: plate.material_id,
                 thickness: plate.thickness_m,
+                constitutive,
             });
         } else {
             plates.insert(engine_id.to_string(), SolverPlateElement {
@@ -1542,7 +1571,9 @@ fn to_engine_input(
     let plaat = plaatbedding::Kern::bouw(request, los, &mut nodes, &mut supports, &mut connectors, &mut next_engine_id, &mut grond);
     let input = SolverInput3D {
         nodes, materials, sections, elements, supports, loads,
-        constraints: schijven::koppelingen(request).0, left_hand: None,
+        constraints: schijven::koppelingen(request).0.into_iter()
+            .chain(koppelingen::constraints(request)).collect(),
+        left_hand: None,
         plates, quads, quad9s: HashMap::new(),
         solid_shells: HashMap::new(), curved_shells: HashMap::new(),
         curved_beams: vec![], connectors,

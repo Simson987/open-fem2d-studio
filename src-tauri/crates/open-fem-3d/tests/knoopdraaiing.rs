@@ -64,7 +64,7 @@ fn verzoek(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>)
         materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: E / 1000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![doorsnede()], members, supports, nodal_loads: vec![], member_loads: vec![],
         member_point_loads: vec![], thermal_loads: vec![], plates: vec![], shell_elements: vec![],
-        surface_loads: vec![], diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,
+        surface_loads: vec![], diaphragms: vec![], node_links: vec![], tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 100, tolerance: 1e-10, buckling_modes: 0,
     }
 }
@@ -992,7 +992,7 @@ fn samen_met_een_plaat() {
         knoop(4, 0.0, 2.0, 0.0), knoop(5, 4.0, 0.0, 0.0)];
     let mut r = verzoek(nodes, vec![scharnierend(staaf(1, 2, 5))],
         vec![scharnier(1), scharnier(2), scharnier(3), scharnier(4), scharnier(5)]);
-    r.plates.push(open_fem_3d::Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None });
+    r.plates.push(open_fem_3d::Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None });
     r.shell_elements.push(open_fem_3d::ShellElement3D { id: 1, plate_id: 1, node_ids: vec![1, 2, 3, 4] });
     r.member_loads.push(q_lokaal(1, 1, -6.0));
     let uit = solve(r).unwrap_or_else(|fout| panic!("{fout}"));

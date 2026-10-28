@@ -52,7 +52,7 @@ fn verzoek(nodes: Vec<Node3D>, members: Vec<Member3D>, supports: Vec<Support3D>)
             torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
         members, supports, nodal_loads: vec![], member_loads: vec![],
         member_point_loads: vec![], thermal_loads: vec![], plates: vec![], shell_elements: vec![],
-        surface_loads: vec![], diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false,
+        surface_loads: vec![], diaphragms: vec![], node_links: vec![], tension_only_fit: None, tension_only_cross_rule: false,
         max_iterations: 100, tolerance: 1e-10, buckling_modes: 0,
     }
 }
@@ -327,7 +327,7 @@ fn plaat_met_een_pendel() {
     let mut r = verzoek(nodes, vec![scharnierend(staaf(1, midden, 100))], vec![
         inklemming(id(0, 0)), scharnier(id(n, 0)), scharnier(id(0, n)), scharnier(id(n, n)),
     ]);
-    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None });
+    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.2, bedding: None, orthotropy: None });
     r.shell_elements = elementen;
     r.surface_loads.push(SurfaceLoad3D { id: 1, plate_id: 1, qx_kn_per_m2: 0.0, qy_kn_per_m2: 0.0, qz_kn_per_m2: -5.0 });
     r.nodal_loads.push(last(1, 100, [0.0, 0.0, -8.0]));
@@ -400,7 +400,7 @@ fn slecht_geconditioneerd_maar_regulier() {
     }
     let mut r = verzoek(nodes, vec![], vec![scharnier(id(0, 0)), scharnier(id(n, 0)), scharnier(id(0, n)), scharnier(id(n, n))]);
     r.sections.clear();
-    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.25, bedding: None });
+    r.plates.push(Plate3D { id: 1, material_id: 1, thickness_m: 0.25, bedding: None, orthotropy: None });
     r.shell_elements = elementen;
     r.surface_loads.push(SurfaceLoad3D { id: 1, plate_id: 1, qx_kn_per_m2: 0.0, qy_kn_per_m2: 0.0, qz_kn_per_m2: -5.0 });
     let uit = solve(r).unwrap_or_else(|fout| panic!("plaatnet: {fout}"));

@@ -794,8 +794,8 @@ mod tests {
             sections: vec![], members: vec![], supports: vec![], nodal_loads: vec![], member_loads: vec![],
             member_point_loads: vec![], thermal_loads: vec![],
             plates: vec![Plate3D { id: 1, material_id: 1, thickness_m: 0.2,
-                bedding: Some(PlateBedding3D { k_kn_per_m3: 10_000.0, compression_only: true }) }],
-            shell_elements: elementen, surface_loads: vec![], diaphragms: vec![],
+                bedding: Some(PlateBedding3D { k_kn_per_m3: 10_000.0, compression_only: true }), orthotropy: None }],
+            shell_elements: elementen, surface_loads: vec![], diaphragms: vec![], node_links: vec![],
             tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 50, tolerance: 1e-8, buckling_modes: 0,
         }
     }

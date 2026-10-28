@@ -875,6 +875,26 @@
       "lifted": "Without contact",
       "totalReaction": "Sum of soil springs",
       "noResult": "The solver returned no plate foundation output for this result."
+    },
+    "masonry": {
+      "title": "Masonry wall",
+      "toggle": "Masonry wall (no horizontal stiffness)",
+      "unitWeight": "γ (kN/m³)",
+      "unitWeightTitle": "Unit weight of the masonry; self-weight = γ·t",
+      "modulus": "E vertical (N/mm²)",
+      "modulusTitle": "E of the masonry, E = K_E·f_k (EN 1996-1-1 §3.7.2)",
+      "hint": "Orthotropic wall plate: E vertical = E, E horizontal ≈ 0 (the wall does not act as a deep beam with the foundation beam), G = 0.4·E (§3.7.3). The plate must be vertical.",
+      "lintel": "Lintel above opening {{opening}}",
+      "lintelBeam": "Lintel member",
+      "bearing": "Bearing length (mm)",
+      "loadSpread": "Load above the opening",
+      "spread": {
+        "triangle60": "Triangle 60°",
+        "fullHeight": "Full height"
+      },
+      "design": "Lintel check ({{spread}}): L = {{span}} m, load {{load}} kN, M = {{moment}} kNm, bearing force {{support}} kN (characteristic, masonry self-weight).",
+      "fallback": "There is {{above}} m of masonry above the lintel, less than the triangle ({{triangle}} m): full height used.",
+      "lintelHint": "The analysis model always puts the full height on the lintel (without horizontal stiffness the masonry forms no arch). The choice applies to the lintel load in the check. Change section and material on the lintel member."
     }
   },
   "frame3d": {

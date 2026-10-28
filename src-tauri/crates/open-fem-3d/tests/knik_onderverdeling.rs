@@ -271,7 +271,7 @@ fn k4_tweede_orde_moment_met_lijnlast_langs_de_as() {
         member_loads: vec![MemberLoad3D { id: 1, member_id: 1, global_direction: Some(GlobalDirection3D::Z),
             q_start_kn_per_m: Some(-3.0), q_end_kn_per_m: Some(-3.0), ..Default::default() }],
         member_point_loads: vec![], thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![],
-        diaphragms: vec![], tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 100,
+        diaphragms: vec![], node_links: vec![], tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 100,
         tolerance: 1e-10, buckling_modes: 1,
     };
     let r = solve(request).unwrap();

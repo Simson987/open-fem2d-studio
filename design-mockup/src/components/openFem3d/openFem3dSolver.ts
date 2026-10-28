@@ -32,6 +32,9 @@ import { withOpenFem3DLoadPanels } from "./openFem3dLoadPanels";
 import { metScheefstandLasten, type OpenFem3DScheefstand } from "./openFem3dScheefstand";
 import { meshOpenFem3DPlates, type OpenFem3DPlateMesh } from "./openFem3dPlateMesh";
 import { resolveOpenFem3DPlateMaterial } from "./openFem3dPlateMaterial";
+import {
+  openFem3DMasonryOrthotropy, openFem3DWallFrame, withOpenFem3DLintelLinks, type OpenFem3DNodeLinkBody,
+} from "./openFem3dMetselwerkwand";
 import { openFem3DSecondOrderMomentKnm, type OpenFem3DSecondOrderMemberParts } from "./openFem3dTrekSchijf";
 import { fromOpenFem3DPrincipalResult, openFem3DPrincipalSection, toOpenFem3DPrincipal } from "./openFem3dPrincipalAxes";
 import { resolveOpenFem3DAnalysisMaterial } from "./openFem3dAnalysisMaterial";
@@ -936,7 +939,14 @@ export function buildOpenFem3DSolveRequest(
     const bedding: OpenFem3DPlateBedding | undefined = plate.bedding
       ? readOpenFem3DPlateBedding(plate.bedding, `3D-plaat ${plate.id}`)
       : undefined;
-    return { id: plate.id, materialId, thicknessM: plate.thicknessM, ...(bedding ? { bedding } : {}) };
+    // Metselwerkwand (#97): orthotroop in plaatassen (y omhoog). De wand
+    // moet verticaal staan; openFem3DWallFrame meldt het anders.
+    if (plate.masonry) openFem3DWallFrame(model, plate);
+    const orthotropy = plate.masonry ? openFem3DMasonryOrthotropy(plate.masonry) : undefined;
+    return {
+      id: plate.id, materialId, thicknessM: plate.thicknessM, ...(bedding ? { bedding } : {}),
+      ...(orthotropy ? { orthotropy } : {}),
+    };
   });
   const shellElements = (plateMesh?.elements ?? []).map((element) => ({
     id: element.id, plateId: element.plateId, nodeIds: [...element.nodeIds],
@@ -988,6 +998,9 @@ export function buildOpenFem3DSolveRequest(
       }
     }
   }
+  // Lateien van metselwerkwanden (#97): eigen knopen, verticaal gekoppeld.
+  const lintels = withOpenFem3DLintelLinks(model, nodes, members);
+  nodes = lintels.nodes;
   const usesContract2 = plateEntries.length > 0
     || members.some((member) => "intermediateNodeIds" in member);
 
@@ -999,7 +1012,7 @@ export function buildOpenFem3DSolveRequest(
     nodes: nodes.map(({ id, x, y, z }) => ({ id, x, y, z })),
     materials,
     sections,
-    members,
+    members: lintels.members,
     supports: supports.map(({ springs, prescribed, layerId: _layerId, ...support }) => ({
       ...support,
       ...(springs ?? {}),
@@ -1025,6 +1038,7 @@ export function buildOpenFem3DSolveRequest(
       ? { tensionOnlyFit: { ...contractLoads(fit, principalAngles), ...(plateEntries.length > 0 ? { surfaceLoads: fit.surfaceLoads } : {}) } }
       : {}),
     ...(tensionOnly && model.tensionOnlyCrossRule ? { tensionOnlyCrossRule: true } : {}),
+    ...(lintels.nodeLinks.length > 0 ? { nodeLinks: lintels.nodeLinks } : {}),
     maxIterations: 50,
     tolerance: 1e-8,
     bucklingModes: 3,
@@ -1256,10 +1270,16 @@ export interface OpenFem3DSolveRequestBody {
     id: number; memberId: number; deltaTUniformK: number; deltaTGradientYK: number; deltaTGradientZK: number;
   }[];
   /** Plaat op bedding (#107): dezelfde velden als in het model (kN/m³). */
-  plates?: { id: number; materialId: number; thicknessM: number; bedding?: OpenFem3DPlateBedding }[];
+  plates?: {
+    id: number; materialId: number; thicknessM: number; bedding?: OpenFem3DPlateBedding;
+    /** Orthotrope plaat (#79, #97), in plaatassen. */
+    orthotropy?: { eXMpa: number; eYMpa: number; gXyMpa: number; nuXy?: number; gXzMpa?: number; gYzMpa?: number };
+  }[];
   shellElements?: { id: number; plateId: number; nodeIds: number[] }[];
   surfaceLoads?: { id: number; plateId: number; qxKnPerM2: number; qyKnPerM2: number; qzKnPerM2: number }[];
   diaphragms?: { id: number; nodeIds: number[] }[];
+  /** Knoopkoppelingen (#97): lateien van metselwerkwanden. */
+  nodeLinks?: OpenFem3DNodeLinkBody[];
   /** Montagelasten van de trek-alleen staven: de blijvende gevallen met factor 1,0. */
   tensionOnlyFit?: OpenFem3DTensionOnlyFitBody;
   /** Kruisregel: van twee kruisende trek-alleen staven blijft er altijd één actief. */
