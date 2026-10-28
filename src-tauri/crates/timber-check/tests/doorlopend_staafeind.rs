@@ -57,7 +57,7 @@ fn invoer(n_kn: f64, my_knm: f64, staafeinden: Option<Staafeinden>) -> TimberBea
         staafeinden,
         lateral_bracing: None,
         ltb_segment_length_m: 0.0,
-        ltb_load_case: LtbLoadCase::UniformLoad,
+        ltb_load_case: Some(LtbLoadCase::UniformLoad),
         ltb_load_position: LtbLoadPosition::CentreOfGravity,
         ltb_effective_length_override_m: 0.0,
         perform_ltb_check: true,
@@ -76,6 +76,8 @@ fn invoer(n_kn: f64, my_knm: f64, staafeinden: Option<Staafeinden>) -> TimberBea
         width_end_mm: None,
         height_end_mm: None,
         zijdelingse_knik_in_analyse: None,
+        schuine_rand: None,
+        pre_camber_mm: None,
     }
 }
 

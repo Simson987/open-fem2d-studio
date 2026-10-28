@@ -179,6 +179,8 @@ pub(crate) struct Afschuining {
     /// |h_eind − h_begin| / L: de helling als één rand schuin loopt.
     pub tan_alpha_enkel: f64,
     pub rand: Option<nen_en_1995_1_1::afgeschuind::SchuineRand>,
+}
+
 /// Rekenruis in N (kN) en M (kNm) telt niet als druk of buiging — dezelfde
 /// drempels als de staalkern.
 const N_NUL_KN: f64 = 1e-6;
@@ -417,12 +419,6 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
     // een as waarvan de zijdelingse uitbuiging al in de globale tweede-orde-
     // berekening met scheefstand zit (zie `ZijdelingseKnikInAnalyse`).
     let zijdelings = input.zijdelingse_knik_in_analyse.unwrap_or_default();
-    let kniklengte_of_vrij = |as_naam: &str,
-                              in_vlak: bool,
-                              opgegeven_m: f64,
-                              steunen: Option<Steunen<'_>>,
-                              gedekt: bool| {
-        if input.is_cantilever && !(opgegeven_m.is_finite() && opgegeven_m > 0.0) {
     // Een vrij eind: de vlag, of een `Vrij` eind in `staafeinden`.
     let vrij_eind = input.is_cantilever
         || input
@@ -903,10 +899,6 @@ pub(crate) fn check_timber_beam_intern(
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 {
-        CheckStatus::Ok
-    } else {
-        CheckStatus::NotOk
     // Een DOORLOPEND staafeind (issue #205) laat art. 6.3.2 en/of 6.3.3
     // weigeren, en een geweigerde toets telt als 0. Zonder deze regel stond de
     // staaf dan op Ok terwijl de kolomtoets bij druk of de kiptoets bij buiging
