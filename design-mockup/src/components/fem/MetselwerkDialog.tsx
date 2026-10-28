@@ -118,12 +118,16 @@ export default function MetselwerkDialog({ open, onClose }: Props) {
           {tekst("naam", t("masonry.name"))}
           {keuze("steensoort", t("masonry.unit"), STEENSOORTEN)}
           {keuze("steengroep", t("masonry.group"), STEENGROEPEN)}
+          {foutVan("steengroep") && <em className="water2d-error">{foutVan("steengroep")}</em>}
           {keuze("mortel", t("masonry.mortar"), MORTELSOORTEN)}
           {tekst("fb", "f_b", "N/mm²")}
           {tekst("fm", "f_m", "N/mm²")}
           {vink("langsvoeg", t("masonry.longitudinalJoint"))}
           {vink("stootvoegenGevuld", t("masonry.perpendsFilled"))}
         </div>
+        {/* Natuursteenmetselwerk (issue #99): groep 1, algemene mortel, f_b uit de opgave. */}
+        {f.steensoort === "Natuursteen" && <p className="water2d-note">{t("masonry.naturalStoneHint")}</p>}
+        {foutVan("mortel") && <p className="water2d-error">{foutVan("mortel")}</p>}
 
         <h4>{t("masonry.ndp")}</h4>
         <p className="water2d-note">{t("masonry.ndpHint")}</p>

@@ -6,7 +6,7 @@ use crate::result::*;
 use mechanics::{ForceStateSnapshot, InternalForces};
 use nen_en_1993_1_1_section::{CheckStatus, Deelstap, NamedValue, ResistanceCalc, UnityCheck};
 use nen_en_1996_1_1::slankheid::{self, EffectieveHoogte, SLANKHEID_MAX};
-use nen_en_1996_1_1::{afschuiving, buiging, capaciteit, geconcentreerd, materiaal, Mortelsoort, Steengroep, NORM};
+use nen_en_1996_1_1::{afschuiving, buiging, capaciteit, geconcentreerd, materiaal, Mortelsoort, Steengroep, Steensoort, NORM};
 use steel_check::{CheckKind, NamedCheck};
 
 /// UC als de weerstand nul is (resultante buiten de kern, Φ = 0): een eindig
@@ -122,6 +122,11 @@ fn fout_resultaat(input: &MetselwerkWandInput, reden: String) -> MetselwerkWandR
 /// Materiaal: α, β, K, f_k, γ_M, f_d (§3.6.1.2, §2.4.3).
 fn sterkte(m: &MetselwerkMateriaal, notes: &mut Vec<String>) -> Result<(MetselwerkSterkte, Vec<Deelstap>), String> {
     positief("f_b", m.f_b_mpa)?;
+    // Natuursteenmetselwerk (issue #99): groep 1 (§3.1.1), f_b uit de opgave.
+    if m.steensoort == Steensoort::Natuursteen {
+        materiaal::controleer_natuursteen(m.steengroep)?;
+        notes.push(materiaal::TOELICHTING_FB_NATUURSTEEN.into());
+    }
     let (alpha, beta, artikel) = materiaal::exponenten(m.steensoort, m.steengroep, m.mortel)?;
     let f_m_in = match (m.mortel, m.f_m_mpa) {
         (Mortelsoort::Algemeen, None) => {

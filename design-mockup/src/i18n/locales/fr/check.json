@@ -1636,6 +1636,7 @@
     "run": "Vérifier",
     "close": "Fermer",
     "nietVolledig": "Pas entièrement vérifié",
+    "naturalStoneHint": "Pierre naturelle (EN 771-6) : groupe 1 (3.1.1) avec mortier d'usage courant. Saisir f_b selon la déclaration du fabricant (résistance moyenne normalisée à la compression) ; la vérification ne la convertit pas.",
     "notChecked": "Non vérifié :",
     "optie": {
       "Baksteen": "Terre cuite",

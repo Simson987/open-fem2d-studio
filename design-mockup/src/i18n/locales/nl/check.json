@@ -1636,6 +1636,7 @@
     "run": "Toetsen",
     "close": "Sluiten",
     "nietVolledig": "Niet volledig getoetst",
+    "naturalStoneHint": "Natuursteen (EN 771-6): groep 1 (§3.1.1) en mortel voor algemene toepassing. Vul f_b in uit de opgave van de producent (genormaliseerde gemiddelde druksterkte); de toets rekent niet om.",
     "notChecked": "Niet getoetst:",
     "optie": {
       "Baksteen": "Baksteen",
