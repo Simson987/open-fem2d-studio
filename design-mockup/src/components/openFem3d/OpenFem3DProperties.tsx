@@ -8,6 +8,7 @@ import OpenFem3DEnvelopePanelProperties from "./OpenFem3DEnvelopePanelProperties
 import { OpenFem3DDiaphragmFromSelection, OpenFem3DNodeDiaphragmRow, OpenFem3DTensionOnlyField } from "./OpenFem3DTrekSchijfVelden";
 import { OpenFem3DBeddingField, OpenFem3DBeddingResults } from "./OpenFem3DBeddingVeld";
 import { OpenFem3DPlateBeddingField, OpenFem3DPlateBeddingResults } from "./OpenFem3DPlaatBeddingVeld";
+import { OpenFem3DMasonryWallField } from "./OpenFem3DMetselwerkwandVeld";
 import { openFem3DBeddingRefusal } from "./openFem3dBedding";
 import { openFem3DSelectionLoadCount, type OpenFem3DSelection } from "./openFem3dSelection";
 import { openFem3DSelectieBelastinggevallen, openFem3DSelectieIds } from "./openFem3dSelectieFilter";
@@ -614,6 +615,8 @@ export default function OpenFem3DProperties({
         </Section>
         {/* Plaat op bedding (#107): k en alleen druk; de kern zet de grondveren. */}
         <OpenFem3DPlateBeddingField model={model} plateIds={[plate.id]} onChange={onChange} />
+        {/* Metselwerkwand met lateien (#97): onder de bestaande secties, niets verschuift. */}
+        <OpenFem3DMasonryWallField model={model} plate={plate} onChange={onChange} />
         <Section title={t("openFem3d.props.surfaceLoads")}>
           {(model.surfaceLoads ?? []).filter((load) => load.plateId === plate.id).length === 0 && <p className="fem-prop-hint">{t("openFem3d.props.surfaceLoadHint")}</p>}
           {surfaceLoad && <>

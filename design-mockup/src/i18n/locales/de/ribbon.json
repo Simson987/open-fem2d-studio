@@ -875,6 +875,26 @@
       "lifted": "Ohne Kontakt",
       "totalReaction": "Summe Bodenfedern",
       "noResult": "Der Rechenkern lieferte für dieses Ergebnis keine Ausgabe der Plattenbettung."
+    },
+    "masonry": {
+      "title": "Mauerwerkswand",
+      "toggle": "Mauerwerkswand (keine horizontale Steifigkeit)",
+      "unitWeight": "γ (kN/m³)",
+      "unitWeightTitle": "Wichte des Mauerwerks; Eigengewicht = γ·t",
+      "modulus": "E vertikal (N/mm²)",
+      "modulusTitle": "E des Mauerwerks, E = K_E·f_k (EN 1996-1-1 §3.7.2)",
+      "hint": "Orthotrope Wandscheibe: E vertikal = E, E horizontal ≈ 0 (die Wand wirkt nicht als wandartiger Träger mit dem Fundamentbalken zusammen), G = 0,4·E (§3.7.3). Die Platte muss senkrecht stehen.",
+      "lintel": "Sturz über Öffnung {{opening}}",
+      "lintelBeam": "Sturzstab",
+      "bearing": "Auflagerlänge (mm)",
+      "loadSpread": "Last über der Öffnung",
+      "spread": {
+        "triangle60": "Dreieck 60°",
+        "fullHeight": "Volle Höhe"
+      },
+      "design": "Sturznachweis ({{spread}}): L = {{span}} m, Last {{load}} kN, M = {{moment}} kNm, Auflagerkraft {{support}} kN (charakteristisch, Eigengewicht Mauerwerk).",
+      "fallback": "Über dem Sturz stehen {{above}} m Mauerwerk, weniger als das Dreieck ({{triangle}} m): mit voller Höhe gerechnet.",
+      "lintelHint": "Das Rechenmodell legt immer die volle Höhe auf den Sturz (ohne horizontale Steifigkeit bildet das Mauerwerk keinen Bogen). Die Wahl gilt für die Sturzlast im Nachweis. Querschnitt und Material ändern Sie am Sturzstab."
     }
   },
   "frame3d": {

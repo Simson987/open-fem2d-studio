@@ -875,6 +875,26 @@
       "lifted": "Zonder contact",
       "totalReaction": "Som grondveren",
       "noResult": "De rekenkern gaf voor deze uitkomst geen uitvoer van de plaatbedding."
+    },
+    "masonry": {
+      "title": "Metselwerkwand",
+      "toggle": "Metselwerkwand (geen stijfheid horizontaal)",
+      "unitWeight": "γ (kN/m³)",
+      "unitWeightTitle": "Volumegewicht van het metselwerk; eigen gewicht = γ·t",
+      "modulus": "E verticaal (N/mm²)",
+      "modulusTitle": "E van het metselwerk, E = K_E·f_k (NEN-EN 1996-1-1 §3.7.2)",
+      "hint": "Orthotrope wandplaat: E verticaal = E, E horizontaal ≈ 0 (de wand werkt niet als hoge ligger met de funderingsbalk samen), G = 0,4·E (§3.7.3). De plaat moet verticaal staan.",
+      "lintel": "Latei boven opening {{opening}}",
+      "lintelBeam": "Lateistaaf",
+      "bearing": "Opleglengte (mm)",
+      "loadSpread": "Last boven de opening",
+      "spread": {
+        "triangle60": "Driehoek 60°",
+        "fullHeight": "Volle hoogte"
+      },
+      "design": "Lateitoets ({{spread}}): L = {{span}} m, last {{load}} kN, M = {{moment}} kNm, oplegkracht {{support}} kN (karakteristiek, eigen gewicht metselwerk).",
+      "fallback": "Boven de latei staat {{above}} m metselwerk, minder dan de driehoek ({{triangle}} m): gerekend met de volle hoogte.",
+      "lintelHint": "Het rekenmodel legt altijd de volle hoogte op de latei (zonder horizontale stijfheid vormt het metselwerk geen boog). De keuze geldt voor de lateibelasting in de toets. Doorsnede en materiaal wijzig je bij de lateistaaf."
     }
   },
   "frame3d": {
