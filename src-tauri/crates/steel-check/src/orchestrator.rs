@@ -11,7 +11,7 @@ use crate::input::{
     MELDING_KOKER_WARMVERVAARDIGD, MELDING_TREK_ALLEEN, MELDING_TREK_RONDSTAAL, MELDING_TREK_STRIP,
     MELDING_VORM_NIET_CONTROLEERBAAR, NIET_VOLLEDIG_GETOETST, REDEN_GESLOTEN_CEL_NIET_GEDECLAREERD,
     REDEN_INTERACTIE_GEEN_DRUK, REDEN_INTERACTIE_ZONDER_KIP, REDEN_KIP_HOEKPROFIEL,
-    REDEN_KIP_NIET_DUBBELSYMMETRISCH, REDEN_KIP_NVT_RONDSTAAL, REDEN_KIP_NVT_STRIP,
+    REDEN_KIP_NIET_DUBBELSYMMETRISCH, REDEN_KIP_NVT_CHS, REDEN_KIP_NVT_RONDSTAAL, REDEN_KIP_NVT_STRIP,
     REDEN_KIP_STRIP_STERKE_AS, REDEN_KLASSE_4, TOETS_TREK_ALLEEN,
 };
 use crate::result::{BeamCheckResult, CheckKind, NamedCheck};
@@ -750,7 +750,25 @@ fn resolveer_doorsnede(
     let Some(custom) = input.custom_section.as_ref() else {
         let profile = match db().find(&input.profile_name) {
             Some(p) => p,
-            None => return Err(format!("ERROR: profile {} not found", input.profile_name)),
+            None => {
+                // Met suggesties uit dezelfde reeks (issue #240): een tikfout
+                // in de maat hoort de lezer meteen de bedoelde naam te geven.
+                let suggesties = db().suggesties(&input.profile_name, 3);
+                return Err(if suggesties.is_empty() {
+                    format!("ERROR: profile {} not found", input.profile_name)
+                } else {
+                    format!(
+                        "ERROR: profile {} not found; er is niet getoetst. Bedoeld: {}? (zie \
+                         list_steel_profiles)",
+                        input.profile_name,
+                        suggesties
+                            .iter()
+                            .map(|n| format!("\"{n}\""))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                });
+            }
         };
         let p = &profile.properties;
         // De vorm bepaalt welk blad van tabel 5.2 geldt: kokerwanden zijn
@@ -919,6 +937,10 @@ fn resolveer_doorsnede(
             },
             kip_nvt: if is_rond {
                 Some(REDEN_KIP_NVT_RONDSTAAL.to_string())
+            } else if matches!(profile.kind, ProfileKind::Chs) {
+                // Issue #240: een ronde buis kipt niet (6.3.2.1(2)); tot
+                // oktober 2026 draaide hier de kiptoets met flensteksten.
+                Some(REDEN_KIP_NVT_CHS.to_string())
             } else if is_strip && !strip_buigt_om_sterke_as {
                 Some(REDEN_KIP_NVT_STRIP.to_string())
             } else {

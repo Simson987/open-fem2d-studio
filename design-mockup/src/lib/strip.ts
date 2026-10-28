@@ -19,12 +19,14 @@
  * lokale z-as, de dikte t langs de lokale y-as. I_y = t·b³/12 is dus de sterke
  * as, zoals bij elk ander profiel; in de maattabel staat h = b en b = t.
  *
- * Bewust alleen afhankelijk van `rondStaal.ts` (dat zelf geen afhankelijkheden
- * heeft): `steelCheckBuilder`, `sectionResolver`, de IFC-export en de
+ * Bewust alleen afhankelijk van `rondStaal.ts` en de gegenereerde
+ * profieltabel (die geen van beide afhankelijkheden hebben): `steelCheckBuilder`, `sectionResolver`, de IFC-export en de
  * 3D-rekenroute lezen dit bestand allemaal, en sommige daarvan importeren
  * elkaar.
  */
 import { rondStaalSleutel } from "./rondStaal";
+// Een gegenereerd gegevensbestand zonder eigen imports: geen kringverwijzing.
+import { STEEL_SECTION_DIMS } from "./steelSectionDims.generated";
 
 /**
  * De voorvoegsels waarmee platstaal geschreven wordt, na het normaliseren
@@ -58,6 +60,53 @@ export function stripSleutel(sleutel: string): string {
  */
 export function profielAliasSleutel(sleutel: string): string {
   return stripSleutel(rondStaalSleutel(sleutel));
+}
+
+/**
+ * Haalt de nullen aan het eind van elk decimaal getal weg, en de punt als er
+ * dan niets achter staat: "8.0" → "8", "8.00" → "8", "6.30" → "6.3"; "10.05"
+ * en "100" blijven gelijk. Zo vinden "CHS 168.3x8" en "CHS168.3x8" het
+ * catalogusprofiel "CHS 168.3x8.0" (issue #240). Moet vóór het weghalen van de
+ * punten gebeuren, anders leest "8.0" als "80". Spiegel van
+ * `zonder_nul_decimalen` in `src-tauri/crates/steel-profiles/src/lib.rs`.
+ */
+export function zonderNulDecimalen(naam: string): string {
+  return naam.replace(/(\d)\.(\d*?)0+(?!\d)/g, (_m, a: string, b: string) => (b ? `${a}.${b}` : a));
+}
+
+/** De sleutel zonder nul-decimalen-regel: spaties, koppeltekens en punten weg, hoofdletters, aliassen. */
+const kaleSleutel = (naam: string) => profielAliasSleutel(naam.replace(/[\s\-.]/g, "").toUpperCase());
+
+/**
+ * Sleutel zonder nul-decimalen → catalogussleutel, alleen voor de profielen
+ * waar die twee verschillen ("CHS1683X8" → "CHS1683X80" voor "CHS 168.3x8.0").
+ * Lui opgebouwd.
+ */
+let nulAlias: Map<string, string> | undefined;
+function nulAliassen(): Map<string, string> {
+  if (!nulAlias) {
+    nulAlias = new Map();
+    for (const [sleutel, d] of Object.entries(STEEL_SECTION_DIMS)) {
+      const k = kaleSleutel(zonderNulDecimalen(d.naam));
+      if (k !== sleutel && !nulAlias.has(k) && !(k in STEEL_SECTION_DIMS)) nulAlias.set(k, sleutel);
+    }
+  }
+  return nulAlias;
+}
+
+/**
+ * De opzoeksleutel van een profielnaam, dezelfde regel als
+ * `SteelProfileDb::find` in de Rust-kern: spaties, koppeltekens en punten weg,
+ * hoofdletters, de aliassen van massief rond en platstaal — en als die
+ * sleutel geen catalogusprofiel is, dezelfde sleutel zonder nul-decimalen:
+ * "CHS 168.3x8" en "CHS168.3x8" krijgen de catalogussleutel "CHS1683X80" van
+ * "CHS 168.3x8.0" (#240). De catalogussleutel zelf blijft ongewijzigd: de app
+ * zet hem zo op een staaf, dus opgeslagen modellen gebruiken hem.
+ */
+export function profielSleutel(naam: string): string {
+  const k = kaleSleutel(naam);
+  if (k in STEEL_SECTION_DIMS) return k;
+  return nulAliassen().get(kaleSleutel(zonderNulDecimalen(naam))) ?? k;
 }
 
 /**

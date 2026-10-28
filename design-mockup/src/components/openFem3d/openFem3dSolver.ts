@@ -10,7 +10,7 @@ import {
 import { STEEL_GRADES } from "../../lib/steelGrades";
 import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { isEigenProfiel, zoekEigenDoorsnede } from "../../lib/profieleditor/eigenDoorsnedenStore";
-import { profielAliasSleutel } from "../../lib/strip";
+import { profielSleutel } from "../../lib/strip";
 import { thermalAlphaForMaterial } from "../../lib/thermalAlpha";
 import {
   OPEN_FEM_3D_BEDDING_ALL_ROUND_COSINE, isOpenFem3DGlobalMemberLoad, openFem3DGlobalDirectionVector, openFem3DGlobalMemberLoadFactor,
@@ -510,9 +510,7 @@ function factorForLoad(selection: OpenFem3DLoadSelection | undefined, caseId: nu
 
 /** Sleutel van de profieltabellen; "Ø24" wordt "RD24" en "FL 80x10" "STRIP80X10" (`lib/strip.ts`). */
 function profileKey(value: string): string {
-  return profielAliasSleutel(
-    value.toUpperCase().split("").filter((character) => ![" ", "-", "."].includes(character)).join(""),
-  );
+  return profielSleutel(value);
 }
 
 function timberGMean(material: string): number | undefined {

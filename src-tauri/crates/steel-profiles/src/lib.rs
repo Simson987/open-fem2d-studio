@@ -98,6 +98,9 @@ pub struct SteelProfileDb {
     profiles: Vec<SteelProfile>,
     by_name: HashMap<String, usize>,
     by_key: HashMap<String, usize>,
+    /// Sleutel na [`zonder_nul_decimalen`]: "CHS 168.3x8.0" staat hier als
+    /// "CHS1683X8", zodat "CHS 168.3x8" en "CHS168.3x8" hem vinden (#240).
+    by_nul_key: HashMap<String, usize>,
 }
 
 /// Zoeksleutel voor een profielnaam: spaties, koppeltekens en punten eruit,
@@ -109,6 +112,11 @@ pub struct SteelProfileDb {
 /// ook als "Ø24", "Ø 24" of "ROND 24" geschreven. Die schrijfwijzen krijgen
 /// hier de sleutel van "RD 24"; zie [`rond_staal_sleutel`]. De frontend heeft
 /// dezelfde regel in `design-mockup/src/lib/rondStaal.ts`.
+///
+/// Deze sleutel is ook de vorm waarin de app een catalogusprofiel op een staaf
+/// zet ("CHS1683X80" voor "CHS 168.3x8.0"); hij blijft daarom ongewijzigd.
+/// Voor schrijfwijzen zonder nul-decimalen ("CHS 168.3x8") is er de tweede
+/// index in [`SteelProfileDb::find`].
 fn lookup_key(name: &str) -> String {
     let sleutel: String = name
         .chars()
@@ -118,6 +126,35 @@ fn lookup_key(name: &str) -> String {
     rond_staal_sleutel(&sleutel)
         .or_else(|| strip_sleutel(&sleutel))
         .unwrap_or(sleutel)
+}
+
+/// Haalt de nullen aan het eind van elk decimaal getal weg, en de punt als er
+/// dan niets achter staat: "8.0" → "8", "8.00" → "8", "6.30" → "6.3"; "10.05"
+/// en "100" blijven gelijk.
+pub fn zonder_nul_decimalen(naam: &str) -> String {
+    let c: Vec<char> = naam.chars().collect();
+    let mut uit = String::with_capacity(naam.len());
+    let mut i = 0;
+    while i < c.len() {
+        let na_cijfer = i > 0 && c[i - 1].is_ascii_digit();
+        if c[i] == '.' && na_cijfer && i + 1 < c.len() && c[i + 1].is_ascii_digit() {
+            let mut j = i + 1;
+            while j < c.len() && c[j].is_ascii_digit() {
+                j += 1;
+            }
+            let fractie: String = c[i + 1..j].iter().collect();
+            let fractie = fractie.trim_end_matches('0');
+            if !fractie.is_empty() {
+                uit.push('.');
+                uit.push_str(fractie);
+            }
+            i = j;
+        } else {
+            uit.push(c[i]);
+            i += 1;
+        }
+    }
+    uit
 }
 
 /// De voorvoegsels waarmee massief rond staal geschreven wordt, na het
@@ -174,27 +211,83 @@ impl SteelProfileDb {
         // Eerste treffer wint, zodat een later profiel met dezelfde
         // genormaliseerde sleutel een eerder profiel niet overschrijft.
         let mut by_key: HashMap<String, usize> = HashMap::new();
+        let mut by_nul_key: HashMap<String, usize> = HashMap::new();
         for (i, p) in profiles.iter().enumerate() {
             by_key.entry(lookup_key(&p.name)).or_insert(i);
+            by_nul_key
+                .entry(lookup_key(&zonder_nul_decimalen(&p.name)))
+                .or_insert(i);
         }
         Self {
             profiles,
             by_name,
             by_key,
+            by_nul_key,
         }
     }
 
-    /// Zoekt eerst op exacte naam, daarna op de genormaliseerde sleutel.
+    /// Zoekt eerst op exacte naam, daarna op de genormaliseerde sleutel, en
+    /// daarna op de sleutel zonder nul-decimalen: "CHS 168.3x8", "CHS168.3x8"
+    /// en "CHS 168.3x8.00" vinden "CHS 168.3x8.0" (issue #240). Dat moet vóór
+    /// de punten wegvallen, anders leest "8.0" als "80". De frontend heeft
+    /// dezelfde regel in `design-mockup/src/lib/strip.ts` (`profielSleutel`).
     pub fn find(&self, name: &str) -> Option<&SteelProfile> {
         self.by_name
             .get(name)
             .or_else(|| self.by_key.get(&lookup_key(name)))
+            .or_else(|| self.by_nul_key.get(&lookup_key(&zonder_nul_decimalen(name))))
             .map(|&i| &self.profiles[i])
     }
 
     pub fn all(&self) -> &[SteelProfile] {
         &self.profiles
     }
+
+    /// Tot `max` catalogusnamen die op `name` lijken, voor de foutmelding bij
+    /// een onbekend profiel (issue #240): dezelfde reeks (de letters vooraan,
+    /// "CHS", "HEA", …) met evenveel maten, gesorteerd op de afstand tussen de
+    /// maten (som van |ln(a/b)|). Leeg als de reeks niet bestaat.
+    pub fn suggesties(&self, name: &str, max: usize) -> Vec<&str> {
+        let (reeks, maten) = reeks_en_maten(name);
+        if reeks.is_empty() {
+            return vec![];
+        }
+        let mut kandidaten: Vec<(f64, &str)> = self
+            .profiles
+            .iter()
+            .filter_map(|p| {
+                let (r, m) = reeks_en_maten(&p.name);
+                if r != reeks || m.len() != maten.len() {
+                    return None;
+                }
+                let afstand: f64 = m
+                    .iter()
+                    .zip(&maten)
+                    .map(|(a, b)| if *a > 0.0 && *b > 0.0 { (a / b).ln().abs() } else { (a - b).abs() })
+                    .sum();
+                Some((afstand, p.name.as_str()))
+            })
+            .collect();
+        kandidaten.sort_by(|a, b| a.0.total_cmp(&b.0));
+        kandidaten.into_iter().take(max).map(|(_, n)| n).collect()
+    }
+}
+
+/// De reeks (de letters vóór de eerste maat, in hoofdletters, zonder spaties
+/// en koppeltekens) en de maten van een profielnaam: "CHS 168.3x8.0" →
+/// ("CHS", [168,3, 8]).
+fn reeks_en_maten(name: &str) -> (String, Vec<f64>) {
+    let reeks: String = name
+        .chars()
+        .take_while(|c| !c.is_ascii_digit())
+        .filter(|c| c.is_alphabetic())
+        .flat_map(|c| c.to_uppercase())
+        .collect();
+    let maten = name
+        .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .filter_map(|t| t.trim_matches('.').parse::<f64>().ok())
+        .collect();
+    (reeks, maten)
 }
 
 pub fn db() -> &'static SteelProfileDb {

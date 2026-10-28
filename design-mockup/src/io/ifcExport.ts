@@ -184,7 +184,7 @@ import {
   STEEL_SECTION_DIMS,
   type SteelSectionDims, type SteelSectionProps,
 } from "../lib/steelSectionDims.generated";
-import { profielAliasSleutel } from "../lib/strip";
+import { profielSleutel } from "../lib/strip";
 import type { MemberCheckResult } from "../lib/checkTypes";
 import { isEigenProfiel, zoekEigenDoorsnede } from "../lib/profieleditor/eigenDoorsnedenStore";
 import type { EigenDoorsnede } from "../lib/profieleditor/types";
@@ -354,7 +354,7 @@ export interface IfcExportOpties {
  * (`lib/strip.ts`).
  */
 function normaliseerProfielnaam(naam: string): string {
-  return profielAliasSleutel(naam.replace(/[\s\-.]/g, "").toUpperCase());
+  return profielSleutel(naam);
 }
 
 /** Afmetingen van een catalogusprofiel, of undefined als het onbekend is. */

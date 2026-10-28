@@ -549,6 +549,14 @@ pub const REDEN_KIP_NVT_RONDSTAAL: &str =
      6.3.2.1(2) noemt al vierkante en ronde buisprofielen als niet gevoelig voor kip; een massieve \
      cirkel is dat a fortiori. In 6.3.3 geldt daarom χ_LT = 1,0, dus M_b,Rd = W_pl·f_y/γ_M1.";
 
+/// Kip 6.3.2 bij een ronde buis (CHS): niet van toepassing, mét reden. Geen
+/// weigering: 6.3.3 wordt gewoon getoetst, met χ_LT = 1,0 (issue #240).
+pub const REDEN_KIP_NVT_CHS: &str =
+    "Niet van toepassing: een ronde buis is niet gevoelig voor kip. NEN-EN 1993-1-1 6.3.2.1(2) \
+     noemt ronde buisprofielen uitdrukkelijk als niet kipgevoelig: de doorsnede is \
+     rotatiesymmetrisch (I_y = I_z) en gesloten, met een grote torsiestijfheid I_t = 2·I. In 6.3.3 \
+     geldt daarom χ_LT = 1,0, dus M_b,Rd = M_y,Rk/γ_M1.";
+
 /// Melding bij de trektoets 6.2.3 van massief rond.
 pub const MELDING_TREK_RONDSTAAL: &str =
     "Massief rond: bij een trekstaaf van rond staal is het draadeind de nettodoorsnede van \
