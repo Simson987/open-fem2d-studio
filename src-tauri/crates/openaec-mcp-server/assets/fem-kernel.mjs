@@ -14732,8 +14732,26 @@ function combineResults(combo, perCase) {
     }
     if (plateElements.length === 0) plateElements = void 0;
   }
-  const maxDisp = grootsteVerplaatsing(displacements.values(), elements.values());
-  return { displacements, reactions, elements, maxDisplacement: maxDisp, plateElements };
+  let maxDisp = grootsteVerplaatsing(displacements.values(), elements.values());
+  let plateNodeDisplacements;
+  for (const [caseId, factor] of combo.factors) {
+    const r = perCase.get(idVan(caseId));
+    if (!r?.plateNodeDisplacements) continue;
+    plateNodeDisplacements ??= /* @__PURE__ */ new Map();
+    for (const [nid, d] of r.plateNodeDisplacements) {
+      const som = plateNodeDisplacements.get(nid) ?? { ux: 0, uz: 0 };
+      plateNodeDisplacements.set(nid, { ux: som.ux + factor * d.ux, uz: som.uz + factor * d.uz });
+    }
+  }
+  for (const d of plateNodeDisplacements?.values() ?? []) maxDisp = Math.max(maxDisp, Math.hypot(d.ux, d.uz));
+  return {
+    displacements,
+    reactions,
+    elements,
+    maxDisplacement: maxDisp,
+    plateElements,
+    ...plateNodeDisplacements ? { plateNodeDisplacements } : {}
+  };
 }
 function staafExtremen(ef) {
   const n2 = ef.stations_mm.length;
@@ -20719,8 +20737,10 @@ function convertResult(mesh, engineResult, nodeIdMap, beamIdMap, supports, plate
   }
   let maxDisp = grootsteVerplaatsing(displacements.values(), elements.values());
   let plateResults;
+  let plateNodeDisplacements;
   if (plateInfo && plateInfo.length > 0) {
     plateResults = [];
+    plateNodeDisplacements = /* @__PURE__ */ new Map();
     for (const info2 of plateInfo) {
       for (const nid of info2.region.nodeIds) {
         const idx = indexById.get(nid);
@@ -20729,6 +20749,7 @@ function convertResult(mesh, engineResult, nodeIdMap, beamIdMap, supports, plate
         const ux = (engineResult.displacements[base + 0] ?? 0) * 1e3;
         const uz = (engineResult.displacements[base + 1] ?? 0) * 1e3;
         maxDisp = Math.max(maxDisp, Math.hypot(ux, uz));
+        plateNodeDisplacements.set(nid, { ux, uz });
       }
       const mkRange = () => ({ min: Infinity, max: -Infinity });
       const ranges = {
@@ -20801,7 +20822,8 @@ function convertResult(mesh, engineResult, nodeIdMap, beamIdMap, supports, plate
     reactions,
     elements,
     maxDisplacement: maxDisp,
-    ...plateResults ? { plateElements: plateResults } : {}
+    ...plateResults ? { plateElements: plateResults } : {},
+    ...plateNodeDisplacements ? { plateNodeDisplacements } : {}
   };
 }
 function beddingSplitsFracties(L_mm, E_nmm2, I_mm4, kLijn) {
@@ -31309,6 +31331,7 @@ function openFem3DMaximumDisplacementM(model, result) {
 }
 function openFem3DMaximumDisplacement(model, result) {
   const knoop = new Map(model.nodes.map((node) => [node.id, node]));
+  for (const node of result.plateMesh?.nodes ?? []) if (!knoop.has(node.id)) knoop.set(node.id, node);
   let beste = null;
   for (const d of result.displacements) {
     const node = knoop.get(d.nodeId);

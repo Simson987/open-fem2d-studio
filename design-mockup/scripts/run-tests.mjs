@@ -476,6 +476,7 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["max-verplaatsing-netknopen", "#228: 2D-combinatie en omhullende via de bron (engine/combinations) en de 3D-samenvatting (openFem3dDisplacement, buiten de barrel) met de 3D-kernbinary als apart proces"],
   ["categorie-h-combinaties", "#237: leest alleen de combinatiegenerator (normcombinaties.ts) rechtstreeks; geen sidecarpad"],
   ["backstage-import-export", "#235: leest de bron van Backstage.tsx en App.tsx (React-UI), niets uit de sidecarbundel"],
   ["chs-profielnaam", "#240: de profielsleutel (lib/strip.ts) en de CHS-toets via de 3D-staalbouwer (openFem3dSteelCheck, buiten de barrel) en de toetsbrug als apart proces; de kern zelf staat in steel-check/tests/chs_naam_en_kip.rs"],

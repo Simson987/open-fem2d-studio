@@ -477,7 +477,11 @@ export function openFem3DMaximumDisplacement(model: OpenFem3DModel, result: Open
   point: [number, number, number];
   displacement: [number, number, number];
 } | null {
-  const knoop = new Map(model.nodes.map((node) => [node.id, node]));
+  // Ook de netknopen van platen en schijven (#228): die staan alleen in het
+  // rekennet van het resultaat, niet in het model. Zonder hen gaf een plaat
+  // op hoekopleggingen 0 mm.
+  const knoop = new Map<number, { x: number; y: number; z: number }>(model.nodes.map((node) => [node.id, node]));
+  for (const node of result.plateMesh?.nodes ?? []) if (!knoop.has(node.id)) knoop.set(node.id, node);
   let beste: { valueM: number; point: [number, number, number]; displacement: [number, number, number] } | null = null;
   for (const d of result.displacements) {
     const node = knoop.get(d.nodeId);
