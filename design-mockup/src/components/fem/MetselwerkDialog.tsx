@@ -18,11 +18,19 @@ import {
   bouwMetselwerkInvoer, leegMetselwerkFormulier, type MetselwerkFormulier, type NdpVeld,
 } from "../../lib/metselwerkCheckBuilder";
 import type { MetselwerkWandResult } from "../../lib/types/metselwerk/MetselwerkWandResult";
+import { metselwerkUit3d } from "../../lib/metselwerkUit3d";
+import type { OpenFem3DModel } from "../openFem3d/openFem3dModel";
+import type { OpenFem3DSolveResult } from "../openFem3d/openFem3dSolver";
 import "./WaterAccumulation2DDialog.css";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  /**
+   * Het 3D-model met het getoonde resultaat (#97): een metselwerkwand daaruit
+   * vult geometrie, N/M per meter en de lateioplegging in (`metselwerkUit3d`).
+   */
+  uit3d?: { model: OpenFem3DModel; result: OpenFem3DSolveResult };
 }
 
 type TekstVeld = {
@@ -36,13 +44,28 @@ const NDP_SYMBOOL: Record<NdpVeld, string> = {
   k: "K", gammaM: "γ_M", kE: "K_E", phiInf: "φ_∞", fvk0: "f_vk0 [N/mm²]", fxk1: "f_xk1 [N/mm²]", fxk2: "f_xk2 [N/mm²]",
 };
 
-export default function MetselwerkDialog({ open, onClose }: Props) {
+export default function MetselwerkDialog({ open, onClose, uit3d }: Props) {
   const { t } = useTranslation("check");
   const [f, setF] = useState<MetselwerkFormulier>(leegMetselwerkFormulier);
   const [fouten, setFouten] = useState<{ veld: string; melding: string }[]>([]);
   const [resultaat, setResultaat] = useState<MetselwerkWandResult | null>(null);
   const [kernFout, setKernFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
+  const wanden3d = (uit3d?.model.plates ?? []).filter((plate) => plate.masonry);
+  const [wand3d, setWand3d] = useState<number | null>(null);
+  const [meldingen3d, setMeldingen3d] = useState<string[]>([]);
+  const neemOver3d = () => {
+    const plateId = wand3d ?? wanden3d[0]?.id;
+    if (!uit3d || plateId === undefined) return;
+    try {
+      const uit = metselwerkUit3d(uit3d.model, plateId, uit3d.result);
+      setF((o) => ({ ...o, ...uit.formulier }));
+      setMeldingen3d(uit.meldingen);
+      setResultaat(null);
+    } catch (fout) {
+      setMeldingen3d([fout instanceof Error ? fout.message : String(fout)]);
+    }
+  };
 
   const zet = <K extends keyof MetselwerkFormulier>(k: K, v: MetselwerkFormulier[K]) => {
     setF((o) => ({ ...o, [k]: v }));
@@ -112,6 +135,18 @@ export default function MetselwerkDialog({ open, onClose }: Props) {
       </>}>
       <div className="water2d-dialog">
         <p>{t("masonry.intro")}</p>
+        {wanden3d.length > 0 && <div className="water2d-fields" data-testid="metselwerk-uit-3d">
+          <label className="water2d-field">
+            <span>{t("masonry.from3d.wall")}</span>
+            <div>
+              <select value={wand3d ?? wanden3d[0]!.id} onChange={(e) => setWand3d(Number(e.target.value))}>
+                {wanden3d.map((plate) => <option key={plate.id} value={plate.id}>{t("masonry.from3d.wallOption", { id: plate.id })}</option>)}
+              </select>
+              <button type="button" onClick={neemOver3d}>{t("masonry.from3d.take")}</button>
+            </div>
+          </label>
+          {meldingen3d.map((melding, index) => <p key={index} className="water2d-hint"><small>{melding}</small></p>)}
+        </div>}
 
         <h4>{t("masonry.material")}</h4>
         <div className="water2d-fields">

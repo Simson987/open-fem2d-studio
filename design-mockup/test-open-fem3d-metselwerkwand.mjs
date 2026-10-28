@@ -32,6 +32,8 @@ const { parseOpenFem3DModel, withOpenFem3DSelfWeight } = await import("./src/com
 const { meshOpenFem3DPlates } = await import("./src/components/openFem3d/openFem3dPlateMesh.ts");
 const { buildOpenFem3DSolveRequest } = await import("./src/components/openFem3d/openFem3dSolver.ts");
 const { openFem3DLintelDesign } = await import("./src/components/openFem3d/openFem3dMetselwerkwand.ts");
+const { metselwerkUit3d } = await import("./src/lib/metselwerkUit3d.ts");
+const { bouwMetselwerkInvoer, leegMetselwerkFormulier } = await import("./src/lib/metselwerkCheckBuilder.ts");
 const { serializeProject, deserializeProject, PROJECT_FORMAT_VERSION_3D_MASONRY } = await import("./src/io/projectFile.ts");
 
 let geslaagd = 0, gefaald = 0;
@@ -216,6 +218,42 @@ stil("\n[5] dezelfde wand op de slappe funderingsbalk: de latei koppelt de penan
   const hand = RA * 3 - wand.reduce((s, [q, a, b]) => s + q * (b - a) * (3 - (a + b) / 2), 0) - latei * (3 - 2.35) - qb * 3 * 1.5;
   const Mbalk = momentVan(result, 1);
   check("funderingsbalk: M zoals de wand als last (1,5 %)", dichtbij(Mbalk, hand, 0.015), `${Mbalk.toFixed(3)} kNm (hand ${hand.toFixed(3)})`);
+}
+
+stil("\n[6] koppeling naar de metselwerktoets (#98)");
+{
+  // Wand op een stijve fundering met opening en latei; N per meter uit n_yy.
+  // Een rij elementen op hoogte z draagt γ·t·(h − z) buiten de opening.
+  const d = wandOpBalk({ opening: [2.4, 3.6, 0.9, 2.1], zonderBalk: true });
+  d.doe("model3d.plate.setMasonry", { plateId: 1, masonry: { unitWeightKnM3: GAMMA, eMpa: 5000 } });
+  d.doe("model3d.plate.setLintel", { plateId: 1, openingId: 1, lintel: { bearingM: 0.1, loadSpread: "fullHeight", profileName: "HEA 100" } });
+  d.doe("model3d.plate.update", { id: 1, edgeSupports: [{ edge: 0, ux: true, uy: true, uz: true, rx: true, ry: false, rz: false }] });
+  const { result } = await rekenEigenGewicht(d.model(), { zonderOpleggingen: true });
+  const uit = metselwerkUit3d(d.model(), 1, result);
+  const f = uit.formulier;
+  const rijOnder = 0.1; // strook van één elementgrootte aan de voet
+  check("geometrie t = 100 mm, h = 2,7 m, l = 6 m", f.t === "100" && f.h === "2.7" && f.l === "6");
+  // Het maatgevende element onderin is een penant naast de opening: daar komt
+  // ook de lateilast bij. Ondergrens: de volle wand op die hoogte.
+  check("N onder ≥ γ·t·(h − z_rij)", Number(f.nOnder) >= GAMMA * T * (H - rijOnder) * 0.999, `${f.nOnder} kN/m (wand ${(GAMMA * T * (H - rijOnder)).toFixed(2)})`);
+  const top = uit.niveaus.boven;
+  // Aan de kop is de wand bijna onbelast; de kleine, scheve elementen van het
+  // driehoeksnet geven daar ruis van enkele tienden kN/m (hand op z = 2,61 m:
+  // 0,18 kN/m). Getoetst: de volgorde en minder dan 10 % van N onder.
+  check("0 < N boven < N midden en N onder, N boven < 10 % van N onder",
+    top.n > 0 && top.n < Math.min(uit.niveaus.midden.n, uit.niveaus.onder.n) && top.n < 0.1 * uit.niveaus.onder.n,
+    `${top.n.toFixed(3)} / ${uit.niveaus.midden.n.toFixed(3)} / ${uit.niveaus.onder.n.toFixed(3)} kN/m`);
+  // Onder de lateioplegging (0,1 m) spreidt de last nauwelijks (E horizontaal
+  // ≈ 0): daar is N per meter het grootst.
+  check("N midden ≥ γ·t·h/2 (penant naast de opening)", uit.niveaus.midden.n >= GAMMA * T * (H / 2 - 0.05) * 0.999,
+    `${uit.niveaus.midden.n.toFixed(3)} kN/m`);
+  check("lateioplegging: l_b = 100 mm, a1 = 2300 mm, h_c = 2,1 m", f.metGeconcentreerd && f.lB === "100" && f.a1 === "2300" && f.hC === "2.1",
+    `N_Edc = ${f.nEdc} kN`);
+  const formulier = { ...leegMetselwerkFormulier(), ...f, fb: "20", ndp: { ...leegMetselwerkFormulier().ndp,
+    k: { waarde: "0.55", bron: "test" }, gammaM: { waarde: "2.0", bron: "test" } } };
+  const bouw = bouwMetselwerkInvoer(formulier);
+  check("het formulier bouwt een geldige toetsinvoer", bouw.fouten.length === 0 && bouw.invoer?.geconcentreerd.length === 1,
+    JSON.stringify(bouw.fouten));
 }
 
 console.log = stil;

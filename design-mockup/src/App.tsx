@@ -5564,7 +5564,8 @@ function App() {
       />
       <WaterAccumulation2DDialog open={waterAccumulationOpen}
         onClose={() => setWaterAccumulationOpen(false)} selectedBeam={selectedWaterBeam} />
-      <MetselwerkDialog open={metselwerkOpen} onClose={() => setMetselwerkOpen(false)} />
+      <MetselwerkDialog open={metselwerkOpen} onClose={() => setMetselwerkOpen(false)}
+        uit3d={modelDimension === "3d" && openFem3dResult ? { model: openFem3d, result: openFem3dResult } : undefined} />
       {welcomeOpen && (
         <WelcomeScreen
           onClose={() => setWelcomeOpen(false)}
