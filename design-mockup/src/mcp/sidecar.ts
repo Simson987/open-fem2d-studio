@@ -1422,19 +1422,6 @@ function rekenDoor(payload: Record<string, unknown>, bewerking: Bewerking) {
   })) {
     waarschuwingenVoor.push(m.tekst);
   }
-  // De UGT-toets van `check` rekent altijd tweede orde (#199): ook bij lineaire
-  // resultaten staat een veldsgewijs geval daar op alle velden tegelijk.
-  if (bewerking === "check" && resultatenLineair) {
-    for (const m of veldpatroonMeldingen({
-      beams: gelezen.model.beams,
-      supports: gelezen.model.supports,
-      loadCases: gelezen.model.loadCases,
-      loads: gelezen.model.loads,
-      lineair: false,
-    })) {
-      waarschuwingenVoor.push(`UGT-toets (tweede orde met scheefstand): ${m.tekst}`);
-    }
-  }
 
   // Een belastinggeval met last dat in geen enkele doorgerekende UGT-combinatie
   // meetelt, en eigen gewicht zonder blijvend geval. Tot september 2026 kwam
@@ -1468,6 +1455,8 @@ function rekenDoor(payload: Record<string, unknown>, bewerking: Bewerking) {
     analysetype,
     eindstijfheid,
     multiInput,
+    // De invoer met de deelgevallen per veld (issue #219); zonder veldsplitsing `multiInput` zelf.
+    rekenInput,
     combinaties,
     veldSplitsing,
     veldVarianten: veld.uitkomst?.combinaties ?? [],
@@ -1739,8 +1728,15 @@ function opCheck(payload: Record<string, unknown>) {
   let toets: ToetsKrachten2D;
   try {
     toets = bepaalToetsKrachten2D({
-      basis: d.multiInput,
-      combinaties: d.combinaties,
+      // De veldsgewijze plaatsing (issue #219) ook in de toets: de UGT-varianten
+      // per veldpatroon, elk als volledige P-Δ-som op de invoer met de
+      // deelgevallen. Het patroon zelf komt uit de eerste-orde-invloedslijn
+      // (NEN-EN 1991-1-1 6.2.1(1)); superpositie van tweede-ordeuitkomsten
+      // gebeurt niet. Zonder deze regel stond een veranderlijke vloerlast in
+      // de UGT-toets op alle velden tegelijk (MCP-proef: 12,19 in plaats van
+      // 21,56 kNm in het middenveld).
+      basis: d.rekenInput,
+      combinaties: d.rekenCombinaties,
       scheefstand: {
         project: project.uitkomst,
         normen: toetsNormen,

@@ -329,7 +329,12 @@ if (!existsSync(MCP_SERVER)) {
   ok("check_fem_model zonder fout", !c.fout, c.fout);
   const inv2 = (c.uit?.steel_check_inputs ?? []).find((i) => i.beam_id === 2);
   const fe = inv2?.forces_envelope ?? [];
-  check("MCP check: staaf 2 my_ed max = 21,5625 kNm", Math.max(...fe.map((p) => p.forces.my_ed)), handExtremen.veld2);
+  // Sinds #199 komen de UGT-toetskrachten uit P-Δ met scheefstand (φ = 1/200),
+  // ook per veldpatroon (elke variant een eigen P-Δ-som op de invoer met de
+  // deelgevallen). De horizontale metgezellen H = φ·V geven de ligger een
+  // kleine normaalkracht; het P-δ-moment daarvan is 0,0019 kNm (gemeten
+  // 21,5644). Eerste orde was 21,5625; de toets houdt 0,1 % marge.
+  check("MCP check: staaf 2 my_ed max = 21,5625 kNm (P-Δ met scheefstand, per veldpatroon)", Math.max(...fe.map((p) => p.forces.my_ed)), handExtremen.veld2, 0.001 * handExtremen.veld2);
   // Niet-lineair: geen varianten, wel de waarschuwing.
   ok("MCP niet-lineair: geen field_patterns", !nl.fout && nl.uit?.field_patterns === undefined, nl.fout);
   ok("MCP niet-lineair: waarschuwing 6.2.1(1)", (nl.uit?.warnings ?? []).some((w) => /NIET veldsgewijs/.test(w) && /6\.2\.1\(1\)/.test(w)),

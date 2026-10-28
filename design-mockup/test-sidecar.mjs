@@ -185,7 +185,7 @@ log("\n[1] Kanaal: pipelining, volgorde, exitcode en stdout-hygiëne");
   // de stukken pas bij het regeleinde samen. Hier: 3 MB in stukken van 7 919
   // tekens, twee korte verzoeken die een stuk delen, en een laatste regel
   // zonder afsluitende "\n".
-  const kind = spawn(process.execPath, [TSX_CLI, SIDECAR_TS, "--sidecar"], { cwd: HIER });
+  const kind = spawn(process.execPath, ["--import", "tsx/esm", SIDECAR_TS, "--sidecar"], { cwd: HIER });
   let uit = "";
   kind.stdout.on("data", (d) => (uit += d));
   const tekst = JSON.stringify(verzoek(21, "handshake", { opvulling: "x".repeat(3_000_000) })) + "\n"

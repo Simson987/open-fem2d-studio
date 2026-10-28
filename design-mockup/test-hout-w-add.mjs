@@ -38,19 +38,23 @@
 //   w_fin = 5,9921 + 0,6·5,9921 = 9,5873 → grens 2·2000/250 = 16 → UC 0,59921
 //   w₂ = 0,6·5,9921 = 3,5952
 //   kandidaten w₂ + (w_c − w₁): G: 3,5952 + 0 = 3,5952; G+Q: 3,5952 − 9,6414 = −6,0462
-//   → w₃ = −9,6414 apart naar de kern; w_add = −6,0462 → grens 2·2000/333 =
-//     12,012 → UC 0,50335. Tot dit issue: w_add = 3,5952 → UC 0,29931.
+//   → w₃ = −9,6414 apart naar de kern; w_add = −6,0462 → grens 0,003·2·2000 =
+//     12,000 → UC 0,50385. Tot dit issue: w_add = 3,5952 → UC 0,29960.
+//   (Op werk/pr-57 stond hier de grens 2·2000/333 = 12,012 en UC 0,50335. De
+//   samenvoeglijn rekent sinds #210 met 0,003·l = l/333,33 (NEN-EN 1990 NB
+//   A1.4.3, zie `timberCheckBuilder.ts`); dat is de enige oorzaak van het
+//   verschil, 12,012/12,000 = 1,001.)
 // Klimaatklasse 3, k_def = 2,0:
 //   w₂ = 11,9841; kandidaten: G: 11,9841; G+Q: 2,3427 → G, geen apart veld;
-//   w_add = 11,9841 → UC 0,99770 (de grootste |w₃| zou 2,3427 geven).
+//   w_add = 11,9841 → UC 0,99868 (was 0,99770 met l/333; de grootste |w₃| zou 2,3427 geven).
 //
 // ── HANDBEREKENING 3D ────────────────────────────────────────────────────────
 // Uitkraging L = 3 m, C24 100 × 300, punt onder G 5 mm OMHOOG, onder G + Q 8 mm
 // OMLAAG (verplaatsingsvelden opgegeven, zoals in test-controle-2026-10-3d). De
 // 3D-maat is een grootte: w_inst = −8, w_qp = −5, w₁ = −5 (alle drie "omlaag").
 // w₃ = de grootste verandering = |−8 − 5| = 13 → −13; w₂ = 0,6·−5 = −3;
-// w_add = −16 → grens 2·3000/333 = 18,018 → UC 0,88800. Tot dit issue:
-// w_add = (−8 − 3) − (−5) = −6 → UC 0,33300.
+// w_add = −16 → grens 0,003·2·3000 = 18,000 → UC 0,88889 (was 0,88800 met
+// l/333). Tot dit issue: w_add = (−8 − 3) − (−5) = −6 → UC 0,33333.
 //
 // Draaien met: npx tsx test-hout-w-add.mjs
 //         of : node scripts/run-tests.mjs --filter=hout-w-add
@@ -106,7 +110,7 @@ const wG = (15.1 * L ** 3 * A) / (24 * EI); // omhoog
 const wQ = (41000 * A ** 2 * (L + A)) / (3 * EI); // omlaag
 dicht("hand: punt omhoog onder G = 5,9921 mm", wG, 5.9921, 5e-5);
 dicht("hand: punt omlaag onder Q = 9,6414 mm", wQ, 9.6414, 5e-5);
-const grensFin = (2 * A) / 250, grensAdd = (2 * A) / 333;
+const grensFin = (2 * A) / 250, grensAdd = 0.003 * (2 * A);
 
 const LC = [{ id: 1, name: "G", type: "dead" }, { id: 2, name: "Q", type: "live", categorie: "A" }];
 /** Eigen combinaties zonder herkenbare naam of kenmerk, zoals een gebruiker ze kan maken. */
@@ -166,8 +170,8 @@ log("\n[1] 2D, eigen combinaties, klimaatklasse 1: w₃ uit G + Q apart naar de 
     dicht("w_fin = 9,5873 mm (onveranderd)", fin.uc.ed, wG * 1.6, 2e-3);
     dicht("w_fin UC = 0,59921", fin.uc.uc, (wG * 1.6) / grensFin, 2e-4);
     dicht("w_add = |w₂ + w₃| = 6,0462 mm (tot dit issue 3,5952)", add.uc.ed, wQ - 0.6 * wG, 2e-3);
-    dicht("w_add grens = 2·2000/333 = 12,012 mm", add.uc.rd, grensAdd, 1e-9);
-    dicht("w_add UC = 0,50335 (tot dit issue 0,29931)", add.uc.uc, (wQ - 0.6 * wG) / grensAdd, 2e-4);
+    dicht("w_add grens = 0,003·2·2000 = 12,000 mm", add.uc.rd, grensAdd, 1e-9);
+    dicht("w_add UC = 0,50385 (tot dit issue 0,29960)", add.uc.uc, (wQ - 0.6 * wG) / grensAdd, 2e-4);
     const w = add.variables.find((v) => v.symbol === "w")?.value;
     dicht("w_add met teken = −6,0462 (omlaag)", w, 0.6 * wG - wQ, 2e-3);
   }
@@ -182,7 +186,7 @@ log("\n[2] Klimaatklasse 3 (k_def = 2,0): de kruip maakt G maatgevend, geen apar
   if (heeftKern) {
     const add = toets(kern([inv])[0], "deflection_w_add");
     dicht("w_add = w₂ = 2,0·5,9921 = 11,9841 mm", add.uc.ed, 2 * wG, 2e-3);
-    dicht("w_add UC = 0,99770", add.uc.uc, (2 * wG) / grensAdd, 2e-4);
+    dicht("w_add UC = 0,99868", add.uc.uc, (2 * wG) / grensAdd, 2e-4);
     // Ter vergelijking, de regel van staal (grootste |w₃|, zonder kruip): G + Q.
     // Dat gaf hier 2,34 mm — vijf keer te weinig.
     const naief = kern([{ ...inv, deflection_add_mm: -wQ }])[0];
@@ -238,7 +242,7 @@ log("\n[4] 3D: tekenwissel tussen G en G + Q");
   if (heeftKern) {
     const add = toets(kern([inv])[0], "deflection_w_add");
     dicht("3D: w_add = |w₂ + w₃| = |−3 − 13| = 16 mm (tot dit issue 6)", add.uc.ed, 16, 1e-9);
-    dicht("3D: w_add UC = 16/18,018 = 0,88800", add.uc.uc, 16 / (3000 / 166.5), 1e-9);
+    dicht("3D: w_add UC = 16/18,000 = 0,88889", add.uc.uc, 16 / (0.003 * 2 * 3000), 1e-9);
   }
 }
 
@@ -285,7 +289,7 @@ if (!existsSync(MCP_SERVER)) {
     const inv = inhoud.timber_check_inputs?.find((i) => i.beam_id === 2);
     const r = inhoud.timber_results?.find((x) => x.beam_id === 2);
     dicht("MCP: w₃ in de toetsinvoer = −9,6414", inv?.deflection_add_mm, -wQ, 2e-3);
-    if (r) dicht("MCP: w_add UC = 0,50335", toets(r, "deflection_w_add").uc.uc, (wQ - 0.6 * wG) / grensAdd, 2e-4);
+    if (r) dicht("MCP: w_add UC = 0,50385", toets(r, "deflection_w_add").uc.uc, (wQ - 0.6 * wG) / grensAdd, 2e-4);
   }
 }
 

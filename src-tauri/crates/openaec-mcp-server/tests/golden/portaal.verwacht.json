@@ -1784,6 +1784,16 @@
         }
       ]
     },
-    "warnings": []
+    "self_weight": {
+      "enabled": false,
+      "case_id": null,
+      "case_name": null,
+      "beams_weight_kN": 4.87617822,
+      "plates_kN_per_m2": [],
+      "included_per_case": {"1":false,"2":false}
+    },
+    "warnings": [
+      "Eigen gewicht staat UIT (`selfWeightEnabled` ontbreekt of is false; in de MCP-modelvorm is dat de standaard): 4,9 kN staafgewicht is in GEEN belastinggeval meegenomen. Zet `selfWeightEnabled: true` om het mee te rekenen (het komt dan in belastinggeval 1 \"G\")."
+    ]
   }
 }

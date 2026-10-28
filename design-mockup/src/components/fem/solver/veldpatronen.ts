@@ -647,6 +647,11 @@ export interface VeldpatroonResultaat<T extends VeldGevalInvoer> {
   gevallen: T[];
   /** Meldingen (afkapping van het aantal patronen); leeg = niets. */
   meldingen: string[];
+  /**
+   * De invoer met de deelgevallen (`splitsing.input`): de UGT-toets rekent
+   * daarop elke variant als eigen P-Δ-som (issue #199 met #219).
+   */
+  input: MultiInput;
 }
 
 /**
@@ -672,6 +677,7 @@ export function veldpatronenUitkomst<T extends VeldGevalInvoer>(
       combinaties: varianten,
       gevallen: deelgevalBelastinggevallen(splitsing, loadCases),
       meldingen,
+      input: splitsing.input,
     },
   };
 }

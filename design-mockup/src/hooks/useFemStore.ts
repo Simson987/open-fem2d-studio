@@ -1626,6 +1626,8 @@ export interface VeldpatroonOutputs {
   combinaties: LoadCombination[];
   gevallen: LoadCase[];
   meldingen: string[];
+  /** De invoer met de deelgevallen, voor de P-Δ-toets per variant (issue #199 met #219). */
+  input?: import("../components/fem/solver/types").MultiInput;
 }
 
 export interface FemStore {

@@ -3142,8 +3142,14 @@ function App() {
     let toets: ToetsKrachten2D;
     try {
       toets = bepaalToetsKrachten2D({
-        basis,
-        combinaties: fem.actieveCombinaties,
+        // De veldsgewijze plaatsing (issue #219) ook in de toets: elke variant
+        // als eigen P-Δ-som op de invoer met de deelgevallen. Het patroon komt
+        // uit de eerste-orde-invloedslijn (NEN-EN 1991-1-1 6.2.1(1)); er wordt
+        // geen tweede-ordeuitkomst gesuperponeerd.
+        basis: veldpatronen?.input ?? basis,
+        combinaties: veldpatronen
+          ? voegVeldpatronenIn(fem.actieveCombinaties, veldpatronen.combinaties)
+          : fem.actieveCombinaties,
         scheefstand: {
           project: scheefstandUitkomst,
           normen: toetsScheefstandNormen(fem.beams, fem.plates),
