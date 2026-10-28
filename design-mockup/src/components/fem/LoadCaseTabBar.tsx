@@ -128,6 +128,9 @@ interface Props {
   /** Alleen 3D (issue #212): de torsievarianten van EN 1993-1-1 5.3.2(10). */
   scheefstandTorsie?: boolean;
   setScheefstandTorsie?: (v: boolean) => void;
+  /** Alleen 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de toets. */
+  scheefstandEigenKolom?: boolean;
+  setScheefstandEigenKolom?: (v: boolean) => void;
   /**
    * 1/φ zoals er is GEREKEND. De balk rekent zelf niets uit — App.tsx bepaalt
    * φ op één plek, zodat het scherm nooit iets anders kan tonen dan de motor
@@ -209,6 +212,7 @@ export default function LoadCaseTabBar({
   scheefstandAantalX = null, setScheefstandAantalX,
   scheefstandAantalY = null, setScheefstandAantalY,
   scheefstandTorsie = false, setScheefstandTorsie,
+  scheefstandEigenKolom = false, setScheefstandEigenKolom,
   scheefstandPhiNoemer, scheefstandPhiNoemerY, scheefstandAfgeleideHoogteM = 0,
   scheefstandAfgeleidAantal = 1, scheefstandAfgeleidAantalY, scheefstandToelichting = "",
   scheefstandWaarschuwingen = [],
@@ -984,6 +988,20 @@ export default function LoadCaseTabBar({
             onChange={(e) => setScheefstandTorsie(e.target.checked)}
           />
           <span>{t("loadCases.swayTorsion")}</span>
+        </label>
+      )}
+      {setScheefstandEnabled && scheefstandIn3D && setScheefstandEigenKolom && (
+        <label
+          className={`lc-tab-toggle${scheefstandEigenKolom ? " active" : ""}`}
+          title={t("loadCases.swayOwnColumnTitle")}
+          data-scheefstand-eigen-kolom
+        >
+          <input
+            type="checkbox"
+            checked={scheefstandEigenKolom}
+            onChange={(e) => setScheefstandEigenKolom(e.target.checked)}
+          />
+          <span>{t("loadCases.swayOwnColumn")}</span>
         </label>
       )}
 

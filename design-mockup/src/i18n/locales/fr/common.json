@@ -1091,6 +1091,8 @@
     "swayMembersAxisLabel": "m dans la direction {{richting}}",
     "swayTorsion": "Torsion φ",
     "swayTorsionTitle": "Variantes de torsion du défaut d'aplomb (EN 1993-1-1 §5.3.2(10), figure 5.5) : pour chaque direction avec deux rangées de poteaux ou plus, deux variantes supplémentaires où les rangées extérieures s'inclinent en sens opposé et le défaut varie linéairement entre elles (une rotation rigide du plan). Double le nombre de calculs P-Δ de la vérification ELU. Pas avec des charges surfaciques sur des plaques.",
+    "swayOwnColumn": "φ poteau isolé",
+    "swayOwnColumnTitle": "Défaut d'aplomb propre par poteau isolé (issue #199, phase 3) : un poteau à tête libre n'est attaché à rien et ne moyenne son défaut avec rien. Dans la vérification ELU, ses charges reçoivent φ = max(φ_modèle, φ_propre), avec φ_propre selon la norme de son matériau, h = sa propre hauteur et m = 1. Son flambement latéral est alors dans les efforts de vérification et un poteau isolé en acier utilise sa longueur système L au lieu de 2·L (EN 1993-1-1 5.2.2(7)b). Les résultats ne changent pas.",
     "swayDirectionTitle": "Direction des forces horizontales équivalentes : LES DEUX. La vérification ELU calcule chaque combinaison avec le défaut d'aplomb en +x et en −x (EN 1993-1-1 5.3.2(2) : dans la direction la plus défavorable) et retient, par barre, la plus défavorable des deux ; lorsque la case Défaut d'aplomb est cochée, les résultats sont calculés de la même façon et le nom de la combinaison indique la direction. La direction préférée enregistrée ici ({{richting}}) détermine seulement quelle variante garde le numéro de combinaison d'origine.",
     "dialogTitle": "Cas de charge & combinaisons",
     "casesTab": "Cas ({{aantal}})",

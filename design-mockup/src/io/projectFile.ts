@@ -548,6 +548,11 @@ export interface ProjectFile {
   scheefstandAantalY?: number | null;
   scheefstandTorsie?: boolean;
   /**
+   * Alleen 3D (issue #199, fase 3, optioneel): de eigen scheefstand per losse
+   * kolom in de UGT-toets. Ontbreekt = uit.
+   */
+  scheefstandEigenKolom?: boolean;
+  /**
    * Eigen doorsneden uit de profieleditor waarnaar staven verwijzen
    * (`EIGEN:<naam>`); v2, optioneel — geen versie-bump. Ontbreekt het veld
    * (ouder bestand), dan blijft de lokaal bewaarde lijst ongemoeid.
@@ -667,7 +672,7 @@ const BEKENDE_TOPVELDEN: readonly string[] = [
   "combinatiesVervangenBijOpenen", "structuralGrid",
   "scheefstandEnabled", "scheefstandNoemer", "scheefstandRichting",
   "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
-  "scheefstandAantalX", "scheefstandAantalY", "scheefstandTorsie",
+  "scheefstandAantalX", "scheefstandAantalY", "scheefstandTorsie", "scheefstandEigenKolom",
   "eigenDoorsneden", "eigenCltOpbouwen", "projectInfo", "windInstellingen",
   "rapport", "modelDimension", "model3d", "openFem3dViewSets", "openFem3dStandaardViewsUitRapport",
   // Oude veldnaam van de 3D-weergaven (ontwikkelspoor `frame3d`); bij openen

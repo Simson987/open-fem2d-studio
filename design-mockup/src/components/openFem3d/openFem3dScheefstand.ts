@@ -44,6 +44,15 @@
  *    torsievariant met reden (de UGT-toets weigert een model met platen in
  *    3D toch al, issue #199). Uit (de standaard) = geen torsievarianten, en
  *    de toelichting zegt dat ze ontbreken.
+ *  - Eigen scheefstand per losse kolom (issue #199, fase 3; instelling
+ *    `scheefstandEigenKolom`): een kolomlijn met een vrije kop hangt nergens
+ *    aan en middelt haar scheefstand met niets. Haar lasten krijgen
+ *    φ = max(φ_model, φ_eigen) met φ_eigen volgens de norm van haar materiaal,
+ *    h = haar eigen hoogte en m = 1 (EN 1993-1-1 (5.5), EN 1992-1-1 (5.1),
+ *    EN 1995-1-1 (5.1)): vervangen, nooit optellen (`eigenKolomScheefstand3D`).
+ *    Een om haar as gedraaide kolom krijgt φ_eigen/max(|cos α|, |sin α|), zodat
+ *    langs elke hoofdas minstens φ_eigen werkt. Daarmee geldt de φ-eis van een
+ *    vrij staafeind (`openFem3DZijdelingseKnik`) voor deze kolom altijd.
  *  - Handmatige m per richting (issue #212): `aantalPerAs` in de keuze
  *    overschrijft de afgeleide m_X of m_Y (EN 1993-1-1 5.3.2(3) laat een
  *    kolom met minder dan 50 % van de gemiddelde verticale last weg).
@@ -62,6 +71,7 @@ import {
 import {
   bepaalScheefstand,
   noemerTekst,
+  phiVolgensNorm,
   scheefstandUitkomstRegels,
   VERTICAAL_VANAF_GRADEN,
   type Kolomlijn,
@@ -79,6 +89,7 @@ import {
   isOpenFem3DGlobalMemberLoad, openFem3DGlobalMemberLoadFactor, openFem3DMemberAxes,
   type OpenFem3DGlobalDirection, type OpenFem3DModel,
 } from "./openFem3dModel";
+import { openFem3DEinden } from "./openFem3dUitkraging";
 
 const S = "common:loadCases.swayDerivation.";
 
@@ -113,6 +124,32 @@ export interface OpenFem3DScheefstand {
    * +richting·φ, die op p_tot −richting·φ, lineair ertussen.
    */
   torsie?: OpenFem3DTorsieRijen;
+  /**
+   * De eigen scheefstand van losse kolommen (issue #199, fase 3): per staaf en
+   * per knoop de φ van deze richting die in plaats van `phi` geldt.
+   */
+  phiPerStaaf?: ReadonlyMap<number, number>;
+  phiPerKnoop?: ReadonlyMap<number, number>;
+}
+
+/** Eén losse kolom: een kolomlijn met een vrije kop (issue #199, fase 3). */
+export interface OpenFem3DLosseKolom {
+  staafIds: number[];
+  /** De knopen van de lijn boven de voet. */
+  knoopIds: number[];
+  hoogteM: number;
+  norm: ScheefstandNorm;
+  /** φ_eigen volgens de norm, met h = de hoogte en m = 1. */
+  phiEigen: number;
+  /** max(|cos α|, |sin α|) van de draaiing om de as; 1 = niet gedraaid. */
+  factor: number;
+}
+
+/** De eigen scheefstand van de losse kolommen, per staaf en knoop per richting. */
+export interface OpenFem3DEigenKolomPhi {
+  kolommen: OpenFem3DLosseKolom[];
+  perStaaf: Map<number, OpenFem3DPhiPerAs>;
+  perKnoop: Map<number, OpenFem3DPhiPerAs>;
 }
 
 /** Nederlandse getalweergave: komma als decimaalteken. */
@@ -358,6 +395,70 @@ export function torsieRijen3D(geometrie: Pick<ScheefstandGeometrie3D, "perAs">):
   }
   return uit;
 }
+
+/**
+ * De losse kolommen van het model en hun eigen scheefstand (issue #199, fase
+ * 3). Een kolomlijn (staven steiler dan 75° die een knoop delen,
+ * `leidScheefstandGeometrieAf3D`) is LOS als geen knoop boven de voet een
+ * oplegging heeft, in een plaat ligt of een andere staaf raakt: de kop is vrij
+ * en de lijn draagt alleen haar eigen lasten. Per richting geldt dan voor haar
+ * lasten φ = max(φ_model, φ_eigen/factor). Een kolom die aan iets hangt (een
+ * ligger op de kop, ook een uitkragende) is geen losse kolom; daar blijft de
+ * φ-eis van het vrije eind gelden.
+ */
+export function eigenKolomScheefstand3D(
+  model: Pick<OpenFem3DModel, "nodes" | "beams" | "supports"> & Partial<Pick<OpenFem3DModel, "plates">>,
+  phiModel: OpenFem3DPhiPerAs,
+): OpenFem3DEigenKolomPhi {
+  const uit: OpenFem3DEigenKolomPhi = { kolommen: [], perStaaf: new Map(), perKnoop: new Map() };
+  const geometrie = leidScheefstandGeometrieAf3D(model);
+  const knoop = new Map(model.nodes.map((n) => [n.id, n]));
+  const einden = openFem3DEinden({ plates: [], ...model } as OpenFem3DModel);
+  const opgelegd = new Set((model.supports ?? []).map((s) => s.nodeId));
+  for (const lijn of geometrie.kolomlijnen) {
+    const staven = model.beams.filter((b) => lijn.staafIds.includes(b.id));
+    if (staven.length === 0) continue;
+    const knopen = [...new Set(staven.flatMap((b) => [b.startNodeId, b.endNodeId]))];
+    const voet = knopen.reduce((l, id) => ((knoop.get(id)?.z ?? Infinity) < (knoop.get(l)?.z ?? Infinity) ? id : l), knopen[0]);
+    const boven = knopen.filter((id) => id !== voet);
+    const eigen = new Set(lijn.staafIds);
+    const los = boven.every((id) =>
+      !opgelegd.has(id)
+      && !einden.knoopInPlaat(id)
+      && !model.beams.some((b) => !eigen.has(b.id) && (b.startNodeId === id || b.endNodeId === id)));
+    if (!los || staven.some((b) => b.bedding)) continue;
+    const hoogteM = (lijn.topZmm - lijn.voetZmm) / 1000;
+    if (!(hoogteM > 0)) continue;
+    const norm = toepasselijkeScheefstandNormen3D({ beams: staven })[0] ?? "en1993";
+    const phiEigen = phiVolgensNorm(norm, hoogteM, 1).phi;
+    const rol = staven[0].rollAngleRad ?? 0;
+    const factor = Number.isFinite(rol) ? Math.max(Math.abs(Math.cos(rol)), Math.abs(Math.sin(rol))) : 1;
+    const toegepast = phiEigen / factor;
+    const perAs: OpenFem3DPhiPerAs = { x: Math.max(phiModel.x, toegepast), y: Math.max(phiModel.y, toegepast) };
+    uit.kolommen.push({ staafIds: [...lijn.staafIds], knoopIds: boven, hoogteM, norm, phiEigen, factor });
+    for (const id of lijn.staafIds) uit.perStaaf.set(id, perAs);
+    for (const id of boven) uit.perKnoop.set(id, perAs);
+  }
+  return uit;
+}
+
+/** De melding over de eigen scheefstand van de losse kolommen, of null zonder losse kolom. */
+export function eigenKolomMelding3D(eigen: OpenFem3DEigenKolomPhi | null): string | null {
+  if (!eigen || eigen.kolommen.length === 0) return null;
+  const lijst = eigen.kolommen.map((k) => {
+    const draai = k.factor < 1 - 1e-9 ? `, gedraaid: /${getal(k.factor, 3)}` : "";
+    return `staaf ${k.staafIds.join("+")} (h = ${getal(k.hoogteM, 3)} m, ${NORM_ARTIKEL[k.norm]}, ` +
+      `φ_eigen = 1/${getal(1 / k.phiEigen, 0)}${draai})`;
+  });
+  return "Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan " +
+    "en middelt haar scheefstand met niets; haar lasten krijgen φ = max(φ_model, φ_eigen) met h = haar eigen " +
+    `hoogte en m = 1: ${lijst.join("; ")}. Daarmee zit haar zijdelingse knik in de toetskrachten en geldt de ` +
+    "systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).";
+}
+
+const NORM_ARTIKEL: Record<ScheefstandNorm, string> = {
+  en1993: "EN 1993-1-1 (5.5)", en1992: "EN 1992-1-1 (5.1)", en1995: "EN 1995-1-1 (5.1)",
+};
 
 /** De 3D-keuze: als in 2D, met een handmatige m per richting (issue #212). */
 export interface ScheefstandKeuze3D extends ScheefstandKeuze {
@@ -647,20 +748,27 @@ export function scheefstandVanCombinatie(
   combinatie: LoadCombination,
   phi: OpenFem3DPhiPerAs | number | null,
   torsie: OpenFem3DTorsiePerAs | null = null,
+  eigenKolom: OpenFem3DEigenKolomPhi | null = null,
 ): OpenFem3DScheefstand | null {
   if (combinatie.scheefstandRichting === undefined || phi === null) return null;
   const as = combinatie.scheefstandAs ?? "x";
   const waarde = typeof phi === "number" ? phi : phi[as];
   if (!(waarde > 0)) return null;
+  const eigen = eigenKolom && eigenKolom.kolommen.length > 0
+    ? {
+        phiPerStaaf: new Map([...eigenKolom.perStaaf].map(([id, p]) => [id, p[as]])),
+        phiPerKnoop: new Map([...eigenKolom.perKnoop].map(([id, p]) => [id, p[as]])),
+      }
+    : {};
   if (combinatie.scheefstandTorsie) {
     const rijen = torsie?.[as];
     if (!rijen) {
       throw new Error(`Scheefstand: de torsievariant "${combinatie.name}" heeft geen twee kolomrijen haaks op ` +
         `${AS_LABEL[as]} (EN 1993-1-1 5.3.2(10)).`);
     }
-    return { phi: waarde, as, richting: combinatie.scheefstandRichting, torsie: rijen };
+    return { phi: waarde, as, richting: combinatie.scheefstandRichting, torsie: rijen, ...eigen };
   }
-  return { phi: waarde, as, richting: combinatie.scheefstandRichting };
+  return { phi: waarde, as, richting: combinatie.scheefstandRichting, ...eigen };
 }
 
 /**
@@ -727,7 +835,11 @@ export interface OpenFem3DScheefstandVerzoek {
  * belasting, en het moment om de verticale as is φ·Σ s·V·(p − p_midden).
  */
 export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verzoek: T, scheefstand: OpenFem3DScheefstand): T {
-  const { phi, as, richting, torsie } = scheefstand;
+  const { phi: phiModel, as, richting, torsie, phiPerStaaf, phiPerKnoop } = scheefstand;
+  // φ per last: de eigen scheefstand van een losse kolom (fase 3) vervangt φ
+  // van het model voor de lasten op haar staven en knopen; anders φ zelf.
+  const phiKnoop = (nodeId: number) => phiPerKnoop?.get(nodeId) ?? phiModel;
+  const phiStaaf = (memberId: number) => phiPerStaaf?.get(memberId) ?? phiModel;
   const d: Vec3 = as === "x" ? [richting, 0, 0] : [0, richting, 0];
   const knoop = new Map(verzoek.nodes.map((n) => [n.id, n]));
   // De torsievariant (5.3.2(10)): de factor s op een punt, uit de coördinaat
@@ -763,6 +875,7 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
 
   for (const last of verzoek.nodalLoads) {
     if (last.fz === 0) continue;
+    const phi = phiKnoop(last.nodeId);
     const s = torsie ? sOp(knoop.get(last.nodeId)!) : 1;
     telOp(last.nodeId, schaal(d, torsie ? -phi * s * last.fz : -phi * last.fz));
   }
@@ -779,6 +892,7 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
   let volgendeStaaflastId = Math.max(0, ...verzoek.memberLoads.map((l) => l.id)) + 1;
   for (const last of verzoek.memberLoads) {
     const { ex, ey, ez, lengte } = assenVan(last.memberId);
+    const phi = phiStaaf(last.memberId);
     const a = last.startPositionM ?? 0, b = last.endPositionM ?? lengte;
     if (isOpenFem3DGlobalMemberLoad(last)) {
       if (last.globalDirection !== "z") continue;
@@ -832,6 +946,7 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
   let volgendePuntlastId = Math.max(0, ...verzoek.memberPointLoads.map((l) => l.id)) + 1;
   for (const last of verzoek.memberPointLoads) {
     const { ex, ey, ez, lengte } = assenVan(last.memberId);
+    const phi = phiStaaf(last.memberId);
     const pZ = last.pyKn * ey[2] + last.pzKn * ez[2];
     if (pZ === 0) continue;
     const h = schaal(d, torsie ? -phi * sLangs(last.memberId, last.positionM, last.positionM)[0] * pZ : -phi * pZ);
@@ -859,8 +974,8 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
   }
   const surfaceLoads = verzoek.surfaceLoads?.map((last) => last.qzKnPerM2 === 0 ? last : {
     ...last,
-    qxKnPerM2: last.qxKnPerM2 - phi * last.qzKnPerM2 * d[0],
-    qyKnPerM2: last.qyKnPerM2 - phi * last.qzKnPerM2 * d[1],
+    qxKnPerM2: last.qxKnPerM2 - phiModel * last.qzKnPerM2 * d[0],
+    qyKnPerM2: last.qyKnPerM2 - phiModel * last.qzKnPerM2 * d[1],
   });
 
   return {

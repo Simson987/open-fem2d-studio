@@ -81,6 +81,7 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     scheefstandAantalX: null,
     scheefstandAantalY: null,
     scheefstandTorsie: false,
+    scheefstandEigenKolom: false,
     gevolgklasse: "CC2",
     // De nationale bijlage (normnaad): zij bepaalt de nationaal bepaalde
     // parameters van elke toetsing, dus een wijziging hoort de resultaten te
@@ -127,6 +128,8 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     scheefstandAantalX: (m) => { m.scheefstandAantalX = 2; },
     scheefstandAantalY: (m) => { m.scheefstandAantalY = 3; },
     scheefstandTorsie: (m) => { m.scheefstandTorsie = true; },
+    // Issue #199, fase 3: de eigen scheefstand per losse kolom.
+    scheefstandEigenKolom: (m) => { m.scheefstandEigenKolom = true; },
     gevolgklasse: (m) => { m.gevolgklasse = "CC3"; },
     // Er is vandaag maar één gevulde bijlage; "naar niets" is de enige
     // wijziging die te maken is, en ook die hoort een nieuwe versie te geven.

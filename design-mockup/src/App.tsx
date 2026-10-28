@@ -1370,6 +1370,8 @@ function App() {
     scheefstandAantalX: fem.scheefstandAantalX,
     scheefstandAantalY: fem.scheefstandAantalY,
     scheefstandTorsie: fem.scheefstandTorsie,
+    // Issue #199, fase 3: de eigen scheefstand per losse kolom.
+    scheefstandEigenKolom: fem.scheefstandEigenKolom,
     // Eigen doorsneden reizen mee in het projectbestand: een staaf met
     // `EIGEN:<naam>` moet op een andere machine dezelfde doorsnede vinden.
     // Alleen de doorsneden die dit model daadwerkelijk gebruikt — anders
@@ -1599,6 +1601,7 @@ function App() {
         scheefstandAantalX: parsed.scheefstandAantalX,
         scheefstandAantalY: parsed.scheefstandAantalY,
         scheefstandTorsie: parsed.scheefstandTorsie,
+        scheefstandEigenKolom: parsed.scheefstandEigenKolom,
         gevolgklasse:
           bestandsklasse === "CC1" || bestandsklasse === "CC2" || bestandsklasse === "CC3"
             ? bestandsklasse
@@ -3691,6 +3694,8 @@ function App() {
               modelAan: fem.scheefstandEnabled,
               // Issue #212: de torsievarianten van EN 1993-1-1 5.3.2(10).
               torsie: openFem3dTorsieRijen,
+              // Issue #199, fase 3: de eigen scheefstand per losse kolom.
+              eigenKolom: fem.scheefstandEigenKolom,
             },
             // Imperfectiegevallen (bijvoorbeeld uit een IFC-analysemodel) tellen
             // in de UGT-toets met factor 0, met een melding (dezelfde functie als MCP).
@@ -3935,7 +3940,7 @@ function App() {
       // gewijzigde scheefstandbron het bestand niet als "gewijzigd" markeren
       // en stil verloren gaan bij het afsluiten.
       fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen,
-      fem.scheefstandAantalX, fem.scheefstandAantalY, fem.scheefstandTorsie,
+      fem.scheefstandAantalX, fem.scheefstandAantalY, fem.scheefstandTorsie, fem.scheefstandEigenKolom,
       openFem3d]);
 
   // C2: sluitbeveiliging. Tauri: onCloseRequested + native dialoog (dekt de
@@ -5248,6 +5253,8 @@ function App() {
           setScheefstandAantalY={fem.setScheefstandAantalY}
           scheefstandTorsie={fem.scheefstandTorsie}
           setScheefstandTorsie={fem.setScheefstandTorsie}
+          scheefstandEigenKolom={fem.scheefstandEigenKolom}
+          setScheefstandEigenKolom={fem.setScheefstandEigenKolom}
           // φ_X en φ_Y, m_X en m_Y (issue #194): de balk toont beide richtingen.
           scheefstandPhiNoemer={scheefstandBalk.noemer}
           scheefstandPhiNoemerY={scheefstandBalk.noemerY}
@@ -5311,6 +5318,8 @@ function App() {
           setScheefstandAantalY={fem.setScheefstandAantalY}
           scheefstandTorsie={fem.scheefstandTorsie}
           setScheefstandTorsie={fem.setScheefstandTorsie}
+          scheefstandEigenKolom={fem.scheefstandEigenKolom}
+          setScheefstandEigenKolom={fem.setScheefstandEigenKolom}
           // De uitkomst en de afleiding gaan als GEGEVEN mee naar de balk: de
           // balk toont wat er is gerekend en rekent niets zelf, zodat er geen
           // tweede plek is waar φ kan ontstaan.

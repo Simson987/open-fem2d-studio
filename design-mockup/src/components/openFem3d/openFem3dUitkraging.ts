@@ -189,6 +189,12 @@ export function openFem3DZijdelingseKnik(
   uls: readonly LoadCombination[],
   analyseVan: (combinatieId: number) => string | undefined,
   phi: number | { x: number; y: number } | undefined,
+  /**
+   * Per staaf de φ van haar lasten als die afwijkt van `phi`: de eigen
+   * scheefstand van een losse kolom (issue #199, fase 3). Daarmee haalt die
+   * kolom de φ-eis hieronder altijd.
+   */
+  phiPerStaaf?: ReadonlyMap<number, { x: number; y: number }>,
 ): (beam: OpenFem3DBeam) => { veld?: { y: boolean; z: boolean }; notitie?: string } {
   const tweedeOrde = uls.length > 0 && uls.every((c) => analyseVan(c.id) === "p-delta");
   const allemaalScheef = uls.every((c) => c.scheefstandRichting !== undefined);
@@ -197,10 +203,13 @@ export function openFem3DZijdelingseKnik(
   const minSinus = Math.sin((VERTICAAL_VANAF_GRADEN * Math.PI) / 180);
   const getal = (x: number, d: number) => x.toFixed(d).replace(".", ",");
   // φ_X en φ_Y (issue #194); één getal geldt in beide richtingen.
-  const phiX = typeof phi === "number" ? phi : phi?.x;
-  const phiY = typeof phi === "number" ? phi : phi?.y;
-  const bekend = phiX !== undefined && phiY !== undefined && Number.isFinite(phiX) && Number.isFinite(phiY);
+  const modelX = typeof phi === "number" ? phi : phi?.x;
+  const modelY = typeof phi === "number" ? phi : phi?.y;
   return (beam) => {
+    const eigen = phiPerStaaf?.get(beam.id);
+    const phiX = eigen?.x ?? modelX;
+    const phiY = eigen?.y ?? modelY;
+    const bekend = phiX !== undefined && phiY !== undefined && Number.isFinite(phiX) && Number.isFinite(phiY);
     if (!gedekt) return {};
     const a = model.nodes.find((n) => n.id === beam.startNodeId);
     const b = model.nodes.find((n) => n.id === beam.endNodeId);

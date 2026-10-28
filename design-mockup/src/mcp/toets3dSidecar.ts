@@ -121,6 +121,8 @@ export function toetsScheefstand3D(
     normen,
     modelAan: false,
     torsie: project.scheefstandTorsie === true ? torsieRijen3D(geometrie) : null,
+    // Issue #199, fase 3: de eigen scheefstand per losse kolom.
+    eigenKolom: project.scheefstandEigenKolom === true,
   };
 }
 

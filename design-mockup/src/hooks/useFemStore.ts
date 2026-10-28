@@ -2037,6 +2037,12 @@ export interface FemStore {
    */
   scheefstandTorsie: boolean;
   setScheefstandTorsie: (v: boolean) => void;
+  /**
+   * Alleen 3D (issue #199, fase 3): de eigen scheefstand per losse kolom (een
+   * kolomlijn met een vrije kop) in de UGT-toets. Standaard uit.
+   */
+  scheefstandEigenKolom: boolean;
+  setScheefstandEigenKolom: (v: boolean) => void;
   /** Canvas view mode: false = model-only (no loads drawn), true = LC active loads visible. */
   showLoads: boolean;
   setShowLoads: (v: boolean) => void;
@@ -2119,6 +2125,7 @@ export interface FemStore {
     scheefstandAantalX?: number | null;
     scheefstandAantalY?: number | null;
     scheefstandTorsie?: boolean;
+    scheefstandEigenKolom?: boolean;
     /**
      * Gevolgklasse uit de projectgegevens van het bestand. Ontbreekt → de
      * klasse uit het kenmerk van de standaardcombinaties in het bestand, en
@@ -2345,6 +2352,7 @@ export function useFemStore(opties?: {
   const [scheefstandAantalX, setScheefstandAantalX] = useState<number | null>(null);
   const [scheefstandAantalY, setScheefstandAantalY] = useState<number | null>(null);
   const [scheefstandTorsie, setScheefstandTorsie] = useState<boolean>(false);
+  const [scheefstandEigenKolom, setScheefstandEigenKolom] = useState<boolean>(false);
   // Eén versie van alles buiten het model dat de uitkomst bepaalt. Elk veld
   // van `RekenInstellingen` is verplicht, dus een nieuwe instelling kan hier
   // niet ontbreken zonder dat het niet compileert.
@@ -2378,7 +2386,7 @@ export function useFemStore(opties?: {
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
       scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
-      scheefstandTorsie, gevolgklasse,
+      scheefstandTorsie, scheefstandEigenKolom, gevolgklasse,
       nationaleBijlage: projectBijlage,
     }),
     [
@@ -2386,7 +2394,7 @@ export function useFemStore(opties?: {
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
       scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
-      scheefstandTorsie, gevolgklasse, projectBijlage,
+      scheefstandTorsie, scheefstandEigenKolom, gevolgklasse, projectBijlage,
     ],
   );
   // Canvas view mode: false = "Model" tab (no loads drawn), true = LC active.
@@ -3296,6 +3304,7 @@ export function useFemStore(opties?: {
     scheefstandAantalX, setScheefstandAantalX,
     scheefstandAantalY, setScheefstandAantalY,
     scheefstandTorsie, setScheefstandTorsie,
+    scheefstandEigenKolom, setScheefstandEigenKolom,
     showLoads, setShowLoads,
     pendingLoadFocus, setPendingLoadFocus,
     canUndo, canRedo, undo, redo,
@@ -3402,6 +3411,7 @@ export function useFemStore(opties?: {
       scheefstandAantalX?: number | null;
       scheefstandAantalY?: number | null;
       scheefstandTorsie?: boolean;
+      scheefstandEigenKolom?: boolean;
       gevolgklasse?: Gevolgklasse;
       /** De nationale bijlage uit de projectgegevens van het bestand, zoals gelezen. */
       nationaleBijlage?: unknown;
@@ -3514,6 +3524,7 @@ export function useFemStore(opties?: {
       setScheefstandAantalX(mPerAs(p.scheefstandAantalX));
       setScheefstandAantalY(mPerAs(p.scheefstandAantalY));
       setScheefstandTorsie(p.scheefstandTorsie === true);
+      setScheefstandEigenKolom(p.scheefstandEigenKolom === true);
       // v2-velden; v1-bestanden (of Nieuw) vallen terug op de defaults.
       // (De combinaties zijn hierboven al gezet, samen met de gevallen.)
       const nieuwGrid = p.structuralGrid ?? DEFAULT_STRUCTURAL_GRID;

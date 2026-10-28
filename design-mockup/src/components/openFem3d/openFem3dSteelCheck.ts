@@ -159,6 +159,12 @@ export interface OpenFem3DCombinationSet {
    */
   scheefstandPhi?: number | { x: number; y: number };
   /**
+   * Per staaf de φ waarmee haar lasten zijn gerekend als die van
+   * `scheefstandPhi` afwijkt: de eigen scheefstand van een losse kolom (issue
+   * #199, fase 3, `eigenKolomScheefstand3D`).
+   */
+  scheefstandPhiPerStaaf?: ReadonlyMap<number, { x: number; y: number }>;
+  /**
    * De analyse van de UGT-toetskrachten (issue #199): alleen in de toetsset
    * (`toetsSet3D`). Daarmee zetten de bouwers bij elke staaf dat de
    * UGT-krachten tweede orde met scheefstand zijn (`toetsKrachtenNotitie3D`).
@@ -250,6 +256,7 @@ export function buildOpenFem3DSteelCheckInputs(
   const einden = openFem3DEinden(model);
   const zijdelingseKnik = openFem3DZijdelingseKnik(
     model, ulsCombinations, (id) => combinationSet?.results.get(id)?.analysis, combinationSet?.scheefstandPhi,
+    combinationSet?.scheefstandPhiPerStaaf,
   );
   for (const beam of model.beams) {
     const material = beam.material?.trim().toUpperCase();

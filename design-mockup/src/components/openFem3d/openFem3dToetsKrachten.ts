@@ -78,6 +78,8 @@ import {
   type OpenFem3DSolveResult,
 } from "./openFem3dSolver";
 import {
+  eigenKolomMelding3D,
+  eigenKolomScheefstand3D,
   metScheefstandRichtingen3D,
   OPEN_FEM_3D_SCHEEFSTAND_ASSEN,
   phiPerAsTekst,
@@ -85,6 +87,7 @@ import {
   scheefstandVanCombinatie,
   toetsPhiTekst3D,
   zonderScheefstandVariant,
+  type OpenFem3DEigenKolomPhi,
   type OpenFem3DPhiPerAs,
   type OpenFem3DScheefstand,
   type OpenFem3DTorsiePerAs,
@@ -122,6 +125,12 @@ export interface ToetsKrachtenInvoer3D {
      * de buitenste kolomrijen (`torsieRijen3D`). `null`/ontbrekend = uit.
      */
     torsie?: OpenFem3DTorsiePerAs | null;
+    /**
+     * De eigen scheefstand per losse kolom (issue #199, fase 3; instelling
+     * `scheefstandEigenKolom`): een kolomlijn met een vrije kop krijgt
+     * max(φ_model, φ_eigen) op haar lasten (`eigenKolomScheefstand3D`).
+     */
+    eigenKolom?: boolean;
   };
   /**
    * De belastinggevallen, voor de imperfectiegevallen (`LoadCase.imperfectie`):
@@ -172,6 +181,8 @@ export interface ToetsPlan3D {
   /** Vooraf geweigerd (platen): geen runs, geen krachten. */
   weigering: ToetsWeigering | null;
   meldingen: string[];
+  /** De eigen scheefstand van de losse kolommen (fase 3 van #199), of null. */
+  eigenKolom?: OpenFem3DEigenKolomPhi | null;
 }
 
 /** De uitkomst van één berekening: het resultaat, of de reden waarom het niet lukte. */
@@ -196,6 +207,8 @@ export interface ToetsKrachten3D {
   meldingen: string[];
   /** Hoeveel berekeningen de toets zelf deed (0 bij volledig hergebruik). */
   berekeningen: number;
+  /** De eigen scheefstand van de losse kolommen (fase 3 van #199), of null. */
+  eigenKolom?: OpenFem3DEigenKolomPhi | null;
 }
 
 /** Is de variant een +X-variant (die het id van de basiscombinatie houdt)? */
@@ -328,6 +341,11 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
   const torsie = scheefstand.torsie ?? null;
   const ugtCombinaties = metScheefstandRichtingen3D(imperfectie.combinaties, phiPerAs, { torsie });
   const torsieAssen = OPEN_FEM_3D_SCHEEFSTAND_ASSEN.filter((as) => torsie?.[as] !== undefined);
+  // Fase 3 van #199: de eigen scheefstand per losse kolom, met de toets-φ als model-φ.
+  const eigenKolom = scheefstand.eigenKolom ? eigenKolomScheefstand3D(model, phiPerAs) : null;
+  const eigenMelding = eigenKolomMelding3D(eigenKolom);
+  if (eigenMelding) meldingen.push(eigenMelding);
+  const metEigen = eigenKolom !== null && eigenKolom.kolommen.length > 0;
   if (torsieAssen.length > 0) {
     meldingen.push(
       `De toets rekent ook de torsievarianten van EN 1993-1-1 5.3.2(10) (figuur 5.5) in ` +
@@ -361,8 +379,10 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
 
   // Met een imperfectiegeval op factor 0 zijn het andere combinaties dan die
   // van de resultaten: nooit hergebruiken.
+  // Met een eigen scheefstand per losse kolom rekenen de resultaten anders dan
+  // de toets: nooit hergebruiken.
   const hergebruikt = scheefstand.modelAan && zelfdePhi && eindtoestand.length === 0
-    && imperfectie.melding === null
+    && imperfectie.melding === null && !metEigen
     && ugtCombinaties.every((v) => bruikbaar(v, "p-delta") !== undefined);
   analyse.hergebruikt = hergebruikt;
   const hergebruik = new Map<number, OpenFem3DSolveResult>();
@@ -374,7 +394,7 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
     }
     runs.push({
       sleutel: `toets:${v.id}`, soort: "toets", combinatie: v, analyse: "p-delta",
-      scheefstand: scheefstandVanCombinatie(v, phiPerAs, torsie), bucklingModes: 1,
+      scheefstand: scheefstandVanCombinatie(v, phiPerAs, torsie, eigenKolom), bucklingModes: 1,
     });
   }
 
@@ -396,12 +416,15 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
       if (r) continue;
       runs.push({
         sleutel: `eersteOrde:${c.id}`, soort: "eersteOrde", combinatie: c, analyse: "linear",
-        scheefstand: scheefstandVanCombinatie(c, phiPerAs, torsie), bucklingModes: 0,
+        scheefstand: scheefstandVanCombinatie(c, phiPerAs, torsie, eigenKolom), bucklingModes: 0,
       });
     }
   }
 
-  return { analyse, ugtCombinaties, runs, hergebruik, ...(eersteOrde ? { eersteOrde } : {}), weigering: null, meldingen };
+  return {
+    analyse, ugtCombinaties, runs, hergebruik, ...(eersteOrde ? { eersteOrde } : {}), weigering: null, meldingen,
+    ...(metEigen ? { eigenKolom } : {}),
+  };
 }
 
 /** α_cr van een uitkomst: de eerste knikvorm, of niet bepaald met de reden. */
@@ -504,6 +527,7 @@ export function stelToetsKrachten3DSamen(
   return {
     analyse: plan.analyse,
     ugtCombinaties: plan.ugtCombinaties,
+    ...(plan.eigenKolom ? { eigenKolom: plan.eigenKolom } : {}),
     combinationResults,
     ...(eersteOrdeResultaten ? { eersteOrdeResultaten } : {}),
     alphaCr,
@@ -567,8 +591,9 @@ export function toetsSet3D(
     if (c.type === "uls") {
       // De eindtoestandvarianten horen niet in een tweede-ordetoets (B10).
       if (c.eindtoestand !== undefined) continue;
+      // 0–3: ±X en ±Y; 4–7: de torsievarianten van 5.3.2(10) (issue #212).
       const ids = c.scheefstandRichting === undefined
-        ? [0, 1, 2, 3].map((k) => c.id + k * SCHEEFSTAND_COMBO_OFFSET)
+        ? [0, 1, 2, 3, 4, 5, 6, 7].map((k) => c.id + k * SCHEEFSTAND_COMBO_OFFSET)
         : [c.id];
       for (const id of ids) neem(toetsVan.get(id), toets.combinationResults.get(id));
       continue;
@@ -583,6 +608,8 @@ export function toetsSet3D(
     ...(resultaten.loadCases ? { loadCases: resultaten.loadCases } : {}),
     ...(resultaten.consequenceClass ? { consequenceClass: resultaten.consequenceClass } : {}),
     scheefstandPhi: toets.analyse.phiPerAs ?? toets.analyse.phi,
+    // Fase 3 van #199: per losse kolom de toegepaste φ (voor de φ-eis van het vrije eind).
+    ...(toets.eigenKolom ? { scheefstandPhiPerStaaf: toets.eigenKolom.perStaaf } : {}),
     toetsAnalyse: toets.analyse,
     ...(toets.eersteOrdeResultaten ? { eersteOrdeResultaten: toets.eersteOrdeResultaten } : {}),
   };

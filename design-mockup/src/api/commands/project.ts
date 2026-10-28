@@ -388,12 +388,14 @@ function scheefstandVan(document: ApiDocument) {
     membersX: document.scheefstandAantalX ?? null,
     membersY: document.scheefstandAantalY ?? null,
     torsion: document.scheefstandTorsie === true,
+    ownColumnSway: document.scheefstandEigenKolom === true,
   };
 }
 
 type ScheefstandInvoer = {
   enabled?: boolean; source?: ScheefstandBron; denominator?: number; heightM?: number | null;
   members?: number | null; membersX?: number | null; membersY?: number | null; torsion?: boolean;
+  ownColumnSway?: boolean;
 };
 
 const scheefstandLezen = documentCommando<Record<string, never>, unknown>({
@@ -419,6 +421,7 @@ const scheefstandZetten = documentCommando<ScheefstandInvoer, unknown>({
     membersX: ofNull(geheel("Alleen 3D: handmatige m_X.", { minimum: 1 }), "null = members of afleiden."),
     membersY: ofNull(geheel("Alleen 3D: handmatige m_Y.", { minimum: 1 }), "null = members of afleiden."),
     torsion: jaNee("Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10)."),
+    ownColumnSway: jaNee("Alleen 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(φ_model, φ_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte."),
   }),
   uitvoeren: (invoer, document) => {
     const nieuw: ApiDocument = {
@@ -431,6 +434,7 @@ const scheefstandZetten = documentCommando<ScheefstandInvoer, unknown>({
       ...(invoer.membersX !== undefined ? { scheefstandAantalX: invoer.membersX } : {}),
       ...(invoer.membersY !== undefined ? { scheefstandAantalY: invoer.membersY } : {}),
       ...(invoer.torsion !== undefined ? { scheefstandTorsie: invoer.torsion } : {}),
+      ...(invoer.ownColumnSway !== undefined ? { scheefstandEigenKolom: invoer.ownColumnSway } : {}),
     };
     return { uitkomst: scheefstandVan(nieuw), document: nieuw };
   },
