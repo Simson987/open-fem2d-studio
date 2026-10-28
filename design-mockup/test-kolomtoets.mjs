@@ -579,5 +579,22 @@ if (!existsSync(TOETSBRUG)) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+log("\n[6] tweede_orde_in_krachten (issue #199, fase 5) uit de toetsanalyse");
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { tweedeOrdeInKrachtenVan } = await import("./src/lib/betonCheckBuilder.ts");
+  const m = model(KOLOM_GESCHOORD);
+  const met = (analysetype) => buildBetonCheckInputs({
+    nodes: m.nodes, beams: m.beams, combinations: COMBOS, combinationResults: resultaten,
+    korven: korvenUitStaven(m.beams),
+    ...(analysetype ? { stabiliteit: { analysetype, alphaCr: [], scheefstandAan: true, scheefstandPhi: 1 / 200 } } : {}),
+  }).inputs[0];
+  eq("P-Δ-toets: Geometrisch (elastisch, geen tweede orde volgens §5.8)", met("tweedeOrdeGeometrisch").tweede_orde_in_krachten, "Geometrisch");
+  eq("fysisch niet-lineaire toets: Fysisch (§5.8.6)", met("tweedeOrdeFysisch").tweede_orde_in_krachten, "Fysisch");
+  eq("eerste orde: Geen", tweedeOrdeInKrachtenVan({ analysetype: "eersteOrde", alphaCr: [], scheefstandAan: false }), "Geen");
+  ok("zonder stabiliteit: het veld ontbreekt (de oude afleiding in de kern)", !("tweede_orde_in_krachten" in met(null)));
+}
+
 log(`\n${passed} geslaagd, ${failed} mislukt${overgeslagen ? `, ${overgeslagen} overgeslagen` : ""}`);
 process.exit(failed === 0 ? 0 : 1);

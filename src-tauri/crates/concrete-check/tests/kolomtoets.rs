@@ -140,6 +140,7 @@ fn verzoek(kolom: ConcreteColumnInput, envelop: Vec<ForcePoint>) -> ConcreteColu
         forces_envelope: envelop,
         sls_quasi_permanent_envelope: vec![],
         first_order_envelope: None,
+        tweede_orde_in_krachten: None,
         design_situation: Default::default(),
         steel_branch: Default::default(),
     }
@@ -170,6 +171,7 @@ fn staaf(kolom: Option<ConcreteColumnInput>, envelop: Vec<ForcePoint>) -> Concre
         bar_spacing_mm: None,
         sls_quasi_permanent_envelope: vec![],
         first_order_envelope: None,
+        tweede_orde_in_krachten: None,
         column: kolom,
         staafstand: None,
         staafstand_notities: None,

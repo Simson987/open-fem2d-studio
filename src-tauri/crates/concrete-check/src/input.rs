@@ -12,6 +12,34 @@ use ts_rs::TS;
 
 use crate::kolom::ConcreteColumnInput;
 
+/// Uit welke berekening de UGT-krachten van een betonstaaf komen, voor §5.8
+/// (issue #199, fase 5). De UGT-toets van de app rekent altijd tweede orde;
+/// §5.8 wil weten WELKE.
+///
+/// * `Geen` — eerste orde. §5.8.8 (nominale kromming) om y op deze krachten.
+/// * `Geometrisch` — een P-Δ-berekening met de elastische, ongescheurde
+///   stijfheid (E_cm·I_c). Dat is GEEN tweede-ordeberekening volgens §5.8: de
+///   algemene methode §5.8.6 vraagt scheurvorming en kruip (5.8.6(1)-(3)), de
+///   methode met nominale stijfheid §5.8.7 een gereduceerde EI (5.21). Om y
+///   telt het tweede-orde-effect dus niet als bepaald: §5.8.8 rekent op de
+///   EERSTE-ORDE-momenten (`first_order_envelope`) met e_i (§5.2) en e₂. Bij
+///   een ongeschoorde staaf mag §5.8.8 niet (NB bij 5.8.5) en blijft de poort
+///   "voldoet niet".
+/// * `Fysisch` — de fysisch niet-lineaire berekening (§5.8.6, de secante
+///   stijfheid per segment). Het tweede-orde-moment om y zit in M_Ed; de poort
+///   λ/λ_lim is dan alleen informatie ("niet van toepassing", telt niet als
+///   maatgevende UC).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(
+    export,
+    export_to = "../../../../design-mockup/src/lib/types/concrete/"
+)]
+pub enum TweedeOrdeInKrachten {
+    Geen,
+    Geometrisch,
+    Fysisch,
+}
+
 fn default_n_strips() -> u32 {
     DEFAULT_N_STRIPS as u32
 }
@@ -226,6 +254,14 @@ pub struct ConcreteBeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub first_order_envelope: Option<Vec<ForcePoint>>,
+
+    /// Uit welke berekening `forces_envelope` komt, voor §5.8 (issue #199,
+    /// fase 5). Zie [`TweedeOrdeInKrachten`]. `None` = de oude afleiding: een
+    /// meegestuurde `first_order_envelope` betekent "tweede orde in de
+    /// krachten" (zoals vóór dit veld).
+    #[serde(default)]
+    #[ts(optional)]
+    pub tweede_orde_in_krachten: Option<TweedeOrdeInKrachten>,
 
     /// De §5.8-gegevens: geschoord of ongeschoord, de kniklengte, de kruip en
     /// de twee keuzen die §9.5 nodig heeft.

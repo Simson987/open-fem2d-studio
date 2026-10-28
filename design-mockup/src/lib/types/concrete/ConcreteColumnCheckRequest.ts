@@ -6,6 +6,7 @@ import type { ForcePoint } from "../steel/ForcePoint";
 import type { NationaleBijlage } from "../norm/NationaleBijlage";
 import type { ReinforcementCage } from "./ReinforcementCage";
 import type { SteelBranch } from "./SteelBranch";
+import type { TweedeOrdeInKrachten } from "./TweedeOrdeInKrachten";
 
 /**
  * Verzoek voor de LOSSE kolomtoets — dezelfde rekengang als in de volledige
@@ -71,4 +72,9 @@ sls_quasi_permanent_envelope: Array<ForcePoint>,
  * `None` = `forces_envelope` is eerste orde. Zie hetzelfde veld in
  * `ConcreteBeamCheckInput`.
  */
-first_order_envelope?: Array<ForcePoint>, design_situation: DesignSituation, steel_branch: SteelBranch, };
+first_order_envelope?: Array<ForcePoint>, 
+/**
+ * Uit welke berekening `forces_envelope` komt (issue #199, fase 5); zie
+ * hetzelfde veld in `ConcreteBeamCheckInput`. `None` = de oude afleiding.
+ */
+tweede_orde_in_krachten?: TweedeOrdeInKrachten, design_situation: DesignSituation, steel_branch: SteelBranch, };

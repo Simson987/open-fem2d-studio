@@ -74,6 +74,8 @@ import type { SolverResult } from "../components/fem/solver/types";
 import type { LoadCombination } from "../components/fem/solver/combinations";
 import { combinatiesVanSoort, zonderBgtEindtoestand } from "../components/fem/solver/combinations";
 import type { ConcreteBeamCheckInput } from "./types/concrete/ConcreteBeamCheckInput";
+import type { TweedeOrdeInKrachten } from "./types/concrete/TweedeOrdeInKrachten";
+import type { StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
 import type { ConcreteColumnInput } from "./types/concrete/ConcreteColumnInput";
 import type { ConcreteSectionInput } from "./types/concrete/ConcreteSectionInput";
 import type { ConcreteShape } from "./types/concrete/ConcreteShape";
@@ -488,6 +490,25 @@ export interface BetonBuildData {
    * (`eersteOrdeResultatenVoorToets`).
    */
   eersteOrdeResultaten?: Map<number, SolverResult>;
+  /**
+   * De stabiliteit van de toets (issue #199): uit haar analysetype volgt
+   * `tweede_orde_in_krachten` (fase 5, `tweedeOrdeInKrachtenVan`). Ontbreekt =
+   * het veld gaat niet mee en de kern volgt de oude afleiding.
+   */
+  stabiliteit?: StabiliteitVoorToets;
+}
+
+/**
+ * Uit welke berekening de UGT-krachten van de toets komen, voor §5.8 (issue
+ * #199, fase 5): "Fysisch" na de fysisch niet-lineaire betonronde (§5.8.6),
+ * anders "Geometrisch" (elastische P-Δ: geen tweede orde volgens §5.8; de kern
+ * rekent om y §5.8.8 op de eerste-ordemomenten), en "Geen" bij eerste orde.
+ */
+export function tweedeOrdeInKrachtenVan(stabiliteit: StabiliteitVoorToets | undefined): TweedeOrdeInKrachten | undefined {
+  if (!stabiliteit) return undefined;
+  if (stabiliteit.analysetype === "tweedeOrdeFysisch") return "Fysisch";
+  if (stabiliteit.analysetype === "eersteOrde") return "Geen";
+  return "Geometrisch";
 }
 
 export interface BetonBuildResult {
@@ -699,6 +720,10 @@ export function buildBetonCheckInputs(ruweData: BetonBuildData): BetonBuildResul
                 ? buildForcesEnvelope(beam.id, eersteOrdeUgt, eersteOrde)
                 : [],
           }
+        : {}),
+      // Issue #199, fase 5: welke tweede orde in de krachten zit, voor §5.8.
+      ...(tweedeOrdeInKrachtenVan(data.stabiliteit)
+        ? { tweede_orde_in_krachten: tweedeOrdeInKrachtenVan(data.stabiliteit) }
         : {}),
       ...(cfg.milieuklasse ? { exposure_class: cfg.milieuklasse } : {}),
       ...(cfg.korrelafmetingMm && cfg.korrelafmetingMm > 0
