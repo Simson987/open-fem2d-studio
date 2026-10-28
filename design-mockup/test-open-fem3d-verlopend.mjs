@@ -159,8 +159,11 @@ console.log("[1] het model: lezen, keuren, toevoegen en wijzigen");
   ok(!("profileNameEnd" in updateOpenFem3DBeam(gewijzigd, 3, { profileNameEnd: null }).beams[2]), "null haalt het eindprofiel weg");
   ok(updateOpenFem3DBeam(gewijzigd, 3, { name: "Spant" }).beams[2].profileNameEnd === "IPE 300", "een andere wijziging laat het eindprofiel staan");
   ok(!("profileNameEnd" in updateOpenFem3DBeam(gewijzigd, 3, { profileNameEnd: "IPE 500" }).beams[2]), "eind gelijk aan begin: prismatisch");
+  // Sinds #240 herkent de catalogus "CHS 168.3x8" (als "CHS 168.3x8.0"): de
+  // weigering noemt nu de buis zelf in plaats van een onbekend profiel. Het
+  // gedrag dat deze regel bewaakt — weigeren, niet stil prismatisch — is gelijk.
   weigert(() => updateOpenFem3DBeam(gewijzigd, 3, { profileName: "CHS 168.3x8" }),
-    /3D-staaf 3: verlopend profiel wordt voor deze doorsnede niet ondersteund \("CHS 168.3x8"\)/,
+    /3D-staaf 3: verlopend profiel wordt voor deze doorsnede niet ondersteund \(buis "CHS 168\.3x8(\.0)?"\)/,
     "een nieuw beginprofiel dat niet bij het eind past, wordt geweigerd (niet stil prismatisch)");
   ok(!("profileNameEnd" in updateOpenFem3DBeam(gewijzigd, 3, { profileName: "CHS 168.3x8", profileNameEnd: null }).beams[2]),
     "met profileNameEnd: null mag het beginprofiel wel van soort wisselen");
