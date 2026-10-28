@@ -557,6 +557,7 @@
       "firstOrderNotAllowed": "Stabiliteit: eerste orde niet toegestaan"
     },
     "solve": {
+      "fieldPatternsLimited": "Veldsgewijze plaatsing beperkt",
       "failed": "Berekening mislukt",
       "done": "Berekend in {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} belastinggevallen · {{combinaties}} combinaties",
@@ -1112,6 +1113,7 @@
     "creepT0": "t₀",
     "creepDays": "d",
     "creepCement": "cement",
+    "fieldPatternNonlinear": "Niet veldsgewijs geplaatst over {{velden}} velden bij niet-lineair rekenen",
     "creepAnnexBFailedTitle": "Kruipcoëfficiënt volgens bijlage B niet bepaald",
     "creepAnnexBFailedBody": "Staaf {{staaf}}: {{reden}} Deze staaf rekent zonder kruipcoëfficiënt.",
     "swayDerivation": {

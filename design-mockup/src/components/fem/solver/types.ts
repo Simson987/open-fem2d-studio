@@ -789,6 +789,15 @@ export interface SolverResult {
   plateElements?: PlateResult[];
 }
 
+/**
+ * Id van het eerste deelgeval per veld (veldsgewijze plaatsing van
+ * veranderlijke vloerbelasting, issue #219; zie solver/veldpatronen.ts). Ruim
+ * boven elk gewoon geval-id, en met de scheefstandverschuiving van een geval
+ * (1 000 000) erbij nog uniek. Past in de u32 van de rekenkern. Staat hier en
+ * niet in veldpatronen.ts zodat engine.ts hem kan lezen zonder kringimport.
+ */
+export const VELD_GEVAL_OFFSET = 100_000_000;
+
 // HEA 160 defaults — same numbers the v2 Properties panel hardcodes.
 export const DEFAULT_E = 210000;        // N/mm²
 export const DEFAULT_A = 3877;          // mm²

@@ -30,6 +30,7 @@ import type {
   LoadCombination, Envelope,
 } from "../components/fem/solver/combinations";
 import { defaultCombinations, metScheefstandRichtingen } from "../components/fem/solver/combinations";
+import { veldpatroonMeldingen, voegVeldpatronenIn } from "../components/fem/solver/veldpatronen";
 import type { AlphaCrUitkomst } from "../components/fem/solver/alphaCr";
 import {
   selecteerCombinaties, type OvergeslagenCombinatie,
@@ -1616,6 +1617,16 @@ export function computeLastenPlakken(
   };
 }
 
+/**
+ * Wat de rekengang over de veldsgewijze plaatsing teruggeeft (issue #219):
+ * de varianten, de deelgevallen als belastinggevallen en eventuele meldingen.
+ */
+export interface VeldpatroonOutputs {
+  combinaties: LoadCombination[];
+  gevallen: LoadCase[];
+  meldingen: string[];
+}
+
 export interface FemStore {
   // Model
   nodes: Node[];
@@ -1726,7 +1737,25 @@ export interface FemStore {
     perCase: Map<number, SolverResult>;
     combinationResults: Map<number, SolverResult>;
     envelope: Envelope;
+    veldpatronen?: VeldpatroonOutputs | null;
   } | null) => void;
+  /**
+   * De veldpatroonvarianten van de laatste (lineaire) rekengang (issue #219,
+   * solver/veldpatronen.ts); null = geen veranderlijk vloergeval over meer
+   * velden, of geen uitkomsten.
+   */
+  veldpatronen: VeldpatroonOutputs | null;
+  /**
+   * De combinaties waarmee de laatste rekengang WERKELIJK rekende:
+   * `actieveCombinaties` met de veldpatroonvarianten elk direct achter hun
+   * basis. Alles wat uitkomsten toont of toetst, zoekt hierin op id.
+   */
+  rekenCombinaties: LoadCombination[];
+  /**
+   * `loadCases` plus de deelgevallen per veld (zelfde type en categorie als
+   * hun geval), voor de toetsbouwers (belastingduur, ψ).
+   */
+  rekenBelastinggevallen: LoadCase[];
 
   // Mutations (each pushes a history snapshot)
   addNode: (x: number, z: number) => number;          // returns new node id
@@ -2182,6 +2211,7 @@ export function useFemStore(opties?: {
   const [combinationResults, setCombinationResults] = useState<Map<number, SolverResult> | null>(null);
   const [envelope, setEnvelope] = useState<Envelope | null>(null);
   const [stabiliteit, setStabiliteit] = useState<AlphaCrUitkomst[] | null>(null);
+  const [veldpatronen, setVeldpatronen] = useState<VeldpatroonOutputs | null>(null);
 
   // Welke combinaties dit model werkelijk nodig heeft. AFGELEID, nooit
   // opgeslagen: `combinations` blijft de volledige lijst die in het
@@ -2264,11 +2294,16 @@ export function useFemStore(opties?: {
    * combinatie-id opzoekt.
    */
   const combinatiesVoorRapport = useMemo(
-    () => metEindtoestandVarianten(
-      metScheefstandRichtingen(combinations, scheefstandEnabled, scheefstandRichting),
-      loadCases, eindstijfheid, combinatieBijlage,
-    ),
-    [combinations, scheefstandEnabled, scheefstandRichting, loadCases, eindstijfheid, combinatieBijlage],
+    () => {
+      const lijst = metEindtoestandVarianten(
+        metScheefstandRichtingen(combinations, scheefstandEnabled, scheefstandRichting),
+        loadCases, eindstijfheid, combinatieBijlage,
+      );
+      // Met de veldpatroonvarianten van de laatste rekengang (issue #219): het
+      // rapport zoekt de maatgevende combinatie op id op.
+      return veldpatronen ? voegVeldpatronenIn(lijst, veldpatronen.combinaties) : lijst;
+    },
+    [combinations, scheefstandEnabled, scheefstandRichting, loadCases, eindstijfheid, combinatieBijlage, veldpatronen],
   );
   // Normberekening van φ — beginstand "vast" (= het oude gedrag), zie de
   // toelichting bij `scheefstandBron` hierboven. h en m op null = afleiden.
@@ -2330,19 +2365,32 @@ export function useFemStore(opties?: {
     combinationResults: Map<number, SolverResult>;
     envelope: Envelope;
     stabiliteit?: AlphaCrUitkomst[];
+    veldpatronen?: VeldpatroonOutputs | null;
   } | null) => {
     if (m === null) {
       setMultiLcResult(null);
       setCombinationResults(null);
       setEnvelope(null);
       setStabiliteit(null);
+      setVeldpatronen(null);
       return;
     }
     setMultiLcResult(m.perCase);
     setCombinationResults(m.combinationResults);
     setEnvelope(m.envelope);
     setStabiliteit(m.stabiliteit ?? null);
+    setVeldpatronen(m.veldpatronen ?? null);
   }, []);
+  // Issue #219: de lijst waarmee werkelijk gerekend is, met de
+  // veldpatroonvarianten achter hun basiscombinatie.
+  const rekenCombinaties = useMemo(
+    () => (veldpatronen ? voegVeldpatronenIn(actieveCombinaties, veldpatronen.combinaties) : actieveCombinaties),
+    [actieveCombinaties, veldpatronen],
+  );
+  const rekenBelastinggevallen = useMemo(
+    () => (veldpatronen ? [...loadCases, ...veldpatronen.gevallen] : loadCases),
+    [loadCases, veldpatronen],
+  );
 
   // Wat er aan de gevallen niet meetelt — tegen de ACTIEF doorgerekende
   // combinaties, want alleen die bepalen de toetsing. De volledige lijst en de
@@ -2357,8 +2405,20 @@ export function useFemStore(opties?: {
       // De eindstijfheid van hout (EN 1995-1-1 2.2.3(5), 2.3.2.2): wat er in
       // een gemengd onbepaald model is doorgerekend en wat niet.
       eindstijfheid.meldingen,
+      // Veranderlijke vloerbelasting over meer velden bij een NIET-lineaire
+      // berekening: geen veldpatronen, dus luid melden (issue #219).
+      veldpatroonMeldingen({
+        beams, supports, loadCases, loads, lineair: analysetype === "eersteOrde",
+      }).map((m): GevalMelding => ({
+        niveau: m.niveau, caseId: m.caseId, tekst: m.tekst,
+        kop: {
+          sleutel: "common:loadCases.fieldPatternNonlinear",
+          waarden: { velden: m.velden },
+          tekst: `Niet veldsgewijs geplaatst over ${m.velden} velden bij niet-lineair rekenen`,
+        },
+      })),
     ),
-    [loadCases, actieveCombinaties, combinations, gevolgklasse, combinatieBijlage, loads, selfWeightEnabled, beams, eindstijfheid],
+    [loadCases, actieveCombinaties, combinations, gevolgklasse, combinatieBijlage, loads, selfWeightEnabled, beams, eindstijfheid, supports, analysetype],
   );
 
   const [selection, setSelection] = useState<Selection>(null);
@@ -3133,6 +3193,7 @@ export function useFemStore(opties?: {
     setMultiLcResult(null);
     setCombinationResults(null);
     setEnvelope(null);
+    setVeldpatronen(null);
     // We deliberately depend on the model-bearing state, not on the setters.
     // `plates` doet mee sinds platen meerekenen (P2): zonder die dependency
     // zou een dikte- of meshSize-wijziging verouderde resultaten laten staan.
@@ -3150,6 +3211,7 @@ export function useFemStore(opties?: {
     combinatieVervangingTekst: combinatieVervanging?.samenvatting ?? vervangingUitBestand,
     activeCombinationId, envelopeView,
     multiLcResult, combinationResults, envelope, stabiliteit,
+    veldpatronen, rekenCombinaties, rekenBelastinggevallen,
     selection,
     setSelection,
     setActiveLoadCaseId,

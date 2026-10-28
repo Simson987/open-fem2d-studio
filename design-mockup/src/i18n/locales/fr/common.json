@@ -557,6 +557,7 @@
       "firstOrderNotAllowed": "Stabilité : calcul au premier ordre non admis"
     },
     "solve": {
+      "fieldPatternsLimited": "Disposition travée par travée limitée",
       "failed": "Échec du calcul",
       "done": "Calculé en {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} cas de charge · {{combinaties}} combinaisons",
@@ -1112,6 +1113,7 @@
     "creepT0": "t₀",
     "creepDays": "j",
     "creepCement": "ciment",
+    "fieldPatternNonlinear": "Pas de disposition travée par travée sur {{velden}} travées en calcul non linéaire",
     "creepAnnexBFailedTitle": "Coefficient de fluage selon l'annexe B non déterminé",
     "creepAnnexBFailedBody": "Barre {{staaf}} : {{reden}} Cette barre est calculée sans coefficient de fluage.",
     "swayDerivation": {

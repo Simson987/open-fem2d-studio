@@ -19469,6 +19469,15 @@ var init_plaatMateriaal = __esm({
   }
 });
 
+// src/components/fem/solver/types.ts
+var VELD_GEVAL_OFFSET;
+var init_types2 = __esm({
+  "src/components/fem/solver/types.ts"() {
+    "use strict";
+    VELD_GEVAL_OFFSET = 1e8;
+  }
+});
+
 // src/components/fem/solver/engine.ts
 function normaliseerSegmenten(beamId, segmenten, L_mm) {
   if (segmenten === void 0) return void 0;
@@ -20829,8 +20838,10 @@ function registreerScheefstandRichtingen(perCase, primair) {
 }
 function gevalResultaten(perCase) {
   const sr = getScheefstandRichtingen(perCase);
-  if (!sr) return perCase;
-  return new Map([...perCase].filter(([id2]) => id2 < sr.offset));
+  const heeftDelen = [...perCase.keys()].some((id2) => id2 >= VELD_GEVAL_OFFSET);
+  if (!sr && !heeftDelen) return perCase;
+  const grens = Math.min(sr?.offset ?? Infinity, VELD_GEVAL_OFFSET);
+  return new Map([...perCase].filter(([id2]) => id2 < grens));
 }
 function losGevallenOp(input, perCase, idOffset) {
   for (const c of input.cases) {
@@ -21077,6 +21088,7 @@ var init_engine = __esm({
     init_femTypes();
     init_plaatMateriaal();
     init_grootsteVerplaatsing();
+    init_types2();
     MAX_MIXED_DOFS = 4e3;
     KNOOP_TOL_MM = 1;
     MIN_SEGMENT_MM = 25;
@@ -24699,6 +24711,388 @@ function bouwMultiInput(model) {
     }
   }
   return multiInput;
+}
+
+// src/components/fem/solver/veldpatronen.ts
+init_types2();
+init_combinations();
+init_engine();
+var VELD_COMBO_OFFSET = 2e9;
+var MAX_VELDPATRONEN = 64;
+var WEGLAAT_FRACTIE = 1e-4;
+function isTranslatieSteun(type) {
+  return type !== "rotSpring";
+}
+function bepaalVelden(model) {
+  const graad = /* @__PURE__ */ new Map();
+  for (const b of model.beams) {
+    for (const k of [b.from, b.to]) {
+      const lijst2 = graad.get(k);
+      if (lijst2) lijst2.push(b.id);
+      else graad.set(k, [b.id]);
+    }
+  }
+  const gesteund = new Set(model.supports.filter((s) => isTranslatieSteun(s.type)).map((s) => s.nodeId));
+  const ouder = new Map(model.beams.map((b) => [b.id, b.id]));
+  const wortel = (id2) => {
+    let r = id2;
+    while (ouder.get(r) !== r) r = ouder.get(r);
+    let x = id2;
+    while (ouder.get(x) !== r) {
+      const v = ouder.get(x);
+      ouder.set(x, r);
+      x = v;
+    }
+    return r;
+  };
+  const binnen2 = /* @__PURE__ */ new Set();
+  for (const [knoop, staven] of graad) {
+    if (gesteund.has(knoop) || staven.length !== 2 || staven[0] === staven[1]) continue;
+    binnen2.add(knoop);
+    const a = wortel(staven[0]), b = wortel(staven[1]);
+    if (a !== b) ouder.set(Math.max(a, b), Math.min(a, b));
+  }
+  const groepen2 = /* @__PURE__ */ new Map();
+  for (const b of model.beams) {
+    const r = wortel(b.id);
+    const lijst2 = groepen2.get(r);
+    if (lijst2) lijst2.push(b.id);
+    else groepen2.set(r, [b.id]);
+  }
+  const staafVan = new Map(model.beams.map((b) => [b.id, b]));
+  return [...groepen2.values()].map((s) => s.sort((a, b) => a - b)).sort((a, b) => a[0] - b[0]).map((staven, i) => ({
+    nummer: i + 1,
+    staven,
+    binnenknopen: [...new Set(staven.flatMap((id2) => {
+      const b = staafVan.get(id2);
+      return [b.from, b.to].filter((k) => binnen2.has(k));
+    }))].sort((a, b) => a - b)
+  }));
+}
+function isVeldsgewijsGeval(lc) {
+  return lc.type === "live" && (lc.categorie ?? "A") !== "H";
+}
+function veldenPerGeval(velden) {
+  const veldVanStaaf = /* @__PURE__ */ new Map();
+  const veldVanKnoop = /* @__PURE__ */ new Map();
+  for (const v of velden) {
+    for (const s of v.staven) veldVanStaaf.set(s, v.nummer);
+    for (const k of v.binnenknopen) veldVanKnoop.set(k, v.nummer);
+  }
+  return {
+    staaf: (beamId) => veldVanStaaf.get(beamId) ?? null,
+    knoop: (nodeId) => veldVanKnoop.get(nodeId) ?? null
+  };
+}
+function splitsVeldgevallen(input, loadCases) {
+  const kandidaten = loadCases.filter(
+    (lc) => isVeldsgewijsGeval(lc) && input.cases.some((c) => c.id === lc.id)
+  );
+  if (kandidaten.length === 0) return null;
+  const velden = bepaalVelden(input);
+  const zoek = veldenPerGeval(velden);
+  const deelgevallen = [];
+  const gesplitst = [];
+  const nieuw = {
+    cases: [],
+    loads: [],
+    pointLoads: [],
+    beamPointLoads: [],
+    thermalLoads: [],
+    edgeLoads: [],
+    edgePointLoads: []
+  };
+  let volgende = VELD_GEVAL_OFFSET + 1;
+  for (const lc of kandidaten) {
+    const groepen2 = /* @__PURE__ */ new Map();
+    const voeg = (sleutel, soort, last) => {
+      const k = sleutel ?? "overig";
+      const lijst2 = groepen2.get(k);
+      if (lijst2) lijst2.push({ soort, last });
+      else groepen2.set(k, [{ soort, last }]);
+    };
+    for (const l of input.loads) if (l.caseId === lc.id) voeg(zoek.staaf(l.beamId), "loads", l);
+    for (const l of input.beamPointLoads ?? []) if (l.caseId === lc.id) voeg(zoek.staaf(l.beamId), "beamPointLoads", l);
+    for (const l of input.pointLoads ?? []) if (l.caseId === lc.id) voeg(zoek.knoop(l.nodeId), "pointLoads", l);
+    for (const l of input.thermalLoads ?? []) if (l.caseId === lc.id) voeg(null, "thermalLoads", l);
+    for (const l of input.edgeLoads ?? []) if (l.caseId === lc.id) voeg(null, "edgeLoads", l);
+    for (const l of input.edgePointLoads ?? []) if (l.caseId === lc.id) voeg(null, "edgePointLoads", l);
+    if (groepen2.size < 2) continue;
+    const veldNummers = [...groepen2.keys()].filter((k) => k !== "overig").sort((a, b) => a - b);
+    const volgorde = [...veldNummers, ...groepen2.has("overig") ? ["overig"] : []];
+    for (const k of volgorde) {
+      const id2 = volgende++;
+      const naam = k === "overig" ? `${lc.name} overig` : `${lc.name} veld ${k}`;
+      deelgevallen.push({ id: id2, ouderId: lc.id, veld: k === "overig" ? null : k, naam });
+      nieuw.cases.push({ id: id2, name: naam });
+      for (const { soort, last } of groepen2.get(k)) {
+        nieuw[soort].push({ ...last, caseId: id2 });
+      }
+    }
+    gesplitst.push({ ouderId: lc.id, naam: lc.name, velden: veldNummers, overig: groepen2.has("overig") });
+  }
+  if (deelgevallen.length === 0) return null;
+  const plus = (oud, erbij) => erbij.length === 0 ? oud : [...oud ?? [], ...erbij];
+  const uitgebreid = {
+    ...input,
+    cases: [...input.cases, ...nieuw.cases],
+    loads: [...input.loads, ...nieuw.loads]
+  };
+  const pl = plus(input.pointLoads, nieuw.pointLoads);
+  if (pl) uitgebreid.pointLoads = pl;
+  const bpl = plus(input.beamPointLoads, nieuw.beamPointLoads);
+  if (bpl) uitgebreid.beamPointLoads = bpl;
+  const tl = plus(input.thermalLoads, nieuw.thermalLoads);
+  if (tl) uitgebreid.thermalLoads = tl;
+  const el = plus(input.edgeLoads, nieuw.edgeLoads);
+  if (el) uitgebreid.edgeLoads = el;
+  const epl = plus(input.edgePointLoads, nieuw.edgePointLoads);
+  if (epl) uitgebreid.edgePointLoads = epl;
+  return { input: uitgebreid, deelgevallen, gesplitst, velden };
+}
+function deelgevalBelastinggevallen(splitsing, loadCases) {
+  if (!splitsing) return [];
+  const uit = [];
+  for (const d of splitsing.deelgevallen) {
+    const ouder = loadCases.find((lc) => lc.id === d.ouderId);
+    if (ouder) uit.push({ ...ouder, id: d.id, name: d.naam });
+  }
+  return uit;
+}
+function* resultaatpunten(resultaten) {
+  const n2 = resultaten.length;
+  const staven = /* @__PURE__ */ new Set();
+  const knopen = /* @__PURE__ */ new Set();
+  const reacties = /* @__PURE__ */ new Set();
+  for (const r of resultaten) {
+    r?.elements.forEach((_, id2) => staven.add(id2));
+    r?.displacements.forEach((_, id2) => knopen.add(id2));
+    r?.reactions.forEach((_, id2) => reacties.add(id2));
+  }
+  for (const bid of [...staven].sort((a, b) => a - b)) {
+    let m = 0;
+    for (const r of resultaten) m = Math.max(m, r?.elements.get(bid)?.stations_mm.length ?? 0);
+    const reeksen = [
+      ["N", (ef) => ef.normalForce],
+      ["V", (ef) => ef.shearForce],
+      ["M", (ef) => ef.bendingMoment],
+      ["w", (ef) => ef.deflection]
+    ];
+    if (m === 0) {
+      for (const [soort, lees2] of [
+        ["N", (ef) => ef.N],
+        ["V", (ef) => ef.V],
+        ["M", (ef) => ef.M_start],
+        ["M", (ef) => ef.M_end]
+      ]) {
+        const r = new Float64Array(n2);
+        resultaten.forEach((res, j) => {
+          const ef = res?.elements.get(bid);
+          r[j] = ef ? lees2(ef) : 0;
+        });
+        yield { soort, r };
+      }
+      continue;
+    }
+    for (const [soort, lees2] of reeksen) {
+      for (let i = 0; i < m; i++) {
+        const r = new Float64Array(n2);
+        resultaten.forEach((res, j) => {
+          const ef = res?.elements.get(bid);
+          r[j] = ef ? lees2(ef)?.[i] ?? 0 : 0;
+        });
+        yield { soort, r };
+      }
+    }
+  }
+  for (const nid of [...reacties].sort((a, b) => a - b)) {
+    for (const k of ["fx", "fz", "my"]) {
+      const r = new Float64Array(n2);
+      resultaten.forEach((res, j) => {
+        r[j] = res?.reactions.get(nid)?.[k] ?? 0;
+      });
+      yield { soort: `R${k}`, r };
+    }
+  }
+  for (const nid of [...knopen].sort((a, b) => a - b)) {
+    for (const k of ["ux", "uz"]) {
+      const r = new Float64Array(n2);
+      resultaten.forEach((res, j) => {
+        r[j] = res?.displacements.get(nid)?.[k] ?? 0;
+      });
+      yield { soort: k, r };
+    }
+  }
+}
+function patroonIn(r, teken, som) {
+  const mee = [];
+  for (let j = 0; j < r.length; j++) {
+    const v = teken * r[j];
+    if (v > 0) mee.push({ j, v });
+  }
+  mee.sort((a, b) => a.v - b.v);
+  let weg = 0;
+  let k = 0;
+  while (k < mee.length && weg + mee[k].v <= WEGLAAT_FRACTIE * som) {
+    weg += mee[k].v;
+    k++;
+  }
+  return mee.slice(k).map((x) => x.j).sort((a, b) => a - b);
+}
+var pct = (x) => `${(100 * x).toFixed(1).replace(".", ",")} %`;
+function combinatieSleutel(c, factoren2, delenVan) {
+  const effectief = /* @__PURE__ */ new Map();
+  for (const [id2, f] of factoren2) {
+    if (f === 0) continue;
+    const delen = delenVan.get(id2);
+    if (delen) for (const d of delen) effectief.set(d, (effectief.get(d) ?? 0) + f);
+    else effectief.set(id2, (effectief.get(id2) ?? 0) + f);
+  }
+  const deel = [...effectief].filter(([, f]) => f !== 0).sort((a, b) => a[0] - b[0]).map(([id2, f]) => `${id2}=${Number(f.toPrecision(12))}`).join(",");
+  const e = c.eindtoestand ? `e${c.eindtoestand.psi2}${c.eindtoestand.bgt ? "b" : ""}` : "";
+  return `${c.type}|${soortVanCombinatie(c) ?? ""}|${c.scheefstandAs ?? ""}${c.scheefstandRichting ?? ""}|${e}|${deel}`;
+}
+function veldpatroonVarianten(combinaties, splitsing, perCase, opties = {}) {
+  const delen = splitsing.deelgevallen;
+  const delenVan = /* @__PURE__ */ new Map();
+  for (const d of delen) {
+    const lijst3 = delenVan.get(d.ouderId);
+    if (lijst3) lijst3.push(d.id);
+    else delenVan.set(d.ouderId, [d.id]);
+  }
+  const sets = [delen.map((d) => perCase.get(d.id))];
+  if (opties.scheefstandOffset !== void 0) {
+    sets.push(delen.map((d) => perCase.get(d.id + opties.scheefstandOffset)));
+  }
+  const schaal = /* @__PURE__ */ new Map();
+  for (const set of sets) {
+    for (const { soort, r } of resultaatpunten(set)) {
+      let s = 0;
+      for (const v of r) s += Math.abs(v);
+      if (s > (schaal.get(soort) ?? 0)) schaal.set(soort, s);
+    }
+  }
+  const patronen = /* @__PURE__ */ new Map();
+  for (const set of sets) {
+    for (const { soort, r } of resultaatpunten(set)) {
+      let som = 0, totaal = 0;
+      for (const v of r) {
+        som += Math.abs(v);
+        totaal += v;
+      }
+      const s = schaal.get(soort) ?? 0;
+      if (!(som > 1e-6 * s) || s === 0) continue;
+      for (const teken of [1, -1]) {
+        const leden = patroonIn(r, teken, som);
+        let waarde = 0;
+        for (const j of leden) waarde += teken * r[j];
+        const winst = (waarde - Math.max(teken * totaal, 0)) / s;
+        const sleutel = leden.join(",");
+        const vorig = patronen.get(sleutel);
+        if (!vorig) patronen.set(sleutel, { leden, winst });
+        else if (winst > vorig.winst) vorig.winst = winst;
+      }
+    }
+  }
+  patronen.delete(delen.map((_, j) => j).join(","));
+  const meldingen = [];
+  let lijst2 = [...patronen.values()].sort((a, b) => b.winst - a.winst || a.leden.length - b.leden.length || a.leden.join(",").localeCompare(b.leden.join(",")));
+  if (lijst2.length > MAX_VELDPATRONEN) {
+    const weg = lijst2.slice(MAX_VELDPATRONEN);
+    lijst2 = lijst2.slice(0, MAX_VELDPATRONEN);
+    meldingen.push(
+      `Veldsgewijze plaatsing (NEN-EN 1991-1-1 6.2.1(1)): ${patronen.size} verschillende veldpatronen gevonden; de ${MAX_VELDPATRONEN} met de grootste winst zijn doorgerekend. De ${weg.length} weggelaten patronen verhogen een effect met hoogstens ${pct(weg[0].winst)} van het grootste veranderlijke aandeel van die grootheid.`
+    );
+  }
+  lijst2.sort((a, b) => a.leden.length - b.leden.length || a.leden.join(",").localeCompare(b.leden.join(","), void 0, { numeric: true }));
+  const gekozen = lijst2.map((p2) => p2.leden.map((j) => delen[j].id));
+  const gezien = new Set(combinaties.map((c) => combinatieSleutel(c, c.factors, delenVan)));
+  const deelVan = new Map(delen.map((d) => [d.id, d]));
+  const varianten = [];
+  let volgnummer = 0;
+  for (const c of combinaties) {
+    if (c.veldpatroon) continue;
+    const ouders = [...delenVan.keys()].filter((id2) => (c.factors.get(id2) ?? 0) !== 0);
+    if (ouders.length === 0) continue;
+    for (const patroon of gekozen) {
+      const factors = new Map(c.factors);
+      for (const o of ouders) factors.delete(o);
+      const belast = ouders.map((o) => ({ ouderId: o, velden: [] }));
+      for (const id2 of patroon) {
+        const d = deelVan.get(id2);
+        const f = c.factors.get(d.ouderId) ?? 0;
+        if (f === 0) continue;
+        factors.set(id2, f);
+        belast.find((b) => b.ouderId === d.ouderId).velden.push(d.veld ?? "overig");
+      }
+      const sleutel = combinatieSleutel(c, factors, delenVan);
+      if (gezien.has(sleutel)) continue;
+      gezien.add(sleutel);
+      volgnummer++;
+      const naamVan = (o) => splitsing.gesplitst.find((g) => g.ouderId === o)?.naam ?? String(o);
+      const omschrijving = belast.map((b) => `${naamVan(b.ouderId)} op ${b.velden.length === 0 ? "geen veld" : b.velden.map((v) => v === "overig" ? "overig" : `veld ${v}`).join(" + ")}`).join("; ");
+      varianten.push({
+        ...c,
+        id: VELD_COMBO_OFFSET + volgnummer,
+        name: `${c.name} \u2014 veldpatroon: ${omschrijving}`,
+        formula: `${c.formula} \u2014 veldsgewijs: ${omschrijving} (NEN-EN 1991-1-1 6.2.1(1))`,
+        factors,
+        veldpatroon: { basisId: c.id, belast }
+      });
+    }
+  }
+  return { varianten, patronen: gekozen, meldingen };
+}
+function voegVeldpatronenIn(combinaties, varianten) {
+  if (varianten.length === 0) return [...combinaties];
+  const perBasis = /* @__PURE__ */ new Map();
+  for (const v of varianten) {
+    const b = v.veldpatroon.basisId;
+    const lijst2 = perBasis.get(b);
+    if (lijst2) lijst2.push(v);
+    else perBasis.set(b, [v]);
+  }
+  return combinaties.flatMap((c) => [c, ...perBasis.get(c.id) ?? []]);
+}
+function veldpatroonMeldingen(p2) {
+  if (p2.lineair) return [];
+  const zoek = veldenPerGeval(bepaalVelden(p2));
+  const uit = [];
+  for (const lc of p2.loadCases) {
+    if (!isVeldsgewijsGeval(lc)) continue;
+    const groepen2 = /* @__PURE__ */ new Set();
+    for (const l of p2.loads) {
+      if (l.caseId !== lc.id) continue;
+      const v = l.beamId !== void 0 ? zoek.staaf(l.beamId) : l.nodeId !== void 0 ? zoek.knoop(l.nodeId) : null;
+      groepen2.add(v === null ? "overig" : String(v));
+    }
+    if (groepen2.size < 2) continue;
+    uit.push({
+      caseId: lc.id,
+      niveau: "waarschuwing",
+      velden: groepen2.size,
+      tekst: `Belastinggeval ${lc.id} ("${lc.name}") is veranderlijke vloerbelasting op ${groepen2.size} velden, maar wordt bij deze niet-lineaire berekening NIET veldsgewijs ongunstig geplaatst (NEN-EN 1991-1-1 6.2.1(1); NEN-EN 1992-1-1 5.1.3, NEN-EN 1993-1-1 AB.2): superpositie van veldpatronen is bij tweede orde of fysisch niet-lineair rekenen ongeldig, en het geval staat dus steeds op alle velden tegelijk. Veldmomenten en steunmomenten kunnen daardoor te laag uitkomen. Reken eerste orde (dan worden de veldpatronen automatisch gemaakt), of maak eigen combinaties met het geval per veld in een eigen belastinggeval.`
+    });
+  }
+  return uit;
+}
+function veldpatronenUitkomst(splitsing, loadCases, combinaties, perCase) {
+  if (!splitsing) return { combinaties, uitkomst: null };
+  const sr = getScheefstandRichtingen(perCase);
+  const { varianten, meldingen } = veldpatroonVarianten(
+    combinaties,
+    splitsing,
+    perCase,
+    sr ? { scheefstandOffset: sr.offset } : {}
+  );
+  return {
+    combinaties: voegVeldpatronenIn(combinaties, varianten),
+    uitkomst: {
+      combinaties: varianten,
+      gevallen: deelgevalBelastinggevallen(splitsing, loadCases),
+      meldingen
+    }
+  };
 }
 
 // src/lib/houtEindstijfheid.ts
@@ -44039,6 +44433,25 @@ function vormEnvelop(env) {
     maxDisplacementCombinationId: env.maxDisplacementCombinationId
   };
 }
+function vormVeldpatronen(splitsing, varianten) {
+  return {
+    rule: "NEN-EN 1991-1-1 6.2.1(1): veranderlijke vloerbelasting (type live, niet categorie H) op twee of meer velden is per veld gesplitst; per combinatie is elke ongunstige veldplaatsing (invloedslijn door superpositie) als variant doorgerekend. Een veld = de staven tussen opeenvolgende steunpunten van een doorgaande lijn.",
+    cases: splitsing.gesplitst.map((g) => ({
+      case_id: g.ouderId,
+      name: g.naam,
+      fields: splitsing.deelgevallen.filter((d) => d.ouderId === g.ouderId).map((d) => ({
+        sub_case_id: d.id,
+        field: d.veld,
+        beams: d.veld === null ? [] : splitsing.velden.find((v) => v.nummer === d.veld)?.staven ?? []
+      }))
+    })),
+    combinations: varianten.map((c) => ({
+      id: c.id,
+      base_id: c.veldpatroon?.basisId ?? null,
+      name: c.name
+    }))
+  };
+}
 function opHandshake() {
   return {
     protocol: SIDECAR_PROTOCOL,
@@ -44116,17 +44529,22 @@ function rekenDoor(payload) {
   }
   const metStations = detail === "stations";
   const multiInput = bouwMultiInput(gelezen.model);
+  const veldSplitsing = nonlinear ? null : splitsVeldgevallen(multiInput, gelezen.model.loadCases);
+  const rekenInput = veldSplitsing?.input ?? multiInput;
   const start = Date.now();
   let perCaseResultaat;
   try {
-    perCaseResultaat = nonlinear ? solveAllCasesNonlinear(multiInput) : solveAllCases(multiInput);
+    perCaseResultaat = nonlinear ? solveAllCasesNonlinear(multiInput) : solveAllCases(rekenInput);
   } catch (err) {
     throw new ModelFout(String(err?.message ?? err));
   }
   weigerBijModelfouten();
   const { perCase } = perCaseResultaat;
+  const veld = veldpatronenUitkomst(veldSplitsing, gelezen.model.loadCases, combinaties, perCase);
+  const rekenCombinaties = veld.combinaties;
+  const rekenGevallen = veld.uitkomst ? [...gelezen.model.loadCases, ...veld.uitkomst.gevallen] : gelezen.model.loadCases;
   try {
-    losEindtoestandOp(multiInput, perCase, combinaties, eindstijfheid);
+    losEindtoestandOp(rekenInput, perCase, rekenCombinaties, eindstijfheid);
   } catch (err) {
     throw new ModelFout(String(err?.message ?? err));
   }
@@ -44134,9 +44552,9 @@ function rekenDoor(payload) {
   let envelope;
   try {
     combinationResults = new Map(
-      combinaties.map((c) => [c.id, combineResults(c, perCase)])
+      rekenCombinaties.map((c) => [c.id, combineResults(c, perCase)])
     );
-    envelope = computeEnvelope(combinaties, perCase);
+    envelope = computeEnvelope(rekenCombinaties, perCase);
   } catch (err) {
     throw new ModelFout(String(err?.message ?? err));
   }
@@ -44167,14 +44585,14 @@ function rekenDoor(payload) {
     // ligger alleen is doorgeknipt; zonder deze lijst zou de doorbuigingstoets
     // dat verschil niet kunnen melden.
     supports: gelezen.model.supports,
-    combinations: combinaties,
+    combinations: rekenCombinaties,
     combinationResults,
     profileDb,
     gevolgklasse,
     // Nodig om w₁ te vinden: de BGT-combinatie met alleen de blijvende
     // belastinggevallen (NEN-EN 1990:2002/NB:2019 A1.4.3(2)). Zonder deze
     // lijst valt w_add terug op de volledige zakking, mét notitie.
-    loadCases: gelezen.model.loadCases,
+    loadCases: rekenGevallen,
     // De nationale bijlage gaat als `bijlage` mee naar de rekenkern.
     nationaleBijlage: bijlage,
     stabiliteit: {
@@ -44195,10 +44613,10 @@ function rekenDoor(payload) {
     // buiten `beam_ids`, en een knoop op een plaat is geen vrij eind.
     alleBeams: teToetsen,
     plates: gelezen.model.plates,
-    combinations: combinaties,
+    combinations: rekenCombinaties,
     combinationResults,
     supportedGrades: houtklassen ?? void 0,
-    loadCases: gelezen.model.loadCases,
+    loadCases: rekenGevallen,
     gevallenMetLast: opgelost,
     nationaleBijlage: bijlage,
     // Analysetype, α_cr en scheefstand, zoals de app ze via de toetsstore
@@ -44223,10 +44641,10 @@ function rekenDoor(payload) {
   const plaat = buildPlaatCheckInputs({
     nodes: gelezen.model.nodes,
     plates: gelezen.model.plates ?? [],
-    combinations: combinaties,
+    combinations: rekenCombinaties,
     combinationResults,
     nationaleBijlage: bijlage,
-    loadCases: gelezen.model.loadCases,
+    loadCases: rekenGevallen,
     gevallenMetLast: opgelost
   });
   const waarschuwingen = [];
@@ -44257,6 +44675,16 @@ function rekenDoor(payload) {
   );
   if (klasseMelding) waarschuwingen.push(klasseMelding);
   waarschuwingen.push(...gelezenCombinaties.openMeldingen);
+  if (veld.uitkomst) waarschuwingen.push(...veld.uitkomst.meldingen);
+  for (const m of veldpatroonMeldingen({
+    beams: gelezen.model.beams,
+    supports: gelezen.model.supports,
+    loadCases: gelezen.model.loadCases,
+    loads: gelezen.model.loads,
+    lineair: !nonlinear
+  })) {
+    waarschuwingen.push(m.tekst);
+  }
   for (const m of stabiliteitMeldingen) {
     waarschuwingen.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
   }
@@ -44274,6 +44702,8 @@ function rekenDoor(payload) {
   }
   return {
     combinaties,
+    veldSplitsing,
+    veldVarianten: veld.uitkomst?.combinaties ?? [],
     combinatiesOvergeslagen: selectie.overgeslagen,
     combinationResults,
     envelope,
@@ -44344,6 +44774,10 @@ function opSolve(payload) {
       (r) => vormResultaat(r, d.metStations)
     ),
     envelope: vormEnvelop(d.envelope),
+    // De veldsgewijze plaatsing (issue #219): welke gevallen per veld zijn
+    // gesplitst en welke combinatie-id's varianten zijn. Alleen aanwezig als
+    // er iets te plaatsen viel; een model zonder blijft byte-gelijk.
+    ...d.veldSplitsing ? { field_patterns: vormVeldpatronen(d.veldSplitsing, d.veldVarianten) } : {},
     // α_cr per UGT-combinatie; een waarde onder 10 bij eerste orde staat ook
     // als FOUT in `warnings` (NEN-EN 1993-1-1 5.2.1(3)).
     stability: d.stabiliteit,
@@ -45332,6 +45766,7 @@ export {
   LABEL_ZUIVER_STAAL_TEKST,
   LEGACY_PROJECT_FORMAT_IDS,
   LOAD_SOORT_MEERVOUD,
+  MAX_VELDPATRONEN,
   MAX_VRIJE_GEVALLEN,
   MELDING_ZONE_I,
   MIN_SEGMENT_MM,
@@ -45425,6 +45860,8 @@ export {
   TIMBER_E_MEAN,
   TIMBER_G_MEAN,
   TIMBER_RHO_MEAN,
+  VELD_COMBO_OFFSET,
+  VELD_GEVAL_OFFSET,
   VERLOOP_SEGMENTEN,
   VERTICAAL_VANAF_GRADEN,
   VRIJSTAAND_SLEUTEL_PREFIX,
@@ -45458,6 +45895,7 @@ export {
   bepaalPlaatStijfheid,
   bepaalPlaatlastRand,
   bepaalStandaardRol,
+  bepaalVelden,
   bepaalVerloop,
   berekenE,
   berekenPlaatMeshSignatuur,
@@ -45490,6 +45928,7 @@ export {
   cpeWand,
   createWindSurfacePressurePlan,
   decodeerStepTekst,
+  deelgevalBelastinggevallen,
   defaultCombinations,
   deflectionNotesFor,
   deserializeProject,
@@ -45565,6 +46004,7 @@ export {
   isProjectFormatId,
   isSteelProfile,
   isStrikt,
+  isVeldsgewijsGeval,
   isWindgeneratorCombinatie,
   isZuivereStaalconstructie,
   kCrUitConfig,
@@ -45690,6 +46130,7 @@ export {
   spiegelElementKrachten,
   spiegelFracties,
   spiegelZones,
+  splitsVeldgevallen,
   splitsVierhoekenInDriehoeken,
   staafInReferentierichting,
   staafLengteMm,
@@ -45711,6 +46152,9 @@ export {
   valideerModel,
   valideerPlaatOpeningen,
   valideerPlaatPolygoon,
+  veldpatronenUitkomst,
+  veldpatroonMeldingen,
+  veldpatroonVarianten,
   veranderlijkeBelastingenZonderLeiding,
   veranderlijkeFactorVerschillen,
   verenNaarCanoniek,
@@ -45727,6 +46171,7 @@ export {
   verwijderWeesFactoren,
   voegBelastinggevalToe,
   voegCombinatieToe,
+  voegVeldpatronenIn,
   volgendVrijId,
   vraagtVloerDakEis,
   vrijstaandDakUitgangspunten,

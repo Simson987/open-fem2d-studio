@@ -557,6 +557,7 @@
       "firstOrderNotAllowed": "Stabilität: Theorie I. Ordnung nicht zulässig"
     },
     "solve": {
+      "fieldPatternsLimited": "Feldweise Lastanordnung begrenzt",
       "failed": "Berechnung fehlgeschlagen",
       "done": "Berechnet in {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} Lastfälle · {{combinaties}} Kombinationen",
@@ -1112,6 +1113,7 @@
     "creepT0": "t₀",
     "creepDays": "d",
     "creepCement": "Zement",
+    "fieldPatternNonlinear": "Bei nichtlinearer Berechnung nicht feldweise über {{velden}} Felder angeordnet",
     "creepAnnexBFailedTitle": "Kriechzahl nach Anhang B nicht bestimmt",
     "creepAnnexBFailedBody": "Stab {{staaf}}: {{reden}} Dieser Stab wird ohne Kriechzahl berechnet.",
     "swayDerivation": {

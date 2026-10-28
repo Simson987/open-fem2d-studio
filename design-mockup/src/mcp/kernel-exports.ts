@@ -51,6 +51,10 @@ export * from "./apiSidecar";
 
 export * from "../components/fem/solver/engine";
 export * from "../components/fem/solver/combinations";
+// De veldsgewijze plaatsing van veranderlijke vloerbelasting (issue #219):
+// de sidecar splitst en maakt de varianten met dezelfde functies als de app,
+// en de test daarvan hoort ook tegen de bundel te draaien. Pure rekencode.
+export * from "../components/fem/solver/veldpatronen";
 // De kritieke lastfactor α_cr en de meldingen erbij (basisaudit nr 27): de
 // sidecar zet ze in `warnings`, dus horen ze in de bundel en in de bundeltest.
 export * from "../components/fem/solver/alphaCr";

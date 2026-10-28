@@ -49,6 +49,7 @@ import {
   defaultCombinations,
   type LoadCombination,
 } from "../components/fem/solver/combinations";
+import type { VeldSplitsing } from "../components/fem/solver/veldpatronen";
 import { buildSteelCheckInputs, profileLookupKey } from "../lib/steelCheckBuilder";
 import { buildTimberCheckInputs, matchSupportedTimberGrade } from "../lib/timberCheckBuilder";
 import { buildCltCheckInputs, isCltProfiel } from "../lib/cltCheckBuilder";
@@ -71,6 +72,11 @@ import {
   type Gevolgklasse,
 } from "../components/fem/solver/normcombinaties";
 import { bouwMultiInput, type FemModelInvoer } from "../lib/modelNaarSolverInput";
+import {
+  splitsVeldgevallen,
+  veldpatroonMeldingen,
+  veldpatronenUitkomst,
+} from "../components/fem/solver/veldpatronen";
 import {
   bepaalEindstijfheidHout,
   losEindtoestandOp,
@@ -869,6 +875,31 @@ function vormEnvelop(env: ReturnType<typeof computeEnvelope>) {
   };
 }
 
+/** `field_patterns` in het antwoord van `solve`; zie solver/veldpatronen.ts. */
+function vormVeldpatronen(splitsing: VeldSplitsing, varianten: readonly LoadCombination[]) {
+  return {
+    rule:
+      "NEN-EN 1991-1-1 6.2.1(1): veranderlijke vloerbelasting (type live, niet categorie H) op " +
+      "twee of meer velden is per veld gesplitst; per combinatie is elke ongunstige veldplaatsing " +
+      "(invloedslijn door superpositie) als variant doorgerekend. Een veld = de staven tussen " +
+      "opeenvolgende steunpunten van een doorgaande lijn.",
+    cases: splitsing.gesplitst.map((g) => ({
+      case_id: g.ouderId,
+      name: g.naam,
+      fields: splitsing.deelgevallen.filter((d) => d.ouderId === g.ouderId).map((d) => ({
+        sub_case_id: d.id,
+        field: d.veld,
+        beams: d.veld === null ? [] : splitsing.velden.find((v) => v.nummer === d.veld)?.staven ?? [],
+      })),
+    })),
+    combinations: varianten.map((c) => ({
+      id: c.id,
+      base_id: c.veldpatroon?.basisId ?? null,
+      name: c.name,
+    })),
+  };
+}
+
 // ── Bewerkingen ────────────────────────────────────────────────────────────
 
 function opHandshake() {
@@ -1017,21 +1048,34 @@ function rekenDoor(payload: Record<string, unknown>) {
   const metStations = detail === "stations";
 
   const multiInput = bouwMultiInput(gelezen.model);
+  // Veranderlijke vloerbelasting veldsgewijs (issue #219, NEN-EN 1991-1-1
+  // 6.2.1(1)): dezelfde stap als de app, alleen bij eerste orde. Zonder geval
+  // over meer velden is `rekenInput` de invoer zelf.
+  const veldSplitsing = nonlinear ? null : splitsVeldgevallen(multiInput, gelezen.model.loadCases);
+  const rekenInput = veldSplitsing?.input ?? multiInput;
 
   const start = Date.now();
   let perCaseResultaat: MultiLcResult;
   try {
     perCaseResultaat = nonlinear
       ? solveAllCasesNonlinear(multiInput)
-      : solveAllCases(multiInput);
+      : solveAllCases(rekenInput);
   } catch (err) {
     throw new ModelFout(String((err as Error)?.message ?? err));
   }
   // De kern accepteerde het model; de modelcontrole heeft het laatste woord.
   weigerBijModelfouten();
   const { perCase } = perCaseResultaat;
+  // De combinaties met hun veldpatroonvarianten: hiermee wordt gecombineerd,
+  // omhuld en getoetst. De deelgevallen gaan als belastinggevallen mee naar
+  // de toetsbouwers (belastingduur, ψ).
+  const veld = veldpatronenUitkomst(veldSplitsing, gelezen.model.loadCases, combinaties, perCase);
+  const rekenCombinaties = veld.combinaties;
+  const rekenGevallen = veld.uitkomst
+    ? [...gelezen.model.loadCases, ...veld.uitkomst.gevallen]
+    : gelezen.model.loadCases;
   try {
-    losEindtoestandOp(multiInput, perCase, combinaties, eindstijfheid);
+    losEindtoestandOp(rekenInput, perCase, rekenCombinaties, eindstijfheid);
   } catch (err) {
     throw new ModelFout(String((err as Error)?.message ?? err));
   }
@@ -1040,9 +1084,9 @@ function rekenDoor(payload: Record<string, unknown>) {
   let envelope: ReturnType<typeof computeEnvelope>;
   try {
     combinationResults = new Map(
-      combinaties.map((c) => [c.id, combineResults(c, perCase)] as const),
+      rekenCombinaties.map((c) => [c.id, combineResults(c, perCase)] as const),
     );
-    envelope = computeEnvelope(combinaties, perCase);
+    envelope = computeEnvelope(rekenCombinaties, perCase);
   } catch (err) {
     throw new ModelFout(String((err as Error)?.message ?? err));
   }
@@ -1096,14 +1140,14 @@ function rekenDoor(payload: Record<string, unknown>) {
     // ligger alleen is doorgeknipt; zonder deze lijst zou de doorbuigingstoets
     // dat verschil niet kunnen melden.
     supports: gelezen.model.supports,
-    combinations: combinaties,
+    combinations: rekenCombinaties,
     combinationResults,
     profileDb,
     gevolgklasse,
     // Nodig om w₁ te vinden: de BGT-combinatie met alleen de blijvende
     // belastinggevallen (NEN-EN 1990:2002/NB:2019 A1.4.3(2)). Zonder deze
     // lijst valt w_add terug op de volledige zakking, mét notitie.
-    loadCases: gelezen.model.loadCases,
+    loadCases: rekenGevallen,
     // De nationale bijlage gaat als `bijlage` mee naar de rekenkern.
     nationaleBijlage: bijlage,
     stabiliteit: {
@@ -1130,10 +1174,10 @@ function rekenDoor(payload: Record<string, unknown>) {
     // buiten `beam_ids`, en een knoop op een plaat is geen vrij eind.
     alleBeams: teToetsen,
     plates: gelezen.model.plates,
-    combinations: combinaties,
+    combinations: rekenCombinaties,
     combinationResults,
     supportedGrades: houtklassen ?? undefined,
-    loadCases: gelezen.model.loadCases,
+    loadCases: rekenGevallen,
     gevallenMetLast: opgelost,
     nationaleBijlage: bijlage,
     // Analysetype, α_cr en scheefstand, zoals de app ze via de toetsstore
@@ -1159,10 +1203,10 @@ function rekenDoor(payload: Record<string, unknown>) {
   const plaat = buildPlaatCheckInputs({
     nodes: gelezen.model.nodes,
     plates: gelezen.model.plates ?? [],
-    combinations: combinaties,
+    combinations: rekenCombinaties,
     combinationResults,
     nationaleBijlage: bijlage,
-    loadCases: gelezen.model.loadCases,
+    loadCases: rekenGevallen,
     gevallenMetLast: opgelost,
   });
 
@@ -1214,6 +1258,19 @@ function rekenDoor(payload: Record<string, unknown>) {
   // Wat er bij het inlezen van het projectbestand is vervangen of weggehaald —
   // dezelfde tekst als de melding bij het openen in de app.
   waarschuwingen.push(...gelezenCombinaties.openMeldingen);
+  // Veldsgewijze plaatsing (issue #219): afkapping van het aantal patronen, en
+  // bij een niet-lineaire berekening de waarschuwing dat er niet veldsgewijs
+  // is geplaatst — nooit stil.
+  if (veld.uitkomst) waarschuwingen.push(...veld.uitkomst.meldingen);
+  for (const m of veldpatroonMeldingen({
+    beams: gelezen.model.beams,
+    supports: gelezen.model.supports,
+    loadCases: gelezen.model.loadCases,
+    loads: gelezen.model.loads,
+    lineair: !nonlinear,
+  })) {
+    waarschuwingen.push(m.tekst);
+  }
   for (const m of stabiliteitMeldingen) {
     waarschuwingen.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
   }
@@ -1232,6 +1289,8 @@ function rekenDoor(payload: Record<string, unknown>) {
 
   return {
     combinaties,
+    veldSplitsing,
+    veldVarianten: veld.uitkomst?.combinaties ?? [],
     combinatiesOvergeslagen: selectie.overgeslagen,
     combinationResults,
     envelope,
@@ -1322,6 +1381,10 @@ function opSolve(payload: Record<string, unknown>) {
       vormResultaat(r, d.metStations),
     ),
     envelope: vormEnvelop(d.envelope),
+    // De veldsgewijze plaatsing (issue #219): welke gevallen per veld zijn
+    // gesplitst en welke combinatie-id's varianten zijn. Alleen aanwezig als
+    // er iets te plaatsen viel; een model zonder blijft byte-gelijk.
+    ...(d.veldSplitsing ? { field_patterns: vormVeldpatronen(d.veldSplitsing, d.veldVarianten) } : {}),
     // α_cr per UGT-combinatie; een waarde onder 10 bij eerste orde staat ook
     // als FOUT in `warnings` (NEN-EN 1993-1-1 5.2.1(3)).
     stability: d.stabiliteit,
