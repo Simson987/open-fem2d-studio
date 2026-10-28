@@ -1,6 +1,6 @@
 [package]
 name = "openaec-native-fem"
-version = "0.1.0"
+version = "2026.44.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
 description = "Independent Rust finite-element kernels for Open FEM Studio"

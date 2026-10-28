@@ -40,6 +40,23 @@ export async function openExternal(url: string): Promise<void> {
   }
 }
 
+/**
+ * Toon een bestand in de bestandsverkenner van het besturingssysteem (alleen
+ * in de desktop-app; via tauri-plugin-opener, permissie
+ * opener:allow-reveal-item-in-dir). Geeft false terug als het niet lukte.
+ */
+export async function revealInFolder(pad: string): Promise<boolean> {
+  if (!isTauriApp()) return false;
+  try {
+    const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+    await revealItemInDir(pad);
+    return true;
+  } catch (fout) {
+    console.warn(`Map openen mislukte (${pad}).`, fout);
+    return false;
+  }
+}
+
 /** Nederlandse melding voor functies die de desktop-app vereisen. */
 export const DESKTOP_ONLY_MSG =
   "Toetsing vereist de desktop-app. Start Open FEM Studio als desktop-applicatie (Tauri) om de EN 1993/EN 1995-rekenkern te gebruiken.";

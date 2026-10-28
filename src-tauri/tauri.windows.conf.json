@@ -5,6 +5,9 @@
       "webviewInstallMode": {
         "type": "embedBootstrapper",
         "silent": true
+      },
+      "wix": {
+        "version": "26.44.0"
       }
     },
     "resources": [

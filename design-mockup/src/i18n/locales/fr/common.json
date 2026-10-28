@@ -320,7 +320,8 @@
     "dontSaveBtn": "Ne pas enregistrer",
     "confirmDiscard": "Continuer sans enregistrer ? Les modifications non enregistrées seront perdues.",
     "proceedBtn": "Continuer",
-    "cancelBtn": "Annuler"
+    "cancelBtn": "Annuler",
+    "askSaveNamed": "« {{naam}} » contient des modifications non enregistrées. Voulez-vous d’abord les enregistrer ?"
   },
   "welcome": {
     "subtitle": "Modèle d'application de bureau professionnelle",
@@ -538,7 +539,9 @@
       "libraryUpdated": "Bibliothèque mise à jour par ce projet",
       "openFailed": "Impossible d'ouvrir le fichier",
       "notAProjectTitle": "Pas un projet Open FEM Studio",
-      "notAProjectBody": "{{naam}} n'est pas un fichier de projet (.ifcfem ou .ifcfem2d) et n'a pas été ouvert."
+      "notAProjectBody": "{{naam}} n'est pas un fichier de projet (.ifcfem ou .ifcfem2d) et n'a pas été ouvert.",
+      "openFolder": "Ouvrir le dossier",
+      "savedNamed": "Enregistré : {{naam}}"
     },
     "ifc": {
       "exportErrors": "L'export IFC contient des erreurs",
@@ -554,7 +557,11 @@
       "firstOrderNotAllowed": "Stabilité : calcul au premier ordre non admis"
     },
     "solve": {
-      "failed": "Échec du calcul"
+      "failed": "Échec du calcul",
+      "done": "Calculé en {{tijd}} s",
+      "doneBody": "{{analyse}} · {{gevallen}} cas de charge · {{combinaties}} combinaisons",
+      "doneMaxU": "|u| maximal = {{u}} mm ({{geval}})",
+      "showResults": "Afficher les résultats"
     },
     "nonlinear": {
       "title": "Non-linéarité matérielle",
@@ -1287,7 +1294,13 @@
     "diaphragms": "Diaphragmes",
     "diaphragmLabel": "Diaphragme {{id}}",
     "diaphragmValue": "{{count}} nœuds · Z {{z}} mm",
-    "deleteDiaphragm": "Supprimer le diaphragme {{id}}"
+    "deleteDiaphragm": "Supprimer le diaphragme {{id}}",
+    "search": {
+      "placeholder": "Rechercher nœud, barre, profil…",
+      "label": "Rechercher dans l’explorateur",
+      "clear": "Effacer la recherche",
+      "none": "Aucun résultat pour « {{q}} »."
+    }
   },
   "resultsOverlay": {
     "deflectionScale": "Échelle de déformée : {{schaal}}×"
@@ -1475,5 +1488,33 @@
     "invalidOpening": "Saisissez au moins trois identifiants de nœuds valides.",
     "add": "Ajouter",
     "delete": "Supprimer le panneau"
+  },
+  "canvasMelding": {
+    "showTimber": "Afficher les barres en bois",
+    "openCombinations": "Combinaisons",
+    "close": "Fermer le message"
+  },
+  "ribbonCollapsed": {
+    "open": "{{groep}} : tous les boutons"
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "intro": "Ouvrir avec ? ou F1. Les lettres agissent dans le modèle, pas pendant la saisie dans un champ.",
+    "groups": {
+      "file": "Fichier",
+      "edit": "Édition",
+      "draw": "Dessin et saisie",
+      "canvas": "Sélection sur le canevas",
+      "calc": "Calcul et aide"
+    },
+    "labels": {
+      "moveSelection": "Déplacer la sélection",
+      "rotateSelection": "Pivoter la sélection",
+      "duplicateSelection": "Dupliquer la sélection",
+      "fit": "Ajuster à la vue",
+      "pan": "Panoramique (maintenir)",
+      "overview": "Raccourcis clavier",
+      "print": "Imprimer / rapport"
+    }
   }
 }

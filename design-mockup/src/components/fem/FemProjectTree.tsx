@@ -5,7 +5,7 @@
  * supports, plates, load cases). Selecting a leaf updates the central
  * selection so the right Properties panel reacts.
  */
-import { useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./FemProjectTree.css";
 import type { Node, Beam, Plate, Support, Load, LoadCase, Selection } from "./femTypes";
@@ -31,10 +31,15 @@ interface TreeNodeProps {
   defaultOpen?: boolean;
   children?: React.ReactNode;
   icon?: React.ReactNode;
+  /** Klapt de knoop open zodra dit getal verandert (selectie op het canvas). */
+  onthul?: number;
 }
 
-function TreeNode({ label, count, defaultOpen = false, children, icon }: TreeNodeProps) {
+function TreeNode({ label, count, defaultOpen = false, children, icon, onthul }: TreeNodeProps) {
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (onthul) setOpen(true);
+  }, [onthul]);
   const hasChildren = !!children;
   return (
     <div className="fem-tree-node">
@@ -67,6 +72,8 @@ interface LeafProps {
   value?: string;
   active?: boolean;
   onClick?: () => void;
+  /** Zoekterm die in label en waarde gemarkeerd wordt. */
+  zoek?: string;
 }
 /**
  * ResultsTab — sidebar pane shown under the "Resultaten" tab.
@@ -411,14 +418,29 @@ function ResultsTab({
   );
 }
 
-function Leaf({ label, value, active, onClick }: LeafProps) {
+/** Tekst met de zoekterm gemarkeerd (hoofdletterongevoelig). */
+function Markeer({ tekst, zoek }: { tekst: string; zoek?: string }) {
+  const q = zoek?.trim().toLowerCase();
+  if (!q) return <>{tekst}</>;
+  const delen: React.ReactNode[] = [];
+  const laag = tekst.toLowerCase();
+  let i = 0;
+  for (let j = laag.indexOf(q); j >= 0; j = laag.indexOf(q, i)) {
+    delen.push(<Fragment key={i}>{tekst.slice(i, j)}</Fragment>, <mark key={`m${j}`}>{tekst.slice(j, j + q.length)}</mark>);
+    i = j + q.length;
+  }
+  delen.push(<Fragment key="rest">{tekst.slice(i)}</Fragment>);
+  return <>{delen}</>;
+}
+
+function Leaf({ label, value, active, onClick, zoek }: LeafProps) {
   return (
     <div
       className={`fem-tree-leaf${active ? " active" : ""}${onClick ? " clickable" : ""}`}
       onClick={onClick}
     >
-      <span className="fem-tree-leaf-label">{label}</span>
-      {value && <span className="fem-tree-leaf-value">{value}</span>}
+      <span className="fem-tree-leaf-label"><Markeer tekst={label} zoek={zoek} /></span>
+      {value && <span className="fem-tree-leaf-value"><Markeer tekst={value} zoek={zoek} /></span>}
     </div>
   );
 }
@@ -496,6 +518,38 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
     openFem3dVisibility, setOpenFem3DVisibility, onOpenZichtbaarheid,
   } = props;
   const { t } = useTranslation("common");
+
+  // Selectie op het canvas → de boom klapt de bijbehorende groep open en zet
+  // de regel in beeld (met een korte oplichting). Een klik in de boom zelf
+  // hoeft dat niet: de regel staat dan al in beeld.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const vanBoomRef = useRef(false);
+  const [onthul, setOnthul] = useState<{ soort: string; n: number }>({ soort: "", n: 0 });
+  const kiesUitBoom = (s: Selection) => { vanBoomRef.current = true; setSelection(s); };
+  useEffect(() => {
+    if (vanBoomRef.current) { vanBoomRef.current = false; return; }
+    if (!selection || selection.type === "multi") return;
+    setOnthul((o) => ({ soort: selection.type, n: o.n + 1 }));
+  }, [selection]);
+  useEffect(() => {
+    if (!onthul.n) return;
+    const id = requestAnimationFrame(() => {
+      const el = bodyRef.current?.querySelector<HTMLElement>(".fem-tree-leaf.active");
+      if (!el) return;
+      el.scrollIntoView({ block: "nearest" });
+      el.classList.remove("fem-tree-flits");
+      void el.offsetWidth;
+      el.classList.add("fem-tree-flits");
+    });
+    return () => cancelAnimationFrame(id);
+  }, [onthul]);
+  const onthulVoor = (soort: string) => (onthul.soort === soort ? onthul.n : 0);
+
+  // Zoeken in de projectboom: met een zoekterm toont de tab alleen de treffers,
+  // per groep, met de zoekterm gemarkeerd.
+  const [zoek, setZoek] = useState("");
+  const q = zoek.trim().toLowerCase();
+  const past = (...teksten: (string | undefined)[]) => teksten.some((x) => !!x && x.toLowerCase().includes(q));
   /** Reden per overgeslagen combinatie-id; leeg = alles wordt doorgerekend. */
   const overgeslagenReden = new Map(
     overgeslagenCombinaties.map((o) => [o.id, o] as const),
@@ -542,8 +596,8 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
 
   const selectBeamSet = (ids: number[]) => {
-    if (ids.length === 1) setSelection({ type: "beam", id: ids[0] });
-    else setSelection({ type: "multi", nodeIds: [], beamIds: ids, plateIds: [] });
+    if (ids.length === 1) kiesUitBoom({ type: "beam", id: ids[0] });
+    else kiesUitBoom({ type: "multi", nodeIds: [], beamIds: ids, plateIds: [] });
   };
   const isBeamSetSelected = (ids: number[]) => {
     if (selection?.type === "beam") return ids.length === 1 && selection.id === ids[0];
@@ -568,7 +622,7 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
       </div>
 
       {/* Tree */}
-      <div className="fem-tree-body">
+      <div className="fem-tree-body" ref={bodyRef}>
         {tab === "view" ? (
           displayFlags && setDisplayFlags ? (
             <ExplorerViewTab
@@ -586,26 +640,93 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
           ) : null
         ) : tab === "project" ? (
           <>
-            <TreeNode label={t("tree.model")} defaultOpen icon={<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v12H2z" opacity="0.2"/><path d="M2 2h12v12H2zM2 8h12M8 2v12" fill="none" stroke="currentColor" strokeWidth="1"/></svg>}>
-              <TreeNode label={t("tree.nodes")} count={nodes.length} defaultOpen icon={<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="5" cy="5" r="2.5" /></svg>}>
+            <div className="fem-tree-zoek">
+              <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+              <input
+                value={zoek}
+                onChange={(e) => setZoek(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape") setZoek(""); }}
+                placeholder={t("tree.search.placeholder")}
+                aria-label={t("tree.search.label")}
+              />
+              {zoek && (
+                <button className="fem-tree-zoek-wis" aria-label={t("tree.search.clear")} onClick={() => setZoek("")}>×</button>
+              )}
+            </div>
+            {q ? (() => {
+              const kn = nodes.filter((n) => past(t("tree.nodeLabel", { id: n.id }), `X:${n.x} Z:${n.z}`));
+              const st = beams.filter((b) => past(t("tree.barLabel", { id: b.id }), `${b.from}-${b.to}`, doorsnedeNaamVertaald(b, t) || "HEA160", b.material ?? "S235"));
+              const op = supports.filter((s) => past(t("tree.nodeLabel", { id: s.nodeId }), supportTypeLabel[s.type] ?? s.type));
+              const pl = plates.filter((p) => past(t("tree.plateLabel", { id: p.id })));
+              const ma = sortedMaterials.filter(([m]) => past(m));
+              const pr = sortedProfiles.filter(([p]) => past(p));
+              const lc = loadCases.filter((c) => past(c.name));
+              const co = combinations.filter((c) => past(c.name));
+              const totaal = kn.length + st.length + op.length + pl.length + ma.length + pr.length + lc.length + co.length;
+              if (totaal === 0) return <div className="fem-tree-zoek-leeg">{t("tree.search.none", { q: zoek.trim() })}</div>;
+              return (
+                <>
+                  {kn.length > 0 && <TreeNode label={t("tree.nodes")} count={kn.length} defaultOpen>
+                    {kn.map((n) => <Leaf key={`zn${n.id}`} zoek={q} label={t("tree.nodeLabel", { id: n.id })} value={`X:${n.x} Z:${n.z}`}
+                      active={selection?.type === "node" && selection.id === n.id} onClick={() => kiesUitBoom({ type: "node", id: n.id })} />)}
+                  </TreeNode>}
+                  {st.length > 0 && <TreeNode label={t("tree.elements")} count={st.length} defaultOpen>
+                    {st.map((b) => {
+                      const prof = doorsnedeNaamVertaald(b, t) || "HEA160";
+                      const mat = b.material ?? "S235";
+                      const waarde = past(prof) ? prof : past(mat) ? mat : `${b.from}-${b.to}`;
+                      return <Leaf key={`zb${b.id}`} zoek={q} label={t("tree.barLabel", { id: b.id })} value={waarde}
+                        active={selection?.type === "beam" && selection.id === b.id} onClick={() => kiesUitBoom({ type: "beam", id: b.id })} />;
+                    })}
+                  </TreeNode>}
+                  {op.length > 0 && <TreeNode label={t("tree.supports")} count={op.length} defaultOpen>
+                    {op.map((s) => <Leaf key={`zs${s.nodeId}`} zoek={q} label={t("tree.nodeLabel", { id: s.nodeId })} value={supportTypeLabel[s.type] ?? s.type}
+                      onClick={() => kiesUitBoom({ type: "node", id: s.nodeId })} />)}
+                  </TreeNode>}
+                  {pl.length > 0 && <TreeNode label={t("tree.plates")} count={pl.length} defaultOpen>
+                    {pl.map((p) => <Leaf key={`zp${p.id}`} zoek={q} label={t("tree.plateLabel", { id: p.id })} value={t("tree.corners", { count: p.nodeIds.length })}
+                      active={selection?.type === "plate" && selection.id === p.id} onClick={() => kiesUitBoom({ type: "plate", id: p.id })} />)}
+                  </TreeNode>}
+                  {ma.length > 0 && <TreeNode label={t("tree.materials")} count={ma.length} defaultOpen>
+                    {ma.map(([m, ids]) => <Leaf key={`zm${m}`} zoek={q} label={m} value={t("tree.barCount", { count: ids.length })}
+                      active={isBeamSetSelected(ids)} onClick={() => selectBeamSet(ids)} />)}
+                  </TreeNode>}
+                  {pr.length > 0 && <TreeNode label={t("tree.profiles")} count={pr.length} defaultOpen>
+                    {pr.map(([p, ids]) => <Leaf key={`zpr${p}`} zoek={q} label={p} value={t("tree.barCount", { count: ids.length })}
+                      active={isBeamSetSelected(ids)} onClick={() => selectBeamSet(ids)} />)}
+                  </TreeNode>}
+                  {lc.length > 0 && <TreeNode label={t("tree.loads")} count={lc.length} defaultOpen>
+                    {lc.map((c) => <Leaf key={`zl${c.id}`} zoek={q} label={c.name} active={c.id === activeLoadCaseId}
+                      onClick={() => setActiveLoadCaseId(c.id)} />)}
+                  </TreeNode>}
+                  {co.length > 0 && <TreeNode label={t("tree.combinations")} count={co.length} defaultOpen>
+                    {co.map((c) => <Leaf key={`zc${c.id}`} zoek={q} label={c.name} active={!envelopeView && c.id === activeCombinationId}
+                      onClick={() => { setActiveCombinationId(c.id); setEnvelopeView(false); }} />)}
+                  </TreeNode>}
+                </>
+              );
+            })() : (
+            <>
+            <TreeNode label={t("tree.model")} defaultOpen onthul={onthul.n} icon={<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v12H2z" opacity="0.2"/><path d="M2 2h12v12H2zM2 8h12M8 2v12" fill="none" stroke="currentColor" strokeWidth="1"/></svg>}>
+              <TreeNode label={t("tree.nodes")} count={nodes.length} defaultOpen onthul={onthulVoor("node")} icon={<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="5" cy="5" r="2.5" /></svg>}>
                 {nodes.map(n => (
                   <Leaf
                     key={`tn${n.id}`}
                     label={t("tree.nodeLabel", { id: n.id })}
                     value={`X:${n.x} Z:${n.z}`}
                     active={selection?.type === "node" && selection.id === n.id}
-                    onClick={() => setSelection({ type: "node", id: n.id })}
+                    onClick={() => kiesUitBoom({ type: "node", id: n.id })}
                   />
                 ))}
               </TreeNode>
-              <TreeNode label={t("tree.elements")} count={beams.length} defaultOpen icon={<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="1" y1="5" x2="9" y2="5" /></svg>}>
+              <TreeNode label={t("tree.elements")} count={beams.length} defaultOpen onthul={onthulVoor("beam")} icon={<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="1" y1="5" x2="9" y2="5" /></svg>}>
                 {beams.map(b => (
                   <Leaf
                     key={`tb${b.id}`}
                     label={t("tree.barLabel", { id: b.id })}
                     value={`${b.from}-${b.to}`}
                     active={selection?.type === "beam" && selection.id === b.id}
-                    onClick={() => setSelection({ type: "beam", id: b.id })}
+                    onClick={() => kiesUitBoom({ type: "beam", id: b.id })}
                   />
                 ))}
               </TreeNode>
@@ -615,19 +736,19 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
                     key={`ts${s.nodeId}`}
                     label={t("tree.nodeLabel", { id: s.nodeId })}
                     value={supportTypeLabel[s.type] ?? s.type}
-                    onClick={() => setSelection({ type: "node", id: s.nodeId })}
+                    onClick={() => kiesUitBoom({ type: "node", id: s.nodeId })}
                   />
                 ))}
               </TreeNode>
               {plates.length > 0 && (
-                <TreeNode label={t("tree.plates")} count={plates.length} icon={<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1.5" y="1.5" width="7" height="7" /></svg>}>
+                <TreeNode label={t("tree.plates")} count={plates.length} onthul={onthulVoor("plate")} icon={<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1.5" y="1.5" width="7" height="7" /></svg>}>
                   {plates.map(p => (
                     <Leaf
                       key={`tp${p.id}`}
                       label={t("tree.plateLabel", { id: p.id })}
                       value={t("tree.corners", { count: p.nodeIds.length })}
                       active={selection?.type === "plate" && selection.id === p.id}
-                      onClick={() => setSelection({ type: "plate", id: p.id })}
+                      onClick={() => kiesUitBoom({ type: "plate", id: p.id })}
                     />
                   ))}
                 </TreeNode>
@@ -821,6 +942,8 @@ export default function FemProjectTree(props: FemProjectTreeProps) {
             </TreeNode>
             {/* De "Versies"-knoop is verwijderd: er bestaat (nog) geen
                 versie-/snapshotsysteem in de app, dus de knoop was schijn-UI. */}
+            </>
+            )}
           </>
         ) : (
           <ResultsTab

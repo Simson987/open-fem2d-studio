@@ -31,6 +31,7 @@
     "fs:allow-write-file",
     "opener:allow-open-url",
     "opener:allow-default-urls",
+    "opener:allow-reveal-item-in-dir",
     "os:allow-arch",
     "os:allow-os-type",
     "os:allow-version"

@@ -39,7 +39,7 @@
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  color: var(--theme-accent);
+  color: var(--theme-accent-tint);
 }
 
 .titlebar-icon svg {
@@ -51,9 +51,9 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 12px;
+  font-size: var(--oa-size-body);
   font-weight: 400;
-  color: var(--theme-accent);
+  color: var(--theme-accent-tint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -63,7 +63,7 @@
 }
 
 .titlebar-version {
-  font-size: 10px;
+  font-size: var(--oa-size-label);
   font-weight: 300;
   opacity: 0.5;
   margin-left: 4px;
@@ -84,7 +84,7 @@
   height: 100%;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--theme-accent);
+  color: var(--theme-accent-tint);
   cursor: default;
   padding: 0;
   margin: 0;
@@ -112,13 +112,22 @@
 }
 
 .titlebar-close:hover {
-  background-color: #e81123;
+  background-color: var(--oa-error);
   color: #ffffff;
 }
 
 .titlebar-close:active {
-  background-color: #c50f1f;
+  background-color: color-mix(in srgb, var(--oa-error) 85%, black);
   color: #ffffff;
+}
+
+/* High contrast: no fill, a 2 px border, as in the Rust library. */
+[data-oa-theme^="high-contrast"] .titlebar-close:hover,
+[data-oa-theme^="high-contrast"] .titlebar-close:active {
+  background-color: transparent;
+  color: var(--oa-text);
+  outline: 2px solid var(--oa-text);
+  outline-offset: -2px;
 }
 
 .titlebar-quick-access {
@@ -139,7 +148,7 @@
   height: 24px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--theme-accent);
+  color: var(--theme-accent-tint);
   cursor: default;
   padding: 0;
   margin: 0;
@@ -168,9 +177,9 @@
 .send-feedback-btn {
   background: none;
   border: none;
-  font-size: 11px;
+  font-size: var(--oa-size-label);
   font-family: inherit;
-  color: var(--theme-accent);
+  color: var(--theme-accent-tint);
   padding: 0 4px;
   margin-right: 12px;
   cursor: default;

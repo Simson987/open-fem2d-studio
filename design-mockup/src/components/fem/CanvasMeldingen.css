@@ -1,0 +1,78 @@
+/* Meldingen bovenaan het canvas (ontwerp 0.4, .oa-banner). Ze liggen over de
+   tekening, onder de rij met Tool en de tellers, en verschuiven niets. */
+.canvas-meldingen {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.canvas-melding {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: var(--oa-radius-medium);
+  border-left: 4px solid var(--oa-warning);
+  background: var(--oa-warning-tint);
+  color: var(--oa-text);
+  box-shadow: var(--oa-shadow-panel);
+  font-size: var(--oa-size-body);
+}
+
+.canvas-melding-fout {
+  border-left-color: var(--oa-error);
+  background: var(--oa-error-tint);
+}
+
+.canvas-melding-teken {
+  color: var(--oa-warning);
+}
+.canvas-melding-fout .canvas-melding-teken {
+  color: var(--oa-error);
+}
+
+.canvas-melding-tekst {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.canvas-melding-knop {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--oa-border-strong);
+  border-radius: var(--oa-radius-small);
+  background: var(--oa-panel);
+  color: var(--oa-text);
+  font: inherit;
+  cursor: pointer;
+}
+.canvas-melding-knop:hover {
+  background: var(--oa-hover);
+}
+
+.canvas-melding-sluit {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--oa-radius-small);
+  background: transparent;
+  color: var(--oa-text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.canvas-melding-sluit:hover {
+  background: var(--oa-hover);
+  color: var(--oa-text);
+}

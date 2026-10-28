@@ -26,10 +26,10 @@
     "theme": "Design",
     "themeDescription": "Wählen Sie ein Farbschema für die Anwendung.",
     "light": "Hell",
-    "forge": "Forge (dunkel)",
-    "dark": "OpenAEC (dunkel)",
+    "dark": "Dunkel",
     "blueprint": "Blueprint",
-    "contrast": "Hoher Kontrast",
+    "highContrastDark": "Hoher Kontrast dunkel",
+    "highContrastLight": "Hoher Kontrast hell",
     "font": "Schriftart",
     "uiFontSize": "UI-Schriftgröße"
   },

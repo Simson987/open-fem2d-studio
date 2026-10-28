@@ -73,7 +73,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "appdata-migratie"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "dirs",
  "serde_json",
@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "concrete-check"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "mechanics",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "frame3d-solver"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "dedaliano-engine",
  "serde",
@@ -2508,7 +2508,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "mechanics"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -2597,7 +2597,7 @@ dependencies = [
 
 [[package]]
 name = "nationale-bijlage"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2630,7 +2630,7 @@ dependencies = [
 
 [[package]]
 name = "nen-en-1990"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -2641,7 +2641,7 @@ dependencies = [
 
 [[package]]
 name = "nen-en-1992-1-1"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "mechanics",
@@ -2654,7 +2654,7 @@ dependencies = [
 
 [[package]]
 name = "nen-en-1993-1-1-ltb"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -2669,7 +2669,7 @@ dependencies = [
 
 [[package]]
 name = "nen-en-1993-1-1-section"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -2684,7 +2684,7 @@ dependencies = [
 
 [[package]]
 name = "nen-en-1993-1-1-stability"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -2699,7 +2699,7 @@ dependencies = [
 
 [[package]]
 name = "nen-en-1993-1-8-las"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "nationale-bijlage",
@@ -2710,7 +2710,7 @@ dependencies = [
 
 [[package]]
 name = "nen-en-1995-1-1"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "mechanics",
@@ -3075,7 +3075,7 @@ dependencies = [
 
 [[package]]
 name = "open-fem-3d"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "dedaliano-engine",
  "serde",
@@ -3137,7 +3137,7 @@ dependencies = [
 
 [[package]]
 name = "openaec-mcp-server"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "base64 0.22.1",
  "concrete-check",
@@ -3166,7 +3166,7 @@ dependencies = [
 
 [[package]]
 name = "openaec-native-fem"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "frame3d-solver",
  "nen-en-1992-1-1",
@@ -3365,7 +3365,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "plaat-check"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "mechanics",
@@ -3802,7 +3802,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "report"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "concrete-check",
  "lopdf",
@@ -4044,7 +4044,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "section-properties"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -4399,7 +4399,7 @@ dependencies = [
 
 [[package]]
 name = "spanning-check"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "mechanics",
@@ -4420,7 +4420,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "steel-check"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -4439,7 +4439,7 @@ dependencies = [
 
 [[package]]
 name = "steel-profiles"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "insta",
@@ -5067,7 +5067,7 @@ dependencies = [
 
 [[package]]
 name = "timber-check"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "approx",
  "mechanics",
@@ -5153,7 +5153,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "toetsbrug"
-version = "0.1.0"
+version = "2026.44.0"
 dependencies = [
  "concrete-check",
  "nationale-bijlage",

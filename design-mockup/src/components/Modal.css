@@ -48,7 +48,7 @@
 }
 
 .modal-header h2 {
-  font-size: 12px;
+  font-size: var(--oa-size-body);
   font-weight: 600;
   color: var(--theme-dialog-header-text);
   margin: 0;
@@ -67,7 +67,7 @@
   color: var(--theme-dialog-content-text);
   cursor: default;
   border-radius: 0;
-  font-size: 16px;
+  font-size: var(--oa-size-dialog-heading);
   line-height: 1;
   padding: 0;
   transition: background 0.1s;
@@ -75,7 +75,7 @@
 
 .modal-close-btn:hover {
   background: var(--theme-ribbon-btn-hover);
-  color: var(--theme-accent);
+  color: var(--theme-accent-tint);
 }
 
 /* Body */

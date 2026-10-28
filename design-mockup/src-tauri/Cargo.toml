@@ -1,6 +1,6 @@
 [package]
 name = "open-fem-studio"
-version = "0.1.0"
+version = "2026.44.0"
 description = "Open FEM Studio — Tauri desktop app"
 authors = ["Impertio"]
 edition = "2021"

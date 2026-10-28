@@ -320,7 +320,8 @@
     "dontSaveBtn": "Nicht speichern",
     "confirmDiscard": "Ohne Speichern fortfahren? Nicht gespeicherte Änderungen gehen verloren.",
     "proceedBtn": "Fortfahren",
-    "cancelBtn": "Abbrechen"
+    "cancelBtn": "Abbrechen",
+    "askSaveNamed": "„{{naam}}“ hat ungespeicherte Änderungen. Möchtest du sie zuerst speichern?"
   },
   "welcome": {
     "subtitle": "Professionelle Desktop-Anwendungsvorlage",
@@ -538,7 +539,9 @@
       "libraryUpdated": "Bibliothek durch dieses Projekt aktualisiert",
       "openFailed": "Datei kann nicht geöffnet werden",
       "notAProjectTitle": "Kein Open FEM Studio-Projekt",
-      "notAProjectBody": "{{naam}} ist keine Projektdatei (.ifcfem oder .ifcfem2d) und wurde nicht geöffnet."
+      "notAProjectBody": "{{naam}} ist keine Projektdatei (.ifcfem oder .ifcfem2d) und wurde nicht geöffnet.",
+      "openFolder": "Ordner öffnen",
+      "savedNamed": "Gespeichert: {{naam}}"
     },
     "ifc": {
       "exportErrors": "IFC-Export enthält Fehler",
@@ -554,7 +557,11 @@
       "firstOrderNotAllowed": "Stabilität: Theorie I. Ordnung nicht zulässig"
     },
     "solve": {
-      "failed": "Berechnung fehlgeschlagen"
+      "failed": "Berechnung fehlgeschlagen",
+      "done": "Berechnet in {{tijd}} s",
+      "doneBody": "{{analyse}} · {{gevallen}} Lastfälle · {{combinaties}} Kombinationen",
+      "doneMaxU": "größte |u| = {{u}} mm ({{geval}})",
+      "showResults": "Ergebnisse anzeigen"
     },
     "nonlinear": {
       "title": "Physikalisch nichtlinear",
@@ -1287,7 +1294,13 @@
     "diaphragms": "Scheiben",
     "diaphragmLabel": "Scheibe {{id}}",
     "diaphragmValue": "{{count}} Knoten · Z {{z}} mm",
-    "deleteDiaphragm": "Scheibe {{id}} löschen"
+    "deleteDiaphragm": "Scheibe {{id}} löschen",
+    "search": {
+      "placeholder": "Knoten, Stab, Profil suchen…",
+      "label": "Im Explorer suchen",
+      "clear": "Suche löschen",
+      "none": "Nichts gefunden für „{{q}}“."
+    }
   },
   "resultsOverlay": {
     "deflectionScale": "Verformungsmaßstab: {{schaal}}×"
@@ -1475,5 +1488,33 @@
     "invalidOpening": "Mindestens drei gültige Knoten-IDs eingeben.",
     "add": "Hinzufügen",
     "delete": "Paneel löschen"
+  },
+  "canvasMelding": {
+    "showTimber": "Holzstäbe anzeigen",
+    "openCombinations": "Kombinationen",
+    "close": "Meldung schließen"
+  },
+  "ribbonCollapsed": {
+    "open": "{{groep}}: alle Schaltflächen"
+  },
+  "shortcuts": {
+    "title": "Tastenkürzel",
+    "intro": "Öffnen mit ? oder F1. Buchstaben wirken im Modell, nicht beim Tippen in einem Eingabefeld.",
+    "groups": {
+      "file": "Datei",
+      "edit": "Bearbeiten",
+      "draw": "Zeichnen und Eingabe",
+      "canvas": "Auswahl auf der Zeichenfläche",
+      "calc": "Berechnung und Hilfe"
+    },
+    "labels": {
+      "moveSelection": "Auswahl verschieben",
+      "rotateSelection": "Auswahl drehen",
+      "duplicateSelection": "Auswahl duplizieren",
+      "fit": "Einpassen",
+      "pan": "Verschieben (gedrückt halten)",
+      "overview": "Tastenkürzel",
+      "print": "Drucken / Bericht"
+    }
   }
 }

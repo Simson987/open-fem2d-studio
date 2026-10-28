@@ -1,6 +1,6 @@
 {
   "name": "open-fem-studio",
-  "version": "1.0.0",
+  "version": "2026.44.0",
   "description": "Open FEM Studio — open-source eindige-elementenprogramma (2D en 3D). Onderdeel van het portfolio van de OpenAEC Foundation.",
   "author": "OpenAEC Foundation",
   "license": "AGPL-3.0-or-later",
@@ -13,6 +13,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "mcp:sidecar": "node scripts/mcp-sidecar.mjs",
+    "versie": "node scripts/versie.mjs",
     "tauri:build": "node scripts/mcp-sidecar.mjs && tauri build --config src-tauri/tauri.bundel.conf.json"
   },
   "dependencies": {

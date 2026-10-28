@@ -320,7 +320,8 @@
     "dontSaveBtn": "Niet opslaan",
     "confirmDiscard": "Doorgaan zonder opslaan? Niet-opgeslagen wijzigingen gaan verloren.",
     "proceedBtn": "Doorgaan",
-    "cancelBtn": "Annuleren"
+    "cancelBtn": "Annuleren",
+    "askSaveNamed": "“{{naam}}” heeft wijzigingen die nog niet zijn opgeslagen. Wil je ze eerst opslaan?"
   },
   "welcome": {
     "subtitle": "Professioneel desktop applicatie sjabloon",
@@ -538,7 +539,9 @@
       "libraryUpdated": "Bibliotheek bijgewerkt door dit project",
       "openFailed": "Kan bestand niet openen",
       "notAProjectTitle": "Geen Open FEM Studio-project",
-      "notAProjectBody": "{{naam}} is geen projectbestand (.ifcfem of .ifcfem2d) en is niet geopend."
+      "notAProjectBody": "{{naam}} is geen projectbestand (.ifcfem of .ifcfem2d) en is niet geopend.",
+      "openFolder": "Map openen",
+      "savedNamed": "Opgeslagen: {{naam}}"
     },
     "ifc": {
       "exportErrors": "IFC-export bevat fouten",
@@ -554,7 +557,11 @@
       "firstOrderNotAllowed": "Stabiliteit: eerste orde niet toegestaan"
     },
     "solve": {
-      "failed": "Berekening mislukt"
+      "failed": "Berekening mislukt",
+      "done": "Berekend in {{tijd}} s",
+      "doneBody": "{{analyse}} · {{gevallen}} belastinggevallen · {{combinaties}} combinaties",
+      "doneMaxU": "grootste |u| = {{u}} mm ({{geval}})",
+      "showResults": "Toon resultaten"
     },
     "nonlinear": {
       "title": "Fysisch niet-lineair",
@@ -1287,7 +1294,13 @@
     "diaphragms": "Schijven",
     "diaphragmLabel": "Schijf {{id}}",
     "diaphragmValue": "{{count}} knopen · Z {{z}} mm",
-    "deleteDiaphragm": "Schijf {{id}} verwijderen"
+    "deleteDiaphragm": "Schijf {{id}} verwijderen",
+    "search": {
+      "placeholder": "Zoek knoop, staaf, profiel…",
+      "label": "Zoeken in de verkenner",
+      "clear": "Zoekveld wissen",
+      "none": "Niets gevonden voor “{{q}}”."
+    }
   },
   "resultsOverlay": {
     "deflectionScale": "Vervormingsschaal: {{schaal}}×"
@@ -1475,5 +1488,33 @@
     "invalidOpening": "Geef minstens drie geldige knoopnummers op.",
     "add": "Toevoegen",
     "delete": "Paneel verwijderen"
+  },
+  "canvasMelding": {
+    "showTimber": "Toon houtstaven",
+    "openCombinations": "Combinaties",
+    "close": "Melding sluiten"
+  },
+  "ribbonCollapsed": {
+    "open": "{{groep}}: alle knoppen"
+  },
+  "shortcuts": {
+    "title": "Sneltoetsen",
+    "intro": "Openen met ? of F1. Letters werken in het model, niet terwijl je in een invoerveld typt.",
+    "groups": {
+      "file": "Bestand",
+      "edit": "Bewerken",
+      "draw": "Tekenen en invoer",
+      "canvas": "Selectie op het canvas",
+      "calc": "Berekenen en hulp"
+    },
+    "labels": {
+      "moveSelection": "Selectie verplaatsen",
+      "rotateSelection": "Selectie roteren",
+      "duplicateSelection": "Selectie dupliceren",
+      "fit": "Passend in beeld",
+      "pan": "Pannen (ingedrukt houden)",
+      "overview": "Sneltoetsen",
+      "print": "Afdrukken / rapport"
+    }
   }
 }

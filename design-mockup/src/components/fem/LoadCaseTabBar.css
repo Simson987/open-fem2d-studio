@@ -6,7 +6,7 @@
   gap: 3px;
   height: 34px;
   padding: 4px 8px 0;
-  background: var(--theme-bg-lighter);
+  background: var(--theme-docbar-bg);
   border-top: 1px solid var(--theme-border);
   flex-shrink: 0;
   overflow-x: auto;
@@ -138,12 +138,12 @@
   gap: 6px;
   padding: 0 12px;
   height: 26px;                                          /* iets korter dan bar — actieve tab "pops up" */
-  background: var(--theme-bg-lighter);
-  border: 1px solid var(--theme-border);
+  background: transparent;
+  border: 1px solid transparent;
   border-bottom: none;
-  border-radius: 6px 6px 0 0;                            /* top-rounded zoals een echte tab */
-  color: var(--theme-text-secondary);
-  font: 500 11.5px/1 "Inter", system-ui, sans-serif;
+  border-radius: 6px 6px 0 0;
+  color: var(--theme-text);
+  font: 500 11.5px/1 var(--oa-font-body);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
@@ -154,12 +154,13 @@
   color: var(--theme-text);
   background: var(--theme-hover);
 }
+/* Actief: maat zoals voorheen, kleur volgens ontwerp 0.4 (tint en streep). */
 .lc-tab.active {
-  color: var(--theme-accent);
-  background: var(--theme-bg);
+  color: var(--theme-text);
+  background: var(--theme-accent-soft);
   height: 30px;                                          /* 4px hoger dan inactive — duidelijke "pop" */
   border-color: var(--theme-border);
-  border-top: 2px solid var(--theme-accent);            /* amber bovenrand markeert actief */
+  border-top: 2px solid var(--oa-selected-bar);
   z-index: 2;
   font-weight: 600;
 }
@@ -171,7 +172,7 @@
   width: 16px;
   height: 16px;
   border-radius: 3px;
-  font: 700 9px/1 "JetBrains Mono", monospace;
+  font: 700 9px/1 var(--oa-font-mono);
   letter-spacing: 0;
   background: var(--theme-text-faint);
   color: var(--theme-bg);
@@ -195,11 +196,6 @@
 .lc-tab-type-results { background: #f59e0b; color: #111827; }
 .lc-tab-results {
   margin-left: 8px;
-  border-color: rgba(245, 158, 11, 0.45);
-}
-.lc-tab-results.active {
-  border-top-color: #f59e0b;
-  color: #f59e0b;
 }
 .lc-tab-results.active .lc-tab-type-results { background: #f59e0b; color: #111827; }
 
@@ -214,8 +210,8 @@
   height: 14px;
   padding: 0 5px;
   background: var(--theme-hover);
-  color: var(--theme-text-faint);
-  font: 600 9px/1 "JetBrains Mono", monospace;
+  color: var(--theme-text-secondary);
+  font: 600 9px/1 var(--oa-font-mono);
   border-radius: 7px;
 }
 /* Het geval "Eigen gewicht": automatisch gevuld, dus een label "auto" en een

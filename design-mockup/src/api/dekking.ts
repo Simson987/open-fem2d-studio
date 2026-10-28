@@ -536,4 +536,5 @@ export const SNELTOETSEN_3D: Record<string, Dekking> = {
   z: { commando: ["app.undo", "app.redo"] },
   y: { commando: "app.redo" },
   s: { commando: "app.project.save" },
+  "?": { fase: 4, reden: "overzicht van de sneltoetsen openen (lib/sneltoetsen.ts); geen modelfunctie" },
 };

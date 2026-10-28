@@ -10,11 +10,14 @@ import ReactDOM from "react-dom/client";
 import { useTranslation } from "react-i18next";
 // Eigen ingang (profieleditor.html): i18n hier initialiseren, net als main.tsx.
 import "../../i18n/config";
+import "../../openaec/openaec-fonts.css";
+import "../../openaec/openaec-tokens.css";
 import "../../themes.css";
 import { naarCustomSection } from "../../lib/profieleditor/eigenDoorsnedenStore";
 import { useEigenDoorsneden } from "../../lib/profieleditor/useEigenDoorsneden";
 import EigenDoorsnedeTekening from "./EigenDoorsnedeTekening";
 import ProfielEditor from "./ProfielEditor";
+import { THEMA_IDS, applyTheme, themeId } from "../settings/SettingsDialog";
 
 /** Rapportweergave van de bewaarde doorsneden (papierstijl), ter controle. */
 function RapportProef() {
@@ -43,13 +46,13 @@ function Pagina() {
   const { t } = useTranslation("check");
   const [thema, setThema] = React.useState<string>(() => {
     try {
-      return localStorage.getItem("openaec.profieleditor.thema") ?? "light";
+      return themeId(localStorage.getItem("openaec.profieleditor.thema") ?? "light");
     } catch {
       return "light";
     }
   });
   React.useEffect(() => {
-    document.documentElement.setAttribute("data-theme", thema);
+    applyTheme(thema);
     try {
       localStorage.setItem("openaec.profieleditor.thema", thema);
     } catch {
@@ -63,7 +66,7 @@ function Pagina() {
         <strong>{t("profileEditor.main.standaloneTitle")}</strong>
         <span style={{ opacity: 0.6, fontSize: 12 }}>{t("profileEditor.main.standaloneSubtitle")}</span>
         <select value={thema} onChange={(e) => setThema(e.target.value)} style={{ marginLeft: "auto" }}>
-          {["light", "forge", "openaec", "blueprint", "contrast"].map((th) => (
+          {THEMA_IDS.map((th) => (
             <option key={th} value={th}>{th}</option>
           ))}
         </select>

@@ -91,16 +91,15 @@ export default function SettingsTab({
           />
         </RibbonGroup>
 
-        {/* Weergave — themawissel. "Donker" = het OpenAEC-huisstijlthema;
-            bij een ander donker thema (forge/blueprint/contrast) licht geen
-            van beide knoppen op. */}
+        {/* Weergave — themawissel tussen Licht en Donker (ontwerp 0.4); bij
+            Blueprint of een high-contrastthema licht geen van beide op. */}
         <RibbonGroup label={t("settings.appearance")}>
           <RibbonButton
             icon={themeMoonIcon}
             label={t("settings.darkMode")}
             size="large"
-            active={theme === "openaec"}
-            onClick={() => onThemeSelect?.("openaec")}
+            active={theme === "dark"}
+            onClick={() => onThemeSelect?.("dark")}
           />
           <RibbonButton
             icon={themeSunIcon}

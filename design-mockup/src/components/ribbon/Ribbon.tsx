@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import RibbonTab from "./RibbonTab";
+import { RibbonInklapContext } from "./RibbonGroup";
 import HomeTab from "./HomeTab";
 import TableTab from "./TableTab";
 import SettingsTab from "./SettingsTab";
@@ -15,7 +16,7 @@ interface RibbonProps {
   onFileTabClick?: () => void;
   onSettingsClick?: () => void;
   onProjectSettingsClick?: () => void;
-  /** Actieve app-thema ("light" / "openaec" / …) — voor de Instellingen-tab. */
+  /** Actieve app-thema ("light" / "dark" / …) — voor de Instellingen-tab. */
   theme?: string;
   /** Themawissel vanaf de Instellingen-tab (direct toepassen + persist). */
   onThemeSelect?: (theme: string) => void;
@@ -250,6 +251,31 @@ export default function Ribbon({
     requestAnimationFrame(updateHighlight);
   }, [activeTab, i18n.language, updateHighlight]);
 
+  // Past het lint niet in het venster, dan klappen groepen van rechts naar
+  // links in tot één knop met een menu (RibbonGroup). Gemeten na elke render:
+  // zolang het actieve paneel uitsteekt, klapt er één groep meer in. Een andere
+  // tab of vensterbreedte begint weer bij nul (de sleutel verandert).
+  const actiefPaneelRef = useRef<HTMLDivElement>(null);
+  const [lintBreedte, setLintBreedte] = useState(0);
+  const [inklap, setInklap] = useState<{ sleutel: string; n: number }>({ sleutel: "", n: 0 });
+  const inklapSleutel = `${activeTab}|${lintBreedte}|${modelDimension}|${i18n.language}`;
+  const inklappen = inklap.sleutel === inklapSleutel ? inklap.n : 0;
+  useEffect(() => {
+    const el = actiefPaneelRef.current?.parentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setLintBreedte(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const paneel = actiefPaneelRef.current;
+    if (!paneel) return;
+    const groepen = paneel.querySelectorAll(".ribbon-groups > .ribbon-group").length;
+    if (paneel.scrollWidth > paneel.clientWidth + 1 && inklappen < groepen - 1) {
+      setInklap({ sleutel: inklapSleutel, n: inklappen + 1 });
+    }
+  });
+
   useEffect(() => {
     window.addEventListener("resize", updateHighlight);
     return () => window.removeEventListener("resize", updateHighlight);
@@ -389,8 +415,11 @@ export default function Ribbon({
         <div
           className={`ribbon-content-panel${animating ? ` ribbon-panel-enter-${direction}` : ""}`}
           key={`active-${activeTab}`}
+          ref={actiefPaneelRef}
         >
-          {renderContent(activeTab)}
+          <RibbonInklapContext.Provider value={inklappen}>
+            {renderContent(activeTab)}
+          </RibbonInklapContext.Provider>
         </div>
       </div>
     </div>

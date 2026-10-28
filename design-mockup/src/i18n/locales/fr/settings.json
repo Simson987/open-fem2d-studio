@@ -26,10 +26,10 @@
     "theme": "Thème",
     "themeDescription": "Choisissez un thème de couleurs pour l'application.",
     "light": "Clair",
-    "forge": "Forge (sombre)",
-    "dark": "OpenAEC (sombre)",
+    "dark": "Sombre",
     "blueprint": "Blueprint",
-    "contrast": "Contraste élevé",
+    "highContrastDark": "Contraste élevé sombre",
+    "highContrastLight": "Contraste élevé clair",
     "font": "Police",
     "uiFontSize": "Taille de police de l'interface"
   },

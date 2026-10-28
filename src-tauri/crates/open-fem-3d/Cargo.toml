@@ -1,6 +1,6 @@
 [package]
 name = "open-fem-3d"
-version = "0.1.0"
+version = "2026.44.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
 description = "Open FEM Studio adapter for the pinned external 3D frame engine"

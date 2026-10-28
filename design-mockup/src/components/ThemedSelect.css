@@ -13,7 +13,7 @@
   border-radius: 0;
   background: var(--theme-dialog-input-bg);
   color: var(--theme-dialog-input-text);
-  font-size: 11px;
+  font-size: var(--oa-size-label);
   font-family: inherit;
   cursor: default;
   transition: border-color 0.1s;
@@ -58,7 +58,7 @@
   border: none;
   background: transparent;
   color: var(--theme-dialog-content-text);
-  font-size: 11px;
+  font-size: var(--oa-size-label);
   font-family: inherit;
   cursor: default;
   text-align: left;
@@ -67,7 +67,7 @@
 
 .themed-select-item:hover {
   background: var(--theme-ribbon-btn-hover);
-  color: var(--theme-accent);
+  color: var(--theme-accent-tint);
 }
 
 .themed-select-item.active {

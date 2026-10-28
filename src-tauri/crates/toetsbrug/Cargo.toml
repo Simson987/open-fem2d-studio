@@ -1,6 +1,6 @@
 [package]
 name = "toetsbrug"
-version = "0.1.0"
+version = "2026.44.0"
 edition = "2021"
 description = "Normtoetsing als JSON-in/JSON-uit, zodat de browser dezelfde rekenkern bereikt als de desktop-app"
 license = "AGPL-3.0-or-later"

@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: space-between;
   height: 22px;
-  font-size: 12px;
+  font-size: var(--oa-size-body);
   color: var(--theme-status-text);
   flex-shrink: 0;
   user-select: none;
@@ -58,13 +58,13 @@
 
 .status-item-label {
   color: var(--theme-status-text-label);
-  font-size: 12px;
+  font-size: var(--oa-size-body);
 }
 
 .status-item-value {
   color: var(--theme-status-text);
   font-weight: 500;
-  font-size: 12px;
+  font-size: var(--oa-size-body);
 }
 
 /* Snapknopjes — één per snapsoort, in voorrangsvolgorde. De AAN-stand is aan
@@ -82,7 +82,7 @@
   border: 1px solid var(--theme-status-separator);
   background: transparent;
   color: var(--theme-status-text-label);
-  font-size: 11px;
+  font-size: var(--oa-size-label);
   font-family: inherit;
   line-height: 1;
   padding: 2px 6px;

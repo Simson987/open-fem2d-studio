@@ -99,19 +99,20 @@ if (!commandoMap) {
   }
 }
 
-// ── [3] vangnet in de sluitbeveiliging ──────────────────────────────────────
-log("\n[3] een falende native dialoog sluit de gebruiker niet op");
+// ── [3] de sluitbeveiliging ─────────────────────────────────────────────────
+// Sinds 2026-10-27 vraagt de app dit in een eigen venster (OnopgeslagenDialog)
+// met drie knoppen, in plaats van twee native dialogen achter elkaar. Een
+// falende native dialoog kan de gebruiker dus niet meer opsluiten; wat nu moet
+// gelden: geen native ask/confirm meer in deze route, Esc en het kruisje zijn
+// Annuleren, en alleen een expliciete keuze "Niet opslaan" gooit werk weg.
+log("\n[3] de sluitbeveiliging vraagt het in een eigen venster, Annuleren is de veilige uitweg");
 const app = lees("src", "App.tsx");
 const blok = /const confirmUnsavedAction = useCallback\([\s\S]*?\n  \}, \[handleSaveProject, t\]\);/.exec(app)?.[0] ?? "";
 check("confirmUnsavedAction is in de bron gevonden", blok.length > 200, `lengte ${blok.length}`);
-check("de native dialoog staat in een try/catch", /try \{[\s\S]*plugin-dialog[\s\S]*\} catch/.test(blok));
-check("bij een fout valt hij terug op de webview-dialoog", /catch[\s\S]*window\.confirm\(/.test(blok));
-check("één vraag met drie knoppen: Opslaan, Niet opslaan, Annuleren",
-  /yes: t\("unsaved\.saveBtn"\), no: t\("unsaved\.dontSaveBtn"\), cancel: t\("unsaved\.cancelBtn"\)/.test(blok)
-  && /message\(t\("unsaved\.askSave"\), \{[\s\S]{0,120}buttons: knoppen/.test(blok));
-check("geen tweede bevestiging na Niet opslaan", !/await (ask|confirm)\(/.test(blok));
-check("alleen Opslaan of Niet opslaan laat de actie doorgaan; Esc en het kruisje annuleren",
-  /if \(keuze === knoppen\.yes \|\| keuze === "Yes"\) return handleSaveProject\(\);\s*return keuze === knoppen\.no \|\| keuze === "No";/.test(blok));
+check("geen native ask/confirm meer in de sluitbeveiliging", !/plugin-dialog/.test(blok));
+check("doorgaan zonder opslaan alleen na de keuze \"niet\"", /return keuze === "niet";/.test(blok));
+const dialoog = lees("src", "components", "OnopgeslagenDialog.tsx");
+check("Esc of het kruisje van het venster = Annuleren", /onClose=\{\(\) => onKeuze\("annuleren"\)\}/.test(dialoog));
 
 // ── [4] externe links via één helper ───────────────────────────────────────
 // Aanleiding (#38): IfcViewerPanel riep openUrl aan zonder await en zonder

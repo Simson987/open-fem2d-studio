@@ -320,7 +320,8 @@
     "dontSaveBtn": "Don't save",
     "confirmDiscard": "Continue without saving? Unsaved changes will be lost.",
     "proceedBtn": "Continue",
-    "cancelBtn": "Cancel"
+    "cancelBtn": "Cancel",
+    "askSaveNamed": "“{{naam}}” has unsaved changes. Do you want to save them first?"
   },
   "welcome": {
     "subtitle": "Professional desktop application template",
@@ -538,7 +539,9 @@
       "libraryUpdated": "Library updated by this project",
       "openFailed": "Cannot open file",
       "notAProjectTitle": "Not an Open FEM Studio project",
-      "notAProjectBody": "{{naam}} is not a project file (.ifcfem or .ifcfem2d) and was not opened."
+      "notAProjectBody": "{{naam}} is not a project file (.ifcfem or .ifcfem2d) and was not opened.",
+      "openFolder": "Open folder",
+      "savedNamed": "Saved: {{naam}}"
     },
     "ifc": {
       "exportErrors": "IFC export contains errors",
@@ -554,7 +557,11 @@
       "firstOrderNotAllowed": "Stability: first-order analysis not permitted"
     },
     "solve": {
-      "failed": "Calculation failed"
+      "failed": "Calculation failed",
+      "done": "Calculated in {{tijd}} s",
+      "doneBody": "{{analyse}} · {{gevallen}} load cases · {{combinaties}} combinations",
+      "doneMaxU": "largest |u| = {{u}} mm ({{geval}})",
+      "showResults": "Show results"
     },
     "nonlinear": {
       "title": "Physically non-linear",
@@ -1287,7 +1294,13 @@
     "diaphragms": "Diaphragms",
     "diaphragmLabel": "Diaphragm {{id}}",
     "diaphragmValue": "{{count}} nodes · Z {{z}} mm",
-    "deleteDiaphragm": "Delete diaphragm {{id}}"
+    "deleteDiaphragm": "Delete diaphragm {{id}}",
+    "search": {
+      "placeholder": "Search node, member, profile…",
+      "label": "Search the explorer",
+      "clear": "Clear search",
+      "none": "Nothing found for “{{q}}”."
+    }
   },
   "resultsOverlay": {
     "deflectionScale": "Deflection scale: {{schaal}}×"
@@ -1475,5 +1488,33 @@
     "invalidOpening": "Enter at least three valid node IDs.",
     "add": "Add",
     "delete": "Delete panel"
+  },
+  "canvasMelding": {
+    "showTimber": "Show timber members",
+    "openCombinations": "Combinations",
+    "close": "Close message"
+  },
+  "ribbonCollapsed": {
+    "open": "{{groep}}: all buttons"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "intro": "Open with ? or F1. Letter keys work in the model, not while typing in an input field.",
+    "groups": {
+      "file": "File",
+      "edit": "Edit",
+      "draw": "Drawing and input",
+      "canvas": "Selection on the canvas",
+      "calc": "Calculation and help"
+    },
+    "labels": {
+      "moveSelection": "Move selection",
+      "rotateSelection": "Rotate selection",
+      "duplicateSelection": "Duplicate selection",
+      "fit": "Fit to view",
+      "pan": "Pan (hold)",
+      "overview": "Keyboard shortcuts",
+      "print": "Print / report"
+    }
   }
 }

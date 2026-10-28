@@ -46,6 +46,8 @@ import {
   plateSurfaceIcon,
   plateMeshIcon,
 } from "./icons";
+import { b2 } from "./b2Icons";
+import { toetsVoor } from "../../lib/sneltoetsen";
 
 interface HomeTabProps {
   onSettingsClick?: () => void;
@@ -120,18 +122,18 @@ interface HomeTabProps {
 const stub = (label: string) => () => console.log(`TODO: ${label}`);
 
 // Reusable trash icon — there isn't one in icons.ts yet.
-const deleteIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>`;
+const deleteIcon = b2("edit.delete");
 const subnodeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h18M12 8v8"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>`;
-const mirrorIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16M6 8l-3 4 3 4M18 8l3 4-3 4"/></svg>`;
+const mirrorIcon = b2("transform.mirror");
 const plateArcIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19h16M4 19Q12 2 20 19"/><circle cx="4" cy="19" r="1.5" fill="currentColor" stroke="none"/><circle cx="20" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>`;
 // Solve / "play" icon — used for the Berekenen button.
-const solveIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-14 9V3z"/></svg>`;
+const solveIcon = b2("fem.solve-linear");
+const cubeIcon = b2("view.isometric");
+const fitIcon = b2("view.fit");
+const topIcon = b2("view.top");
+const frontIcon = b2("view.front");
+const sideIcon = b2("view.right");
 const steelHallIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linejoin="round" d="M3 20V10l9-6 9 6v10M3 10h18"/><path stroke-width="1.4" d="M7 20v-9.5M12 20V7M17 20v-9.5M3 20h18"/></svg>`;
-const cubeIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linejoin="round" d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5m-9 5v10"/></svg>`;
-const fitIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>`;
-const topIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke-width="1"/></svg>`;
-const frontIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 20V4m0 16h16"/><path stroke-width="1.5" d="M7 17V9l5-4 5 4v8H7z"/></svg>`;
-const sideIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 20V4m0 16h16"/><path stroke-width="1.5" d="M8 17V7h9v10H8z"/></svg>`;
 const revoluteIcon = (axis: "X" | "Y" | "Z") => `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.8" stroke-linecap="round" d="M7 16a7 7 0 1 1 10 0"/><path stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m6 12 1 4 4-1"/><circle cx="12" cy="12" r="2"/><text x="12" y="22" text-anchor="middle" fill="currentColor" stroke="none" font-size="6" font-family="sans-serif">${axis}</text></svg>`;
 /** Veer in Y (3D): het X-veersymbool met een letter, zoals de Y-rol. */
 const ySpringIcon = `<svg fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 16 16"><path d="M15,8 L13,8 L11.5,4 L9.5,12 L7.5,4 L5.5,12 L4,8 L3,8"/><line x1="1" y1="2" x2="1" y2="14" stroke="#333"/><text x="13" y="4.5" text-anchor="middle" fill="currentColor" stroke="none" font-size="5" font-family="sans-serif">Y</text></svg>`;
@@ -210,6 +212,7 @@ export default function HomeTab({
           <RibbonButton
             icon={solveIcon}
             label={t("home.solve")}
+            shortcut={toetsVoor("berekenen")}
             size="large"
             active={hasResults}
             onClick={() => onSolve?.()}
@@ -222,6 +225,7 @@ export default function HomeTab({
           <RibbonButton
             icon={fileNewIcon}
             label={t("home.new")}
+            shortcut={toetsVoor("nieuw")}
             size="large"
             onClick={onNewProject ?? stub("New project (no handler)")}
           />
@@ -229,18 +233,21 @@ export default function HomeTab({
             <RibbonButton
               icon={fileOpenIcon}
               label={t("home.open")}
+              shortcut={toetsVoor("openen")}
               size="small"
               onClick={onOpenProject ?? stub("Open project (no handler)")}
             />
             <RibbonButton
               icon={fileSaveIcon}
               label={t("home.save")}
+              shortcut={toetsVoor("opslaan")}
               size="small"
               onClick={onSaveProject ?? stub("Save project (no handler)")}
             />
             <RibbonButton
               icon={fileSaveIcon}
               label={t("home.saveAs")}
+              shortcut={toetsVoor("opslaanAls")}
               size="small"
               onClick={onSaveProjectAs ?? stub("Save project as (no handler)")}
             />
@@ -293,6 +300,7 @@ export default function HomeTab({
           <RibbonButton
             icon={barIcon}
             label={t("home.bar")}
+            shortcut={is3D ? undefined : toetsVoor("staaf")}
             size="large"
             active={toolActive("addBeam")}
             onClick={() => setTool("addBeam")}
@@ -301,6 +309,7 @@ export default function HomeTab({
             <RibbonButton
               icon={nodeIcon}
               label={t("home.node")}
+              shortcut={is3D ? undefined : toetsVoor("knoop")}
               size="small"
               active={toolActive("addNode")}
               onClick={() => setTool("addNode")}
@@ -317,6 +326,7 @@ export default function HomeTab({
             <RibbonButton
               icon={plateIcon}
               label={t("home.plate")}
+              shortcut={is3D ? undefined : toetsVoor("plaat")}
               size="small"
               active={toolActive("addPlate")}
               onClick={() => setTool("addPlate")}
@@ -367,6 +377,7 @@ export default function HomeTab({
             <RibbonButton
               icon={gridIcon}
               label={t("home.grids")}
+              shortcut={toetsVoor("stramien")}
               size="small"
               onClick={() => onOpenGrids?.()}
             />
@@ -378,6 +389,7 @@ export default function HomeTab({
           <RibbonButton
             icon={bcPinnedIcon}
             label={t("home.pinned")}
+            shortcut={is3D ? undefined : toetsVoor("scharnier")}
             size="large"
             active={is3D ? openFem3dTool === "support:pinned" : toolActive("addPinned")}
             onClick={() => is3D ? onOpenFem3DSupportPreset?.("pinned") : setTool("addPinned")}
@@ -518,6 +530,7 @@ export default function HomeTab({
           <RibbonButton
             icon={loadPointIcon}
             label={t("home.pointLoad")}
+            shortcut={is3D ? undefined : toetsVoor("puntlast")}
             size="large"
             active={is3D ? openFem3dTool === "addPointLoad" : toolActive("addPointLoad")}
             onClick={() => is3D
@@ -537,6 +550,7 @@ export default function HomeTab({
           <RibbonButton
             icon={loadLineIcon}
             label={t("home.lineLoad")}
+            shortcut={is3D ? undefined : toetsVoor("lijnlast")}
             size="large"
             active={is3D ? openFem3dTool === "addMemberLoad" : toolActive("addLineLoad")}
             onClick={() => is3D ? onOpenFem3DRequestMemberLoad?.() : setTool("addLineLoad")}
@@ -604,6 +618,7 @@ export default function HomeTab({
             <RibbonButton
               icon={loadCasesIcon}
               label={t("home.loadCases")}
+              shortcut={toetsVoor("belastinggevallen")}
               size="small"
               onClick={onOpenLoadCases ?? stub("Load cases dialog (no handler)")}
               disabled={!onOpenLoadCases}
@@ -678,6 +693,7 @@ export default function HomeTab({
             <RibbonButton
               icon={undoIcon}
               label={t("home.undo")}
+              shortcut={toetsVoor("ongedaan")}
               size="small"
               onClick={() => onUndo?.()}
               disabled={!canUndo}
@@ -685,6 +701,7 @@ export default function HomeTab({
             <RibbonButton
               icon={redoIcon}
               label={t("home.redo")}
+              shortcut={toetsVoor("opnieuw")}
               size="small"
               onClick={() => onRedo?.()}
               disabled={!canRedo}
@@ -692,6 +709,7 @@ export default function HomeTab({
             <RibbonButton
               icon={deleteIcon}
               label={t("common:delete")}
+              shortcut={toetsVoor("verwijderen")}
               size="small"
               onClick={() => onDelete?.()}
               disabled={is3D && !canOpenFem3DDelete}

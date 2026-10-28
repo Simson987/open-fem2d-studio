@@ -20,19 +20,18 @@
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--theme-text-secondary);
-  font: 600 11px/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.5px;
+  font: var(--oa-weight-medium) 11px/1 var(--oa-font-mono);
+  letter-spacing: var(--oa-letter-spacing-mono-label);
   text-transform: uppercase;
   cursor: default;
   padding: 0;
 }
 .fem-tree-tab.active {
-  color: var(--theme-accent);
+  color: var(--theme-text);
   border-bottom-color: var(--theme-accent);
-  background: var(--theme-bg);
 }
 .fem-tree-tab:hover:not(.active) {
-  color: var(--theme-accent);
+  color: var(--theme-text);
   background: var(--theme-hover);
 }
 
@@ -101,10 +100,10 @@
 
 .explorer-view-subtitle {
   padding: 7px 10px 3px;
-  color: var(--theme-text-faint);
-  font: 600 10px/1.2 "Inter", system-ui, sans-serif;
+  color: var(--theme-text-secondary);
+  font: var(--oa-weight-medium) 10px/1.2 var(--oa-font-mono);
   text-transform: uppercase;
-  letter-spacing: 0.45px;
+  letter-spacing: var(--oa-letter-spacing-mono-label);
 }
 
 .explorer-view-toggle.sub {
@@ -214,6 +213,14 @@
   height: 16px;
 }
 
+/* Blueprint-iconen: op 16 px de eigen 16 px-tekening (zie ribbon/b2Icons.ts). */
+.explorer-view-toggle-icon svg.b2-24 {
+  display: none;
+}
+.explorer-view-toggle-icon svg.b2-16 {
+  display: block;
+}
+
 .explorer-view-toggle.active .explorer-view-toggle-icon {
   color: var(--theme-accent);
 }
@@ -229,7 +236,7 @@
   background: transparent;
   border: none;
   color: var(--theme-text);
-  font: 500 12px/1.3 "Inter", system-ui, sans-serif;
+  font: 400 var(--oa-size-body)/1.3 var(--oa-font-body);
   text-align: left;
   cursor: default;
   border-radius: 2px;
@@ -282,11 +289,9 @@
   text-overflow: ellipsis;
 }
 .fem-tree-count {
-  font-size: 10px;
-  color: var(--theme-text-faint);
-  background: var(--theme-hover);
+  font: 11px var(--oa-font-mono);
+  color: var(--theme-text-secondary);
   padding: 0 5px;
-  border-radius: 8px;
   min-width: 16px;
   text-align: center;
 }
@@ -313,14 +318,15 @@
 .fem-tree-leaf:hover { background: var(--theme-hover); color: var(--theme-text); }
 .fem-tree-leaf.active {
   background: var(--theme-accent-soft, var(--theme-hover));
-  color: var(--theme-accent);
-  font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--oa-selected-bar);
+  color: var(--theme-text);
+  font-weight: 600;
 }
 .fem-tree-leaf-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fem-tree-leaf-value {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--oa-font-mono);
   font-size: 10px;
-  color: var(--theme-text-faint);
+  color: var(--theme-text-secondary);
   margin-left: 8px;
 }
 
@@ -345,10 +351,10 @@
 }
 .fem-results-section-title {
   padding: 6px 12px 4px;
-  font: 600 10.5px/1 "Inter", system-ui, sans-serif;
-  letter-spacing: 0.06em;
+  font: var(--oa-weight-medium) 10.5px/1 var(--oa-font-mono);
+  letter-spacing: var(--oa-letter-spacing-mono-label);
   text-transform: uppercase;
-  color: var(--theme-accent-tint, var(--theme-accent));
+  color: var(--theme-text-secondary);
   background: var(--theme-bg-lighter);
   border-bottom: 1px solid var(--theme-border-subtle);
 }
@@ -553,4 +559,64 @@
   background: var(--theme-hover);
   border-color: var(--theme-border);
   color: var(--theme-accent);
+}
+
+/* Zoeken in de projectboom (ontwerp 0.4: veld met focusrand) */
+.fem-tree-zoek {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 8px 4px;
+  padding: 0 6px 0 8px;
+  height: 26px;
+  border: 1px solid var(--oa-border-strong);
+  border-radius: var(--oa-radius-small);
+  background: var(--oa-panel);
+  color: var(--theme-text-secondary);
+}
+.fem-tree-zoek:focus-within {
+  border-color: var(--oa-focus);
+  box-shadow: 0 0 0 1px var(--oa-focus);
+}
+.fem-tree-zoek svg {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.fem-tree-zoek input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--theme-text);
+  font: inherit;
+  font-size: var(--oa-size-body);
+}
+.fem-tree-zoek-wis {
+  border: 0;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fem-tree-zoek-leeg {
+  padding: 12px;
+  color: var(--theme-text-secondary);
+}
+.fem-tree-body mark {
+  background: color-mix(in srgb, var(--oa-accent) 30%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+/* Selectie op het canvas: de regel in de boom licht kort op. */
+.fem-tree-leaf.fem-tree-flits {
+  animation: fem-tree-flits 1.2s ease-out;
+}
+@keyframes fem-tree-flits {
+  from { background: var(--oa-accent); color: var(--oa-text-on-accent); }
 }

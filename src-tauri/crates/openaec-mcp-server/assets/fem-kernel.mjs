@@ -28202,7 +28202,7 @@ function deserializeProject(text) {
 init_femTypes();
 
 // package.json
-var version = "2026.42.0";
+var version = "2026.44.0";
 
 // src/mcp/fouten.ts
 var AFBEELDINGEN = [

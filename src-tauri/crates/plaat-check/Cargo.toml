@@ -1,6 +1,6 @@
 [package]
 name = "plaat-check"
-version = "0.1.0"
+version = "2026.44.0"
 edition = "2021"
 description = "Normtoetsing van platen (wandschijven, belast in het vlak) per element"
 license = "LGPL-3.0-or-later"

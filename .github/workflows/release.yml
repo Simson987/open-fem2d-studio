@@ -25,6 +25,14 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+      # Versie JJJJ.W.N op alle plekken gelijk, en gelijk aan de tag (vJJJJ.W.N).
+      - name: Versienummer
+        run: |
+          node scripts/versie.mjs --check
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            app=$(node -p "require('./design-mockup/package.json').version")
+            [ "v$app" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME past niet bij versie $app"; exit 1; }
+          fi
       - uses: actions/cache@v5
         with:
           path: ~/.npm

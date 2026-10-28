@@ -1,5 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+// Ontwerp 0.4: lettertypen en tokens uit het OpenAEC-webpakket (Blueprint).
+import "./openaec/openaec-fonts.css";
+import "./openaec/openaec-tokens.css";
 import "./i18n/config";
 import App from "./App";
 import { installeerSelecteerBijFocus } from "./lib/selecteerBijFocus";

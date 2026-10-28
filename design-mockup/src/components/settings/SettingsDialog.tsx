@@ -15,12 +15,22 @@ import "../ThemedSelect.css";
 import "./SettingsDialog.css";
 
 const THEME_OPTIONS = [
-  { value: "light",     labelKey: "appearance.light",     swatches: ["#FAFAF9", "#FFFFFF", "#D97706", "#36363E"] },
-  { value: "forge",     labelKey: "appearance.forge",     swatches: ["#36363E", "#27272A", "#FBBF24", "#FAFAF9"] },
-  { value: "openaec",   labelKey: "appearance.dark",      swatches: ["#27272A", "#1C1917", "#FBBF24", "#FAFAF9"] },
-  { value: "blueprint", labelKey: "appearance.blueprint", swatches: ["#0F1B2D", "#1A2C45", "#60A5FA", "#E0E7FF"] },
-  { value: "contrast",  labelKey: "appearance.contrast",  swatches: ["#000000", "#0A0A0A", "#FFD700", "#FFFFFF"] },
+  { value: "light",               labelKey: "appearance.light",             swatches: ["#F1EEEA", "#FFFFFF", "#D97706", "#2A2A32"] },
+  { value: "dark",                labelKey: "appearance.dark",              swatches: ["#2A2A32", "#33333C", "#D97706", "#EDEBE8"] },
+  { value: "blueprint",           labelKey: "appearance.blueprint",         swatches: ["#0A1320", "#0F1B2D", "#60A5FA", "#E0E7FF"] },
+  { value: "high-contrast-dark",  labelKey: "appearance.highContrastDark",  swatches: ["#000000", "#000000", "#F59E0B", "#FFFFFF"] },
+  { value: "high-contrast-light", labelKey: "appearance.highContrastLight", swatches: ["#FFFFFF", "#FFFFFF", "#92400E", "#000000"] },
 ];
+
+/** De vijf thema's van ontwerp 0.4 (OpenAEC Blueprint). */
+export const THEMA_IDS = THEME_OPTIONS.map((o) => o.value);
+
+/** The 0.4 theme for a saved value, also for the names of earlier versions. */
+export function themeId(theme?: string): string {
+  const earlier: Record<string, string> = { forge: "dark", openaec: "dark", contrast: "high-contrast-dark" };
+  const id = earlier[theme ?? ""] ?? theme ?? "light";
+  return THEME_OPTIONS.some((o) => o.value === id) ? id : "light";
+}
 
 /* ─── Tab configuratie ──────────────────────────────────────
    Pas deze array aan voor jouw project.
@@ -35,7 +45,7 @@ const TAB_IDS = ["general", "appearance", "calculation", "aiAssistant", "about"]
 export type SettingsTabId = (typeof TAB_IDS)[number];
 
 export function applyTheme(theme?: string) {
-  document.documentElement.setAttribute("data-theme", theme || "light");
+  document.documentElement.setAttribute("data-oa-theme", themeId(theme));
 }
 
 interface SettingsDialogProps {

@@ -1,6 +1,8 @@
+/* Ontwerp 0.4: een afgeronde taak meldt zich rechtsonder, boven de
+   statusbalk (22 px) en de belastinggevallenbalk. */
 .toast-host {
   position: fixed;
-  top: 16px;
+  bottom: 64px;
   right: 16px;
   display: flex;
   flex-direction: column;
@@ -15,23 +17,23 @@
   align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 6px;
-  background: var(--theme-bg);
-  color: var(--theme-text);
-  border: 1px solid var(--theme-border);
+  border-radius: var(--oa-radius-medium);
+  background: var(--oa-raised);
+  color: var(--oa-text);
+  border: 1px solid var(--oa-border);
   border-left-width: 4px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  font: 500 12.5px/1.4 "Inter", system-ui, sans-serif;
+  box-shadow: var(--oa-shadow-popup);
+  font: 500 var(--oa-size-body)/1.4 var(--oa-font-body);
   animation: toast-in 0.18s ease-out;
 }
 @keyframes toast-in {
-  from { transform: translateX(20px); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
-.toast-info    { border-left-color: #2563eb; }
-.toast-success { border-left-color: #10b981; }
-.toast-warning { border-left-color: #f59e0b; }
-.toast-soon    { border-left-color: #9333ea; }
+.toast-info    { border-left-color: var(--oa-info); }
+.toast-success { border-left-color: var(--oa-success); }
+.toast-warning { border-left-color: var(--oa-warning); }
+.toast-soon    { border-left-color: var(--oa-accent); }
 
 .toast-body { flex: 1; min-width: 0; }
 .toast-title { font-weight: 600; margin-bottom: 2px; }
@@ -40,15 +42,16 @@
   color: var(--theme-text-secondary);
   font-size: 11.5px;
   line-height: 1.4;
+  white-space: pre-line;
 }
 .toast-actie {
   margin-top: 6px;
   padding: 3px 10px;
   border-radius: 4px;
-  border: 1px solid var(--theme-border);
-  background: var(--theme-bg);
-  color: var(--theme-text);
-  font: 600 11.5px/1.4 "Inter", system-ui, sans-serif;
+  border: 1px solid var(--oa-border-strong);
+  background: var(--oa-panel);
+  color: var(--oa-text);
+  font: 600 11.5px/1.4 var(--oa-font-body);
   cursor: pointer;
 }
 .toast-actie:hover { border-color: var(--theme-text-secondary); }

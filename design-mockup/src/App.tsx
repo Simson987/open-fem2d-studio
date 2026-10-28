@@ -8,13 +8,19 @@ import Ribbon from "./components/ribbon/Ribbon";
 import DocumentBar from "./components/DocumentBar";
 import StatusBar, { type SolverStatus } from "./components/StatusBar";
 import Backstage from "./components/backstage/Backstage";
-import ToastHost from "./components/feedback/Toast";
+import ToastHost, { pushToast } from "./components/feedback/Toast";
 import ImportVerslagVenster, { type ImportVerslag } from "./extensies/ImportVerslagVenster";
 import { MeerdereImporteursFout, useExtensieStore } from "./extensies/extensieStore";
 import { useRecentFiles } from "./hooks/useRecentFiles";
 import { useBestandskoppeling } from "./hooks/useBestandskoppeling";
 import { maakWachtpoort, type Wachtpoort } from "./io/bestandskoppeling";
-import SettingsDialog, { applyTheme, type SettingsTabId } from "./components/settings/SettingsDialog";
+import SettingsDialog, { applyTheme, themeId, type SettingsTabId } from "./components/settings/SettingsDialog";
+import SneltoetsenDialog from "./components/SneltoetsenDialog";
+import OnopgeslagenDialog, { type OnopgeslagenKeuze } from "./components/OnopgeslagenDialog";
+import CanvasMeldingen from "./components/fem/CanvasMeldingen";
+import { materiaalVanStaaf } from "./lib/variantInvoer";
+import { erIsEenDialoogOpen } from "./components/Modal";
+import { actieVoorToets, isTypVeld } from "./lib/sneltoetsen";
 import FeedbackDialog from "./components/feedback/FeedbackDialog";
 import WelcomeScreen from "./components/welcome/WelcomeScreen";
 import ProjectSettingsDialog, { DEFAULT_UITGANGSPUNTEN } from "./components/project/ProjectSettingsDialog";
@@ -212,7 +218,7 @@ import {
   exporteer as exporteerCltOpbouwen,
   importeer as importeerCltOpbouwen,
 } from "./lib/profieleditor/cltOpbouwenStore";
-import { isTauriApp } from "./lib/tauri";
+import { isTauriApp, revealInFolder } from "./lib/tauri";
 import { getSetting, setSetting } from "./store";
 import "./themes.css";
 import "./App.css";
@@ -405,6 +411,7 @@ function App() {
     setSettingsOpen(true);
   }, []);
   const [backstageOpen, setBackstageOpen] = useState(false);
+  const [sneltoetsenOpen, setSneltoetsenOpen] = useState(false);
   // Currently-open project path (Tauri only; empty string = unsaved).
   // Save → write back to this path; Save As → always opens dialog and updates this.
   const [projectPath, setProjectPath] = useState<string>("");
@@ -1254,6 +1261,29 @@ function App() {
       () => unsavedConfirmationPendingRef.current || closeRequestPendingRef.current,
     );
   }
+  const [onopgeslagenOpen, setOnopgeslagenOpen] = useState(false);
+  const onopgeslagenResolveRef = useRef<((k: OnopgeslagenKeuze) => void) | null>(null);
+
+  /**
+   * Melding na opslaan: bestandsnaam, map en tijd, met "Map openen" (Tauri,
+   * via tauri-plugin-opener). In de browser is er geen map om te openen.
+   */
+  const meldOpgeslagen = useCallback((pad: string) => {
+    const delen = pad.split(/[\\/]/);
+    const naam = delen.pop() ?? pad;
+    const map = delen.join("/");
+    const tijd = new Date().toLocaleTimeString(i18next.language, { hour: "2-digit", minute: "2-digit" });
+    pushToast({
+      kind: "success",
+      title: i18next.t("common:app.file.savedNamed", { naam }),
+      body: map ? `${map} · ${tijd}` : tijd,
+      duration: 6000,
+      actie: isTauriApp() ? {
+        label: i18next.t("common:app.file.openFolder"),
+        onClick: () => { void revealInFolder(pad); },
+      } : undefined,
+    });
+  }, []);
 
   /** Opslaan als — retourneert true als er daadwerkelijk is opgeslagen. */
   const handleSaveProjectAs = useCallback(async (): Promise<boolean> => {
@@ -1273,13 +1303,14 @@ function App() {
       }
       lastSavedRef.current = modelJson(snap);
       setDirty(false);
-      notifySuccess(i18next.t("common:app.file.saved"), newPath || i18next.t("common:app.file.downloadStarted"));
+      if (newPath) meldOpgeslagen(newPath);
+      else notifySuccess(i18next.t("common:app.file.saved"), i18next.t("common:app.file.downloadStarted"));
       return true;
     } catch (e) {
       notifyWarning(i18next.t("common:app.file.saveFailed"), e instanceof Error ? e.message : String(e));
       return false;
     }
-  }, [buildProjectSnapshot, projectPath, addRecentFile, setDirty]);
+  }, [buildProjectSnapshot, projectPath, addRecentFile, setDirty, meldOpgeslagen]);
 
   /** Opslaan — naar het bekende pad, of via Opslaan-als zonder pad. */
   const handleSaveProject = useCallback(async (): Promise<boolean> => {
@@ -1287,58 +1318,40 @@ function App() {
       return handleSaveProjectAs();
     }
     const { serializeProject, saveProjectTo } = await import("./io/projectFile");
-    const { notifySuccess, notifyWarning } = await import("./io/notify");
+    const { notifyWarning } = await import("./io/notify");
     try {
       const snap = buildProjectSnapshot();
       const text = serializeProject(snap);
       await saveProjectTo(projectPath, text);
       lastSavedRef.current = modelJson(snap);
       setDirty(false);
-      notifySuccess(i18next.t("common:app.file.saved"), projectPath.split(/[\\/]/).pop());
+      meldOpgeslagen(projectPath);
       return true;
     } catch (e) {
       notifyWarning(i18next.t("common:app.file.saveFailed"), e instanceof Error ? e.message : String(e));
       return false;
     }
-  }, [buildProjectSnapshot, projectPath, handleSaveProjectAs, setDirty]);
+  }, [buildProjectSnapshot, projectPath, handleSaveProjectAs, setDirty, meldOpgeslagen]);
 
   /**
-   * C2: sluitbeveiliging. Vraagt bij niet-opgeslagen wijzigingen wat er moet
-   * gebeuren: Opslaan / Niet opslaan / Annuleren (twee dialogen, want de
-   * Tauri dialog-plugin kent alleen twee-knops dialogen). Retourneert true
-   * wanneer de aanroeper mag doorgaan (schoon, opgeslagen of bewust
-   * weggegooid), false bij Annuleren of mislukt opslaan.
+   * C2: sluitbeveiliging. Vraagt bij niet-opgeslagen wijzigingen in één
+   * venster van de app (OnopgeslagenDialog) wat er moet gebeuren: Opslaan /
+   * Niet opslaan / Annuleren. Esc en het kruisje betekenen Annuleren, dus er
+   * gaat alleen werk verloren na een bewuste keuze voor "Niet opslaan".
+   * Retourneert true wanneer de aanroeper mag doorgaan (schoon, opgeslagen of
+   * bewust weggegooid), false bij Annuleren of mislukt opslaan.
    */
   const confirmUnsavedAction = useCallback(async (): Promise<boolean> => {
     if (!isDirtyRef.current) return true;
     if (unsavedConfirmationPendingRef.current) return false;
     unsavedConfirmationPendingRef.current = true;
     try {
-      if (isTauriApp()) {
-        // Faalt de native dialoog (bv. een JS-plugin die een commando aanroept
-        // dat de Rust-plugin niet kent), dan mag dat de gebruiker niet in de app
-        // opsluiten: zonder vangnet breekt onCloseRequested af vóór destroy() en
-        // doet het kruisje niets. Dan vragen we het met de webview-dialoog.
-        try {
-          // Eén vraag met drie knoppen. De plugin geeft het label van de
-          // gekozen knop terug; Esc en het kruisje van de vraag gelden als
-          // Annuleren, zodat een misklik geen werk weggooit.
-          const { message } = await import("@tauri-apps/plugin-dialog");
-          const knoppen = { yes: t("unsaved.saveBtn"), no: t("unsaved.dontSaveBtn"), cancel: t("unsaved.cancelBtn") };
-          const keuze = await message(t("unsaved.askSave"), {
-            title: t("unsaved.title"),
-            kind: "warning",
-            buttons: knoppen,
-          });
-          if (keuze === knoppen.yes || keuze === "Yes") return handleSaveProject();
-          return keuze === knoppen.no || keuze === "No";
-        } catch (error) {
-          console.error("native dialoog voor niet-opgeslagen werk faalde", error);
-          return window.confirm(t("unsaved.confirmDiscard"));
-        }
-      }
-      // Browser-fallback: window.confirm kent maar twee knoppen.
-      return window.confirm(t("unsaved.confirmDiscard"));
+      const keuze = await new Promise<OnopgeslagenKeuze>((resolve) => {
+        onopgeslagenResolveRef.current = resolve;
+        setOnopgeslagenOpen(true);
+      });
+      if (keuze === "opslaan") return handleSaveProject();
+      return keuze === "niet";
     } finally {
       unsavedConfirmationPendingRef.current = false;
       vraagpoortRef.current?.misschienOpen();
@@ -3126,6 +3139,84 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleSaveProject, handleSaveProjectAs]);
 
+  // Berekenen op verzoek van de gebruiker (lintknop of F9) krijgt na afloop een
+  // melding rechtsonder (ontwerp 0.4). Automatisch herrekenen niet: dat zou bij
+  // elke wijziging een melding geven.
+  const gebruikerRekentRef = useRef<number | null>(null);
+  const handleSolveDoorGebruiker = useCallback(() => {
+    gebruikerRekentRef.current = performance.now();
+    void handleSolve();
+  }, [handleSolve]);
+  useEffect(() => {
+    const start = gebruikerRekentRef.current;
+    if (start === null || solverStatus.kind === "rekenen") return;
+    gebruikerRekentRef.current = null;
+    if (solverStatus.kind !== "solved") return;
+    const seconden = ((performance.now() - start) / 1000).toLocaleString(i18next.language, { maximumFractionDigits: 1 });
+    const regels = [i18next.t("common:app.solve.doneBody", {
+      analyse: i18next.t(`common:loadCases.analysisType.${fem.analysetype}`),
+      gevallen: fem.loadCases.length,
+      combinaties: fem.combinations.length,
+    })];
+    if (modelDimension !== "3d" && fem.multiLcResult) {
+      let grootste: { u: number; caseId: number } | null = null;
+      for (const [caseId, r] of fem.multiLcResult) {
+        if (Number.isFinite(r.maxDisplacement) && (!grootste || r.maxDisplacement > grootste.u)) grootste = { u: r.maxDisplacement, caseId };
+      }
+      if (grootste) regels.push(i18next.t("common:app.solve.doneMaxU", {
+        u: grootste.u.toLocaleString(i18next.language, { maximumFractionDigits: 1 }),
+        geval: fem.loadCases.find((c) => c.id === grootste!.caseId)?.name ?? "",
+      }));
+    }
+    pushToast({
+      kind: "success",
+      title: i18next.t("common:app.solve.done", { tijd: seconden }),
+      body: regels.join("\n"),
+      duration: 7000,
+      actie: {
+        label: i18next.t("common:app.solve.showResults"),
+        onClick: () => { setTreeTab("results"); setResultsTabActive(true); },
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solverStatus]);
+
+  // Sneltoetsen (lib/sneltoetsen.ts). Letters alleen in het 2D-model en niet
+  // tijdens typen of met een dialoog open; Ctrl+S en Ctrl+Z hebben hierboven
+  // hun eigen afhandeling.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat) return;
+      const actie = actieVoorToets(e);
+      if (!actie) return;
+      const metCtrl = e.ctrlKey || e.metaKey;
+      if (erIsEenDialoogOpen() || backstageOpen) return;
+      if (!metCtrl && !e.key.startsWith("F") && isTypVeld(e.target)) return;
+      if (actie === "overzicht" && e.key === "?" && isTypVeld(e.target)) return;
+      const in2DModel = modelDimension !== "3d" && (activeView === "default" || activeView === "table" || activeView === "check");
+      const tool = ({ staaf: "addBeam", knoop: "addNode", plaat: "addPlate", scharnier: "addPinned", puntlast: "addPointLoad", lijnlast: "addLineLoad" } as const)[actie as string];
+      if (tool) {
+        if (!in2DModel) return;
+        e.preventDefault();
+        setFemTool(tool);
+        return;
+      }
+      e.preventDefault();
+      switch (actie) {
+        case "nieuw": void handleNewProject(); break;
+        case "openen": void handleOpenProject(); break;
+        case "afdrukken": setActiveView("report"); break;
+        case "voorkeuren": setSettingsOpen(true); break;
+        case "stramien": setGridsOpen(true); break;
+        case "belastinggevallen": setLoadCasesTab("cases"); setLoadCasesOpen(true); break;
+        case "berekenen": handleSolveDoorGebruiker(); break;
+        case "overzicht": setSneltoetsenOpen(true); break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeView, modelDimension, backstageOpen, handleNewProject, handleOpenProject, handleSolveDoorGebruiker]);
+
   // C2: dirty-detectie. Draait alléén wanneer persisteerbare modelstate
   // wijzigt (array-identiteiten veranderen per mutatie), nooit per render —
   // de JSON-vergelijking is dus event-gedreven en goedkoop.
@@ -3262,8 +3353,9 @@ function App() {
   const isSplitResizing = useRef(false);
 
   useEffect(() => {
+    // Oude themanamen (forge, openaec, contrast) worden de 0.4-thema's.
     getSetting("theme", "light").then((saved) => {
-      setTheme(saved);
+      setTheme(themeId(saved));
       applyTheme(saved);
     });
     // Welcome modal is no longer auto-shown — the persistent StartSidebar
@@ -3667,6 +3759,18 @@ function App() {
                 onZoomChange={setZoomPct}
                 onOpenCheckForBeam={handleOpenCheckForBeam}
               />
+              <CanvasMeldingen
+                meldingen={fem.belastingMeldingen}
+                onToonHout={() => {
+                  const ids = fem.beams.filter((b) => {
+                    const m = materiaalVanStaaf(b);
+                    return m === "hout" || m === "clt";
+                  }).map((b) => b.id);
+                  if (ids.length === 1) fem.setSelection({ type: "beam", id: ids[0] });
+                  else if (ids.length > 1) fem.setSelection({ type: "multi", nodeIds: [], beamIds: ids, plateIds: [] });
+                }}
+                onOpenCombinaties={() => { setLoadCasesTab("combos"); setLoadCasesOpen(true); }}
+              />
             </div>
             {isCheckSplit && (
               <>
@@ -4036,7 +4140,7 @@ function App() {
           if (load) setOpenFem3dSelection({ type: "surfaceLoad", id: load.id });
           setRightPanelOpen(true);
         }}
-        onSolve={handleSolve}
+        onSolve={handleSolveDoorGebruiker}
         hasResults={modelDimension === "3d" ? openFem3dResult !== null : solverResult !== null || fem.envelope !== null}
         onDelete={modelDimension === "3d" ? () => setOpenFem3dDeleteToken((token) => token + 1) : fem.deleteSelected}
         onUndo={() => toolbarUndoRedo("undo")}
@@ -4604,6 +4708,16 @@ function App() {
         />
       )}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} theme={theme} onThemeChange={setTheme} initialTab={settingsTab} />
+      <SneltoetsenDialog open={sneltoetsenOpen} onClose={() => setSneltoetsenOpen(false)} />
+      <OnopgeslagenDialog
+        open={onopgeslagenOpen}
+        naam={projectPath ? projectPath.split(/[\\/]/).pop() : undefined}
+        onKeuze={(k) => {
+          setOnopgeslagenOpen(false);
+          onopgeslagenResolveRef.current?.(k);
+          onopgeslagenResolveRef.current = null;
+        }}
+      />
       <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} initialTab={libraryTab} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       <ProjectSettingsDialog open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)} />
