@@ -51,12 +51,13 @@
 //!
 //! # Wat deze module NIET doet — en wat zij om de tweede as wél doet
 //!
-//! In het REKENVLAK rekent zij geen tweede orde uit. Dat doet de algemene
-//! methode van §5.8.6, die in deze app bestaat als de fysisch niet-lineaire
-//! keten ([`crate::segment_stiffness`] met `lib/betonStijfheid.ts`). Voor die
-//! as beantwoordt deze module alleen de voorvraag, en kan zij aan een
-//! krachtsverloop niet zien of het al uit zo'n tweede-orde-berekening komt.
-//! Dat staat bij de toets.
+//! In het REKENVLAK is de algemene methode van §5.8.6 de hoofdweg: de fysisch
+//! niet-lineaire keten ([`crate::segment_stiffness`] met
+//! `lib/betonStijfheid.ts`). Is het krachtsverloop eerste orde (er is geen
+//! aparte eerste-orde-omhullende meegestuurd) en λ ≥ λ_lim, dan bepaalt deze
+//! module het tweede-orde-moment om y zelf met de NOMINALE KROMMING van §5.8.8
+//! (issue #224) — alleen voor een geschoorde kolom, want de NB staat die
+//! methode voor een ongeschoorde niet toe. Zie [`tweede_orde_om_y`].
 //!
 //! Om de TWEEDE as (z) bestaat die keten niet — de raamwerkoplosser rekent in
 //! één vlak — en daar rekent deze module het tweede-orde-deel wél zelf, met de
@@ -71,7 +72,7 @@ use nen_en_1992_1_1::kolom::{
     kolomslankheid, min_diameter_dwarswapening_9_5_3, min_diameter_langsstaaf_9_5_2,
     min_dwarsafmeting_9_5_1, moment_tweede_as_deelstappen, n_rd_5_39_n, opgesloten_staven_9_5_3,
     s_cl_tmax_9_5_3, scheefstand_5_1, toepassingsgebied_9_5_1, traagheidsstraal_mm,
-    voorwaarde_5_38a, voorwaarde_5_38b, Beugelzone, DubbeleBuiging, Knikgeval, Kniklengtebepaling,
+    voorwaarde_5_38a, voorwaarde_5_38b, m0e_5_32, nominale_kromming_5_8_8, Beugelzone, DubbeleBuiging, Knikgeval, Kniklengtebepaling,
     KolomInvoer, KolomdetailleringInvoer, Kolomslankheid, MomentTweedeAs, Overlappingssituatie,
     Schoring, TweedeOrdeDeel,
 };
@@ -385,6 +386,21 @@ pub struct ConcreteColumnCheckResponse {
     /// De grootste som van (5.39), alleen als §5.8.9(4) haar vereiste.
     #[ts(optional)]
     pub interactie_5_39: Option<f64>,
+    /// De imperfectie e_i = θ_i·l₀/2 om y, mm (§5.2) — alleen als de tweede
+    /// orde om y met §5.8.8 is bepaald (issue #224).
+    #[ts(optional)]
+    pub e_i_y_mm: Option<f64>,
+    /// e₂ om y volgens de nominale kromming (§5.8.8), mm. `None` als die niet
+    /// is bepaald (λ < λ_lim, ongeschoord, krachten al tweede orde, of kruip
+    /// onbekend — de toets `5.8.8_moment_y` zegt waarom).
+    #[ts(optional)]
+    pub e_2_y_mm: Option<f64>,
+    /// M_Edy inclusief tweede orde (§5.8.8), kNm.
+    #[ts(optional)]
+    pub m_edy_knm: Option<f64>,
+    /// M_Rdy bij N_Ed, kNm.
+    #[ts(optional)]
+    pub m_rdy_knm: Option<f64>,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -399,6 +415,8 @@ pub struct Kolomuitkomst {
     /// Wat er om de tweede as is vastgesteld; `None` als §5.8 als geheel niet
     /// aan de orde was.
     pub tweede_as: Option<TweedeAsUitkomst>,
+    /// Tweede orde om y met de nominale kromming (§5.8.8), issue #224.
+    pub tweede_orde_y: Option<TweedeOrdeYUitkomst>,
 }
 
 /// De ids van de §5.8-toetsen, zodat een test ze kan terugvinden en een rapport
@@ -411,6 +429,9 @@ pub const SLANKHEIDSGRENS_Z_ID: &str = "5.8.3.1_slankheidsgrens_z";
 pub const MOMENT_Z_ID: &str = "5.8.9_moment_z";
 /// §5.8.9: de voorwaarden (5.38a)/(5.38b) en, waar nodig, de interactie (5.39).
 pub const DUBBELE_BUIGING_ID: &str = "5.8.9_dubbele_buiging";
+/// Het moment om de y-as (het rekenvlak) INCLUSIEF tweede orde volgens de
+/// nominale kromming van §5.8.8, tegen M_Rdy (issue #224).
+pub const MOMENT_Y_ID: &str = "5.8.8_moment_y";
 
 /// Getal met een decimale komma, zoals de rest van het rapport het toont.
 fn nl(v: f64, cijfers: usize) -> String {
@@ -687,6 +708,7 @@ pub fn kolomtoetsen(
                 ))],
                 slankheid: None,
                 tweede_as: None,
+                tweede_orde_y: None,
             };
         }
     };
@@ -705,6 +727,7 @@ pub fn kolomtoetsen(
             ))],
             slankheid: None,
             tweede_as: None,
+            tweede_orde_y: None,
         };
     };
 
@@ -727,6 +750,7 @@ pub fn kolomtoetsen(
                 ))],
                 slankheid: None,
                 tweede_as: None,
+                tweede_orde_y: None,
             };
         }
     };
@@ -761,6 +785,7 @@ pub fn kolomtoetsen(
                 ))],
                 slankheid: None,
                 tweede_as: None,
+                tweede_orde_y: None,
             };
         }
     };
@@ -789,6 +814,7 @@ pub fn kolomtoetsen(
                 ))],
                 slankheid: None,
                 tweede_as: None,
+                tweede_orde_y: None,
             };
         }
     }
@@ -840,6 +866,7 @@ pub fn kolomtoetsen(
                         ))],
                         slankheid: None,
                         tweede_as: None,
+                        tweede_orde_y: None,
                     };
                 }
             }
@@ -920,11 +947,26 @@ pub fn kolomtoetsen(
                 ))],
                 slankheid: None,
                 tweede_as: None,
+                tweede_orde_y: None,
             };
         }
     };
 
     let mut checks: Vec<NamedCheck> = Vec::new();
+
+    // ── 0. Tweede orde om y met de nominale kromming (§5.8.8), issue #224 ──
+    let (moment_y, nominaal_y, y_uit) = tweede_orde_om_y(
+        section,
+        cage,
+        mat,
+        k,
+        &slank,
+        &gov,
+        lengte_mm,
+        momentlijst,
+        eerste_orde.is_some(),
+        n_strips,
+    );
 
     // ── 1. De POORT: λ tegen λ_lim ────────────────────────────────────────
     //
@@ -1132,7 +1174,22 @@ pub fn kolomtoetsen(
     for kant in &slank.kanttekeningen {
         poort.notes.push(kant.clone());
     }
+    // De poort als INFORMATIE (issue #224): is de tweede orde om y met §5.8.8
+    // wél bepaald, dan is λ ≥ λ_lim geen open eind meer maar de reden voor die
+    // berekening. De status wordt dan "niet van toepassing" MÉT unity check —
+    // geen doorsnedebezwijken en geen maatgevende UC; het oordeel staat in
+    // 5.8.8_moment_y.
+    if y_uit.berekend && !slank.tweede_orde_verwaarloosbaar {
+        poort.status = CheckStatus::NotApplicable;
+        poort.notes.push(format!(
+            "De tweede-orde-effecten om y zijn bepaald met de nominale kromming van §5.8.8; zie \
+             de toets {MOMENT_Y_ID}. Deze poort is daarmee informatie over de NOODZAAK van \
+             tweede orde en geen toets van de doorsnede; λ/λ_lim telt niet als maatgevende \
+             unity check."
+        ));
+    }
     checks.push(benoem(poort));
+    checks.push(moment_y);
 
     // ── 1b. De tweede as: §5.8.3 om z, §5.2, e₂ om z en §5.8.9 ────────────
     //
@@ -1142,7 +1199,18 @@ pub fn kolomtoetsen(
     // model, want dan is M_Edz door de imperfectie en de tweede orde om z
     // nog steeds niet nul. Zie de toelichting boven [`TweedeAsUitkomst`].
     let (checks_z, tweede_as) = tweede_as_toetsen(
-        section, cage, mat, situation, k, lengte_mm, ugt, bgt_qp, &gov, &slank, n_strips,
+        section,
+        cage,
+        mat,
+        situation,
+        k,
+        lengte_mm,
+        ugt,
+        bgt_qp,
+        &gov,
+        &slank,
+        n_strips,
+        nominaal_y.as_ref(),
     );
     checks.extend(checks_z);
 
@@ -1409,7 +1477,486 @@ pub fn kolomtoetsen(
         checks,
         slankheid: Some(slank),
         tweede_as: Some(tweede_as),
+        tweede_orde_y: Some(y_uit),
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tweede orde om y — de nominale kromming van §5.8.8 (issue #224)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// WAAROM. Boven λ_lim moeten de krachten tweede orde zijn. In de app levert
+// de fysisch niet-lineaire keten (§5.8.6) die krachten; de LOSSE kolomtoets en
+// een staaf met een eerste-orde-omhullende hebben ze niet. Zonder iets erbij
+// bleef het bij "NotOk, λ/λ_lim > 1" en werd (5.39) met het eerste-orde-moment
+// gevuld. §5.8.5 laat de methode vrij; de NB staat de nominale kromming toe
+// voor GESCHOORDE, op zichzelf staande elementen. Daarvoor is hij hier:
+//
+//   M_Ed = M₀e + N_Ed·e_i + N_Ed·e₂           (5.31), met e_i uit §5.2
+//   M₀e  = max(0,6·M₀₂ + 0,4·M₀₁; 0,4·M₀₂)    (5.32), M₀₁/M₀₂ eerste orde
+//   e₂   = (1/r)·l₀²/c                        (5.33) t/m (5.37)
+//
+// en daarnaast de einddoorsnede (|M₀₂|) en de minimale excentriciteit van
+// 6.1(4). Ongeschoord of al-tweede-orde-krachten: niet gebruikt, met reden.
+
+/// Wat er om y met §5.8.8 is vastgesteld, voor het antwoord van het losse
+/// verzoek.
+#[derive(Clone, Debug, Default)]
+pub struct TweedeOrdeYUitkomst {
+    /// `true` als e₂ om y met §5.8.8 is bepaald (met bekende kruip).
+    pub berekend: bool,
+    /// e_i om y, mm.
+    pub e_i_mm: Option<f64>,
+    /// e₂ om y op de snede met de grootste normaaldruk, mm.
+    pub e_2_mm: Option<f64>,
+    /// M_Edy inclusief tweede orde, kNm.
+    pub m_edy_knm: Option<f64>,
+    /// M_Rdy bij N_Ed, kNm.
+    pub m_rdy_knm: Option<f64>,
+}
+
+/// De gegevens waarmee M_Edy inclusief tweede orde per snede wordt bepaald —
+/// voor (5.38b)/(5.39) in [`tweede_as_toetsen`].
+pub struct NominaalY {
+    e_i_mm: f64,
+    a_c_mm2: f64,
+    f_cd_mpa: f64,
+    omega: f64,
+    f_ck_mpa: f64,
+    lambda: f64,
+    phi_ef: f64,
+    f_yd_mpa: f64,
+    d_mm: f64,
+    l0_mm: f64,
+    /// Per combinatie: (combinatie, M₀e, max |M₀| aan de einden, c).
+    per_combinatie: Vec<(u32, f64, f64, f64)>,
+}
+
+impl NominaalY {
+    fn e_2_mm(&self, n_druk_kn: f64, c: f64) -> Option<f64> {
+        nominale_kromming_5_8_8(
+            n_druk_kn * 1e3,
+            self.a_c_mm2,
+            self.f_cd_mpa,
+            self.omega,
+            self.f_ck_mpa,
+            self.lambda,
+            self.phi_ef,
+            self.f_yd_mpa,
+            nen_en_1992_1_1::E_S,
+            self.d_mm,
+            self.l0_mm,
+            c,
+        )
+        .ok()
+        .map(|k| k.e_2_mm)
+    }
+
+    /// M_Edy op een snede: max(M₀e + N·(e_i + e₂); |M_y|) — de nominale
+    /// kromming geldt in het veld, het eindmoment aan het eind; op elke snede
+    /// het grootste van beide is de veilige kant.
+    pub fn m_ed_y_knm(&self, n_druk_kn: f64, combinatie: u32, m_y_abs_knm: f64) -> f64 {
+        let (m0e, c) = self
+            .per_combinatie
+            .iter()
+            .find(|(cmb, ..)| *cmb == combinatie)
+            .map(|&(_, m0e, _, c)| (m0e, c))
+            .unwrap_or((m_y_abs_knm, C_ALGEMEEN));
+        // Draagt de doorsnede N niet (n > n_u), dan is er geen e₂; het
+        // moment blijft dan het eerste-orde-moment en de doorsnedetoets
+        // vangt het af.
+        let e_2 = self.e_2_mm(n_druk_kn, c).unwrap_or(0.0);
+        (m0e + n_druk_kn * (self.e_i_mm + e_2) * 1e-3).max(m_y_abs_knm)
+    }
+}
+
+fn moment_y_calc(state: ForceStateSnapshot, status: CheckStatus, notes: Vec<String>) -> ResistanceCalc {
+    let mut c = calc(
+        MOMENT_Y_ID,
+        "Moment om de y-as inclusief tweede orde (nominale kromming)",
+        "art. 5.8.8 (5.31)–(5.37), 5.2(7), 6.1(4) en 6.1",
+        state,
+        status,
+        notes,
+    );
+    c.formula_latex = r"M_{Edy} = \max\{M_{0e} + N_{Ed}(e_i + e_2)\ ;\ |M_{02}|\ ;\ N_{Ed} e_0\} \le M_{Rdy}"
+        .to_string();
+    c.unit = "kNm".to_string();
+    c
+}
+
+fn uc_nul() -> Option<UnityCheck> {
+    Some(UnityCheck {
+        ed: 0.0,
+        rd: 0.0,
+        uc: 0.0,
+        formula_latex: r"M_{Edy} / M_{Rdy}".to_string(),
+    })
+}
+
+/// §5.8.8 om y. Zie de toelichting hierboven.
+#[allow(clippy::too_many_arguments)]
+fn tweede_orde_om_y(
+    section: &ConcreteSection,
+    cage: &ReinforcementCage,
+    mat: &DesignMaterial,
+    k: &ConcreteColumnInput,
+    slank: &Kolomslankheid,
+    gov: &ForcePoint,
+    lengte_mm: f64,
+    momentlijst: &[ForcePoint],
+    krachten_tweede_orde: bool,
+    n_strips: usize,
+) -> (NamedCheck, Option<NominaalY>, TweedeOrdeYUitkomst) {
+    let state = ForceStateSnapshot::from_point(gov);
+    let mut uit = TweedeOrdeYUitkomst::default();
+
+    if slank.tweede_orde_verwaarloosbaar {
+        let mut c = moment_y_calc(
+            state,
+            CheckStatus::NotApplicable,
+            vec![format!(
+                "λ = {} < λ_lim = {}: §5.8.3.1(1) staat toe de tweede-orde-effecten om y te \
+                 verwaarlozen. Het moment om y is dan het eerste-orde-moment; de doorsnede wordt \
+                 daarop in §6.1 getoetst.",
+                nl(slank.lambda, 1),
+                nl(slank.lambda_lim, 1)
+            )],
+        );
+        c.uc = uc_nul();
+        return (benoem(c), None, uit);
+    }
+    if krachten_tweede_orde {
+        let mut c = moment_y_calc(
+            state,
+            CheckStatus::NotApplicable,
+            vec![
+                "De UGT-krachten van deze staaf komen uit een tweede-orde- of fysisch \
+                 niet-lineaire berekening (er is een aparte eerste-orde-omhullende meegestuurd). \
+                 Het tweede-orde-moment om y zit dan al in M_Ed; §5.8.8 er nog eens bovenop \
+                 zetten zou het dubbel tellen. De doorsnede wordt op die krachten in §6.1 \
+                 getoetst."
+                    .to_string(),
+            ],
+        );
+        c.uc = uc_nul();
+        return (benoem(c), None, uit);
+    }
+    if k.bracing == Schoring::Ongeschoord {
+        return (
+            benoem(moment_y_calc(
+                state,
+                CheckStatus::NotApplicable,
+                vec![
+                    "NIET UITGEVOERD: λ ≥ λ_lim, maar de kolom is ONGESCHOORD. De NB bij 5.8.5: \
+                     \"De methode gebaseerd op de nominale kromming (5.8.8) mag alleen voor \
+                     geschoorde, op zichzelf staande elementen zijn toegepast.\" Het moment om y \
+                     inclusief tweede orde moet uit een tweede-orde-berekening van het raamwerk \
+                     komen (§5.8.6, in de app de fysisch niet-lineaire keten); de slankheidspoort \
+                     blijft daarom 'voldoet niet' melden."
+                        .to_string(),
+                ],
+            )),
+            None,
+            uit,
+        );
+    }
+
+    let mut notes: Vec<String> = Vec::new();
+    // φ_ef om y: dezelfde volgorde als om z (§5.8.4).
+    let (phi_ef, kruip_onbekend) = match (&slank.kruip, slank.phi_ef, k.phi_inf_t0) {
+        (Some(v), _, _) if v.toegestaan => {
+            notes.push("§5.8.4(4) is vervuld: φ_ef = 0 en dus K_φ = 1.".to_string());
+            (0.0, false)
+        }
+        (_, Some(p), _) => {
+            notes.push(format!("φ_ef = {} uit (5.19).", nl(p, 3)));
+            (p, false)
+        }
+        (_, None, Some(phi)) => {
+            notes.push(format!(
+                "WAARSCHUWING — φ_ef niet uit (5.19): er is geen quasi-blijvende combinatie \
+                 meegestuurd. φ(∞,t₀) = {} is als BOVENGRENS van φ_ef genomen (|M₀Eqp| ≤ |M₀Ed|).",
+                nl(phi, 2)
+            ));
+            (phi, false)
+        }
+        (_, None, None) => {
+            notes.push(
+                "φ(∞,t₀) is niet opgegeven: K_φ is met φ_ef = 0 bepaald, een ONDERGRENS van e₂."
+                    .to_string(),
+            );
+            (0.0, true)
+        }
+    };
+
+    let scheef = match scheefstand_5_1(lengte_mm / 1000.0, 1) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                benoem(moment_y_calc(
+                    state,
+                    CheckStatus::NotApplicable,
+                    vec![format!("NIET UITGEVOERD: §5.2: {e}")],
+                )),
+                None,
+                uit,
+            )
+        }
+    };
+    let e_i = match e_i_5_2_mm(scheef.theta_i, slank.l0_mm) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                benoem(moment_y_calc(
+                    state,
+                    CheckStatus::NotApplicable,
+                    vec![format!("NIET UITGEVOERD: §5.2: {e}")],
+                )),
+                None,
+                uit,
+            )
+        }
+    };
+
+    // M₀e en c per combinatie, uit de EERSTE-ORDE-momenten.
+    let mut combinaties: Vec<u32> = momentlijst.iter().map(|p| p.combination_id).collect();
+    combinaties.sort_unstable();
+    combinaties.dedup();
+    let per_combinatie: Vec<(u32, f64, f64, f64)> = combinaties
+        .iter()
+        .map(|&cmb| {
+            let max_m = momentlijst
+                .iter()
+                .filter(|p| p.combination_id == cmb)
+                .map(|p| p.forces.my_ed.abs())
+                .fold(0.0_f64, f64::max);
+            match eindmomenten(momentlijst, cmb, lengte_mm, |p| p.forces.my_ed) {
+                Eindmomenten::Paar { m01, m02 } => {
+                    let constant = (m01 - m02).abs() <= 0.01 * m02.abs();
+                    (
+                        cmb,
+                        m0e_5_32(m01, m02),
+                        m02.abs(),
+                        if constant {
+                            C_CONSTANT_MOMENT
+                        } else {
+                            C_ALGEMEEN
+                        },
+                    )
+                }
+                Eindmomenten::RmIsEen {
+                    dwarsbelasting: false,
+                    ..
+                } => (cmb, max_m, max_m, C_CONSTANT_MOMENT),
+                _ => (cmb, max_m, max_m, C_ALGEMEEN),
+            }
+        })
+        .collect();
+    let (m0e, m02_abs, c) = per_combinatie
+        .iter()
+        .find(|(cmb, ..)| *cmb == gov.combination_id)
+        .map(|&(_, a, b, c)| (a, b, c))
+        .unwrap_or((gov.forces.my_ed.abs(), gov.forces.my_ed.abs(), C_ALGEMEEN));
+
+    // d volgens 5.8.8.3(2): bij wapening op twee tegenover elkaar liggende
+    // zijden de nuttige hoogte; liggen er ook zijstaven, dan d = h/2 + i_s.
+    let lagen_y = cage.layers(section.h_mm);
+    let gov_teken = momentlijst
+        .iter()
+        .filter(|p| p.combination_id == gov.combination_id)
+        .max_by(|a, b| a.forces.my_ed.abs().total_cmp(&b.forces.my_ed.abs()))
+        .map(|p| if p.forces.my_ed < 0.0 { -1.0 } else { 1.0 })
+        .unwrap_or(1.0);
+    let (d, d_note) = if cage.a_s_sides_mm2() > 0.0 {
+        let a: f64 = lagen_y.iter().map(|l| l.area_mm2).sum();
+        let zc = lagen_y.iter().map(|l| l.area_mm2 * l.z_mm).sum::<f64>() / a;
+        let i_s = (lagen_y
+            .iter()
+            .map(|l| l.area_mm2 * (l.z_mm - zc).powi(2))
+            .sum::<f64>()
+            / a)
+            .sqrt();
+        (
+            section.h_mm / 2.0 + i_s,
+            format!(
+                "d = h/2 + i_s = {} + {} = {} mm (5.8.8.3(2): de wapening ligt niet alleen op twee \
+                 tegenover elkaar liggende zijden).",
+                nl(section.h_mm / 2.0, 1),
+                nl(i_s, 1),
+                nl(section.h_mm / 2.0 + i_s, 1)
+            ),
+        )
+    } else {
+        let d = if gov_teken < 0.0 {
+            section.h_mm - cage.d2_mm()
+        } else {
+            cage.d_mm(section.h_mm)
+        };
+        (
+            d,
+            format!("d = {} mm, de nuttige hoogte van de getrokken rij (5.8.8.3(2)).", nl(d, 1)),
+        )
+    };
+
+    let n_druk = -gov.forces.n_ed;
+    let nk = match nominale_kromming_5_8_8(
+        n_druk * 1e3,
+        section.area_mm2(),
+        mat.f_cd(),
+        slank.omega,
+        mat.f_ck,
+        slank.lambda,
+        phi_ef,
+        mat.f_yd(),
+        nen_en_1992_1_1::E_S,
+        d,
+        slank.l0_mm,
+        c,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            let mut calc = moment_y_calc(
+                state,
+                CheckStatus::NotOk,
+                vec![format!("§5.8.8: {e}")],
+            );
+            calc.notes.extend(notes);
+            return (benoem(calc), None, uit);
+        }
+    };
+    let m2 = n_druk * nk.e_2_mm * 1e-3;
+    let m_ei = n_druk * e_i * 1e-3;
+    let e0 = minimum_eccentricity_mm(section.h_mm);
+    let m_min = n_druk * e0 * 1e-3;
+    let m_veld = m0e + m_ei + m2;
+    let m_ed = m_veld.max(m02_abs).max(m_min);
+    let opts = MnKappaOptions { n_strips };
+    let m_rd = m_rd_bij_n(section, &lagen_y, mat, gov.forces.n_ed, gov_teken, &opts);
+
+    notes.insert(
+        0,
+        format!(
+            "λ = {} ≥ λ_lim = {} en het krachtsverloop is eerste orde: het tweede-orde-moment om \
+             y is bepaald met de NOMINALE KROMMING van §5.8.8. De NB bij 5.8.5 staat die methode \
+             toe voor geschoorde, op zichzelf staande elementen; deze kolom is als geschoord \
+             opgegeven.",
+            nl(slank.lambda, 2),
+            nl(slank.lambda_lim, 2)
+        ),
+    );
+    notes.push(format!(
+        "M₀e = max(0,6·M₀₂ + 0,4·M₀₁; 0,4·M₀₂) = {} kNm (5.32) uit de eerste-orde-momenten van \
+         combinatie {}; |M₀₂| = {} kNm.",
+        nl(m0e, 2),
+        gov.combination_id,
+        nl(m02_abs, 2)
+    ));
+    notes.push(format!(
+        "e_i = θ_i·l₀/2 = {}·{}/2 = {} mm (§5.2(7), θ₀ = 1/300 uit de NB, α_h = {}).",
+        nl(scheef.theta_i, 5),
+        nl(slank.l0_mm, 0),
+        nl(e_i, 2),
+        nl(scheef.alpha_h, 3)
+    ));
+    notes.push(d_note);
+    notes.push(format!(
+        "n = {}, n_u = 1 + ω = {}, K_r = (n_u − n)/(n_u − 0,4) = {} (5.36); β = 0,35 + f_ck/200 − \
+         λ/150 = {}, K_φ = 1 + β·φ_ef = {} (5.37); 1/r₀ = ε_yd/(0,45·d) = {}·10⁻⁶/mm; \
+         1/r = K_r·K_φ/r₀ = {}·10⁻⁶/mm (5.34); c = {} (5.8.8.2(4){}); e₂ = (1/r)·l₀²/c = {} mm \
+         (5.33); M₂ = N_Ed·e₂ = {} kNm.",
+        nl(nk.n, 3),
+        nl(nk.n_u, 3),
+        nl(nk.k_r, 3),
+        nl(nk.beta, 4),
+        nl(nk.k_phi, 3),
+        nl(nk.inv_r0_per_mm * 1e6, 3),
+        nl(nk.inv_r_per_mm * 1e6, 3),
+        nl(c, 0),
+        if c == C_CONSTANT_MOMENT {
+            ": constant eerste-orde-moment, ondergrens 8"
+        } else {
+            ""
+        },
+        nl(nk.e_2_mm, 2),
+        nl(m2, 2)
+    ));
+    notes.push(format!(
+        "M_Edy = max(M₀e + N_Ed·e_i + M₂; |M₀₂|; N_Ed·e₀) = max({} + {} + {}; {}; {}) = {} kNm. \
+         Dit moment gaat ook in (5.38b)/(5.39) van §5.8.9.",
+        nl(m0e, 2),
+        nl(m_ei, 2),
+        nl(m2, 2),
+        nl(m02_abs, 2),
+        nl(m_min, 2),
+        nl(m_ed, 2)
+    ));
+
+    let mut calc = moment_y_calc(state, CheckStatus::Ok, notes);
+    calc.value = m_ed;
+    calc.variables = vec![
+        NamedValue { symbol: "N_Ed".to_string(), value: n_druk, unit: "kN".to_string() },
+        NamedValue { symbol: "M_0e".to_string(), value: m0e, unit: "kNm".to_string() },
+        NamedValue { symbol: "e_i".to_string(), value: e_i, unit: "mm".to_string() },
+        NamedValue { symbol: "K_r".to_string(), value: nk.k_r, unit: "-".to_string() },
+        NamedValue { symbol: "K_φ".to_string(), value: nk.k_phi, unit: "-".to_string() },
+        NamedValue { symbol: "d".to_string(), value: d, unit: "mm".to_string() },
+        NamedValue { symbol: "c".to_string(), value: c, unit: "-".to_string() },
+        NamedValue { symbol: "e_2".to_string(), value: nk.e_2_mm, unit: "mm".to_string() },
+        NamedValue { symbol: "M_2".to_string(), value: m2, unit: "kNm".to_string() },
+        NamedValue { symbol: "M_Edy".to_string(), value: m_ed, unit: "kNm".to_string() },
+        NamedValue {
+            symbol: "M_Rdy".to_string(),
+            value: m_rd.unwrap_or(0.0),
+            unit: "kNm".to_string(),
+        },
+    ];
+    match m_rd {
+        Some(rd) => {
+            let uc = m_ed / rd;
+            calc.uc = Some(UnityCheck {
+                ed: m_ed,
+                rd,
+                uc,
+                formula_latex: r"M_{Edy} / M_{Rdy}".to_string(),
+            });
+            calc.status = if uc <= 1.0 {
+                CheckStatus::Ok
+            } else {
+                CheckStatus::NotOk
+            };
+        }
+        None => {
+            calc.status = CheckStatus::NotOk;
+            calc.notes.push(
+                "De doorsnede draagt de normaalkracht al niet bij κ = 0; er is geen \
+                 momentweerstand om y meer over."
+                    .to_string(),
+            );
+        }
+    }
+    if kruip_onbekend {
+        weiger_zonder_kruip(&mut calc, "M_Edy");
+    }
+    uit.berekend = !kruip_onbekend;
+    uit.e_i_mm = Some(e_i);
+    uit.e_2_mm = if kruip_onbekend { None } else { Some(nk.e_2_mm) };
+    uit.m_edy_knm = if kruip_onbekend { None } else { Some(m_ed) };
+    uit.m_rdy_knm = m_rd;
+    let nominaal = NominaalY {
+        e_i_mm: e_i,
+        a_c_mm2: section.area_mm2(),
+        f_cd_mpa: mat.f_cd(),
+        omega: slank.omega,
+        f_ck_mpa: mat.f_ck,
+        lambda: slank.lambda,
+        phi_ef,
+        f_yd_mpa: mat.f_yd(),
+        d_mm: d,
+        l0_mm: slank.l0_mm,
+        per_combinatie,
+    };
+    (benoem(calc), Some(nominaal), uit)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1481,6 +2028,10 @@ pub fn column_check(
         m_edz_knm: z.and_then(|t| t.m_edz_knm),
         m_rdz_knm: z.and_then(|t| t.m_rdz_knm),
         interactie_5_39: z.and_then(|t| t.interactie_5_39),
+        e_i_y_mm: uit.tweede_orde_y.as_ref().and_then(|y| y.e_i_mm),
+        e_2_y_mm: uit.tweede_orde_y.as_ref().and_then(|y| y.e_2_mm),
+        m_edy_knm: uit.tweede_orde_y.as_ref().and_then(|y| y.m_edy_knm),
+        m_rdy_knm: uit.tweede_orde_y.as_ref().and_then(|y| y.m_rdy_knm),
         checks: uit.checks,
     })
 }
@@ -1530,9 +2081,10 @@ pub fn column_check(
 // §5.8.9(4) geeft a ook alleen voor cirkel, ellips en rechthoek.
 //
 // WAT ER NIET IN ZIT. Een echte ruimtelijke tweede-orde-berekening; dit is
-// de algemene methode op één snede. En M_Edy wordt genomen zoals de
-// omhullende hem levert: of dáár tweede orde in zit, kan deze module niet
-// zien — dat zegt de poort om y al.
+// de algemene methode op één snede. M_Edy is het moment uit de omhullende,
+// of — boven λ_lim bij een eerste-orde-omhullende en een geschoorde kolom —
+// het moment inclusief de nominale kromming van §5.8.8 (issue #224, zie
+// [`tweede_orde_om_y`]).
 
 /// Wat er om de tweede as is vastgesteld, voor het antwoord van het losse
 /// verzoek. Alles `None` als de tweede as niet kon worden doorgerekend; de
@@ -1702,6 +2254,7 @@ fn tweede_as_toetsen(
     gov: &ForcePoint,
     slank_y: &Kolomslankheid,
     n_strips: usize,
+    nominaal_y: Option<&NominaalY>,
 ) -> (Vec<NamedCheck>, TweedeAsUitkomst) {
     let state = ForceStateSnapshot::from_point(gov);
     let n_gov_kn = -gov.forces.n_ed;
@@ -2252,7 +2805,13 @@ fn tweede_as_toetsen(
         let m_min_z = n_druk * e_0z * 1e-3;
         let e_0_bindend = m_min_z > m_edz_ruw;
         let m_edz = m_edz_ruw.max(m_min_z);
-        let m_edy = p.forces.my_ed.abs();
+        // M_Edy "inclusief tweede-orde-moment" (5.39): met de nominale
+        // kromming om y als die is bepaald (issue #224), anders zoals de
+        // omhullende hem levert.
+        let m_edy = match nominaal_y {
+            Some(ny) => ny.m_ed_y_knm(n_druk, p.combination_id, p.forces.my_ed.abs()),
+            None => p.forces.my_ed.abs(),
+        };
         // (5.38b) en (5.39) vragen "de rekenwaarde van het moment, inclusief
         // tweede-orde-moment" — de werkelijke rekenmomenten, dus zónder de
         // ondergrens N_Ed·e₀ van 6.1(4). Die ondergrens is een eis aan de
@@ -2487,16 +3046,21 @@ fn tweede_as_toetsen(
         r"\left(\frac{M_{Edz}}{M_{Rdz}}\right)^a + \left(\frac{M_{Edy}}{M_{Rdy}}\right)^a \le 1{,}0"
             .to_string();
     db.unit = "-".to_string();
-    db.notes.push(
+    db.notes.push(if nominaal_y.is_some() {
+        "M_Edy is per snede max(M₀e + N_Ed·(e_i + e₂); |M_y|), met e₂ volgens de nominale \
+         kromming van §5.8.8 (zie 5.8.8_moment_y). M_Edz"
+    } else {
         "M_Edy is genomen zoals de omhullende hem levert; of daar al tweede orde in zit, kan deze \
-         toets niet zien — zie de poort om y. M_Edz = M₀Edz + N_Ed·(e_i + e₂) is de rekenwaarde \
+         toets niet zien — zie de poort om y. M_Edz"
+    }
+    .to_string()
+        + " = M₀Edz + N_Ed·(e_i + e₂) is de rekenwaarde \
          om z inclusief imperfectie en tweede orde. De ondergrens N_Ed·e₀ van 6.1(4) zit in GEEN \
          van beide: (5.38b) en (5.39) vragen de werkelijke rekenmomenten, en 6.1(4) is een eis \
          aan de doorsnedetoets per richting — die staat om y in §6.1 en om z in de toets hierboven. \
          Beide momenten zijn per snede genomen; §5.8.9(1) vraagt bijzondere aandacht voor de \
          doorsnede met de kritieke combinatie van momenten, en daarom is elke snede met \
-         normaaldruk nagegaan."
-            .to_string(),
+         normaaldruk nagegaan.",
     );
     let (Some(va), false) = (voorwaarde_a, instabiel) else {
         db.status = CheckStatus::NotApplicable;

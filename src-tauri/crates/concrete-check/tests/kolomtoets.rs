@@ -651,9 +651,10 @@ fn de_negen_kolomdetailleringseisen_staan_in_het_resultaat() {
     ] {
         let _ = toets(&a.checks, id);
     }
-    // Twee toetsen van §5.8 om y, drie om de z-as (de poort om z, het moment om
-    // z en §5.8.9) plus negen van §9.5.
-    assert_eq!(a.checks.len(), 14);
+    // Drie toetsen van §5.8 om y (de poort, het moment om y met §5.8.8 —
+    // sinds issue #224 — en de kruip), drie om de z-as (de poort om z, het
+    // moment om z en §5.8.9) plus negen van §9.5.
+    assert_eq!(a.checks.len(), 15);
 
     assert_eq!(
         toets(&a.checks, "9.5.2_as_max").status,
@@ -975,12 +976,18 @@ fn zonder_normaaldruk_geen_tweede_as() {
 /// ```
 #[test]
 fn een_slanke_kolom_heeft_een_moment_om_z_door_imperfectie_en_tweede_orde() {
-    let klein_my = column_check(verzoek_z(
+    // De omhullende wordt hier als TWEEDE ORDE aangemerkt (eerste-orde-lijst =
+    // dezelfde momenten): deze test gaat over de mechaniek om z bij een
+    // gegeven M_Edy van 20 kNm. Zonder die aanmerking telt sinds issue #224
+    // de nominale kromming om y (λ_y = 138,6) mee, wordt M_Edy veel groter en
+    // is e_y/e_z < 0,2 — dan zou (5.39) terecht vervallen.
+    let mut v = verzoek_z(
         12.0,
         geschoord_met_kruip(PHI_Z),
         ugt_z(12_000.0, 400.0, 20.0, 0.0),
-    ))
-    .unwrap();
+    );
+    v.first_order_envelope = Some(v.forces_envelope.clone());
+    let klein_my = column_check(v).unwrap();
     let db = toets(&klein_my.checks, DUBBELE_BUIGING_ID);
     assert!(
         db.uc.is_some(),

@@ -79,4 +79,23 @@ m_rdz_knm?: number,
 /**
  * De grootste som van (5.39), alleen als §5.8.9(4) haar vereiste.
  */
-interactie_5_39?: number, };
+interactie_5_39?: number, 
+/**
+ * De imperfectie e_i = θ_i·l₀/2 om y, mm (§5.2) — alleen als de tweede
+ * orde om y met §5.8.8 is bepaald (issue #224).
+ */
+e_i_y_mm?: number, 
+/**
+ * e₂ om y volgens de nominale kromming (§5.8.8), mm. `None` als die niet
+ * is bepaald (λ < λ_lim, ongeschoord, krachten al tweede orde, of kruip
+ * onbekend — de toets `5.8.8_moment_y` zegt waarom).
+ */
+e_2_y_mm?: number, 
+/**
+ * M_Edy inclusief tweede orde (§5.8.8), kNm.
+ */
+m_edy_knm?: number, 
+/**
+ * M_Rdy bij N_Ed, kNm.
+ */
+m_rdy_knm?: number, };

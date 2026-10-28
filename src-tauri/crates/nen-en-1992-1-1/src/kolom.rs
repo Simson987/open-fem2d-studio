@@ -6,9 +6,9 @@
 //! tweede-orde-effecten worden gerekend, en met welke kruip?** Voor het
 //! rekenvlak rekent zij zelf géén tweede orde uit; dat doet de algemene
 //! methode van §5.8.6, die in deze app al bestaat (fysisch niet-lineair,
-//! M-N-κ per segment). De twee vereenvoudigde methoden — nominale stijfheid
-//! (§5.8.7) en nominale kromming (§5.8.8) — zijn hier bewust NIET gebouwd;
-//! wat zij zouden vragen staat onderaan deze doc.
+//! M-N-κ per segment). Van de twee vereenvoudigde methoden is de nominale
+//! kromming (§5.8.8) gebouwd voor de LOSSE kolomtoets (issue #224); de
+//! nominale stijfheid (§5.8.7) niet. Zie onderaan deze doc.
 //!
 //! Daarnaast draagt zij de rekenregels van §5.2 (de imperfectie van een
 //! afzonderlijk element als excentriciteit e_i) en van §5.8.9 (dubbele
@@ -118,11 +118,12 @@
 //!   gelang de doorsnede symmetrisch of excentrisch gewapend is en of er
 //!   normaalkracht is. Die tabel loopt van C12/15 tot C90/105 en is nog niet
 //!   overgenomen.
-//! * **§5.8.8 (nominale kromming) — niet gebouwd.** Vraagt M₀e uit de twee
-//!   eindmomenten, e₂ uit de kromming 1/r met de factoren K_r en K_φ, φ_ef
-//!   (die deze module wél levert), en een aanname voor de krommingsverdeling
-//!   (de factor c). Alleen bruikbaar voor geschoorde, op zichzelf staande
-//!   elementen; voor een ongeschoorde kolom mag hij in Nederland niet.
+//! * **§5.8.8 (nominale kromming) — GEBOUWD voor het rekenvlak (issue #224)**,
+//!   als [`nominale_kromming_5_8_8`]: e₂ = (1/r)·l₀²/c met
+//!   1/r = K_r·K_φ·ε_yd/(0,45·d). `concrete_check::kolomtoetsen` gebruikt hem
+//!   boven λ_lim als het krachtsverloop eerste orde is, en alleen voor
+//!   geschoorde kolommen; voor een ongeschoorde kolom mag hij in Nederland
+//!   niet en blijft de poort "tweede orde nodig" melden.
 //! * **§5.8.9 (dubbele buiging) — GEBOUWD**, zie de sectie §5.8.9 hieronder
 //!   en `concrete_check::kolomtoetsen`. Dat de raamwerkoplosser geen M_z
 //!   levert, betekent niet dat er geen M_z is: een kolom in een vlak raamwerk
@@ -1838,6 +1839,110 @@ pub fn kolom_deelstappen(k: &Kolomslankheid) -> Vec<Deelstap> {
 
 /// θ₀ — de basiswaarde van de scheefstand, nationale bijlage bij §5.2(5).
 ///
+/// n_bal van 5.8.8.3(3): de waarde van n bij het maximale momentdraagvermogen.
+pub const N_BAL_5_8_8: f64 = 0.4;
+
+/// De tussenstappen van §5.8.8.3 (nominale kromming).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NominaleKromming588 {
+    /// n = N_Ed/(A_c·f_cd).
+    pub n: f64,
+    /// n_u = 1 + ω.
+    pub n_u: f64,
+    /// K_r = (n_u − n)/(n_u − n_bal) ≤ 1 (5.36).
+    pub k_r: f64,
+    /// β = 0,35 + f_ck/200 − λ/150 (5.37).
+    pub beta: f64,
+    /// φ_ef zoals ingevuld.
+    pub phi_ef: f64,
+    /// K_φ = 1 + β·φ_ef ≥ 1 (5.37).
+    pub k_phi: f64,
+    /// ε_yd = f_yd/E_s.
+    pub eps_yd: f64,
+    /// d, mm (5.8.8.3(2)).
+    pub d_mm: f64,
+    /// 1/r₀ = ε_yd/(0,45·d), 1/mm.
+    pub inv_r0_per_mm: f64,
+    /// 1/r = K_r·K_φ·1/r₀ (5.34), 1/mm.
+    pub inv_r_per_mm: f64,
+    /// De factor c van (5.33).
+    pub c: f64,
+    /// e₂ = (1/r)·l₀²/c (5.33), mm.
+    pub e_2_mm: f64,
+}
+
+/// §5.8.8.3 — de tweede-orde-uitbuiging e₂ met de NOMINALE KROMMING:
+///
+/// ```text
+///   e₂  = (1/r)·l₀²/c                           (5.33)
+///   1/r = K_r·K_φ·1/r₀,  1/r₀ = ε_yd/(0,45·d)   (5.34)
+///   K_r = (n_u − n)/(n_u − n_bal) ≤ 1,  n_u = 1 + ω,  n_bal = 0,4   (5.36)
+///   K_φ = 1 + β·φ_ef ≥ 1,  β = 0,35 + f_ck/200 − λ/150              (5.37)
+/// ```
+///
+/// NB bij 5.8.5: alleen voor GESCHOORDE, op zichzelf staande elementen; dat
+/// toetst de aanroeper. `n_ed_druk_n` is de drukkracht als positief getal.
+#[allow(clippy::too_many_arguments)]
+pub fn nominale_kromming_5_8_8(
+    n_ed_druk_n: f64,
+    a_c_mm2: f64,
+    f_cd_mpa: f64,
+    omega: f64,
+    f_ck_mpa: f64,
+    lambda: f64,
+    phi_ef: f64,
+    f_yd_mpa: f64,
+    e_s_mpa: f64,
+    d_mm: f64,
+    l0_mm: f64,
+    c: f64,
+) -> Result<NominaleKromming588, String> {
+    if !(a_c_mm2 > 0.0 && f_cd_mpa > 0.0 && d_mm > 0.0 && l0_mm > 0.0 && c > 0.0 && e_s_mpa > 0.0)
+    {
+        return Err("A_c, f_cd, d, l₀, c en E_s moeten groter dan nul zijn".to_string());
+    }
+    if !(phi_ef >= 0.0) {
+        return Err(format!("φ_ef kan niet negatief zijn, kreeg {phi_ef}"));
+    }
+    let n = n_ed_druk_n / (a_c_mm2 * f_cd_mpa);
+    let n_u = 1.0 + omega;
+    let k_r_ruw = (n_u - n) / (n_u - N_BAL_5_8_8);
+    if k_r_ruw < 0.0 {
+        return Err(format!(
+            "n = {n:.3} > n_u = 1 + ω = {n_u:.3}: de doorsnede draagt deze normaalkracht niet"
+        ));
+    }
+    let k_r = k_r_ruw.min(1.0);
+    let beta = 0.35 + f_ck_mpa / 200.0 - lambda / 150.0;
+    let k_phi = (1.0 + beta * phi_ef).max(1.0);
+    let eps_yd = f_yd_mpa / e_s_mpa;
+    let inv_r0 = eps_yd / (0.45 * d_mm);
+    let inv_r = k_r * k_phi * inv_r0;
+    Ok(NominaleKromming588 {
+        n,
+        n_u,
+        k_r,
+        beta,
+        phi_ef,
+        k_phi,
+        eps_yd,
+        d_mm,
+        inv_r0_per_mm: inv_r0,
+        inv_r_per_mm: inv_r,
+        c,
+        e_2_mm: inv_r * l0_mm * l0_mm / c,
+    })
+}
+
+/// (5.32): het equivalente eerste-orde-moment M₀e = max(0,6·M₀₂ + 0,4·M₀₁;
+/// 0,4·M₀₂), met |M₀₂| ≥ |M₀₁| en M₀₁ met hetzelfde teken als M₀₂ bij trek aan
+/// dezelfde zijde. Levert een niet-negatief getal (de grootte).
+pub fn m0e_5_32(m01_knm: f64, m02_knm: f64) -> f64 {
+    let m02 = m02_knm.abs();
+    let m01 = if m02_knm < 0.0 { -m01_knm } else { m01_knm };
+    (0.6 * m02 + 0.4 * m01).max(0.4 * m02)
+}
+
 /// "De waarde van θ₀ moet gelijk aan 1/300 zijn genomen." De EN-aanbeveling
 /// 1/200 is op de gerenderde bladzijde 68 oranje doorgehaald.
 pub const THETA_0_NB: f64 = 1.0 / 300.0;
