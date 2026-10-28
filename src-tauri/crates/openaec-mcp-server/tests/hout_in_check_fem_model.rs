@@ -658,3 +658,56 @@ async fn catalogusprofielen_buiten_de_oude_voorvoegsellijst_worden_getoetst() {
     }
     eis_sluitend(uit, &[1, 2, 3, 4]);
 }
+
+/// #229: `detail: "samenvatting"` geeft hetzelfde oordeel in een fractie van
+/// de omvang. Het model van controle 023: één houtligger 75 × 200 C24, 4 m,
+/// twee gevallen (volledig antwoord in 2026.42: 33 485 tekens).
+#[tokio::test]
+async fn samenvatting_geeft_hetzelfde_oordeel_in_enkele_kb() {
+    eis_node().await;
+    let model = json!({
+        "nodes": [ { "id": 1, "x": 0, "z": 0 }, { "id": 2, "x": 4000, "z": 0 } ],
+        "beams": [ { "id": 1, "from": 1, "to": 2, "material": "C24", "profile": "75x200" } ],
+        "supports": [ { "nodeId": 1, "type": "pinned" }, { "nodeId": 2, "type": "zRoller" } ],
+        "loadCases": [
+            { "id": 1, "name": "G", "type": "dead" },
+            { "id": 2, "name": "Q", "type": "live" }
+        ],
+        "loads": [
+            { "id": 1, "type": "lineLoad", "caseId": 1, "beamId": 1, "q": -1.0 },
+            { "id": 2, "type": "lineLoad", "caseId": 2, "beamId": 1, "q": -1.5 }
+        ]
+    });
+    let antwoorden = roep_tools(&[
+        ("check_fem_model", json!({ "model": model.clone() })),
+        ("check_fem_model", json!({ "model": model, "detail": "samenvatting" })),
+    ])
+    .await;
+    let volledig = geen_fout(&antwoorden[0]).clone();
+    let kort = geen_fout(&antwoorden[1]).clone();
+    let n_volledig = serde_json::to_string(&volledig).unwrap().len();
+    let n_kort = serde_json::to_string(&kort).unwrap().len();
+    assert!(n_kort < 8_000, "samenvatting {n_kort} tekens (volledig {n_volledig})");
+    assert!(n_kort * 3 < n_volledig, "samenvatting {n_kort} niet wezenlijk kleiner dan {n_volledig}");
+
+    // Hetzelfde oordeel: maatgevend, UC per toets, status, waarschuwingen.
+    assert_eq!(kort["governing"], volledig["governing"]);
+    assert_eq!(kort["warnings"], volledig["warnings"]);
+    assert_eq!(kort["skipped_beams"], volledig["skipped_beams"]);
+    let hout_v = &volledig["timber_results"][0];
+    let hout_k = &kort["timber_results"][0];
+    for veld in ["beam_id", "uc_max", "status", "governing_check_id"] {
+        assert_eq!(hout_k[veld], hout_v[veld], "{veld}");
+    }
+    let checks_v = hout_v["checks"].as_array().unwrap();
+    let checks_k = hout_k["checks"].as_array().unwrap();
+    assert_eq!(checks_k.len(), checks_v.len());
+    for (k, v) in checks_k.iter().zip(checks_v) {
+        assert_eq!(k["id"], v["id"]);
+        assert_eq!(k["uc"], v["kind"]["data"]["uc"]["uc"], "{}", k["id"]);
+        assert_eq!(k["status"], v["kind"]["data"]["status"], "{}", k["id"]);
+    }
+    assert!(kort.get("timber_check_inputs").is_none());
+    assert_eq!(kort["weggelaten_toetsinvoer"]["aantallen"]["timber_check_inputs"], json!(1));
+    eprintln!("check_fem_model 023: volledig {n_volledig} tekens, samenvatting {n_kort} tekens");
+}

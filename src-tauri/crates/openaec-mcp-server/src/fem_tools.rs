@@ -205,6 +205,9 @@ struct CheckArgumenten {
     /// — het type is `NationaleBijlage`, niet een vrije tekst.
     #[serde(default)]
     bijlage: Option<nationale_bijlage::NationaleBijlage>,
+    /// `"samenvatting"` of `"volledig"` (standaard): zie `samenvatting.rs` (#229).
+    #[serde(default)]
+    detail: Option<String>,
 }
 
 fn lees_argumenten<T: for<'de> Deserialize<'de>>(tool: &str, args: Value) -> Result<T, RpcError> {
@@ -392,6 +395,17 @@ async fn roep(op: &str, payload: Value, timeout_s: Option<u64>) -> Result<Value,
 /// [`meld_niet_getoetste_staven`].
 async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
     let a: CheckArgumenten = lees_argumenten(naam, args)?;
+    let samenvatting = match a.detail.as_deref() {
+        None | Some("volledig") => false,
+        Some("samenvatting") => true,
+        Some(ander) => {
+            return Err(fout(
+                ARGUMENT_ONGELDIG,
+                format!("`detail` moet \"samenvatting\" of \"volledig\" zijn, niet \"{ander}\"."),
+                "Laat `detail` weg voor het volledige antwoord.",
+            ))
+        }
+    };
     let timeout_s = a.timeout_s;
     let beam_ids_filter = a.beam_ids.clone();
     let mut payload = model_payload(naam, a.model, a.project_path)?;
@@ -541,6 +555,11 @@ async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
         hout_ondersteund,
     );
     meld_niet_getoetste_platen(&mut uit, model_voor_beton.as_ref(), platen_ondersteund);
+    // Pas NA de vangnetten hierboven: die lezen de toetsinvoer om elke staaf
+    // en plaat te verantwoorden.
+    if samenvatting {
+        crate::samenvatting::samenvat_check_fem_model(&mut uit);
+    }
     Ok(uit)
 }
 
@@ -1381,6 +1400,7 @@ pub fn tool_definitions() -> Vec<Value> {
                         "description": "Toetsinstellingen per staaf-id (sleutel = het id als tekst), samengevoegd over de `checkConfig` van die staaf. Ontbreekt een staaf, dan gelden de defaults van de app. De staalsoort staat NIET hier maar in `material` van de staaf. Gekeurd met dezelfde veldpoort als `checkConfig` in het model: een onbekend veld of een nummer dat geen staaf is, geeft een invoerfout.",
                         "patternProperties": { "^[0-9]+$": schema_checkconfig() }
                     },
+                    "detail": crate::samenvatting::schema_detail(),
                     "beam_ids": { "type": "array", "items": { "type": "integer" },
                         "description": "Beperk de toetsing tot deze staven. Leeg of afwezig = alle staven (staal, hout en kruislaaghout). Een nummer dat geen staaf in het model is, staat in `skipped_beams` met de reden \"bestaat niet in het model\"." }
                 },

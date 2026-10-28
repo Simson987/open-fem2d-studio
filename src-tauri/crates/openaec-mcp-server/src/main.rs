@@ -71,6 +71,8 @@ mod plate_tools;
 /// één tool per commando, uit de ingebakken catalogus. Met `project` zonder app op
 /// een bestand (via de sidecar), anders in de draaiende app. Zie `api_tools.rs`.
 mod api_tools;
+// `detail: "samenvatting"` voor toetsantwoorden van enkele kB (#229).
+mod samenvatting;
 #[cfg(test)]
 mod report_tests;
 
@@ -491,7 +493,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "generate_steel_report_pdf",
-            "description": "Generate a complete constructive-check PDF report. Material-neutral despite the name: EN 1993-1-1 steel, EN 1995-1-1 timber and cross-laminated timber, EN 1992-1-1 concrete, plus the norm-independent stress check (von Mises against an allowable stress). The cover and the page header name only the standards actually present. Optionally include concrete_stiffness_trace to add the chapter on physically non-linear second-order analysis: the per-combination assumptions, the segment stiffness tables and the four concrete figures. Returns the PDF as base64 plus byte_count. Heavy operation — runs on a blocking task.",
+            "description": "Generate a complete constructive-check PDF report. Material-neutral despite the name: EN 1993-1-1 steel, EN 1995-1-1 timber and cross-laminated timber, EN 1992-1-1 concrete, plus the norm-independent stress check (von Mises against an allowable stress). The cover and the page header name only the standards actually present. Optionally include concrete_stiffness_trace to add the chapter on physically non-linear second-order analysis: the per-combination assumptions, the segment stiffness tables and the four concrete figures. Returns the PDF as base64 plus byte_count, or — with `output_path` — writes it to disk and returns only the path and byte_count. Heavy operation — runs on a blocking task.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -517,6 +519,7 @@ fn tool_definitions() -> Value {
                         "properties": { "plate_id": { "type": "integer", "minimum": 0 }, "reden": { "type": "string" } }
                     }, "description": "Plates not sent to the check kernel, with their literal reason. Printed as not checked." },
                     "concrete_stiffness_trace": { "type": "object" },
+                    "output_path": { "type": "string", "minLength": 1, "description": "Absolute path ending in .pdf. When given, the PDF is written there (replacing an existing file) and the answer is only { output_path, byte_count } — no base64. Recommended: base64 of a three-page report is ~2.9 million characters." },
                     "wind_toelichting": { "type": "string", "description": "Optional text block (one line per load case) describing generated wind loads: NEN-EN 1991-1-4 paragraph and table, roof pitch alpha, blockage phi and the coefficient used. Printed verbatim under 'Uitgangspunten' → 'Windbelasting'; empty or absent = the PDF says nothing about wind." }
                 },
                 "required": [
@@ -587,12 +590,31 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
             Ok(v)
         }
         "generate_steel_report_pdf" => {
+            // `output_path` (#227, #229): de PDF naar schijf in plaats van als
+            // base64 in het antwoord — dat waren ~2,9 miljoen tekens voor drie
+            // pagina's. Geen veld van `ReportInput`, dus hier eraf gehaald.
+            let mut args = args;
+            let uitvoer = match args.as_object_mut().and_then(|m| m.remove("output_path")) {
+                None => None,
+                Some(Value::String(p)) => Some(keur_pdf_pad(&p)?),
+                Some(_) => return Err(RpcError::invalid_params("output_path moet een pad (tekst) zijn.")),
+            };
             let input: report::ReportInput = serde_json::from_value(args)
                 .map_err(|e| RpcError::invalid_params(format!("ReportInput: {e}")))?;
             let bytes = tokio::task::spawn_blocking(move || report::generate_report_pdf(input))
                 .await
                 .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
             let byte_count = bytes.len();
+            if let Some(pad) = uitvoer {
+                let tijdelijk = format!("{pad}.tmp-{}", std::process::id());
+                std::fs::write(&tijdelijk, &bytes)
+                    .and_then(|_| std::fs::rename(&tijdelijk, &pad))
+                    .map_err(|e| {
+                        let _ = std::fs::remove_file(&tijdelijk);
+                        RpcError::tool_exec(format!("De PDF kon niet naar `{pad}` worden geschreven ({e})."))
+                    })?;
+                return Ok(json!({ "output_path": pad, "byte_count": byte_count }));
+            }
             let pdf_b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
             Ok(json!({ "pdf_base64": pdf_b64, "byte_count": byte_count }))
         }
@@ -635,6 +657,22 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         api if api_tools::is_api_tool(api) => api_tools::dispatch(api, args).await,
         other => Err(RpcError::method_not_found(other)),
     }
+}
+
+/// Het uitvoerpad van de rapport-PDF: absoluut, eindigend op .pdf, in een
+/// bestaande map. Een bestaand bestand wordt vervangen (zoals Opslaan als).
+fn keur_pdf_pad(pad: &str) -> Result<String, RpcError> {
+    let p = std::path::Path::new(pad);
+    if !pad.to_lowercase().ends_with(".pdf") {
+        return Err(RpcError::invalid_params(format!("output_path moet op .pdf eindigen, niet `{pad}`.")));
+    }
+    if !p.is_absolute() {
+        return Err(RpcError::invalid_params(format!("output_path moet een absoluut pad zijn, niet `{pad}`.")));
+    }
+    if !p.parent().is_some_and(|m| m.is_dir()) {
+        return Err(RpcError::invalid_params(format!("De map van output_path bestaat niet: `{pad}`.")));
+    }
+    Ok(pad.to_owned())
 }
 
 fn compute_section_props(

@@ -491,9 +491,13 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
             "veld '{veld}' ontbreekt in het schema van check_concrete_beam"
         );
     }
+    // `detail` (#229) is GEEN veld van ConcreteBeamCheckInput: de tool leest
+    // het zelf en haalt het eruit vóór de strikte invoer gelezen wordt. Het
+    // staat daarom wel in het schema, met alleen deze twee waarden.
+    assert_eq!(props["detail"]["enum"], json!(["volledig", "samenvatting"]));
     assert_eq!(
         props.as_object().unwrap().len(),
-        24,
+        24 + 1,
         "het schema kent een veld dat ConcreteBeamCheckInput weigert"
     );
 
