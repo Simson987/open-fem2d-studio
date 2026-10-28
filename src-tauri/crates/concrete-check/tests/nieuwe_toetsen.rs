@@ -667,10 +667,12 @@ fn de_negen_detailleringstoetsen_staan_in_het_resultaat() {
     // §5.8 altijd één kolomregel in de lijst. Deze balk draagt geen
     // normaaldruk, dus die regel zegt dat §5.8 niet van toepassing is — met
     // de reden, en niet door hem weg te laten.
+    // Zeventien sinds issue #250: de begrenzing x_u/d van 6.1(9) is een eigen
+    // toets geworden.
     assert_eq!(
         r.checks.len(),
-        16,
-        "6.1 (2×), 6.2, 7.3 (2×), 7.4.2, negen keer 9.2/8.2 en één keer 5.8"
+        17,
+        "6.1 (2×), 6.1(9), 6.2, 7.3 (2×), 7.4.2, negen keer 9.2/8.2 en één keer 5.8"
     );
 }
 
@@ -774,7 +776,7 @@ fn een_toets_die_niet_kon_zwijgt_niet_en_meldt_niet_groen() {
         let r = check_concrete_beam(inp);
         // Vijftien toetsen plus de ene kolomregel van §5.8; zie
         // `de_negen_detailleringstoetsen_staan_in_het_resultaat`.
-        assert_eq!(r.checks.len(), 16, "{naam}: er ontbreekt een toets");
+        assert_eq!(r.checks.len(), 17, "{naam}: er ontbreekt een toets");
         for c in &r.checks {
             let CheckKind::Resistance(rc) = &c.kind else {
                 unreachable!()
@@ -928,9 +930,9 @@ fn een_vervulde_detailleringseis_wordt_niet_de_maatgevende_toets() {
         assert!(!c.notes.is_empty(), "toets {} noemt geen reden", n.check_id);
     }
 
-    // Er verdwijnt niets: alle zestien toetsen staan er nog, mét hun unity
-    // check. Alleen de RANGSCHIKKING is anders.
-    assert_eq!(r.checks.len(), 16);
+    // Er verdwijnt niets: alle zeventien toetsen (incl. 6.1(9), #250) staan er
+    // nog, mét hun unity check. Alleen de RANGSCHIKKING is anders.
+    assert_eq!(r.checks.len(), 17);
     assert!(beugel.uc.is_some());
 }
 

@@ -10,7 +10,7 @@
 use mechanics::ForceStateSnapshot;
 use nen_en_1993_1_1_section::{CheckStatus, NamedValue, ResistanceCalc, UnityCheck};
 
-use crate::bending::{stress_block, StressBlockError};
+use crate::bending::{drukzonehoogte_bij_m_ed, stress_block, StressBlockError};
 use crate::deelstappen::{self, Betongegevens};
 use crate::mnkappa::{
     axial_compression_capacity_kn, axial_tension_capacity_kn, mn_kappa_diagram, FailureMode,
@@ -239,6 +239,179 @@ pub fn check_bending_stress_block(
             }
         }
     }
+}
+
+/// De id van de toets van 6.1(9).
+pub const DRUKZONEHOOGTE_ID: &str = "6.1(9)_drukzonehoogte";
+
+/// Art. 6.1(9) met NB — begrenzing van de drukzonehoogte x_u/d (issue #250).
+///
+/// NB bij 6.1(9): bij buiging zonder normaalkracht en bij een normaaldrukkracht
+/// kleiner dan 0,1·f_cd·A_c moet x_u/d ≤ ε_cu·10⁶/(ε_cu·10⁶ + 7f) zijn, met f de
+/// naar oppervlak gewogen sterkte van de trekwapening (zonder voorspanning
+/// f_yd). Voor f_ck ≤ 50 MPa is dat 500/(500 + f). x_u hoort bij het deel van
+/// de wapening dat nodig is voor M_Ed; zie [`drukzonehoogte_bij_m_ed`].
+///
+/// Modelkeuzen (genoemd in de notes): spanningsblok van 3.1.7(3) met ε_cu3,
+/// aanwezige drukwapening met haar werkelijke rek. Bij een normaaltrekkracht
+/// wordt de grens ook getoetst (de norm noemt trek niet; de trek verkleint
+/// x_u, dus de grens toetsen blijft aan de veilige kant).
+pub fn check_drukzonehoogte(
+    section: &RectConcreteSection,
+    cage: &ReinforcementCage,
+    mat: &DesignMaterial,
+    force_state: ForceStateSnapshot,
+) -> ResistanceCalc {
+    use crate::deelstappen::nl;
+    let m_ed = force_state.forces.my_ed;
+    let n_ed = force_state.forces.n_ed;
+    let layers = cage.layers(section.h_mm);
+    let f_cd = mat.f_cd();
+    let a_c = section.area_mm2();
+    let druk_kn = if n_ed < 0.0 { -n_ed } else { 0.0 };
+    let drempel_kn = 0.1 * f_cd * a_c * 1e-3;
+    let f = mat.steel.f_yd;
+    let ecu = mat.eps_cu3 * 1e6;
+    let grens = ecu / (ecu + 7.0 * f);
+    let mut notes: Vec<String> = section.assumptions();
+    let mut variables = vec![
+        nv(r"M_{Ed}", m_ed, "kNm"),
+        nv(r"N_{Ed}", n_ed, "kN"),
+        nv(r"f_{cd}", f_cd, "N/mm²"),
+        nv("f", f, "N/mm²"),
+        nv(r"\varepsilon_{cu}", mat.eps_cu3 * 1e3, "‰"),
+        nv(r"(x_u/d)_{max}", grens, "-"),
+    ];
+    let maak = |variables: Vec<NamedValue>,
+                notes: Vec<String>,
+                value: f64,
+                uc: Option<UnityCheck>,
+                status: CheckStatus| ResistanceCalc {
+        id: DRUKZONEHOOGTE_ID.to_string(),
+        title: "Begrenzing van de drukzonehoogte x_u/d".to_string(),
+        article: "art. 6.1(9) + NB".to_string(),
+        force_state,
+        formula_latex: r"\frac{x_u}{d} \le \frac{\varepsilon_{cu} \cdot 10^6}{\varepsilon_{cu} \cdot 10^6 + 7 f}"
+            .to_string(),
+        variables,
+        deelstappen: vec![],
+        value,
+        unit: "-".to_string(),
+        uc,
+        status,
+        notes,
+    };
+    notes.push(format!(
+        "NB bij 6.1(9): x_u/d ≤ ε_cu·10⁶/(ε_cu·10⁶ + 7f); voor f_ck ≤ 50 MPa staat dat gelijk aan \
+         500/(500 + f). Zonder voorspanning is f = f_yd = {} N/mm², dus (x_u/d)_max = {}.",
+        nl(f, 2),
+        nl(grens, 3)
+    ));
+    if m_ed.abs() <= 1e-9 {
+        notes.push("M_Ed = 0: er is geen buiging, dus geen drukzone te begrenzen.".to_string());
+        return maak(
+            variables,
+            notes,
+            0.0,
+            Some(UnityCheck {
+                ed: 0.0,
+                rd: grens,
+                uc: 0.0,
+                formula_latex: r"(x_u/d) / (x_u/d)_{max}".to_string(),
+            }),
+            CheckStatus::NotApplicable,
+        );
+    }
+    if druk_kn > drempel_kn {
+        notes.push(format!(
+            "6.1(9) geldt alleen bij buiging zonder normaalkracht of met een normaaldrukkracht \
+             kleiner dan 0,1·f_cd·A_c = {} kN. De drukkracht is hier {} kN; de begrenzing is voor \
+             deze snede niet van toepassing.",
+            nl(drempel_kn, 1),
+            nl(druk_kn, 1)
+        ));
+        return maak(
+            variables,
+            notes,
+            0.0,
+            Some(UnityCheck {
+                ed: 0.0,
+                rd: grens,
+                uc: 0.0,
+                formula_latex: r"(x_u/d) / (x_u/d)_{max}".to_string(),
+            }),
+            CheckStatus::NotApplicable,
+        );
+    }
+    let Some(x) = drukzonehoogte_bij_m_ed(section, &layers, mat, n_ed, m_ed) else {
+        notes.push(
+            "Geen wapening in de doorsnede: x_u is niet te bepalen. De begrenzing van 6.1(9) is \
+             NIET getoetst."
+                .to_string(),
+        );
+        return maak(variables, notes, 0.0, None, CheckStatus::NotApplicable);
+    };
+    variables.extend([
+        nv("d", x.d_mm, "mm"),
+        nv(r"x_u", x.x_u_mm, "mm"),
+        nv(r"F_c", x.f_c_kn, "kN"),
+        nv(r"F_{s,overig}", x.f_overig_kn, "kN"),
+    ]);
+    notes.push(format!(
+        "x_u is de drukzonehoogte bij het deel van de wapening dat NODIG is voor M_Ed (6.1(9)), \
+         niet de x bij de volle M_Rd. Bepaald met de rechthoekige spanningsverdeling (3.1.7(3), \
+         ε_cu3 aan de gedrukte rand) uit het momentenevenwicht om de trekwapening: \
+         F_c·(d − a_c) + ΣF_si·(d − d_i) = |M_Ed| + N_druk·(d − h/2) = {} kNm. De aanwezige \
+         drukwapening en eventuele zijstaven tellen mee met hun rek ε_cu3·(1 − d_i/x) \
+         (bilineair staaldiagram); samen {} kN (druk positief).",
+        nl(x.m_s_knm, 2),
+        nl(x.f_overig_kn, 1)
+    ));
+    if n_ed > 1e-9 {
+        notes.push(
+            "N_Ed is een trekkracht. 6.1(9) noemt buiging zonder normaalkracht en met kleine \
+             druk; de trek is in het evenwicht meegenomen en de grens is toch getoetst (veilige \
+             kant: trek verkleint x_u)."
+                .to_string(),
+        );
+    }
+    let (verhouding, uc) = if x.boven_d {
+        notes.push(format!(
+            "Zelfs bij x = d = {} mm is het moment niet op te nemen: de benodigde drukzone loopt \
+             tot voorbij de trekwapening. De eis van 6.1(9) is dan zeker niet te halen.",
+            nl(x.d_mm, 1)
+        ));
+        (1.0, 1.0 / grens)
+    } else {
+        notes.push(format!(
+            "x_u/d = {}/{} = {} tegen de grens {}.",
+            nl(x.x_u_mm, 1),
+            nl(x.d_mm, 1),
+            nl(x.verhouding, 3),
+            nl(grens, 3)
+        ));
+        (x.verhouding, x.verhouding / grens)
+    };
+    if uc > 1.0 {
+        notes.push(
+            "De drukzone is te hoog: de doorsnede is te zwaar gewapend voor een taai \
+             bezwijkgedrag. Maatregelen: drukwapening toevoegen, de doorsnede verhogen of de \
+             betonsterkteklasse verhogen."
+                .to_string(),
+        );
+    }
+    maak(
+        variables,
+        notes,
+        verhouding,
+        Some(UnityCheck {
+            ed: verhouding,
+            rd: grens,
+            uc,
+            formula_latex: r"(x_u/d) / (x_u/d)_{max}".to_string(),
+        }),
+        status_for(uc, true),
+    )
 }
 
 /// Uitkomst van de M-N-κ-toets: de toets zelf plus het diagram waarop hij rust.

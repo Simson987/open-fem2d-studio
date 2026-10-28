@@ -334,11 +334,13 @@ pub enum CotThetaKeuze {
     Opgegeven,
     /// Opgegeven, maar buiten 1,0…2,5 en daarom afgekapt.
     OpgegevenAfgekapt,
-    /// Automatisch: de **grootste** cot θ binnen 1,0…2,5 waarbij de
-    /// betondrukdiagonaal nog voldoet (V_Rd,max ≥ V_Ed).
+    /// Automatisch: de cot θ binnen 1,0…2,5 die min(V_Rd,s; V_Rd,max)
+    /// maximaal maakt — het snijpunt √(T/S − 1) van (6.8) en (6.9), begrensd
+    /// op 2,5. Zie [`cot_theta_automatisch`].
     Automatisch,
-    /// Automatisch, maar zelfs bij cot θ = 1 haalt V_Rd,max het niet. Dan is
-    /// cot θ = 1 aangehouden: de waarde waarbij (6.9) maximaal is.
+    /// Automatisch, maar het snijpunt ligt onder cot θ = 1: ook bij cot θ = 1,
+    /// waar (6.9) maximaal is, bezwijkt de drukdiagonaal vóór de beugels
+    /// vloeien. cot θ = 1 is aangehouden; méér beugels helpen dan niet.
     AutomatischDrukdiagonaalTeKlein,
     /// Er ligt géén dwarskrachtwapening, dus er is niets om θ voor te kiezen:
     /// (6.8) bestaat hier niet. cot θ = 1 is aangehouden omdat (6.9) daar
@@ -911,13 +913,24 @@ pub fn shear_resistance_met_hefboomsarm(
     if weerstandsroute == Some(Weerstandsroute::Dwarskrachtwapening) {
         if let Some(v) = vakwerk.as_ref() {
             if v.tak == Some(VakwerkTak::DrukdiagonaalBezwijkt) {
-                notes.push(
+                // Alleen bij cot θ = 1 — waar (6.9) maximaal is — helpt
+                // méér beugelwapening niet meer (issue #251). Bij een
+                // opgegeven grotere cot θ verhoogt een steilere diagonaal de
+                // weerstand nog.
+                notes.push(if (v.cot_theta - COT_THETA_MIN).abs() < 1e-9 {
                     "V_Rd,max is maatgevend: de betondrukdiagonaal bezwijkt vóór de beugels \
-                     vloeien. Méér beugelwapening helpt hier niet — de doorsnede of de \
-                     betonsterkte moet groter, of θ moet binnen 1,0 ≤ cot θ ≤ 2,5 anders worden \
-                     gekozen."
-                        .to_string(),
-                );
+                     vloeien, ook bij cot θ = 1 waar (6.9) maximaal is. Méér beugelwapening \
+                     helpt hier niet — de doorsnede of de betonsterkte moet groter."
+                        .to_string()
+                } else {
+                    format!(
+                        "V_Rd,max is maatgevend bij de opgegeven cot θ = {}: de \
+                         betondrukdiagonaal bezwijkt vóór de beugels vloeien. Een kleinere \
+                         cot θ (steilere diagonaal, minimaal 1,0) verhoogt V_Rd,max; laat cot θ \
+                         leeg om de gunstigste hoek te laten bepalen.",
+                        nl(v.cot_theta, 3)
+                    )
+                });
             }
         }
     }
@@ -1004,37 +1017,43 @@ pub fn beta_6_2_2_6(a_v_mm: f64, d_mm: f64) -> Result<(f64, f64), String> {
     Ok((a_v / (2.0 * d_mm), a_v))
 }
 
-/// De grootste cot θ binnen 1,0…2,5 waarbij (6.9) nog V_Ed haalt.
+/// De cot θ binnen 1,0…2,5 die de vakwerkweerstand min(V_Rd,s; V_Rd,max)
+/// MAXIMAAL maakt.
 ///
 /// **Waarom deze keuze.** De norm laat θ vrij binnen 1,0 ≤ cot θ ≤ 2,5 (NB bij
-/// 6.2.3(2)) en zegt niet welke waarde je moet nemen. De twee vergelijkingen
-/// trekken tegengesteld: V_Rd,s = (A_sw/s)·z·f_ywd·cot θ stijgt met cot θ,
-/// terwijl V_Rd,max = α_cw·b_w·z·ν₁·f_cd/(cot θ + tan θ) een maximum heeft bij
-/// cot θ = 1 en daarna daalt (cot θ + tan θ neemt vanaf 1 monotoon toe). De
-/// grootste toelaatbare cot θ geeft dus de minste beugelwapening en is de
-/// gangbare ontwerpkeuze — mits de drukdiagonaal het houdt. Daarom:
+/// 6.2.3(2)). Bij een TOETS van aanwezige wapening is de weerstand van de
+/// doorsnede dan het maximum over die toegelaten hoeken van
+/// V_Rd = min(V_Rd,s; V_Rd,max) (6.2.3(3)): elke θ in het bereik is een
+/// toegelaten vakwerk, dus de gunstigste mag. V_Rd,s = (A_sw/s)·z·f_ywd·cot θ
+/// stijgt met cot θ en V_Rd,max = T/(cot θ + tan θ) daalt vanaf cot θ = 1;
+/// het maximum van het minimum ligt dus in het snijpunt
 ///
-/// * los cot θ + tan θ = K op met K = α_cw·b_w·z·ν₁·f_cd / V_Ed. Dat is
-///   c² − K·c + 1 = 0 met de grootste wortel c = (K + √(K² − 4))/2;
-/// * kap af op 2,5, en houd ten minste 1,0 aan;
-/// * is K < 2, dan haalt zelfs cot θ = 1 het niet en bezwijkt de
-///   drukdiagonaal. Dan is cot θ = 1 aangehouden, de waarde waarbij (6.9)
-///   maximaal is; de toets valt daarna op V_Rd,max af.
+///   c·S = T/(c + 1/c)  →  S·(c² + 1) = T  →  c = √(T/S − 1),
 ///
-/// Wat er ook uit komt, het rapport toont welke θ is gebruikt en waarom — de
-/// keuze is een ontwerpbeslissing en geen rekenkundig detail.
-pub fn cot_theta_automatisch(v_rd_max_teller_n: f64, v_ed_n: f64) -> (f64, CotThetaKeuze) {
-    if v_ed_n.is_nan() || v_ed_n <= 0.0 {
+/// begrensd op [1,0; 2,5] (issue #251). Met S = (A_sw/s)·z·f_ywd in N per
+/// eenheid cot θ en T = α_cw·b_w·z·ν₁·f_cd in N.
+///
+/// * c > 2,5: (6.8) is bij 2,5 nog maatgevend; cot θ = 2,5.
+/// * c < 1 (T/S < 2): ook bij cot θ = 1, waar (6.9) maximaal is, bezwijkt de
+///   drukdiagonaal eerder dan de beugels vloeien. cot θ = 1; alleen DAN helpen
+///   méér beugels niet meer.
+///
+/// De vroegere keuze — de grootste cot θ waarbij (6.9) V_Ed nog haalt — is een
+/// ONTWERPkeuze (minste beugels voor een gegeven V_Ed). Als toets onderschatte
+/// zij de weerstand: zij gaf V_Rd = V_Ed en UC 1,000 zodra
+/// V_Rd,max(2,5) < V_Ed, terwijl een steilere diagonaal meer weerstand geeft.
+pub fn cot_theta_automatisch(v_rd_max_teller_n: f64, v_rd_s_per_cot_n: f64) -> (f64, CotThetaKeuze) {
+    if v_rd_s_per_cot_n.is_nan() || v_rd_s_per_cot_n <= 0.0 {
         return (COT_THETA_MAX, CotThetaKeuze::Automatisch);
     }
-    let k = v_rd_max_teller_n / v_ed_n;
-    if k < 2.0 {
+    let verhouding = v_rd_max_teller_n / v_rd_s_per_cot_n;
+    if verhouding <= 2.0 {
         return (
             COT_THETA_MIN,
             CotThetaKeuze::AutomatischDrukdiagonaalTeKlein,
         );
     }
-    let c = (k + (k * k - 4.0).sqrt()) / 2.0;
+    let c = (verhouding - 1.0).sqrt();
     (
         c.clamp(COT_THETA_MIN, COT_THETA_MAX),
         CotThetaKeuze::Automatisch,
@@ -1077,26 +1096,6 @@ fn bouw_vakwerk(
             Err(e) => (None, Some(e)),
         };
 
-    // θ: opgegeven gaat vóór; anders automatisch zolang er beugels zijn om θ
-    // voor te kiezen, en cot θ = 1 als die er niet zijn — daar is (6.9)
-    // maximaal en dient V_Rd,max alleen als bovengrens.
-    let (cot_theta, keuze) = match opts.cot_theta {
-        Some(c) => {
-            let afgekapt = c.clamp(COT_THETA_MIN, COT_THETA_MAX);
-            let keuze = if (afgekapt - c).abs() > 1e-12 {
-                CotThetaKeuze::OpgegevenAfgekapt
-            } else {
-                CotThetaKeuze::Opgegeven
-            };
-            (afgekapt, keuze)
-        }
-        None if asw.is_some() => cot_theta_automatisch(teller_n, v_ed_kn * 1e3),
-        None => (COT_THETA_MIN, CotThetaKeuze::GeenDwarskrachtwapening),
-    };
-    let tan_theta = 1.0 / cot_theta;
-    let theta_deg = cot_theta.recip().atan().to_degrees();
-    let v_rd_max_n = teller_n / (cot_theta + tan_theta);
-
     // f_ywd: eigen beugelkwaliteit → f_ywk/γ_S; anders de f_yd van de
     // langswapening. De korf legt vast dat `None` "dezelfde staalsoort" betekent.
     let (f_ywd, f_ywd_bron) = match asw.and_then(|a| a.f_ywk_mpa) {
@@ -1109,6 +1108,27 @@ fn bouw_vakwerk(
             }
         }
     };
+
+    // θ: opgegeven gaat vóór; anders automatisch zolang er beugels zijn om θ
+    // voor te kiezen (het maximum van min(V_Rd,s; V_Rd,max), zie
+    // [`cot_theta_automatisch`]), en cot θ = 1 als die er niet zijn — daar is
+    // (6.9) maximaal en dient V_Rd,max alleen als bovengrens.
+    let (cot_theta, keuze) = match (opts.cot_theta, asw, f_ywd) {
+        (Some(c), _, _) => {
+            let afgekapt = c.clamp(COT_THETA_MIN, COT_THETA_MAX);
+            let keuze = if (afgekapt - c).abs() > 1e-12 {
+                CotThetaKeuze::OpgegevenAfgekapt
+            } else {
+                CotThetaKeuze::Opgegeven
+            };
+            (afgekapt, keuze)
+        }
+        (None, Some(a), Some(f)) => cot_theta_automatisch(teller_n, a.a_sw_per_s_mm * z * f),
+        _ => (COT_THETA_MIN, CotThetaKeuze::GeenDwarskrachtwapening),
+    };
+    let tan_theta = 1.0 / cot_theta;
+    let theta_deg = cot_theta.recip().atan().to_degrees();
+    let v_rd_max_n = teller_n / (cot_theta + tan_theta);
 
     // (6.8) geldt voor VERTICALE dwarskrachtwapening. De korf legt α vast op
     // 90°; loopt dat ooit uiteen, dan zou (6.13)/(6.14) nodig zijn en die staan
@@ -1131,7 +1151,11 @@ fn bouw_vakwerk(
         _ => None,
     };
     let (v_rd_n, tak) = match v_rd_s_n {
-        Some(s) if s <= v_rd_max_n => (Some(s), Some(VakwerkTak::WapeningVloeit)),
+        // In het snijpunt van de automatische keuze zijn beide gelijk; een
+        // afrondingsverschil mag dan niet de drukdiagonaal maatgevend maken.
+        Some(s) if s <= v_rd_max_n * (1.0 + 1e-9) => {
+            (Some(s.min(v_rd_max_n)), Some(VakwerkTak::WapeningVloeit))
+        }
         Some(_) => (Some(v_rd_max_n), Some(VakwerkTak::DrukdiagonaalBezwijkt)),
         None => (None, None),
     };
@@ -1589,16 +1613,27 @@ impl ShearResistance {
                                 .to_string()
                         }
                         CotThetaKeuze::Automatisch => {
-                            "Gekozen is de GROOTSTE cot θ binnen 1,0…2,5 waarbij de \
-                             betondrukdiagonaal (6.9) V_Ed nog haalt. Dat geeft de kleinste \
-                             benodigde beugelwapening, want (6.8) stijgt met cot θ terwijl (6.9) \
-                             daalt."
-                                .to_string()
+                            if v.cot_theta >= COT_THETA_MAX - 1e-12 {
+                                "Gekozen is de cot θ binnen 1,0…2,5 die de weerstand \
+                                 min(V_Rd,s; V_Rd,max) MAXIMAAL maakt. (6.8) stijgt met cot θ en \
+                                 (6.9) daalt; hun snijpunt cot θ = √(T/S − 1) ligt boven 2,5, dus \
+                                 de NB-grens 2,5 is bindend en (6.8) is maatgevend."
+                                    .to_string()
+                            } else {
+                                "Gekozen is de cot θ binnen 1,0…2,5 die de weerstand \
+                                 min(V_Rd,s; V_Rd,max) MAXIMAAL maakt: het snijpunt van (6.8) en \
+                                 (6.9), cot θ = √(T/S − 1) met T = α_cw·b_w·z·ν₁·f_cd en \
+                                 S = (A_sw/s)·z·f_ywd. Daar zijn V_Rd,s en V_Rd,max gelijk; méér \
+                                 beugels verhogen de weerstand nog (bij een steilere diagonaal), \
+                                 tot cot θ = 1."
+                                    .to_string()
+                            }
                         }
                         CotThetaKeuze::AutomatischDrukdiagonaalTeKlein => {
-                            "Zelfs bij cot θ = 1 — de waarde waarbij (6.9) MAXIMAAL is — haalt de \
-                             betondrukdiagonaal V_Ed niet. cot θ = 1 is aangehouden; de toets \
-                             loopt daarna op V_Rd,max stuk."
+                            "Het snijpunt van (6.8) en (6.9) ligt onder cot θ = 1: ook bij \
+                             cot θ = 1 — de waarde waarbij (6.9) MAXIMAAL is — bezwijkt de \
+                             drukdiagonaal vóór de beugels vloeien. cot θ = 1 is aangehouden; \
+                             V_Rd,max is maatgevend."
                                 .to_string()
                         }
                         CotThetaKeuze::GeenDwarskrachtwapening => {
@@ -1746,9 +1781,15 @@ impl ShearResistance {
                             "(6.8) is maatgevend: de dwarskrachtwapening vloeit.".to_string()
                         }
                         Some(VakwerkTak::DrukdiagonaalBezwijkt) => {
-                            "(6.9) is maatgevend: de betondrukdiagonaal bezwijkt. Méér beugels \
-                             helpen niet."
-                                .to_string()
+                            if (v.cot_theta - COT_THETA_MIN).abs() < 1e-9 {
+                                "(6.9) is maatgevend bij cot θ = 1, waar (6.9) maximaal is: de \
+                                 betondrukdiagonaal bezwijkt. Méér beugels helpen niet."
+                                    .to_string()
+                            } else {
+                                "(6.9) is maatgevend bij de opgegeven θ: de betondrukdiagonaal \
+                                 bezwijkt. Een kleinere cot θ verhoogt V_Rd,max."
+                                    .to_string()
+                            }
                         }
                         None => String::new(),
                     }],

@@ -184,7 +184,10 @@ fn mn_kappa_verzoek() {
         interaction_points: 11,
     };
     let r = mn_kappa(req).expect("geldig verzoek");
-    assert_relative_eq!(r.n_rd_compression_kn, 3331.75, max_relative = 1e-3);
+    // Netto betondoorsnede (issue #239): A_s = 603,186 + 226,195 = 829,381 mm²,
+    //   N_Rd = (150 000 − 829,381)·20 + 829,381·σ_s(ε_c2 = 2 ‰ → 400)
+    //        = 2 983,41 + 331,75 = 3 315,16 kN   (bruto was 3 331,75 kN).
+    assert_relative_eq!(r.n_rd_compression_kn, 3315.16, max_relative = 1e-4);
     assert_relative_eq!(
         r.n_rd_tension_kn,
         (603.186 + 226.195) * 434.7826 * 1e-3,

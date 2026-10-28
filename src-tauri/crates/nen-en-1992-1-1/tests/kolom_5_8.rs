@@ -1725,3 +1725,45 @@ fn phi_ef_5_19_begrensd_handberekening_en_grenzen() {
     assert!(phi_ef_5_19_begrensd(-0.1, 40.0, 65.0).is_err());
     assert!(phi_ef_5_19_begrensd(2.5, f64::NAN, 65.0).is_err());
 }
+
+// ── §5.8.8 nominale kromming (issue #224) ───────────────────────────────────
+
+/// Kolom 048 uit issue #224: 400 × 400, C30/37, B500B, 6Ø20, d = 352 mm,
+/// l₀ = 4 m, N_Ed = 1 500 kN, φ_ef = 2,0, c = 10.
+///
+/// ```text
+///   n = 0,46875; ω = 0,25611; K_r = (1,25611 − 0,46875)/0,85611 = 0,91969
+///   β = 0,35 + 0,15 − 34,641/150 = 0,26906; K_φ = 1,53812
+///   1/r₀ = (434,783/200 000)/(0,45·352) = 1,37242·10⁻⁵ /mm
+///   e₂ = 0,91969·1,53812·1,37242·10⁻⁵·4000²/10 = 31,063 mm
+/// ```
+#[test]
+fn nominale_kromming_kolom_048_issue_224() {
+    use nen_en_1992_1_1::kolom::{m0e_5_32, nominale_kromming_5_8_8};
+    let a_s = 6.0 * std::f64::consts::PI * 100.0;
+    let f_yd = 500.0 / 1.15;
+    let omega = a_s * f_yd / (160_000.0 * 20.0);
+    let lambda = 4000.0 / (400.0 / 12f64.sqrt());
+    let k = nominale_kromming_5_8_8(
+        1_500_000.0, 160_000.0, 20.0, omega, 30.0, lambda, 2.0, f_yd, 200_000.0, 352.0, 4000.0,
+        10.0,
+    )
+    .unwrap();
+    assert!((k.n - 0.46875).abs() < 1e-12);
+    assert!((k.k_r - 0.919695).abs() < 1e-5, "K_r {}", k.k_r);
+    assert!((k.k_phi - 1.538120).abs() < 1e-5, "K_φ {}", k.k_phi);
+    assert!((k.inv_r0_per_mm - 1.372419e-5).abs() < 1e-10);
+    assert!((k.e_2_mm - 31.0628).abs() < 1e-3, "e₂ {}", k.e_2_mm);
+    // (5.32): 0,6·60 + 0,4·30 = 48; tegengesteld teken: max(36 − 12; 24) = 24.
+    assert!((m0e_5_32(30.0, 60.0) - 48.0).abs() < 1e-12);
+    assert!((m0e_5_32(-30.0, 60.0) - 24.0).abs() < 1e-12);
+    assert!((m0e_5_32(30.0, -60.0) - 24.0).abs() < 1e-12);
+    // K_r is begrensd op 1 en K_φ op ten minste 1.
+    let laag = nominale_kromming_5_8_8(
+        100_000.0, 160_000.0, 20.0, omega, 30.0, 140.0, 2.0, f_yd, 200_000.0, 352.0, 4000.0,
+        10.0,
+    )
+    .unwrap();
+    assert_eq!(laag.k_r, 1.0);
+    assert_eq!(laag.k_phi, 1.0);
+}

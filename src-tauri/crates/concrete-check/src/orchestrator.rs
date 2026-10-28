@@ -147,7 +147,7 @@ use std::collections::HashMap;
 
 use mechanics::{ForcePoint, ForceStateSnapshot, InternalForces, Staafstand};
 use nen_en_1992_1_1::bending::stress_block;
-use nen_en_1992_1_1::checks::{check_bending_stress_block, check_mn_kappa};
+use nen_en_1992_1_1::checks::{check_bending_stress_block, check_drukzonehoogte, check_mn_kappa};
 // De negen detailleringseisen worden hier STUK VOOR STUK aangeroepen en niet
 // meer als één `detailleringstoetsen(&inv)`. Reden: acht van de negen lezen de
 // KORF, en die verschilt sinds de wapeningszones per stuk staaf; alleen de
@@ -1146,16 +1146,46 @@ fn as_min_over_sneden(
     zaad: ResistanceCalc,
     aantal_env: usize,
 ) -> ResistanceCalc {
-    let mut beste: Zwaarste<ResistanceCalc> = Zwaarste::nieuw();
+    // Bepaalde en onbepaalde uitkomsten apart bijhouden (issue #225). Een
+    // snede waar A_s,min niet te bepalen is, mag een snede waar hij WEL bepaald
+    // is en niet voldoet nooit verdringen: dan zou een NotOk verdwijnen achter
+    // een "niet uitgevoerd". Volgorde: bepaald en afgekeurd > onbepaald >
+    // bepaald en voldoet (de strengste bepaalde).
+    let mut bepaald: Zwaarste<ResistanceCalc> = Zwaarste::nieuw();
+    let mut onbepaald: Zwaarste<ResistanceCalc> = Zwaarste::nieuw();
+    let mut bied = |calc: ResistanceCalc, belasting: f64| {
+        let z = zwaarte_van(&calc, belasting);
+        if calc.uc.is_some() {
+            bepaald.bied(z, calc);
+        } else {
+            onbepaald.bied(z, calc);
+        }
+    };
     let belasting_zaad = zaad.force_state.forces.my_ed.abs();
-    beste.bied(zwaarte_van(&zaad, belasting_zaad), zaad);
-
+    bied(zaad, belasting_zaad);
     for s in sneden {
         let calc = as_min_9_2_1_1(&basis.invoer(&s.korf, ForceStateSnapshot::from_point(&s.punt)));
-        beste.bied(zwaarte_van(&calc, s.punt.forces.my_ed.abs()), calc);
+        bied(calc, s.punt.forces.my_ed.abs());
     }
+    let bepaald = bepaald.uitkomst();
+    let onbepaald = onbepaald.uitkomst();
+    let mut uit = match (bepaald, onbepaald) {
+        (Some(b), _) if b.uc.as_ref().is_some_and(|u| u.uc > 1.0) => b,
+        (Some(b), Some(mut o)) => {
+            o.notes.push(format!(
+                "Op de overige sneden is A_s,min wél bepaald; de strengste daarvan geeft UC = {:.3} \
+                 (combinatie {} op x = {:.0} mm) en voldoet.",
+                b.uc.as_ref().map(|u| u.uc).unwrap_or(0.0),
+                b.force_state.combination_id,
+                b.force_state.position_mm
+            ));
+            o
+        }
+        (Some(b), None) => b,
+        (None, Some(o)) => o,
+        (None, None) => unreachable!("de zaaduitkomst is altijd geboden"),
+    };
 
-    let mut uit = beste.uitkomst().expect("de zaaduitkomst is altijd geboden");
     uit.notes.push(snedemelding(
         "Deze eis is op ELKE snede van de omhullende nagelopen en op de hoogste unity check \
          gekozen: A_s,min wordt tegen de AANWEZIGE trekwapening afgezet, en welke rij dat is volgt \
@@ -1728,6 +1758,29 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
         ));
     }
     checks.push(make_resistance(blok));
+
+    // 1b. Art. 6.1(9) + NB: begrenzing van x_u/d bij M_Ed (issue #250). Over
+    //     ALLE sneden van de omhullende, met de korf ter plaatse; de zwaarste
+    //     unity check wint.
+    let mut xu_beste: Zwaarste<(ResistanceCalc, ForcePoint)> = Zwaarste::nieuw();
+    for s in &ugt_sneden {
+        let kandidaat = check_drukzonehoogte(
+            &section,
+            &s.korf,
+            &mat,
+            ForceStateSnapshot::from_point(&s.punt),
+        );
+        let zwaarte = zwaarte_van(&kandidaat, s.punt.forces.my_ed.abs());
+        xu_beste.bied(zwaarte, (kandidaat, s.punt));
+    }
+    if let Some((mut xu, punt)) = xu_beste.uitkomst() {
+        xu.notes.push(snedemelding(
+            "De maatgevende snede is gezocht op de UNITY CHECK.",
+            &punt,
+            ugt_sneden.len(),
+        ));
+        checks.push(make_resistance(xu));
+    }
 
     // 2. M-N-κ. Eén afgevaardigde per (teken van M_Ed; N_Ed; korf) — zie
     //    `sneden_mn_kappa` voor waarom dat exact is en niet benaderend.
@@ -2557,8 +2610,9 @@ pub fn check_all_concrete_beams(
 /// De test `staafstand_zijden.rs` legt vast dat élke toets wiens tekst een
 /// zijde noemt in deze lijst staat; een nieuwe toets die een zijde kiest valt
 /// daar op.
-pub(crate) const KIEZEN_EEN_TREKZIJDE: [&str; 8] = [
+pub(crate) const KIEZEN_EEN_TREKZIJDE: [&str; 9] = [
     "6.1_bending_stress_block",
+    "6.1(9)_drukzonehoogte",
     "6.1_mn_kappa",
     "6.2_shear",
     "7.3.2_minimumwapening",

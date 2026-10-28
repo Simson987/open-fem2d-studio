@@ -1019,12 +1019,15 @@ mod tests {
         assert!(m0_druk < m0_nul);
 
         // Handberekening bij N = −800 kN, uit de rek in het midden: de
-        // spanning is in beide lagen gelijk (uniforme rek), dus
-        //   M₀ = σ_s·(A_boven·(456 − 250) + A_onder·(46 − 250)).
+        // spanning is in beide lagen gelijk (uniforme rek). Sinds issue #239
+        // telt het door het staal verdrongen beton niet meer mee; ter plaatse
+        // van elke laag werkt dus netto (σ_s − σ_c):
+        //   M₀ = (σ_s − σ_c)·(A_boven·(456 − 250) + A_onder·(46 − 250)).
         let sol = crate::mnkappa::solve_state(&s, &lagen, &m, -800.0, 0.0, &o).unwrap();
         let sigma = sol.sigma_s[0];
         assert_relative_eq!(sol.sigma_s[1], sigma, max_relative = 1e-12);
-        let hand = sigma * (226.1947 * 206.0 - 603.1858 * 204.0) * 1e-6;
+        let sigma_c = m.sigma_c(sol.eps_s[0]);
+        let hand = (sigma - sigma_c) * (226.1947 * 206.0 - 603.1858 * 204.0) * 1e-6;
         assert_relative_eq!(m0_druk, hand, max_relative = 1e-4);
         assert!(hand < 0.0);
     }
@@ -1524,8 +1527,11 @@ mod tests {
             zonder * 1e-3
         );
         assert!(r.m0_knm < -1.0);
+        // Drempel 1,10 (was 1,15): sinds issue #239 telt het verdrongen beton
+        // niet meer mee, waardoor M₀ bij deze korf kleiner is (netto σ_s − σ_c
+        // per laag) en het verschil 13,6 % in plaats van ruim 15 % wordt.
         assert!(
-            r.ei_knm2 > zonder * 1.15,
+            r.ei_knm2 > zonder * 1.10,
             "verschil te klein: {} vs {}",
             r.ei_knm2,
             zonder

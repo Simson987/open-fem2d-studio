@@ -452,10 +452,10 @@ ways produce for this input:
   "f_cd_mpa": 20.0,
   "f_yd_mpa": 434.7826086956522,
   "checks": [ "6.1_bending_stress_block", "6.1_mn_kappa" ],
-  "uc_max": 0.8839946123262402,
+  "uc_max": 0.8839690235099628,
   "status": "Ok",
   "governing_check_id": "6.1_mn_kappa",
-  "mn_kappa": { "n_kn": 0.0, "m_max_knm": 113.12286139035288, "failure_mode": "ConcreteCrushing" },
+  "mn_kappa": { "n_kn": 0.0, "m_max_knm": 113.12613603011955, "failure_mode": "ConcreteCrushing" },
   "interaction_positive": [ /* 21 points */ ],
   "interaction_negative": [ /* 21 points */ ]
 }
@@ -486,9 +486,9 @@ column takes a negative value.
 }
 ```
 
-Response (abridged): `n_rd_compression_kn` = 3331.7521842190818,
+Response (abridged): `n_rd_compression_kn` = 3315.164575008128,
 `n_rd_tension_kn` = 360.6002002381328, `diagram.m_max_knm` =
-235.12985457846818, `diagram.kappa_u_per_m` = 0.017642178136855355,
+234.5771225829466, `diagram.kappa_u_per_m` = 0.01756162443831563,
 `diagram.failure_mode` = `"ConcreteCrushing"`, 61 diagram points and 11
 interaction points per moment direction.
 
