@@ -10,6 +10,9 @@ revolute opleggingen om elke globale as. De set bewaakt ook oplegveren, opgelegd
 rotaties, de kritieke-lastgrens en de geldige P-Delta-nultoestand
 waarbij een belasting volledig op een geblokkeerde vrijheidsgraad staat.
 
+De platen, schalen en de Hex8-volumes van de 3D-versie zijn tegen de NAFEMS-benchmarks
+(LE1, LE2, LE3, LE5, LE6, LE10) getest; zie [`../nafems/`](../nafems/README.md).
+
 ## Openbare 3D-staalmodellen
 
 | Projectbestand | Model en belastingen | Controle |

@@ -200,6 +200,10 @@ Een deel van de `test-*.mjs`-batterij roept `toetsbrug` en `openaec-mcp-server` 
 bouw die eerst, anders test je een oude kern. Nieuwe tests horen geregistreerd te worden in
 `design-mockup/scripts/run-tests.mjs` (`BUNDEL_TESTS` of `ALLEEN_BRON`).
 
+Verificatie van de 3D-kern tegen gesloten oplossingen en de NAFEMS-benchmarks staat in
+[`docs/verificatie/3d-raamwerk/`](docs/verificatie/3d-raamwerk/README.md) en
+[`docs/verificatie/nafems/`](docs/verificatie/nafems/README.md).
+
 ## Release
 
 Het versienummer staat in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (en daarmee `Cargo.lock`) en

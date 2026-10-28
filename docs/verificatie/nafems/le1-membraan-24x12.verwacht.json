@@ -1,0 +1,6 @@
+{
+  "benchmark": "NAFEMS LE1",
+  "doelMpa": 92.7,
+  "meetpunt": "knoop 1 = D (2; 0), plaat 1, sigma_yy = nyyKnPerM / 0,1 m / 1000",
+  "sigmaYyDMpa": 90.52699797901226
+}
