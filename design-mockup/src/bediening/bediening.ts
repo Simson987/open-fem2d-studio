@@ -838,8 +838,12 @@ export async function voerUit(
       }
       // #230: een onbekend profiel of materiaal (of een combinatie die niet
       // bij elkaar past) weigert Berekenen later toch; dan nu al, met ALLE
-      // staven die het betreft, en het huidige model blijft staan.
-      const onbekend = onbekendeOpenFem3DDoorsneden(gelezen);
+      // staven die het betreft, en het huidige model blijft staan. Een staaf
+      // ZONDER materiaal valt hier buiten (zoals voorheen: Berekenen meldt
+      // dat); het gaat om een opgegeven naam die niet bestaat of niet past.
+      const onbekend = onbekendeOpenFem3DDoorsneden({
+        beams: gelezen.beams.filter((beam) => (beam.material?.trim() ?? "") !== ""),
+      });
       if (onbekend.length > 0) {
         throw new Error(`${onbekend.map(beschrijfOnbekendeDoorsnede).join("; ")}. Het model is niet geopend.${onbekend[0].suggestie}`);
       }
