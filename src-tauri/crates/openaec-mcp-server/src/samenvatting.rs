@@ -65,7 +65,9 @@ pub(crate) fn samenvat_resultaat(r: &Value) -> Value {
 }
 
 /// `check_fem_model` als samenvatting: de resultaten per staaf/plaat kaal,
-/// de teruggestuurde toetsinvoer vervangen door een telling. `governing`,
+/// de teruggestuurde toetsinvoer vervangen door een telling, en de
+/// toelichtingen bij de toetsanalyse weg (`analyse_toelichting`,
+/// `scheefstand_toelichting`; #199). `governing`,
 /// `governing_plate`, `skipped_*`, `warnings`, `stability`, `self_weight` en
 /// `solve_summary` blijven ongewijzigd: die zijn klein en dragen het oordeel.
 pub(crate) fn samenvat_check_fem_model(uit: &mut Value) {
@@ -83,11 +85,22 @@ pub(crate) fn samenvat_check_fem_model(uit: &mut Value) {
             weggelaten.insert(sleutel.into(), json!(aantal));
         }
     }
+    // De toelichtingen bij de toetsanalyse (issue #199): de tekstuele afleiding
+    // van de analyse en van φ. Het oordeel staat in `toetskrachten` (noemer en
+    // de tweede-ordecombinaties) en `stability`; de tekst komt terug met
+    // `detail: "volledig"`.
+    let mut weggelaten_teksten = Vec::new();
+    for sleutel in ["analyse_toelichting", "scheefstand_toelichting"] {
+        if map.remove(sleutel).is_some() {
+            weggelaten_teksten.push(json!(sleutel));
+        }
+    }
     map.insert("detail".into(), json!("samenvatting"));
     map.insert(
         "weggelaten_toetsinvoer".into(),
         json!({
             "aantallen": weggelaten,
+            "toelichtingen": weggelaten_teksten,
             "toelichting": "Samenvatting: de toetsinvoer, formules, variabelen, deelstappen en notities zijn weggelaten. Vraag `detail: \"volledig\"` voor de afleiding.",
         }),
     );
