@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+// De werkbank haalt zijn teksten uit de locales; zonder i18n gaf t() de sleutel terug.
+import "./scripts/i18n-voor-tests.mjs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import React from "react";

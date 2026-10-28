@@ -1,38 +1,29 @@
 // Bewaakt de leesbaarheid van gewone tekst in alle donkere thema's. De
 // transparante tokenkleuren worden over hun daadwerkelijke achtergrond gemengd
 // voordat de WCAG-contrastverhouding wordt berekend.
+//
+// Sinds ontwerp 0.4 (OpenAEC Blueprint) staan de kleuren niet meer per
+// `[data-theme=…]` in themes.css, maar in `openaec/openaec-tokens.css` per
+// `[data-oa-theme=…]`; themes.css koppelt de `--theme-*`-namen eraan. De test
+// rekent daarom met `scripts/thema-tokens.mjs`, die dezelfde cascade doorloopt
+// als de browser. De donkere thema's van 0.4 zijn dark, blueprint en
+// high-contrast-dark (2026.42: forge, openaec, blueprint, contrast); de eisen
+// zijn dezelfde, met één verschuiving in betekenis:
+//
+//   `--theme-accent` is in 0.4 `--oa-accent`, een VULKLEUR (knoppen, actieve
+//   tab) met `--oa-text-on-accent` erop. Voor accenttekst heeft 0.4 een eigen
+//   token, `--oa-accent-text` (bij ons `--theme-accent-tint`). De eis 4,5:1 voor
+//   tekst geldt dus voor `accent-tint`; voor de vulkleur `accent` geldt de eis
+//   voor niet-tekstuele onderdelen, 3:1 (WCAG 2.1, 1.4.11).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { THEMAS, themaTokens, kleur } from './scripts/thema-tokens.mjs';
 
-const css = readFileSync(new URL('./src/themes.css', import.meta.url), 'utf8');
-const themes = ['forge', 'openaec', 'blueprint', 'contrast'];
-
-function theme(name) {
-  const start = css.indexOf(`[data-theme="${name}"] {`);
-  assert.ok(start >= 0, `thema ${name} ontbreekt`);
-  return css.slice(start, css.indexOf('\n}', start));
-}
-
-function token(block, name) {
-  const value = new RegExp(`--theme-${name}:\\s*([^;]+);`).exec(block)?.[1]?.trim();
-  assert.ok(value, `token ${name} ontbreekt`);
-  return value;
-}
-
-function color(value) {
-  if (value.startsWith('#')) {
-    const hex = value.slice(1);
-    assert.equal(hex.length, 6);
-    return [...hex.matchAll(/../g)].map(([pair]) => parseInt(pair, 16)).concat(1);
-  }
-  const match = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(value);
-  assert.ok(match, `onbekende kleur ${value}`);
-  return match.slice(1).map(Number);
-}
+const themes = THEMAS.filter((t) => themaTokens(t).get('color-scheme') === 'dark');
+assert.deepEqual(themes, ['dark', 'blueprint', 'high-contrast-dark'], 'de donkere thema\'s van ontwerp 0.4');
 
 function on(foreground, background) {
-  const [r, g, b, alpha] = color(foreground);
-  const bg = color(background);
+  const [r, g, b, alpha] = kleur(foreground);
+  const bg = kleur(background);
   return [r, g, b].map((channel, i) => channel * alpha + bg[i] * (1 - alpha));
 }
 
@@ -46,35 +37,42 @@ function luminance(rgb) {
 
 function contrast(foreground, background) {
   const a = luminance(on(foreground, background));
-  const b = luminance(color(background));
+  const b = luminance(kleur(background).slice(0, 3));
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
 for (const name of themes) {
-  const block = theme(name);
-  assert.match(block, /color-scheme:\s*dark;/, `${name}: browsercontrols moeten donker zijn`);
+  const tokens = themaTokens(name);
+  const token = (n) => {
+    const v = tokens.get(`--theme-${n}`);
+    assert.ok(v, `${name}: token ${n} ontbreekt`);
+    return v;
+  };
   for (const text of ['text-secondary', 'text-muted', 'text-faint']) {
-    const ratio = contrast(token(block, text), token(block, 'bg'));
+    const ratio = contrast(token(text), token('bg'));
     assert.ok(ratio >= 4.5, `${name} ${text}: contrast ${ratio.toFixed(2)} < 4,5`);
   }
   for (const text of ['placeholder-heading', 'placeholder-text']) {
-    const ratio = contrast(token(block, text), token(block, 'content-bg'));
+    const ratio = contrast(token(text), token('content-bg'));
     assert.ok(ratio >= 4.5, `${name} ${text}: contrast ${ratio.toFixed(2)} < 4,5`);
   }
-  const dialog = contrast(token(block, 'dialog-content-secondary'), token(block, 'dialog-content-bg'));
+  const dialog = contrast(token('dialog-content-secondary'), token('dialog-content-bg'));
   assert.ok(dialog >= 4.5, `${name} dialoogtekst: contrast ${dialog.toFixed(2)} < 4,5`);
   for (const [text, background] of [
-    ['accent', 'bg-lighter'],
     ['accent-tint', 'bg-lighter'],
     ['ribbon-group-label', 'bg-lighter'],
     ['status-text-label', 'status-bg'],
     ['backstage-item-shortcut-hover', 'bg-lighter'],
     ['dialog-header-text', 'dialog-header-bg'],
     ['accent-text', 'accent'],
+    ['ribbon-btn-active-text', 'ribbon-btn-active-bg'],
+    ['dialog-tab-active-text', 'dialog-tab-active-bg'],
   ]) {
-    const ratio = contrast(token(block, text), token(block, background));
+    const ratio = contrast(token(text), token(background));
     assert.ok(ratio >= 4.5, `${name} ${text} op ${background}: contrast ${ratio.toFixed(2)} < 4,5`);
   }
+  const vlak = contrast(token('accent'), token('bg-lighter'));
+  assert.ok(vlak >= 3, `${name} accentvlak op bg-lighter: contrast ${vlak.toFixed(2)} < 3`);
 }
 
 console.log(`${themes.length} donkere thema's: tekstcontrast ≥ 4,5:1`);

@@ -623,9 +623,9 @@ export default function LoadCaseTabBar({
         <span
           className={`lc-tab-phi${analysetype !== "eersteOrde" ? " active" : ""}`}
           title={analysetype === "tweedeOrdeGeometrisch" && geometricAnalysisLabel
-            ? "Tet4-volume: totale-Lagrange GNL. Andere volume- of staafelementen worden in deze stand geweigerd."
+            ? t("loadCases.analysisDescriptionVolume.geometric")
             : analysetype === "tweedeOrdeFysisch" && materialAnalysisLabel
-              ? materialAnalysisDescription ?? "Tet4-volume: J2-staalplastificatie of betontrekschade bij kleine rek. Alleen zuivere Tet4-modellen."
+              ? materialAnalysisDescription ?? t("loadCases.analysisDescriptionVolume.material")
             : t(`loadCases.analysisDescription.${analysetype}`)}
         >
           <span className="lc-tab-phi-label">{t("loadCases.analysis")}</span>
