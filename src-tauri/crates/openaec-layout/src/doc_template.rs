@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::draw::{DrawList, DrawOp};
 use crate::error::LayoutError;
 use crate::flowable::{Flowable, LayoutContext};
-use crate::fonts::SharedFontRegistry;
+use crate::fonts::{FontId, SharedFontRegistry};
 use crate::page_template::PageTemplate;
 use crate::types::{Pt, Size};
 
@@ -354,10 +354,23 @@ impl DocTemplate {
         let mut pdf_fonts: std::collections::HashMap<String, printpdf::IndirectFontRef> =
             std::collections::HashMap::new();
 
-        for (name, font_id) in fonts_guard.iter() {
+        // Eén ingebed lettertype per FONT, niet per NAAM: een alias
+        // ("LiberationSans" → "LiberationSans-Regular") wees naar dezelfde
+        // bytes en werd toch een tweede keer volledig ingebed — vijf
+        // lettertypes voor vier fonts, honderden kB per rapport (#227).
+        let mut per_font: std::collections::HashMap<usize, printpdf::IndirectFontRef> =
+            std::collections::HashMap::new();
+        let mut namen: Vec<(&str, FontId)> = fonts_guard.iter().collect();
+        namen.sort_by(|a, b| a.0.cmp(b.0));
+        for (name, font_id) in namen {
+            if let Some(font_ref) = per_font.get(&font_id.0) {
+                pdf_fonts.insert(name.to_string(), font_ref.clone());
+                continue;
+            }
             let font_data = fonts_guard.font_data(font_id);
             match doc.add_external_font(font_data) {
                 Ok(font_ref) => {
+                    per_font.insert(font_id.0, font_ref.clone());
                     pdf_fonts.insert(name.to_string(), font_ref);
                 }
                 Err(e) => {
