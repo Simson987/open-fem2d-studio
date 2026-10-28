@@ -56,7 +56,7 @@ use rekenkern::{
         assembly::assemble_sparse_3d, constraints::FreeConstraintSystem, dof::DofNumbering,
         linear::solve_3d,
     },
-    types::{AnalysisResults3D, DistributedLoadInfo, SolverInput3D, SolverLoad3D, SolverNodalLoad3D},
+    types::{AnalysisResults3D, DiagnosticCode, DistributedLoadInfo, Severity, SolverInput3D, SolverLoad3D, SolverNodalLoad3D},
 };
 
 use crate::{BucklingModeSummary, BucklingSummary, MemberBucklingData, SecondOrderSummary};
@@ -657,6 +657,25 @@ pub(crate) fn herstel_residu(input: &SolverInput3D, results: &mut AnalysisResult
     if let Some(evenwicht) = results.equilibrium.as_mut() {
         evenwicht.relative_residual = residu;
         evenwicht.residual_ok = residu < 1e-6;
+    }
+    // De kern zet hetzelfde ongereduceerde getal ook in een eigen melding
+    // ("Constrained 3D residual … exceeds tolerance"). Die sprak het
+    // gecorrigeerde evenwicht tegen (#238); vervang haar door het
+    // gereduceerde residu, met dezelfde grens 1e-6.
+    for melding in results.structured_diagnostics.iter_mut() {
+        if !matches!(melding.code, DiagnosticCode::ResidualOk | DiagnosticCode::ResidualHigh)
+            || !melding.message.starts_with("Constrained 3D residual") {
+            continue;
+        }
+        let goed = residu < 1e-6;
+        melding.code = if goed { DiagnosticCode::ResidualOk } else { DiagnosticCode::ResidualHigh };
+        melding.severity = if goed { Severity::Info } else { Severity::Warning };
+        melding.value = Some(residu);
+        melding.message = if goed {
+            format!("Constrained 3D residual {residu:.2e} (gereduceerd, na schijfkoppeling)")
+        } else {
+            format!("Constrained 3D residual {residu:.2e} (gereduceerd, na schijfkoppeling) exceeds tolerance")
+        };
     }
     Ok(())
 }

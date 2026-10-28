@@ -852,3 +852,52 @@ fn pendulum_columns_under_a_diaphragm_name_the_sway_of_the_diaphragm() {
     let error = solve(columns((0..4).map(|i| load(i + 1, 2 * i + 2, 0.0, -10.0)).collect())).unwrap_err();
     assert!(error.contains(sway), "{error}");
 }
+
+#[test]
+fn rigid_diaphragm_on_four_columns_reports_the_reduced_residual_not_a_false_alarm() {
+    // #238: vier ingeklemde kolommen CHS 219.1×8 (A = 5306 mm², I = 2,96·10⁷ mm⁴,
+    // J = 2I), L = 4 m, hoeken van een vlak 6 × 6 m, koppen 5–8 in een starre
+    // schijf, F_x = 20 kN op kop 5 (x = y = 0). E = 210 000 N/mm², ν = 0,3.
+    // Handberekening (koppen draaien vrij om X/Y, dus uitkragende kolommen):
+    //   k = 3EI/L³ = 3·210e6·2,96e-5/64 = 291,375 kN/m per kolom
+    //   GJ/L = 210e6/2,6 · 5,92e-5 / 4 = 1195,38 kNm/rad per kolom
+    //   K_θ = 4·k·(3² + 3²) + 4·GJ/L = 25 760,5 kNm/rad
+    //   θ_z = F·3 / K_θ = 60 / 25 760,5 = 2,3291e-3 rad
+    //   u_x,5 = F/(4k) + 3·θ_z = 24,147 mm
+    let e = 210e6_f64;
+    let (a, i) = (5306e-6, 2.96e-5);
+    let mut nodes = Vec::new();
+    let mut members = Vec::new();
+    let mut supports = Vec::new();
+    for (n, (x, y)) in [(0.0, 0.0), (6.0, 0.0), (0.0, 6.0), (6.0, 6.0)].into_iter().enumerate() {
+        nodes.push(Node3D { id: n + 1, x, y, z: 0.0 });
+        nodes.push(Node3D { id: n + 5, x, y, z: 4.0 });
+        members.push(member(n + 1, n + 1, n + 5));
+        supports.push(fixed(n + 1));
+    }
+    let mut input = request(nodes, members, supports,
+        vec![NodalLoad3D { id: 1, node_id: 5, fx: 20.0, fy: 0.0, fz: 0.0, mx: 0.0, my: 0.0, mz: 0.0 }]);
+    input.materials[0].nu = 0.3;
+    input.sections[0] = Section3D { id: 1, name: "CHS 219.1x8".into(), area_m2: a, iy_m4: i, iz_m4: i,
+        torsion_j_m4: 2.0 * i, shear_area_y_m2: None, shear_area_z_m2: None };
+    input.diaphragms.push(Diaphragm3D { id: 1, node_ids: vec![5, 6, 7, 8] });
+    let result = solve(input).unwrap();
+
+    let k = 3.0 * e * i / 64.0;
+    let gj_l = e / 2.6 * 2.0 * i / 4.0;
+    let theta = 60.0 / (4.0 * k * 18.0 + 4.0 * gj_l);
+    close(theta, 2.3291e-3, 1e-4, 0.0);
+    let kop5 = result.displacements.iter().find(|d| d.node_id == 5).unwrap();
+    // Axiale en afschuifvervorming wijken minder dan 0,5 % af van de handwaarde.
+    close(kop5.rz, theta, 5e-3, 0.0);
+    close(kop5.ux, 20.0 / (4.0 * k) + 3.0 * theta, 5e-3, 0.0);
+
+    let evenwicht = result.equilibrium.as_ref().unwrap();
+    assert!(evenwicht.residual_ok && evenwicht.relative_residual < 1e-9, "{evenwicht:?}");
+    // De diagnostiek mag het evenwicht niet tegenspreken.
+    assert!(!result.diagnostics.iter().any(|m| m.contains("exceeds tolerance")), "{:?}", result.diagnostics);
+    let residu = result.diagnostics.iter().find(|m| m.starts_with("Constrained 3D residual"));
+    if let Some(melding) = residu {
+        assert!(melding.contains("gereduceerd"), "{melding}");
+    }
+}
