@@ -2022,6 +2022,21 @@ export interface FemStore {
    */
   scheefstandAantalElementen: number | null;
   setScheefstandAantalElementen: (v: number | null) => void;
+  /**
+   * Alleen 3D (issue #212): handmatige m_X en m_Y per richting (EN 1993-1-1
+   * 5.3.2(3)); `null` = `scheefstandAantalElementen`, en anders de afgeleide m
+   * van die richting.
+   */
+  scheefstandAantalX: number | null;
+  setScheefstandAantalX: (v: number | null) => void;
+  scheefstandAantalY: number | null;
+  setScheefstandAantalY: (v: number | null) => void;
+  /**
+   * Alleen 3D (issue #212): de torsievarianten van EN 1993-1-1 5.3.2(10)
+   * (figuur 5.5) erbij. Standaard uit: ze verdubbelen de P-Δ-sommen van de toets.
+   */
+  scheefstandTorsie: boolean;
+  setScheefstandTorsie: (v: boolean) => void;
   /** Canvas view mode: false = model-only (no loads drawn), true = LC active loads visible. */
   showLoads: boolean;
   setShowLoads: (v: boolean) => void;
@@ -2101,6 +2116,9 @@ export interface FemStore {
     scheefstandBron?: string;
     scheefstandHoogteM?: number | null;
     scheefstandAantalElementen?: number | null;
+    scheefstandAantalX?: number | null;
+    scheefstandAantalY?: number | null;
+    scheefstandTorsie?: boolean;
     /**
      * Gevolgklasse uit de projectgegevens van het bestand. Ontbreekt → de
      * klasse uit het kenmerk van de standaardcombinaties in het bestand, en
@@ -2323,6 +2341,10 @@ export function useFemStore(opties?: {
   const [scheefstandHoogteM, setScheefstandHoogteM] = useState<number | null>(null);
   const [scheefstandAantalElementen, setScheefstandAantalElementen] =
     useState<number | null>(null);
+  // 3D (issue #212): m per richting en de torsievarianten; null/uit = het gedrag van vóór #212.
+  const [scheefstandAantalX, setScheefstandAantalX] = useState<number | null>(null);
+  const [scheefstandAantalY, setScheefstandAantalY] = useState<number | null>(null);
+  const [scheefstandTorsie, setScheefstandTorsie] = useState<boolean>(false);
   // Eén versie van alles buiten het model dat de uitkomst bepaalt. Elk veld
   // van `RekenInstellingen` is verplicht, dus een nieuwe instelling kan hier
   // niet ontbreken zonder dat het niet compileert.
@@ -2355,14 +2377,16 @@ export function useFemStore(opties?: {
       loadCases, combinations, selfWeightEnabled, analysetype, axialMaterialLoadPath, betonSegmentLengteMm,
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
-      scheefstandHoogteM, scheefstandAantalElementen, gevolgklasse,
+      scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
+      scheefstandTorsie, gevolgklasse,
       nationaleBijlage: projectBijlage,
     }),
     [
       loadCases, combinations, selfWeightEnabled, analysetype, axialMaterialLoadPath, betonSegmentLengteMm,
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
-      scheefstandHoogteM, scheefstandAantalElementen, gevolgklasse, projectBijlage,
+      scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
+      scheefstandTorsie, gevolgklasse, projectBijlage,
     ],
   );
   // Canvas view mode: false = "Model" tab (no loads drawn), true = LC active.
@@ -3269,6 +3293,9 @@ export function useFemStore(opties?: {
     scheefstandBron, setScheefstandBron,
     scheefstandHoogteM, setScheefstandHoogteM,
     scheefstandAantalElementen, setScheefstandAantalElementen,
+    scheefstandAantalX, setScheefstandAantalX,
+    scheefstandAantalY, setScheefstandAantalY,
+    scheefstandTorsie, setScheefstandTorsie,
     showLoads, setShowLoads,
     pendingLoadFocus, setPendingLoadFocus,
     canUndo, canRedo, undo, redo,
@@ -3372,6 +3399,9 @@ export function useFemStore(opties?: {
       scheefstandBron?: string;
       scheefstandHoogteM?: number | null;
       scheefstandAantalElementen?: number | null;
+      scheefstandAantalX?: number | null;
+      scheefstandAantalY?: number | null;
+      scheefstandTorsie?: boolean;
       gevolgklasse?: Gevolgklasse;
       /** De nationale bijlage uit de projectgegevens van het bestand, zoals gelezen. */
       nationaleBijlage?: unknown;
@@ -3479,6 +3509,11 @@ export function useFemStore(opties?: {
         typeof p.scheefstandAantalElementen === "number" && p.scheefstandAantalElementen >= 1
           ? Math.floor(p.scheefstandAantalElementen) : null,
       );
+      // 3D (issue #212): ontbreekt = afleiden en geen torsievarianten, het gedrag van vóór #212.
+      const mPerAs = (v: unknown) => (typeof v === "number" && v >= 1 ? Math.floor(v) : null);
+      setScheefstandAantalX(mPerAs(p.scheefstandAantalX));
+      setScheefstandAantalY(mPerAs(p.scheefstandAantalY));
+      setScheefstandTorsie(p.scheefstandTorsie === true);
       // v2-velden; v1-bestanden (of Nieuw) vallen terug op de defaults.
       // (De combinaties zijn hierboven al gezet, samen met de gevallen.)
       const nieuwGrid = p.structuralGrid ?? DEFAULT_STRUCTURAL_GRID;

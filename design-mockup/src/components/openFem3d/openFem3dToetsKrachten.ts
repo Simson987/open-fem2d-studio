@@ -87,8 +87,10 @@ import {
   zonderScheefstandVariant,
   type OpenFem3DPhiPerAs,
   type OpenFem3DScheefstand,
+  type OpenFem3DTorsiePerAs,
   type ScheefstandGeometrie3D,
   type ScheefstandUitkomst3D,
+  type ToelichtingOpties3D,
 } from "./openFem3dScheefstand";
 import type { OpenFem3DCombinationSet } from "./openFem3dSteelCheck";
 
@@ -115,6 +117,11 @@ export interface ToetsKrachtenInvoer3D {
     normen: readonly ScheefstandNorm[];
     /** De schakelaar Scheefstand van het model (voor de resultaten). */
     modelAan: boolean;
+    /**
+     * De torsievarianten van EN 1993-1-1 5.3.2(10) (issue #212): per richting
+     * de buitenste kolomrijen (`torsieRijen3D`). `null`/ontbrekend = uit.
+     */
+    torsie?: OpenFem3DTorsiePerAs | null;
   };
   /**
    * De belastinggevallen, voor de imperfectiegevallen (`LoadCase.imperfectie`):
@@ -192,12 +199,14 @@ export interface ToetsKrachten3D {
 }
 
 /** Is de variant een +X-variant (die het id van de basiscombinatie houdt)? */
-const isPrimair = (c: LoadCombination): boolean => (c.scheefstandAs ?? "x") === "x" && c.scheefstandRichting === 1;
+const isPrimair = (c: LoadCombination): boolean =>
+  (c.scheefstandAs ?? "x") === "x" && c.scheefstandRichting === 1 && !c.scheefstandTorsie;
 
 /** Dezelfde scheefstand: as en richting gelijk (ook allebei zonder). */
 const zelfdeScheefstand = (a: LoadCombination | undefined, b: LoadCombination): boolean =>
   a !== undefined && a.scheefstandRichting === b.scheefstandRichting
-  && (a.scheefstandRichting === undefined || (a.scheefstandAs ?? "x") === (b.scheefstandAs ?? "x"));
+  && (a.scheefstandRichting === undefined || ((a.scheefstandAs ?? "x") === (b.scheefstandAs ?? "x")
+    && (a.scheefstandTorsie === true) === (b.scheefstandTorsie === true)));
 
 /** Een betonstaaf met korf en kolomblok: alleen dan leest de kern de eerste orde (§5.8). */
 function heeftBetonkolom(model: Pick<OpenFem3DModel, "beams">): boolean {
@@ -264,9 +273,10 @@ export function scheefstandToelichtingToets3D(
   project: ScheefstandUitkomst3D,
   geometrie: ScheefstandGeometrie3D,
   normen: readonly ScheefstandNorm[],
+  opties: ToelichtingOpties3D = {},
 ): string {
   const ts = toetsScheefstand3D(project, normen);
-  const regels = [scheefstandToelichting3D(project, geometrie)];
+  const regels = [scheefstandToelichting3D(project, geometrie, opties)];
   if (ts.meldingen.length > 0) regels.push("", ...ts.meldingen.map((m) => `! ${m}`));
   const gewijzigd = OPEN_FEM_3D_SCHEEFSTAND_ASSEN.some((as) =>
     Math.abs(ts.phiPerAs[as] - project.phi[as]) > project.phi[as] * TOETS_PHI_MARGE);
@@ -313,7 +323,18 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
   // toets rekent zelf met de scheefstand.
   const imperfectie = zetImperfectieGevallenOpNul(ugt.filter((c) => c.eindtoestand === undefined), invoer.loadCases);
   if (imperfectie.melding) meldingen.push(imperfectie.melding);
-  const ugtCombinaties = metScheefstandRichtingen3D(imperfectie.combinaties, phiPerAs);
+  // De torsievarianten van 5.3.2(10) (issue #212), alleen met de instelling aan
+  // en per richting met twee of meer kolomrijen.
+  const torsie = scheefstand.torsie ?? null;
+  const ugtCombinaties = metScheefstandRichtingen3D(imperfectie.combinaties, phiPerAs, { torsie });
+  const torsieAssen = OPEN_FEM_3D_SCHEEFSTAND_ASSEN.filter((as) => torsie?.[as] !== undefined);
+  if (torsieAssen.length > 0) {
+    meldingen.push(
+      `De toets rekent ook de torsievarianten van EN 1993-1-1 5.3.2(10) (figuur 5.5) in ` +
+      `${torsieAssen.map((as) => as.toUpperCase()).join(" en ")}: de buitenste kolomrijen tegengesteld ` +
+      "scheef, lineair ertussen (twee varianten per richting extra).",
+    );
+  }
 
   if ((model.plates?.length ?? 0) > 0) {
     return {
@@ -353,7 +374,7 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
     }
     runs.push({
       sleutel: `toets:${v.id}`, soort: "toets", combinatie: v, analyse: "p-delta",
-      scheefstand: scheefstandVanCombinatie(v, phiPerAs), bucklingModes: 1,
+      scheefstand: scheefstandVanCombinatie(v, phiPerAs, torsie), bucklingModes: 1,
     });
   }
 
@@ -375,7 +396,7 @@ export function planToetsKrachten3D(invoer: ToetsKrachtenInvoer3D): ToetsPlan3D 
       if (r) continue;
       runs.push({
         sleutel: `eersteOrde:${c.id}`, soort: "eersteOrde", combinatie: c, analyse: "linear",
-        scheefstand: scheefstandVanCombinatie(c, phiPerAs), bucklingModes: 0,
+        scheefstand: scheefstandVanCombinatie(c, phiPerAs, torsie), bucklingModes: 0,
       });
     }
   }
@@ -467,7 +488,8 @@ export function stelToetsKrachten3DSamen(
     const weigering: ToetsWeigering = {
       reden:
         `De toetskrachten zijn niet te bepalen: de tweede-ordeberekening (P-Δ) met scheefstand ` +
-        `${toetsPhiTekst3D(plan.analyse)} in +X, −X, +Y en −Y faalt in ${mislukt.length} van de ` +
+        `${toetsPhiTekst3D(plan.analyse)} in +X, −X, +Y en −Y` +
+        `${plan.ugtCombinaties.some((c) => c.scheefstandTorsie) ? " (met de torsievarianten van 5.3.2(10))" : ""} faalt in ${mislukt.length} van de ` +
         `${aantalToets + (plan.eersteOrde?.size ?? 0)} toetsberekeningen. De toets wordt geweigerd; er wordt ` +
         "niet teruggevallen op eerste orde (NEN-EN 1993-1-1 5.2.2(7)b vraagt krachten uit een " +
         "tweede-ordeberekening met imperfecties). De resultaten van de berekening blijven staan.",

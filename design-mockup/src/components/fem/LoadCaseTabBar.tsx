@@ -120,6 +120,14 @@ interface Props {
   /** Handmatige m voor α_m; `null` = de afgeleide waarde tonen. */
   scheefstandAantalElementen?: number | null;
   setScheefstandAantalElementen?: (v: number | null) => void;
+  /** Alleen 3D (issue #212): handmatige m_X en m_Y; `null` = de gedeelde m of de afgeleide. */
+  scheefstandAantalX?: number | null;
+  setScheefstandAantalX?: (v: number | null) => void;
+  scheefstandAantalY?: number | null;
+  setScheefstandAantalY?: (v: number | null) => void;
+  /** Alleen 3D (issue #212): de torsievarianten van EN 1993-1-1 5.3.2(10). */
+  scheefstandTorsie?: boolean;
+  setScheefstandTorsie?: (v: boolean) => void;
   /**
    * 1/φ zoals er is GEREKEND. De balk rekent zelf niets uit — App.tsx bepaalt
    * φ op één plek, zodat het scherm nooit iets anders kan tonen dan de motor
@@ -198,6 +206,9 @@ export default function LoadCaseTabBar({
   scheefstandBron = "vast", setScheefstandBron,
   scheefstandHoogteM = null, setScheefstandHoogteM,
   scheefstandAantalElementen = null, setScheefstandAantalElementen,
+  scheefstandAantalX = null, setScheefstandAantalX,
+  scheefstandAantalY = null, setScheefstandAantalY,
+  scheefstandTorsie = false, setScheefstandTorsie,
   scheefstandPhiNoemer, scheefstandPhiNoemerY, scheefstandAfgeleideHoogteM = 0,
   scheefstandAfgeleidAantal = 1, scheefstandAfgeleidAantalY, scheefstandToelichting = "",
   scheefstandWaarschuwingen = [],
@@ -931,6 +942,49 @@ export default function LoadCaseTabBar({
         >
           <span className="lc-tab-phi-label">{scheefstandIn3D ? "±X ±Y" : "±x"}</span>
         </span>
+      )}
+
+      {/* 3D (issue #212): m per richting. Leeg = de gedeelde m hierboven, of
+          de afgeleide m van die richting (de plaatshouder). */}
+      {setScheefstandEnabled && scheefstandIn3D && scheefstandBron !== "vast" && setScheefstandAantalX && setScheefstandAantalY && (
+        <span className="lc-tab-phi" title={t("loadCases.swayMembersPerAxisTitle")} data-scheefstand-m-per-as>
+          {([["X", scheefstandAantalX, setScheefstandAantalX, scheefstandAfgeleidAantal],
+            ["Y", scheefstandAantalY, setScheefstandAantalY, scheefstandAfgeleidAantalY ?? scheefstandAfgeleidAantal]] as const)
+            .map(([as, waarde, zet, afgeleid]) => (
+              <span key={as} className="lc-tab-phi">
+                <span className="lc-tab-phi-label">m_{as} =</span>
+                <input
+                  type="number"
+                  className="lc-tab-phi-input"
+                  min={1}
+                  step={1}
+                  placeholder={String(scheefstandAantalElementen ?? afgeleid)}
+                  value={waarde ?? ""}
+                  aria-label={t("loadCases.swayMembersAxisLabel", { richting: as })}
+                  onChange={(e) => {
+                    const tekst = e.target.value.trim();
+                    if (tekst === "") { zet(null); return; }
+                    const v = Number(tekst);
+                    if (Number.isFinite(v) && v >= 1) zet(Math.floor(v));
+                  }}
+                />
+              </span>
+            ))}
+        </span>
+      )}
+      {setScheefstandEnabled && scheefstandIn3D && setScheefstandTorsie && (
+        <label
+          className={`lc-tab-toggle${scheefstandTorsie ? " active" : ""}`}
+          title={t("loadCases.swayTorsionTitle")}
+          data-scheefstand-torsie
+        >
+          <input
+            type="checkbox"
+            checked={scheefstandTorsie}
+            onChange={(e) => setScheefstandTorsie(e.target.checked)}
+          />
+          <span>{t("loadCases.swayTorsion")}</span>
+        </label>
       )}
 
       {/* 3D, trek-alleen staven: montage na de permanente belasting en de

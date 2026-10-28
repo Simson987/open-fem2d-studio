@@ -12,7 +12,8 @@
 import { ApiFout } from "../register";
 import { documentCommando, nietGevonden } from "../commandoHulp";
 import { leegDocument, model3dVan, type ApiDocument } from "../projectDocument";
-import { getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
+import { geheel, getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
+import { SCHEEFSTAND_BRONNEN, type ScheefstandBron } from "../../lib/scheefstandNorm";
 import { combinationsFromFile, combinationsToFile } from "../../io/projectFile";
 import {
   beoordeelCombinatiesBijOpenen, bevestigEigenFactoren, gevolgklasseBijOpenen, openCombinatieStaat, trekBevestigingIn,
@@ -372,8 +373,71 @@ const eigenFactorenIntrekken = documentCommando<{ ids?: number[] }, unknown>({
   },
 });
 
+// ── Scheefstand (EN 1993-1-1 5.3.2) ───────────────────────────────────────
+
+/** De scheefstandinstellingen van het document, met de standaarden van de app bij ontbrekende velden. */
+function scheefstandVan(document: ApiDocument) {
+  return {
+    enabled: document.scheefstandEnabled === true,
+    source: (SCHEEFSTAND_BRONNEN as readonly unknown[]).includes(document.scheefstandBron)
+      ? document.scheefstandBron as ScheefstandBron : "vast",
+    denominator: typeof document.scheefstandNoemer === "number" && document.scheefstandNoemer > 0
+      ? document.scheefstandNoemer : 200,
+    heightM: document.scheefstandHoogteM ?? null,
+    members: document.scheefstandAantalElementen ?? null,
+    membersX: document.scheefstandAantalX ?? null,
+    membersY: document.scheefstandAantalY ?? null,
+    torsion: document.scheefstandTorsie === true,
+  };
+}
+
+type ScheefstandInvoer = {
+  enabled?: boolean; source?: ScheefstandBron; denominator?: number; heightM?: number | null;
+  members?: number | null; membersX?: number | null; membersY?: number | null; torsion?: boolean;
+};
+
+const scheefstandLezen = documentCommando<Record<string, never>, unknown>({
+  naam: "project.sway.get",
+  beschrijving: "De instellingen van de initiële scheefstand (EN 1993-1-1 5.3.2): schakelaar voor de resultaten, bron van φ, vaste noemer, handmatige h en m, in 3D m per richting (membersX, membersY) en de torsievarianten van 5.3.2(10). De UGT-toets rekent altijd met scheefstand (issue #199).",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document) => ({ uitkomst: scheefstandVan(document) }),
+});
+
+const scheefstandZetten = documentCommando<ScheefstandInvoer, unknown>({
+  naam: "project.sway.set",
+  beschrijving: "De initiële scheefstand (EN 1993-1-1 5.3.2) instellen; alleen de opgegeven velden veranderen. " +
+    "membersX/membersY (alleen 3D, issue #212) overschrijven m per richting (5.3.2(3): een kolom met minder dan 50 % " +
+    "van de gemiddelde verticale kolomkracht mag eruit); null = de gedeelde m of de afleiding uit de kolomrijen. " +
+    "torsion (alleen 3D) zet de torsievarianten van 5.3.2(10) (figuur 5.5) aan: per richting met twee of meer kolomrijen " +
+    "twee varianten extra, wat het aantal P-Δ-berekeningen van de UGT-toets verdubbelt; niet bij vlaklasten op platen.",
+  invoer: obj({
+    enabled: jaNee("Scheefstand in de RESULTATEN (de UGT-toets rekent er altijd mee)."),
+    source: keuze([...SCHEEFSTAND_BRONNEN], "Bron van φ: vast (1/denominator) of een norm."),
+    denominator: getal("Vaste noemer x in φ = 1/x.", { exclusiveMinimum: 0 }),
+    heightM: ofNull(getal("Handmatige h in m.", { exclusiveMinimum: 0 }), "null = afleiden."),
+    members: ofNull(geheel("Handmatige m, in X en in Y.", { minimum: 1 }), "null = afleiden."),
+    membersX: ofNull(geheel("Alleen 3D: handmatige m_X.", { minimum: 1 }), "null = members of afleiden."),
+    membersY: ofNull(geheel("Alleen 3D: handmatige m_Y.", { minimum: 1 }), "null = members of afleiden."),
+    torsion: jaNee("Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10)."),
+  }),
+  uitvoeren: (invoer, document) => {
+    const nieuw: ApiDocument = {
+      ...document,
+      ...(invoer.enabled !== undefined ? { scheefstandEnabled: invoer.enabled } : {}),
+      ...(invoer.source !== undefined ? { scheefstandBron: invoer.source } : {}),
+      ...(invoer.denominator !== undefined ? { scheefstandNoemer: invoer.denominator } : {}),
+      ...(invoer.heightM !== undefined ? { scheefstandHoogteM: invoer.heightM } : {}),
+      ...(invoer.members !== undefined ? { scheefstandAantalElementen: invoer.members } : {}),
+      ...(invoer.membersX !== undefined ? { scheefstandAantalX: invoer.membersX } : {}),
+      ...(invoer.membersY !== undefined ? { scheefstandAantalY: invoer.membersY } : {}),
+      ...(invoer.torsion !== undefined ? { scheefstandTorsie: invoer.torsion } : {}),
+    };
+    return { uitkomst: scheefstandVan(nieuw), document: nieuw };
+  },
+});
+
 export const PROJECT_COMMANDOS = [
   projectLezen, projectNieuw, gevalToevoegen, gevalWijzigen, gevalVerwijderen,
   combinatieToevoegen, combinatieWijzigen, combinatieVerwijderen, standaardHerstellen,
-  eigenFactorenHouden, eigenFactorenIntrekken,
+  eigenFactorenHouden, eigenFactorenIntrekken, scheefstandLezen, scheefstandZetten,
 ];

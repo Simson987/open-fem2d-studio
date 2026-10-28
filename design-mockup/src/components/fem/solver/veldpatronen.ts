@@ -440,7 +440,7 @@ function combinatieSleutel(
   // De SOORT telt mee: de toetsen zoeken hun combinaties op soort (6.14b voor
   // de doorbuiging, 6.15b voor de scheurwijdte); een 6.14b-variant met alleen
   // G mag niet wegvallen omdat 6.16b toevallig dezelfde factoren heeft.
-  return `${c.type}|${soortVanCombinatie(c) ?? ""}|${c.scheefstandAs ?? ""}${c.scheefstandRichting ?? ""}|${e}|${deel}`;
+  return `${c.type}|${soortVanCombinatie(c) ?? ""}|${c.scheefstandAs ?? ""}${c.scheefstandRichting ?? ""}${c.scheefstandTorsie ? "t" : ""}|${e}|${deel}`;
 }
 
 /**

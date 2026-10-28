@@ -228,6 +228,7 @@ import {
   leidScheefstandGeometrieAf3D,
   metScheefstandRichtingen3D,
   scheefstandToelichting3DVertaald,
+  torsieRijen3D,
   scheefstandVanCombinatie,
   toepasselijkeScheefstandNormen3D,
 } from "./components/openFem3d/openFem3dScheefstand";
@@ -1098,13 +1099,16 @@ function App() {
             noemer: fem.scheefstandNoemer,
             hoogteM: fem.scheefstandHoogteM,
             aantalElementen: fem.scheefstandAantalElementen,
+            // Issue #212: een handmatige m per richting.
+            aantalPerAs: { x: fem.scheefstandAantalX, y: fem.scheefstandAantalY },
           },
           openFem3dScheefstandGeometrie,
           toepasselijkeScheefstandNormen3D(openFem3d),
         )
       : null),
     [fem.scheefstandBron, fem.scheefstandNoemer, fem.scheefstandHoogteM,
-     fem.scheefstandAantalElementen, openFem3dScheefstandGeometrie, openFem3d]);
+     fem.scheefstandAantalElementen, fem.scheefstandAantalX, fem.scheefstandAantalY,
+     openFem3dScheefstandGeometrie, openFem3d]);
   // Nooit leeg: de UGT-toets rekent altijd met deze scheefstand, ook met de
   // schakelaar uit (issue #199). Zie `scheefstandTekst` hieronder.
   const openFem3dScheefstandTekst = useMemo(
@@ -1112,9 +1116,17 @@ function App() {
       ? scheefstandToelichtingToets3D(
           openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie,
           toepasselijkeScheefstandNormen3D(openFem3d),
+          { torsie: fem.scheefstandTorsie },
         )
       : ""),
-    [openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, openFem3d]);
+    [openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, openFem3d, fem.scheefstandTorsie]);
+  /**
+   * De buitenste kolomrijen per richting voor de torsievarianten van EN 1993-1-1
+   * 5.3.2(10) (issue #212); `null` met de instelling uit.
+   */
+  const openFem3dTorsieRijen = useMemo(
+    () => (fem.scheefstandTorsie && openFem3dScheefstandGeometrie ? torsieRijen3D(openFem3dScheefstandGeometrie) : null),
+    [fem.scheefstandTorsie, openFem3dScheefstandGeometrie]);
   /**
    * Wat de balk onder het canvas toont. In 3D φ_X en φ_Y, m_X en m_Y en de
    * 3D-afleiding (issue #194); anders die van 2D.
@@ -1127,7 +1139,8 @@ function App() {
         aantal: openFem3dScheefstandGeometrie.perAs.x.aantalElementen,
         aantalY: openFem3dScheefstandGeometrie.perAs.y.aantalElementen as number | undefined,
         toelichting: (vertaal: Vertaalfunctie) =>
-          scheefstandToelichting3DVertaald(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, vertaal),
+          scheefstandToelichting3DVertaald(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, vertaal,
+            { torsie: fem.scheefstandTorsie }),
         waarschuwingen: openFem3dScheefstandUitkomst.waarschuwingen,
       }
     : {
@@ -1353,6 +1366,10 @@ function App() {
     scheefstandBron: fem.scheefstandBron,
     scheefstandHoogteM: fem.scheefstandHoogteM,
     scheefstandAantalElementen: fem.scheefstandAantalElementen,
+    // 3D (issue #212): m per richting en de torsievarianten van 5.3.2(10).
+    scheefstandAantalX: fem.scheefstandAantalX,
+    scheefstandAantalY: fem.scheefstandAantalY,
+    scheefstandTorsie: fem.scheefstandTorsie,
     // Eigen doorsneden reizen mee in het projectbestand: een staaf met
     // `EIGEN:<naam>` moet op een andere machine dezelfde doorsnede vinden.
     // Alleen de doorsneden die dit model daadwerkelijk gebruikt — anders
@@ -1579,6 +1596,9 @@ function App() {
         scheefstandBron: parsed.scheefstandBron,
         scheefstandHoogteM: parsed.scheefstandHoogteM,
         scheefstandAantalElementen: parsed.scheefstandAantalElementen,
+        scheefstandAantalX: parsed.scheefstandAantalX,
+        scheefstandAantalY: parsed.scheefstandAantalY,
+        scheefstandTorsie: parsed.scheefstandTorsie,
         gevolgklasse:
           bestandsklasse === "CC1" || bestandsklasse === "CC2" || bestandsklasse === "CC3"
             ? bestandsklasse
@@ -3547,8 +3567,14 @@ function App() {
         // varianten. De toets rekent hoe dan ook met scheefstand, alleen in de
         // UGT (zie de toetskrachten hieronder, issue #199).
         const scheefstandPhi = fem.scheefstandEnabled ? openFem3dScheefstandUitkomst?.phi ?? null : null;
+        // De torsievarianten van 5.3.2(10) (issue #212) ook in de resultaten,
+        // zodat de toets ze kan hergebruiken. Niet bij platen: een vlaklast kent
+        // per plaat alleen een uniform verloop, en de toets weigert platen toch.
+        const resultaatTorsie = scheefstandPhi && (openFem3dCalculationModel.plates?.length ?? 0) === 0
+          ? openFem3dTorsieRijen : null;
         const combinations = metScheefstandRichtingen3D(fem.combinations.filter((combination) =>
-          [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0)), scheefstandPhi, { bgt: true });
+          [...loadedCaseIds].some((caseId) => (combination.factors.get(caseId) ?? 0) !== 0)), scheefstandPhi,
+        { bgt: true, torsie: resultaatTorsie });
 
         // Elk geval blijft afzonderlijk beschikbaar voor invoercontrole. Iedere
         // combinatie gaat als één volledige lastvector door de gekozen kern;
@@ -3589,7 +3615,7 @@ function App() {
             Promise.all(combinations.map(async (combination) =>
               [combination.id, await solveOpenFem3DCombination(
                 openFem3dCalculationModel, combination.factors, openFem3dAnalysis,
-                scheefstandVanCombinatie(combination, scheefstandPhi), openFem3dOptions)] as const)),
+                scheefstandVanCombinatie(combination, scheefstandPhi, resultaatTorsie), openFem3dOptions)] as const)),
           ]);
         }
         if (generation !== openFem3dSolveGenerationRef.current) {
@@ -3663,6 +3689,8 @@ function App() {
               project: openFem3dScheefstandUitkomst,
               normen: toepasselijkeScheefstandNormen3D(openFem3d),
               modelAan: fem.scheefstandEnabled,
+              // Issue #212: de torsievarianten van EN 1993-1-1 5.3.2(10).
+              torsie: openFem3dTorsieRijen,
             },
             // Imperfectiegevallen (bijvoorbeeld uit een IFC-analysemodel) tellen
             // in de UGT-toets met factor 0, met een melding (dezelfde functie als MCP).
@@ -3746,7 +3774,8 @@ function App() {
     fem.setSelection(null);
     // Rekenen + toetsen; vanaf nu blijft het model live.
     void rekenDoor(selectedSolver.id);
-  }, [fem, openFem3d, openFem3dCalculation, openFem3dCalculationModel, modelDimension, rekenDoor]);
+  }, [fem, openFem3d, openFem3dCalculation, openFem3dCalculationModel, modelDimension, rekenDoor,
+    openFem3dScheefstandUitkomst, openFem3dTorsieRijen]);
 
   // Keyboard: Ctrl+Z / Ctrl+Y for undo/redo. In vrije-tekstvelden blijft het de
   // tekst-undo van de browser; in getalvelden, keuzelijsten e.d. gaat het naar
@@ -3906,6 +3935,7 @@ function App() {
       // gewijzigde scheefstandbron het bestand niet als "gewijzigd" markeren
       // en stil verloren gaan bij het afsluiten.
       fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen,
+      fem.scheefstandAantalX, fem.scheefstandAantalY, fem.scheefstandTorsie,
       openFem3d]);
 
   // C2: sluitbeveiliging. Tauri: onCloseRequested + native dialoog (dekt de
@@ -5211,6 +5241,13 @@ function App() {
           setScheefstandHoogteM={fem.setScheefstandHoogteM}
           scheefstandAantalElementen={fem.scheefstandAantalElementen}
           setScheefstandAantalElementen={fem.setScheefstandAantalElementen}
+          // Issue #212 (alleen 3D): m per richting en de torsievarianten van 5.3.2(10).
+          scheefstandAantalX={fem.scheefstandAantalX}
+          setScheefstandAantalX={fem.setScheefstandAantalX}
+          scheefstandAantalY={fem.scheefstandAantalY}
+          setScheefstandAantalY={fem.setScheefstandAantalY}
+          scheefstandTorsie={fem.scheefstandTorsie}
+          setScheefstandTorsie={fem.setScheefstandTorsie}
           // φ_X en φ_Y, m_X en m_Y (issue #194): de balk toont beide richtingen.
           scheefstandPhiNoemer={scheefstandBalk.noemer}
           scheefstandPhiNoemerY={scheefstandBalk.noemerY}
@@ -5267,6 +5304,13 @@ function App() {
           setScheefstandHoogteM={fem.setScheefstandHoogteM}
           scheefstandAantalElementen={fem.scheefstandAantalElementen}
           setScheefstandAantalElementen={fem.setScheefstandAantalElementen}
+          // Issue #212 (alleen 3D): m per richting en de torsievarianten van 5.3.2(10).
+          scheefstandAantalX={fem.scheefstandAantalX}
+          setScheefstandAantalX={fem.setScheefstandAantalX}
+          scheefstandAantalY={fem.scheefstandAantalY}
+          setScheefstandAantalY={fem.setScheefstandAantalY}
+          scheefstandTorsie={fem.scheefstandTorsie}
+          setScheefstandTorsie={fem.setScheefstandTorsie}
           // De uitkomst en de afleiding gaan als GEGEVEN mee naar de balk: de
           // balk toont wat er is gerekend en rekent niets zelf, zodat er geen
           // tweede plek is waar φ kan ontstaan.

@@ -227,6 +227,8 @@ log("\n[4] de app gebruikt de scheefstand in de 3D-rekenroute — uitgevoerd, ni
       openFem3dCalculation: { selfWeightError: undefined, selfWeightCaseId: undefined },
       openFem3dSolveGenerationRef: { current: 0 },
       openFem3dScheefstandUitkomst: projectUitkomst,
+      // Issue #212: de torsievarianten van 5.3.2(10) staan uit.
+      openFem3dTorsieRijen: null,
       fem: {
         analysetype, scheefstandEnabled: scheefstandAan, activeLoadCaseId: 2,
         combinations: [UGT, BGT, LEEG], loadCases: [{ id: 2, name: "Q", type: "live" }], gevolgklasse: "CC2",
@@ -305,6 +307,8 @@ log("\n[4] de app gebruikt de scheefstand in de 3D-rekenroute — uitgevoerd, ni
   const tekstNaden = (scheefstandEnabled) => ({
     fem: { scheefstandEnabled }, openFem3d: model,
     openFem3dScheefstandUitkomst: uitkomst, openFem3dScheefstandGeometrie: geo,
+    // Issue #212: de torsievarianten van 5.3.2(10) staan uit.
+    openFem3dTorsieRijen: null,
   });
   const tekst = (await voerUitIn(app, declaratie(app, "openFem3dScheefstandTekst"), tekstNaden(true)))();
   const inRapport = await voerUitIn(app, jsxAttribuut(app, "OpenFem3DReport", "scheefstandTekst"), { openFem3dScheefstandTekst: tekst });

@@ -528,6 +528,8 @@ log("\n[9] de app: de 3D-tak van handleSolve, uitgevoerd");
       openFem3dCalculation: { selfWeightError: undefined, selfWeightCaseId: undefined },
       openFem3dSolveGenerationRef: { current: 0 },
       openFem3dScheefstandUitkomst: projectScheefstand(model),
+      // Issue #212: de torsievarianten van 5.3.2(10) staan uit.
+      openFem3dTorsieRijen: null,
       fem: {
         analysetype, scheefstandEnabled: scheefstandAan, activeLoadCaseId: 1,
         combinations: [UGT, BGT], loadCases: [{ id: 1, type: "dead" }, { id: 4, type: "wind" }], gevolgklasse: "CC2",

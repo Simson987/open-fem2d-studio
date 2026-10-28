@@ -540,6 +540,14 @@ export interface ProjectFile {
   /** Handmatig aantal verticale elementen m voor α_m (v2, optioneel — ontbreekt = afleiden). */
   scheefstandAantalElementen?: number | null;
   /**
+   * Alleen 3D (issue #212, optioneel — geen versie-bump): handmatige m_X en
+   * m_Y per richting (ontbreekt/null = `scheefstandAantalElementen`, anders
+   * afleiden) en de torsievarianten van EN 1993-1-1 5.3.2(10) (ontbreekt = uit).
+   */
+  scheefstandAantalX?: number | null;
+  scheefstandAantalY?: number | null;
+  scheefstandTorsie?: boolean;
+  /**
    * Eigen doorsneden uit de profieleditor waarnaar staven verwijzen
    * (`EIGEN:<naam>`); v2, optioneel — geen versie-bump. Ontbreekt het veld
    * (ouder bestand), dan blijft de lokaal bewaarde lijst ongemoeid.
@@ -659,6 +667,7 @@ const BEKENDE_TOPVELDEN: readonly string[] = [
   "combinatiesVervangenBijOpenen", "structuralGrid",
   "scheefstandEnabled", "scheefstandNoemer", "scheefstandRichting",
   "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
+  "scheefstandAantalX", "scheefstandAantalY", "scheefstandTorsie",
   "eigenDoorsneden", "eigenCltOpbouwen", "projectInfo", "windInstellingen",
   "rapport", "modelDimension", "model3d", "openFem3dViewSets", "openFem3dStandaardViewsUitRapport",
   // Oude veldnaam van de 3D-weergaven (ontwikkelspoor `frame3d`); bij openen

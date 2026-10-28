@@ -473,6 +473,7 @@ export const VELDEN_3D = {
     bevestigdeFactoren: { commando: ["project.combinations.confirmOwnFactors", "project.combinations.revokeOwnFactors"] },
     scheefstandRichting: { afgeleid: "rekenvariant van de scheefstand, gezet bij het rekenen en niet opgeslagen" },
     scheefstandAs: { afgeleid: "rekenvariant van de scheefstand, gezet bij het rekenen en niet opgeslagen" },
+    scheefstandTorsie: { afgeleid: "torsievariant van de scheefstand (5.3.2(10)), gezet bij het rekenen en niet opgeslagen" },
     eindtoestand: { afgeleid: "rekenvariant met de eindstijfheid, gezet bij het rekenen en niet opgeslagen" },
     veldpatroon: { afgeleid: "rekenvariant met veldsgewijs geplaatste veranderlijke vloerbelasting (issue #219), gezet bij het rekenen en niet opgeslagen" },
   } satisfies Record<keyof LoadCombination, Dekking>,

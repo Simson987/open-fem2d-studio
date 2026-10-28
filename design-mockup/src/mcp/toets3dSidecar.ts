@@ -47,7 +47,7 @@ import {
   type OpenFem3DSolveResult,
 } from "../components/openFem3d/openFem3dSolver";
 import {
-  bepaalScheefstand3D, leidScheefstandGeometrieAf3D, toepasselijkeScheefstandNormen3D,
+  bepaalScheefstand3D, leidScheefstandGeometrieAf3D, toepasselijkeScheefstandNormen3D, torsieRijen3D,
 } from "../components/openFem3d/openFem3dScheefstand";
 import type { OpenFem3DCombinationSet } from "../components/openFem3d/openFem3dSteelCheck";
 import {
@@ -111,11 +111,16 @@ export function toetsScheefstand3D(
     ? project.scheefstandHoogteM : null;
   const aantalElementen = typeof project.scheefstandAantalElementen === "number" && project.scheefstandAantalElementen >= 1
     ? Math.floor(project.scheefstandAantalElementen) : null;
+  // Issue #212: m per richting en de torsievarianten van 5.3.2(10), zoals de app.
+  const mPerAs = (v: unknown) => (typeof v === "number" && v >= 1 ? Math.floor(v) : null);
+  const aantalPerAs = { x: mPerAs(project.scheefstandAantalX), y: mPerAs(project.scheefstandAantalY) };
+  const geometrie = leidScheefstandGeometrieAf3D(model);
   const normen = toepasselijkeScheefstandNormen3D(model);
   return {
-    project: bepaalScheefstand3D({ bron, noemer, hoogteM, aantalElementen }, leidScheefstandGeometrieAf3D(model), normen),
+    project: bepaalScheefstand3D({ bron, noemer, hoogteM, aantalElementen, aantalPerAs }, geometrie, normen),
     normen,
     modelAan: false,
+    torsie: project.scheefstandTorsie === true ? torsieRijen3D(geometrie) : null,
   };
 }
 

@@ -4231,6 +4231,103 @@
         "additionalProperties": false
       },
       "kind": "document"
+    },
+    {
+      "name": "project.sway.get",
+      "description": "De instellingen van de initiële scheefstand (EN 1993-1-1 5.3.2): schakelaar voor de resultaten, bron van φ, vaste noemer, handmatige h en m, in 3D m per richting (membersX, membersY) en de torsievarianten van 5.3.2(10). De UGT-toets rekent altijd met scheefstand (issue #199).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.sway.set",
+      "description": "De initiële scheefstand (EN 1993-1-1 5.3.2) instellen; alleen de opgegeven velden veranderen. membersX/membersY (alleen 3D, issue #212) overschrijven m per richting (5.3.2(3): een kolom met minder dan 50 % van de gemiddelde verticale kolomkracht mag eruit); null = de gedeelde m of de afleiding uit de kolomrijen. torsion (alleen 3D) zet de torsievarianten van 5.3.2(10) (figuur 5.5) aan: per richting met twee of meer kolomrijen twee varianten extra, wat het aantal P-Δ-berekeningen van de UGT-toets verdubbelt; niet bij vlaklasten op platen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Scheefstand in de RESULTATEN (de UGT-toets rekent er altijd mee)."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "vast",
+              "en1993",
+              "en1992",
+              "en1995",
+              "ongunstigste"
+            ],
+            "description": "Bron van φ: vast (1/denominator) of een norm."
+          },
+          "denominator": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Vaste noemer x in φ = 1/x."
+          },
+          "heightM": {
+            "oneOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Handmatige h in m."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = afleiden."
+          },
+          "members": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Handmatige m, in X en in Y."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = afleiden."
+          },
+          "membersX": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Alleen 3D: handmatige m_X."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = members of afleiden."
+          },
+          "membersY": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Alleen 3D: handmatige m_Y."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = members of afleiden."
+          },
+          "torsion": {
+            "type": "boolean",
+            "description": "Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
     }
   ]
 }

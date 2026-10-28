@@ -29,20 +29,24 @@
  *    Scheefstand aan) geldt dat voor elke combinatie, ook de BGT, zoals in 2D;
  *    de UGT-toets (`openFem3dToetsKrachten.ts`) ontvouwt alleen de UGT.
  *
- * NIET GEDAAN: §5.3.2(10) en figuur 5.5, de torsie door een antisymmetrische
- * scheefstand van twee tegenoverliggende gevels. Daarvoor zijn per richting
- * met twee of meer kolomrijen twee varianten extra nodig, waarin de buitenste
- * rijen tegengesteld scheefstaan en de scheefstand ertussen lineair verloopt
- * (een starre verdraaiing van de plattegrond): elke verticale last V krijgt
- * dan s·φ·V met s = 1 − 2·(p − p_van)/(p_tot − p_van), p de coördinaat haaks
- * op de richting. Een verdeelde staaflast wordt dan een kwadratisch verloop
- * (een gelijkwaardig trapezium met dezelfde resultante en werklijn), en een
- * vlaklast op een plaat moet als knooplasten over het plaatnet (de
- * consistente verdeling ∫ N_i·q·s dA), omdat het rekencontract per plaat
- * alleen een uniforme vlaklast kent. Het verdubbelt het aantal varianten (en
- * de P-Δ-sommen van de toets). De toelichting meldt dat deze varianten
- * ontbreken; een gebouw dat op torsie gevoelig is, hoort de constructeur daar
- * apart op te beoordelen.
+ *  - §5.3.2(10) en figuur 5.5 (issue #212): de torsie door een
+ *    antisymmetrische scheefstand van twee tegenoverliggende gevels. Met de
+ *    instelling `scheefstandTorsie` krijgt elke richting met twee of meer
+ *    kolomrijen twee varianten extra (+ en −), waarin de buitenste rijen
+ *    tegengesteld scheefstaan en de scheefstand ertussen lineair verloopt:
+ *    een starre verdraaiing van de plattegrond. Elke verticale last V krijgt
+ *    dan s·φ·V met s = 1 − 2·(p − p_van)/(p_tot − p_van), p de coördinaat
+ *    haaks op de richting (y bij X, x bij Y) en p_van, p_tot die van de
+ *    buitenste rijen. Een verdeelde staaflast krijgt zo een kwadratisch
+ *    verloop; dat gaat als het gelijkwaardige trapezium met dezelfde
+ *    resultante en werklijn (`trapeziumVanProduct`). Een vlaklast op een plaat
+ *    kent het rekencontract alleen uniform per plaat; daar weigert de
+ *    torsievariant met reden (de UGT-toets weigert een model met platen in
+ *    3D toch al, issue #199). Uit (de standaard) = geen torsievarianten, en
+ *    de toelichting zegt dat ze ontbreken.
+ *  - Handmatige m per richting (issue #212): `aantalPerAs` in de keuze
+ *    overschrijft de afgeleide m_X of m_Y (EN 1993-1-1 5.3.2(3) laat een
+ *    kolom met minder dan 50 % van de gemiddelde verticale last weg).
  *
  * De omzetting werkt op het rekenverzoek NA het samenstellen van de
  * combinatie (factoren, eigen gewicht en belastingvlakken zijn dan al
@@ -86,12 +90,29 @@ export const OPEN_FEM_3D_SCHEEFSTAND_ASSEN: readonly OpenFem3DScheefstandAs[] = 
 /** φ per horizontale richting, in rad. */
 export type OpenFem3DPhiPerAs = Record<OpenFem3DScheefstandAs, number>;
 
+/**
+ * De buitenste kolomrijen haaks op een richting, voor de torsievariant van
+ * EN 1993-1-1 5.3.2(10): p_van en p_tot in m (y bij X, x bij Y).
+ */
+export interface OpenFem3DTorsieRijen {
+  vanM: number;
+  totM: number;
+}
+
+/** Per richting de buitenste rijen; ontbreekt = minder dan twee rijen, geen torsievariant. */
+export type OpenFem3DTorsiePerAs = Partial<Record<OpenFem3DScheefstandAs, OpenFem3DTorsieRijen>>;
+
 /** Eén richting van de scheefstand in één berekening. */
 export interface OpenFem3DScheefstand {
   /** φ in rad: φ_X bij de as x, φ_Y bij de as y. */
   phi: number;
   as: OpenFem3DScheefstandAs;
   richting: 1 | -1;
+  /**
+   * De torsievariant (5.3.2(10), issue #212): de rijen op p_van krijgen
+   * +richting·φ, die op p_tot −richting·φ, lineair ertussen.
+   */
+  torsie?: OpenFem3DTorsieRijen;
 }
 
 /** Nederlandse getalweergave: komma als decimaalteken. */
@@ -323,6 +344,30 @@ export function toepasselijkeScheefstandNormen3D(model: Pick<OpenFem3DModel, "be
   return (["en1993", "en1992", "en1995"] as const).filter((norm) => normen.has(norm));
 }
 
+/**
+ * De buitenste kolomrijen per richting voor de torsievariant (5.3.2(10)):
+ * alleen een richting met twee of meer rijen. Coördinaten in m.
+ */
+export function torsieRijen3D(geometrie: Pick<ScheefstandGeometrie3D, "perAs">): OpenFem3DTorsiePerAs {
+  const uit: OpenFem3DTorsiePerAs = {};
+  for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+    const rijen = geometrie.perAs[as].rijen;
+    if (rijen.length < 2) continue;
+    const c = rijen.map((r) => r.coordinaatMm);
+    uit[as] = { vanM: Math.min(...c) / 1000, totM: Math.max(...c) / 1000 };
+  }
+  return uit;
+}
+
+/** De 3D-keuze: als in 2D, met een handmatige m per richting (issue #212). */
+export interface ScheefstandKeuze3D extends ScheefstandKeuze {
+  /**
+   * Handmatige m_X en m_Y; `null`/ontbrekend = `aantalElementen`, en anders de
+   * afgeleide m van die richting.
+   */
+  aantalPerAs?: Partial<Record<OpenFem3DScheefstandAs, number | null>>;
+}
+
 /** φ_X en φ_Y: per richting de uitkomst van `bepaalScheefstand`, met de m van die richting. */
 export interface ScheefstandUitkomst3D {
   x: ScheefstandUitkomst;
@@ -337,16 +382,22 @@ export interface ScheefstandUitkomst3D {
 /**
  * φ_X en φ_Y uit de projectinstelling: per richting dezelfde normfunctie als
  * 2D, met de m van die richting. Een handmatige m (`keuze.aantalElementen`)
- * geldt in beide richtingen; een handmatige h ook. Met de vaste noemer zijn
+ * geldt in beide richtingen, tenzij `keuze.aantalPerAs` er voor een richting
+ * een eigen waarde geeft (issue #212); een handmatige h geldt in beide. Met de vaste noemer zijn
  * φ_X en φ_Y gelijk.
  */
 export function bepaalScheefstand3D(
-  keuze: ScheefstandKeuze,
+  keuze: ScheefstandKeuze3D,
   geometrie: ScheefstandGeometrie3D,
   toepasselijk: ScheefstandNorm[],
 ): ScheefstandUitkomst3D {
-  const x = bepaalScheefstand(keuze, geometrie.perAs.x, toepasselijk);
-  const y = bepaalScheefstand(keuze, geometrie.perAs.y, toepasselijk);
+  const { aantalPerAs, ...gedeeld } = keuze;
+  const perAs = (as: OpenFem3DScheefstandAs): ScheefstandKeuze => {
+    const eigen = aantalPerAs?.[as];
+    return typeof eigen === "number" && eigen >= 1 ? { ...gedeeld, aantalElementen: Math.floor(eigen) } : gedeeld;
+  };
+  const x = bepaalScheefstand(perAs("x"), geometrie.perAs.x, toepasselijk);
+  const y = bepaalScheefstand(perAs("y"), geometrie.perAs.y, toepasselijk);
   const gezien = new Set<string>();
   const waarschuwingTeksten = [...x.waarschuwingTeksten, ...y.waarschuwingTeksten].filter((w) => {
     if (gezien.has(w.tekst)) return false;
@@ -376,8 +427,18 @@ export function toetsPhiTekst3D(analyse: { noemer: number; phiPerAs?: OpenFem3DP
   return analyse.phiPerAs ? phiPerAsTekst(analyse.phiPerAs) : `φ = 1/${noemerTekst(analyse.noemer)}`;
 }
 
+/** Wat de toelichting over de torsievariant (5.3.2(10)) moet zeggen. */
+export interface ToelichtingOpties3D {
+  /** De instelling `scheefstandTorsie`: torsievarianten aan. */
+  torsie?: boolean;
+}
+
 /** De regels van de 3D-toelichting, elk als tekst of vertaalbare tekst. */
-function toelichtingRegels3D(uitkomst: ScheefstandUitkomst3D, geometrie: ScheefstandGeometrie3D): TekstWaarde[] {
+function toelichtingRegels3D(
+  uitkomst: ScheefstandUitkomst3D,
+  geometrie: ScheefstandGeometrie3D,
+  opties: ToelichtingOpties3D = {},
+): TekstWaarde[] {
   const regels: TekstWaarde[] = [];
   if (uitkomst.x.norm === null && uitkomst.y.norm === null) {
     const [kop, ...tussenwaarden] = scheefstandUitkomstRegels(uitkomst.x);
@@ -401,12 +462,23 @@ function toelichtingRegels3D(uitkomst: ScheefstandUitkomst3D, geometrie: Scheefs
       ? vt(`${S}heightManual`, `h is handmatig opgegeven: ${getal(uitkomst.x.hoogteM, 3)} m.`,
         { h: getal(uitkomst.x.hoogteM, 3) })
       : geometrie.afleidingTeksten[0]);
-    if (uitkomst.x.aantalHandmatig) {
+    if (uitkomst.x.aantalHandmatig && uitkomst.y.aantalHandmatig
+        && uitkomst.x.aantalElementen === uitkomst.y.aantalElementen) {
       regels.push(vt(`${S}membersManualBoth`,
         `m is handmatig opgegeven: ${uitkomst.x.aantalElementen}, in X en in Y.`,
         { m: uitkomst.x.aantalElementen }));
     } else {
-      for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) regels.push(geometrie.perAs[as].afleidingTeksten[1]);
+      // Per richting: de handmatige m (issue #212) naast de afgeleide, of de afleiding.
+      for (const as of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+        const u = uitkomst[as];
+        regels.push(u.aantalHandmatig
+          ? vt(`${S}membersManualAxis`,
+            `m_${AS_LABEL[as]} is handmatig opgegeven: ${u.aantalElementen} (afgeleid uit de rijen: ` +
+              `${geometrie.perAs[as].aantalElementen}). EN 1993-1-1 5.3.2(3) laat een kolom die minder ` +
+              "dan 50 % van de gemiddelde verticale kolomkracht draagt buiten m.",
+            { richting: AS_LABEL[as], m: u.aantalElementen, afgeleid: geometrie.perAs[as].aantalElementen })
+          : geometrie.perAs[as].afleidingTeksten[1]);
+      }
     }
     for (const r of geometrie.notities) regels.push(r);
   }
@@ -421,11 +493,35 @@ function toelichtingRegels3D(uitkomst: ScheefstandUitkomst3D, geometrie: Scheefs
       "resultaten zo, en dan elke combinatie, ook de BGT, zoals in 2D: strenger dan de norm vraagt " +
       "(EN 1992-1-1 §5.2(2)P en (3) plaatsen de imperfectie in de UGT), maar dezelfde keuze in 2D " +
       "en 3D."));
-  regels.push(vt(`${S}torsionNotIncluded`,
-    "Niet meegenomen: de torsie door een tegengestelde scheefstand van twee tegenoverliggende " +
-      "gevels (EN 1993-1-1 §5.3.2(10), figuur 5.5). Is het gebouw daar gevoelig voor (een " +
-      "plattegrond met de stabiliteit aan één zijde, of een kleine torsiestijfheid), beoordeel dat " +
-      "dan apart."));
+  const rijen = torsieRijen3D(geometrie);
+  const torsieAssen = OPEN_FEM_3D_SCHEEFSTAND_ASSEN.filter((as) => rijen[as] !== undefined);
+  if (opties.torsie && torsieAssen.length > 0) {
+    const lijst = {
+      lijst: torsieAssen.map((as) => vt(`${S}torsionAxisItem`,
+        `${AS_LABEL[as]}: ${RIJ_COORDINAAT[as]} = ${getal(rijen[as]!.vanM * 1000, 0)} tot ` +
+          `${getal(rijen[as]!.totM * 1000, 0)} mm`,
+        { richting: AS_LABEL[as], as: RIJ_COORDINAAT[as],
+          van: getal(rijen[as]!.vanM * 1000, 0), tot: getal(rijen[as]!.totM * 1000, 0) })),
+      scheiding: "; ",
+    };
+    regels.push(vt(`${S}torsionIncluded`,
+      "Meegenomen: de torsie door een tegengestelde scheefstand van twee tegenoverliggende gevels " +
+        "(EN 1993-1-1 §5.3.2(10), figuur 5.5). Per richting met twee of meer kolomrijen twee " +
+        "varianten extra (torsie + en −): een starre verdraaiing van de plattegrond, waarin elke " +
+        "verticale last V de horizontale last s·φ·V krijgt, s = 1 − 2·(p − p_van)/(p_tot − p_van), " +
+        `met p haaks op de richting en p_van, p_tot de buitenste rijen (${nederlands(lijst)}).`,
+      { lijst }));
+  } else if (opties.torsie) {
+    regels.push(vt(`${S}torsionNoRows`,
+      "De torsievariant (EN 1993-1-1 §5.3.2(10)) staat aan, maar geen richting heeft twee of meer " +
+        "kolomrijen: er is geen tegenoverliggende gevel om tegengesteld scheef te zetten."));
+  } else {
+    regels.push(vt(`${S}torsionNotIncluded`,
+      "Niet meegenomen: de torsie door een tegengestelde scheefstand van twee tegenoverliggende " +
+        "gevels (EN 1993-1-1 §5.3.2(10), figuur 5.5). Is het gebouw daar gevoelig voor (een " +
+        "plattegrond met de stabiliteit aan één zijde, of een kleine torsiestijfheid), beoordeel dat " +
+        "dan apart."));
+  }
   if (uitkomst.waarschuwingTeksten.length > 0) {
     regels.push("");
     for (const w of uitkomst.waarschuwingTeksten) regels.push({ lijst: ["! ", w], scheiding: "" });
@@ -438,8 +534,12 @@ function toelichtingRegels3D(uitkomst: ScheefstandUitkomst3D, geometrie: Scheefs
  * de tooltip (`scheefstandToelichting3DVertaald`), zodat scherm en rapport niet
  * uit elkaar kunnen lopen.
  */
-export function scheefstandToelichting3D(uitkomst: ScheefstandUitkomst3D, geometrie: ScheefstandGeometrie3D): string {
-  return toelichtingRegels3D(uitkomst, geometrie).map(nederlands).join("\n");
+export function scheefstandToelichting3D(
+  uitkomst: ScheefstandUitkomst3D,
+  geometrie: ScheefstandGeometrie3D,
+  opties: ToelichtingOpties3D = {},
+): string {
+  return toelichtingRegels3D(uitkomst, geometrie, opties).map(nederlands).join("\n");
 }
 
 /** `scheefstandToelichting3D` in de taal van de interface, voor de tooltip op de φ-knop. */
@@ -447,20 +547,27 @@ export function scheefstandToelichting3DVertaald(
   uitkomst: ScheefstandUitkomst3D,
   geometrie: ScheefstandGeometrie3D,
   t: Vertaalfunctie,
+  opties: ToelichtingOpties3D = {},
 ): string {
-  return toelichtingRegels3D(uitkomst, geometrie).map((r) => vertaalWaarde(t, r)).join("\n");
+  return toelichtingRegels3D(uitkomst, geometrie, opties).map((r) => vertaalWaarde(t, r)).join("\n");
 }
 
-const RICHTINGEN: readonly { as: OpenFem3DScheefstandAs; richting: 1 | -1; label: string }[] = [
-  { as: "x", richting: 1, label: "+X" },
-  { as: "x", richting: -1, label: "−X" },
-  { as: "y", richting: 1, label: "+Y" },
-  { as: "y", richting: -1, label: "−Y" },
+const RICHTINGEN: readonly { as: OpenFem3DScheefstandAs; richting: 1 | -1; label: string; torsie: boolean }[] = [
+  { as: "x", richting: 1, label: "+X", torsie: false },
+  { as: "x", richting: -1, label: "−X", torsie: false },
+  { as: "y", richting: 1, label: "+Y", torsie: false },
+  { as: "y", richting: -1, label: "−Y", torsie: false },
+  // De torsievarianten van 5.3.2(10) (issue #212): index 4 t/m 7, dus id +
+  // 4…7 · SCHEEFSTAND_COMBO_OFFSET. "+" = de rij op p_van in de +richting.
+  { as: "x", richting: 1, label: "torsie +X", torsie: true },
+  { as: "x", richting: -1, label: "torsie −X", torsie: true },
+  { as: "y", richting: 1, label: "torsie +Y", torsie: true },
+  { as: "y", richting: -1, label: "torsie −Y", torsie: true },
 ];
 
 /** Kort label van een 3D-scheefstandrichting, voor combinatienamen. */
-export function scheefstandRichtingLabel3D(as: OpenFem3DScheefstandAs, richting: 1 | -1): string {
-  return RICHTINGEN.find((r) => r.as === as && r.richting === richting)!.label;
+export function scheefstandRichtingLabel3D(as: OpenFem3DScheefstandAs, richting: 1 | -1, torsie = false): string {
+  return RICHTINGEN.find((r) => r.as === as && r.richting === richting && r.torsie === torsie)!.label;
 }
 
 /**
@@ -478,7 +585,14 @@ export function scheefstandRichtingLabel3D(as: OpenFem3DScheefstandAs, richting:
 export function metScheefstandRichtingen3D(
   combinations: readonly LoadCombination[],
   phi: OpenFem3DPhiPerAs | null,
-  opties: { bgt?: boolean } = {},
+  opties: {
+    bgt?: boolean;
+    /**
+     * De torsievarianten (5.3.2(10), issue #212): per richting met buitenste
+     * rijen (`torsieRijen3D`) twee varianten extra. Ontbreekt = geen.
+     */
+    torsie?: OpenFem3DTorsiePerAs | null;
+  } = {},
 ): LoadCombination[] {
   if (!phi) return [...combinations];
   const uit: LoadCombination[] = [];
@@ -487,18 +601,20 @@ export function metScheefstandRichtingen3D(
       uit.push(combinatie);
       continue;
     }
-    const varianten = RICHTINGEN.map((r, index) => ({ ...r, index })).filter((r) => phi[r.as] > 0);
+    const varianten = RICHTINGEN.map((r, index) => ({ ...r, index }))
+      .filter((r) => phi[r.as] > 0 && (!r.torsie || opties.torsie?.[r.as] !== undefined));
     if (varianten.length === 0) {
       uit.push(combinatie);
       continue;
     }
-    for (const { as, richting, label, index } of varianten) {
+    for (const { as, richting, label, index, torsie } of varianten) {
       uit.push({
         ...combinatie,
         id: combinatie.id + index * SCHEEFSTAND_COMBO_OFFSET,
         name: `${combinatie.name} (scheefstand ${label})`,
         scheefstandRichting: richting,
         scheefstandAs: as,
+        ...(torsie ? { scheefstandTorsie: true } : {}),
       });
     }
   }
@@ -512,8 +628,9 @@ export function metScheefstandRichtingen3D(
  */
 export function zonderScheefstandVariant(combinatie: LoadCombination): LoadCombination {
   if (combinatie.scheefstandRichting === undefined) return combinatie;
-  const { scheefstandRichting: _r, scheefstandAs: _a, ...rest } = combinatie;
-  const label = scheefstandRichtingLabel3D(combinatie.scheefstandAs ?? "x", combinatie.scheefstandRichting);
+  const { scheefstandRichting: _r, scheefstandAs: _a, scheefstandTorsie: _t, ...rest } = combinatie;
+  const label = scheefstandRichtingLabel3D(
+    combinatie.scheefstandAs ?? "x", combinatie.scheefstandRichting, combinatie.scheefstandTorsie === true);
   const achtervoegsel = ` (scheefstand ${label})`;
   return {
     ...rest,
@@ -529,12 +646,36 @@ export function zonderScheefstandVariant(combinatie: LoadCombination): LoadCombi
 export function scheefstandVanCombinatie(
   combinatie: LoadCombination,
   phi: OpenFem3DPhiPerAs | number | null,
+  torsie: OpenFem3DTorsiePerAs | null = null,
 ): OpenFem3DScheefstand | null {
   if (combinatie.scheefstandRichting === undefined || phi === null) return null;
   const as = combinatie.scheefstandAs ?? "x";
   const waarde = typeof phi === "number" ? phi : phi[as];
   if (!(waarde > 0)) return null;
+  if (combinatie.scheefstandTorsie) {
+    const rijen = torsie?.[as];
+    if (!rijen) {
+      throw new Error(`Scheefstand: de torsievariant "${combinatie.name}" heeft geen twee kolomrijen haaks op ` +
+        `${AS_LABEL[as]} (EN 1993-1-1 5.3.2(10)).`);
+    }
+    return { phi: waarde, as, richting: combinatie.scheefstandRichting, torsie: rijen };
+  }
   return { phi: waarde, as, richting: combinatie.scheefstandRichting };
+}
+
+/**
+ * Het gelijkwaardige trapezium van het product van twee lineaire verlopen
+ * q(t) en s(t) over een deel met t van 0 tot 1: dezelfde resultante en
+ * dezelfde werklijn (eerste moment). Met I₀ = ∫q·s dt en I₁ = ∫q·s·t dt is
+ * T₁ + T₂ = 2·I₀ en T₁ + 2·T₂ = 6·I₁. Bij een constante s precies (q₁·s, q₂·s).
+ * Voor de torsievariant (5.3.2(10)): de last q·s·φ is kwadratisch, het
+ * rekencontract kent alleen een trapezium.
+ */
+export function trapeziumVanProduct(q1: number, q2: number, s1: number, s2: number): [number, number] {
+  const dq = q2 - q1, ds = s2 - s1;
+  const i0 = q1 * s1 + (q1 * ds + s1 * dq) / 2 + dq * ds / 3;
+  const i1 = q1 * s1 / 2 + (q1 * ds + s1 * dq) / 3 + dq * ds / 4;
+  return [4 * i0 - 6 * i1, 6 * i1 - 2 * i0];
 }
 
 type Vec3 = [number, number, number];
@@ -580,12 +721,25 @@ export interface OpenFem3DScheefstandVerzoek {
  *    geen verticale component.
  *  - Puntlast op een staaf: net zo, met het axiale deel naar de uiteinden.
  *
- * De som van alle toegevoegde horizontale krachten is exact φ·ΣV.
+ * De som van alle toegevoegde horizontale krachten is exact φ·ΣV. Bij de
+ * torsievariant (`scheefstand.torsie`, 5.3.2(10)) krijgt elke last er de factor
+ * s bij (zie de kop); de som is dan Σ s·φ·V, nul bij een symmetrische
+ * belasting, en het moment om de verticale as is φ·Σ s·V·(p − p_midden).
  */
 export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verzoek: T, scheefstand: OpenFem3DScheefstand): T {
-  const { phi, as, richting } = scheefstand;
+  const { phi, as, richting, torsie } = scheefstand;
   const d: Vec3 = as === "x" ? [richting, 0, 0] : [0, richting, 0];
   const knoop = new Map(verzoek.nodes.map((n) => [n.id, n]));
+  // De torsievariant (5.3.2(10)): de factor s op een punt, uit de coördinaat
+  // haaks op de richting. Zonder torsie s = 1 en rekent alles hieronder zoals
+  // vóór issue #212, tot op het laatste bit.
+  const haaks = RIJ_COORDINAAT[as];
+  const sOp = (p: { x: number; y: number }): number => torsie
+    ? 1 - 2 * (p[haaks] - torsie.vanM) / (torsie.totM - torsie.vanM)
+    : 1;
+  if (torsie && !(torsie.totM > torsie.vanM)) {
+    throw new Error("Scheefstand: de torsievariant heeft twee verschillende buitenste kolomrijen nodig.");
+  }
   const staaf = new Map(verzoek.members.map((m) => [m.id, m]));
   const assen = new Map<number, { ex: Vec3; ey: Vec3; ez: Vec3; lengte: number }>();
   const assenVan = (memberId: number) => {
@@ -608,8 +762,18 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
   const schaal = (v: Vec3, s: number): Vec3 => [v[0] * s, v[1] * s, v[2] * s];
 
   for (const last of verzoek.nodalLoads) {
-    if (last.fz !== 0) telOp(last.nodeId, schaal(d, -phi * last.fz));
+    if (last.fz === 0) continue;
+    const s = torsie ? sOp(knoop.get(last.nodeId)!) : 1;
+    telOp(last.nodeId, schaal(d, torsie ? -phi * s * last.fz : -phi * last.fz));
   }
+  /** s aan begin en eind van het deel [a, b] van een staaf (lineair langs de staaf). */
+  const sLangs = (memberId: number, a: number, b: number): [number, number] => {
+    const m = staaf.get(memberId)!;
+    const { ex } = assenVan(memberId);
+    const p0 = knoop.get(m.startNodeId)!;
+    const punt = (t: number) => ({ x: p0.x + ex[0] * t, y: p0.y + ex[1] * t });
+    return [sOp(punt(a)), sOp(punt(b))];
+  };
 
   const extraStaaflasten: T["memberLoads"][number][] = [];
   let volgendeStaaflastId = Math.max(0, ...verzoek.memberLoads.map((l) => l.id)) + 1;
@@ -619,7 +783,13 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
     if (isOpenFem3DGlobalMemberLoad(last)) {
       if (last.globalDirection !== "z") continue;
       const f = openFem3DGlobalMemberLoadFactor(ex, "z", last.perProjection);
-      const h1 = -phi * f * last.qStartKnPerM, h2 = -phi * f * last.qEndKnPerM;
+      let h1 = -phi * f * last.qStartKnPerM, h2 = -phi * f * last.qEndKnPerM;
+      if (torsie) {
+        const [s1, s2] = sLangs(last.memberId, a, b);
+        const [t1, t2] = trapeziumVanProduct(f * last.qStartKnPerM, f * last.qEndKnPerM, s1, s2);
+        h1 = -phi * t1;
+        h2 = -phi * t2;
+      }
       if (h1 === 0 && h2 === 0) continue;
       extraStaaflasten.push({
         id: volgendeStaaflastId++, memberId: last.memberId, globalDirection: as,
@@ -628,9 +798,14 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
       continue;
     }
     // Globale verticale component aan begin en eind van het belaste deel.
-    const qZ1 = last.qyStartKnPerM * ey[2] + last.qzStartKnPerM * ez[2];
-    const qZ2 = last.qyEndKnPerM * ey[2] + last.qzEndKnPerM * ez[2];
+    let qZ1 = last.qyStartKnPerM * ey[2] + last.qzStartKnPerM * ez[2];
+    let qZ2 = last.qyEndKnPerM * ey[2] + last.qzEndKnPerM * ez[2];
     if (qZ1 === 0 && qZ2 === 0) continue;
+    if (torsie) {
+      // Het kwadratische verloop q_Z·s als gelijkwaardig trapezium.
+      const [s1, s2] = sLangs(last.memberId, a, b);
+      [qZ1, qZ2] = trapeziumVanProduct(qZ1, qZ2, s1, s2);
+    }
     const h1 = schaal(d, -phi * qZ1), h2 = schaal(d, -phi * qZ2);
     const qy1 = dot(h1, ey), qy2 = dot(h2, ey), qz1 = dot(h1, ez), qz2 = dot(h2, ez);
     if (qy1 !== 0 || qy2 !== 0 || qz1 !== 0 || qz2 !== 0) {
@@ -659,7 +834,7 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
     const { ex, ey, ez, lengte } = assenVan(last.memberId);
     const pZ = last.pyKn * ey[2] + last.pzKn * ez[2];
     if (pZ === 0) continue;
-    const h = schaal(d, -phi * pZ);
+    const h = schaal(d, torsie ? -phi * sLangs(last.memberId, last.positionM, last.positionM)[0] * pZ : -phi * pZ);
     const py = dot(h, ey), pz = dot(h, ez), px = dot(h, ex);
     if (py !== 0 || pz !== 0) extraPuntlasten.push({ ...last, id: volgendePuntlastId++, pyKn: py, pzKn: pz });
     if (px !== 0 && lengte > 0) {
@@ -675,6 +850,13 @@ export function metScheefstandLasten<T extends OpenFem3DScheefstandVerzoek>(verz
     .map(([nodeId, f]) => ({ id: volgendeKnooplastId++, nodeId, fx: f[0], fy: f[1], fz: f[2], mx: 0, my: 0, mz: 0 }));
 
   // Vlaklast op een plaat (globaal per m²): de horizontale component φ·q_Z per m².
+  // De torsievariant zou s·φ·q_Z per plaatpunt vragen; het rekencontract kent
+  // per plaat alleen een uniforme vlaklast. Dan liever een weigering met reden.
+  if (torsie && verzoek.surfaceLoads?.some((l) => l.qzKnPerM2 !== 0)) {
+    throw new Error("Scheefstand: de torsievariant (EN 1993-1-1 5.3.2(10)) is niet beschikbaar voor een " +
+      "verticale vlaklast op een plaat; het rekenverzoek kent per plaat alleen een uniforme vlaklast. " +
+      "Zet de torsievariant uit of beoordeel de torsie apart.");
+  }
   const surfaceLoads = verzoek.surfaceLoads?.map((last) => last.qzKnPerM2 === 0 ? last : {
     ...last,
     qxKnPerM2: last.qxKnPerM2 - phi * last.qzKnPerM2 * d[0],

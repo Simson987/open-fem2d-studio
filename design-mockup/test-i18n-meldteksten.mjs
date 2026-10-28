@@ -526,7 +526,8 @@ check("de toetshint zet geen spaties rond de toets",
 // Issue #194: in 3D de 3D-toelichting met φ_X en φ_Y (`scheefstandToelichting3DVertaald`).
 check("de φ-knop krijgt de vertaalde toelichting (in 3D die van het 3D-model)",
   /scheefstandToelichting=\{scheefstandBalk\.toelichting\(t\)\}/.test(bron("App.tsx"))
-  && /scheefstandToelichting3DVertaald\(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, vertaal\)/.test(bron("App.tsx"))
+  // Issue #212: met de torsie-instelling als vierde argument.
+  && /scheefstandToelichting3DVertaald\(openFem3dScheefstandUitkomst, openFem3dScheefstandGeometrie, vertaal,\s*\{ torsie: fem\.scheefstandTorsie \}\)/.test(bron("App.tsx"))
   && /scheefstandToelichtingVertaald\(scheefstandUitkomst, scheefstandGeometrie, vertaal\)/.test(bron("App.tsx")));
 
 log(`\n${passed} geslaagd, ${failed} gefaald`);

@@ -25996,7 +25996,7 @@ function combinatieSleutel(c, factoren2, delenVan) {
   }
   const deel = [...effectief].filter(([, f]) => f !== 0).sort((a, b) => a[0] - b[0]).map(([id2, f]) => `${id2}=${Number(f.toPrecision(12))}`).join(",");
   const e = c.eindtoestand ? `e${c.eindtoestand.psi2}${c.eindtoestand.bgt ? "b" : ""}` : "";
-  return `${c.type}|${soortVanCombinatie(c) ?? ""}|${c.scheefstandAs ?? ""}${c.scheefstandRichting ?? ""}|${e}|${deel}`;
+  return `${c.type}|${soortVanCombinatie(c) ?? ""}|${c.scheefstandAs ?? ""}${c.scheefstandRichting ?? ""}${c.scheefstandTorsie ? "t" : ""}|${e}|${deel}`;
 }
 function veldpatroonVarianten(combinaties, splitsing, perCase, opties = {}) {
   const delen = splitsing.deelgevallen;
@@ -26136,7 +26136,8 @@ function veldpatronenUitkomst(splitsing, loadCases, combinaties, perCase) {
     uitkomst: {
       combinaties: varianten,
       gevallen: deelgevalBelastinggevallen(splitsing, loadCases),
-      meldingen
+      meldingen,
+      input: splitsing.input
     }
   };
 }
@@ -30881,6 +30882,9 @@ var BEKENDE_TOPVELDEN = [
   "scheefstandBron",
   "scheefstandHoogteM",
   "scheefstandAantalElementen",
+  "scheefstandAantalX",
+  "scheefstandAantalY",
+  "scheefstandTorsie",
   "eigenDoorsneden",
   "eigenCltOpbouwen",
   "projectInfo",
@@ -32599,9 +32603,24 @@ function toepasselijkeScheefstandNormen3D(model) {
   }
   return ["en1993", "en1992", "en1995"].filter((norm5) => normen.has(norm5));
 }
+function torsieRijen3D(geometrie) {
+  const uit = {};
+  for (const as3 of OPEN_FEM_3D_SCHEEFSTAND_ASSEN) {
+    const rijen = geometrie.perAs[as3].rijen;
+    if (rijen.length < 2) continue;
+    const c = rijen.map((r) => r.coordinaatMm);
+    uit[as3] = { vanM: Math.min(...c) / 1e3, totM: Math.max(...c) / 1e3 };
+  }
+  return uit;
+}
 function bepaalScheefstand3D(keuze2, geometrie, toepasselijk) {
-  const x = bepaalScheefstand(keuze2, geometrie.perAs.x, toepasselijk);
-  const y = bepaalScheefstand(keuze2, geometrie.perAs.y, toepasselijk);
+  const { aantalPerAs, ...gedeeld } = keuze2;
+  const perAs = (as3) => {
+    const eigen = aantalPerAs?.[as3];
+    return typeof eigen === "number" && eigen >= 1 ? { ...gedeeld, aantalElementen: Math.floor(eigen) } : gedeeld;
+  };
+  const x = bepaalScheefstand(perAs("x"), geometrie.perAs.x, toepasselijk);
+  const y = bepaalScheefstand(perAs("y"), geometrie.perAs.y, toepasselijk);
   const gezien = /* @__PURE__ */ new Set();
   const waarschuwingTeksten = [...x.waarschuwingTeksten, ...y.waarschuwingTeksten].filter((w) => {
     if (gezien.has(w.tekst)) return false;
@@ -32625,13 +32644,19 @@ function toetsPhiTekst3D(analyse) {
   return analyse.phiPerAs ? phiPerAsTekst(analyse.phiPerAs) : `\u03C6 = 1/${noemerTekst(analyse.noemer)}`;
 }
 var RICHTINGEN = [
-  { as: "x", richting: 1, label: "+X" },
-  { as: "x", richting: -1, label: "\u2212X" },
-  { as: "y", richting: 1, label: "+Y" },
-  { as: "y", richting: -1, label: "\u2212Y" }
+  { as: "x", richting: 1, label: "+X", torsie: false },
+  { as: "x", richting: -1, label: "\u2212X", torsie: false },
+  { as: "y", richting: 1, label: "+Y", torsie: false },
+  { as: "y", richting: -1, label: "\u2212Y", torsie: false },
+  // De torsievarianten van 5.3.2(10) (issue #212): index 4 t/m 7, dus id +
+  // 4…7 · SCHEEFSTAND_COMBO_OFFSET. "+" = de rij op p_van in de +richting.
+  { as: "x", richting: 1, label: "torsie +X", torsie: true },
+  { as: "x", richting: -1, label: "torsie \u2212X", torsie: true },
+  { as: "y", richting: 1, label: "torsie +Y", torsie: true },
+  { as: "y", richting: -1, label: "torsie \u2212Y", torsie: true }
 ];
-function scheefstandRichtingLabel3D(as3, richting2) {
-  return RICHTINGEN.find((r) => r.as === as3 && r.richting === richting2).label;
+function scheefstandRichtingLabel3D(as3, richting2, torsie = false) {
+  return RICHTINGEN.find((r) => r.as === as3 && r.richting === richting2 && r.torsie === torsie).label;
 }
 function metScheefstandRichtingen3D(combinations, phi, opties = {}) {
   if (!phi) return [...combinations];
@@ -32641,18 +32666,19 @@ function metScheefstandRichtingen3D(combinations, phi, opties = {}) {
       uit.push(combinatie);
       continue;
     }
-    const varianten = RICHTINGEN.map((r, index) => ({ ...r, index })).filter((r) => phi[r.as] > 0);
+    const varianten = RICHTINGEN.map((r, index) => ({ ...r, index })).filter((r) => phi[r.as] > 0 && (!r.torsie || opties.torsie?.[r.as] !== void 0));
     if (varianten.length === 0) {
       uit.push(combinatie);
       continue;
     }
-    for (const { as: as3, richting: richting2, label, index } of varianten) {
+    for (const { as: as3, richting: richting2, label, index, torsie } of varianten) {
       uit.push({
         ...combinatie,
         id: combinatie.id + index * SCHEEFSTAND_COMBO_OFFSET,
         name: `${combinatie.name} (scheefstand ${label})`,
         scheefstandRichting: richting2,
-        scheefstandAs: as3
+        scheefstandAs: as3,
+        ...torsie ? { scheefstandTorsie: true } : {}
       });
     }
   }
@@ -32660,8 +32686,12 @@ function metScheefstandRichtingen3D(combinations, phi, opties = {}) {
 }
 function zonderScheefstandVariant(combinatie) {
   if (combinatie.scheefstandRichting === void 0) return combinatie;
-  const { scheefstandRichting: _r, scheefstandAs: _a, ...rest } = combinatie;
-  const label = scheefstandRichtingLabel3D(combinatie.scheefstandAs ?? "x", combinatie.scheefstandRichting);
+  const { scheefstandRichting: _r, scheefstandAs: _a, scheefstandTorsie: _t, ...rest } = combinatie;
+  const label = scheefstandRichtingLabel3D(
+    combinatie.scheefstandAs ?? "x",
+    combinatie.scheefstandRichting,
+    combinatie.scheefstandTorsie === true
+  );
   const achtervoegsel = ` (scheefstand ${label})`;
   return {
     ...rest,
@@ -32669,17 +32699,35 @@ function zonderScheefstandVariant(combinatie) {
     name: combinatie.name.endsWith(achtervoegsel) ? combinatie.name.slice(0, -achtervoegsel.length) : combinatie.name
   };
 }
-function scheefstandVanCombinatie(combinatie, phi) {
+function scheefstandVanCombinatie(combinatie, phi, torsie = null) {
   if (combinatie.scheefstandRichting === void 0 || phi === null) return null;
   const as3 = combinatie.scheefstandAs ?? "x";
   const waarde = typeof phi === "number" ? phi : phi[as3];
   if (!(waarde > 0)) return null;
+  if (combinatie.scheefstandTorsie) {
+    const rijen = torsie?.[as3];
+    if (!rijen) {
+      throw new Error(`Scheefstand: de torsievariant "${combinatie.name}" heeft geen twee kolomrijen haaks op ${AS_LABEL[as3]} (EN 1993-1-1 5.3.2(10)).`);
+    }
+    return { phi: waarde, as: as3, richting: combinatie.scheefstandRichting, torsie: rijen };
+  }
   return { phi: waarde, as: as3, richting: combinatie.scheefstandRichting };
 }
+function trapeziumVanProduct(q1, q2, s1, s2) {
+  const dq = q2 - q1, ds = s2 - s1;
+  const i0 = q1 * s1 + (q1 * ds + s1 * dq) / 2 + dq * ds / 3;
+  const i1 = q1 * s1 / 2 + (q1 * ds + s1 * dq) / 3 + dq * ds / 4;
+  return [4 * i0 - 6 * i1, 6 * i1 - 2 * i0];
+}
 function metScheefstandLasten(verzoek, scheefstand) {
-  const { phi, as: as3, richting: richting2 } = scheefstand;
+  const { phi, as: as3, richting: richting2, torsie } = scheefstand;
   const d = as3 === "x" ? [richting2, 0, 0] : [0, richting2, 0];
   const knoop = new Map(verzoek.nodes.map((n2) => [n2.id, n2]));
+  const haaks = RIJ_COORDINAAT[as3];
+  const sOp = (p2) => torsie ? 1 - 2 * (p2[haaks] - torsie.vanM) / (torsie.totM - torsie.vanM) : 1;
+  if (torsie && !(torsie.totM > torsie.vanM)) {
+    throw new Error("Scheefstand: de torsievariant heeft twee verschillende buitenste kolomrijen nodig.");
+  }
   const staaf = new Map(verzoek.members.map((m) => [m.id, m]));
   const assen = /* @__PURE__ */ new Map();
   const assenVan = (memberId) => {
@@ -32701,8 +32749,17 @@ function metScheefstandLasten(verzoek, scheefstand) {
   };
   const schaal = (v, s) => [v[0] * s, v[1] * s, v[2] * s];
   for (const last of verzoek.nodalLoads) {
-    if (last.fz !== 0) telOp(last.nodeId, schaal(d, -phi * last.fz));
+    if (last.fz === 0) continue;
+    const s = torsie ? sOp(knoop.get(last.nodeId)) : 1;
+    telOp(last.nodeId, schaal(d, torsie ? -phi * s * last.fz : -phi * last.fz));
   }
+  const sLangs = (memberId, a, b) => {
+    const m = staaf.get(memberId);
+    const { ex } = assenVan(memberId);
+    const p0 = knoop.get(m.startNodeId);
+    const punt = (t) => ({ x: p0.x + ex[0] * t, y: p0.y + ex[1] * t });
+    return [sOp(punt(a)), sOp(punt(b))];
+  };
   const extraStaaflasten = [];
   let volgendeStaaflastId = Math.max(0, ...verzoek.memberLoads.map((l) => l.id)) + 1;
   for (const last of verzoek.memberLoads) {
@@ -32711,7 +32768,13 @@ function metScheefstandLasten(verzoek, scheefstand) {
     if (isOpenFem3DGlobalMemberLoad(last)) {
       if (last.globalDirection !== "z") continue;
       const f = openFem3DGlobalMemberLoadFactor(ex, "z", last.perProjection);
-      const h12 = -phi * f * last.qStartKnPerM, h22 = -phi * f * last.qEndKnPerM;
+      let h12 = -phi * f * last.qStartKnPerM, h22 = -phi * f * last.qEndKnPerM;
+      if (torsie) {
+        const [s1, s2] = sLangs(last.memberId, a, b);
+        const [t1, t2] = trapeziumVanProduct(f * last.qStartKnPerM, f * last.qEndKnPerM, s1, s2);
+        h12 = -phi * t1;
+        h22 = -phi * t2;
+      }
       if (h12 === 0 && h22 === 0) continue;
       extraStaaflasten.push({
         id: volgendeStaaflastId++,
@@ -32724,9 +32787,13 @@ function metScheefstandLasten(verzoek, scheefstand) {
       });
       continue;
     }
-    const qZ1 = last.qyStartKnPerM * ey[2] + last.qzStartKnPerM * ez[2];
-    const qZ2 = last.qyEndKnPerM * ey[2] + last.qzEndKnPerM * ez[2];
+    let qZ1 = last.qyStartKnPerM * ey[2] + last.qzStartKnPerM * ez[2];
+    let qZ2 = last.qyEndKnPerM * ey[2] + last.qzEndKnPerM * ez[2];
     if (qZ1 === 0 && qZ2 === 0) continue;
+    if (torsie) {
+      const [s1, s2] = sLangs(last.memberId, a, b);
+      [qZ1, qZ2] = trapeziumVanProduct(qZ1, qZ2, s1, s2);
+    }
     const h1 = schaal(d, -phi * qZ1), h2 = schaal(d, -phi * qZ2);
     const qy1 = dot9(h1, ey), qy2 = dot9(h2, ey), qz1 = dot9(h1, ez), qz2 = dot9(h2, ez);
     if (qy1 !== 0 || qy2 !== 0 || qz1 !== 0 || qz2 !== 0) {
@@ -32756,7 +32823,7 @@ function metScheefstandLasten(verzoek, scheefstand) {
     const { ex, ey, ez, lengte } = assenVan(last.memberId);
     const pZ = last.pyKn * ey[2] + last.pzKn * ez[2];
     if (pZ === 0) continue;
-    const h = schaal(d, -phi * pZ);
+    const h = schaal(d, torsie ? -phi * sLangs(last.memberId, last.positionM, last.positionM)[0] * pZ : -phi * pZ);
     const py = dot9(h, ey), pz = dot9(h, ez), px = dot9(h, ex);
     if (py !== 0 || pz !== 0) extraPuntlasten.push({ ...last, id: volgendePuntlastId++, pyKn: py, pzKn: pz });
     if (px !== 0 && lengte > 0) {
@@ -32767,6 +32834,9 @@ function metScheefstandLasten(verzoek, scheefstand) {
   }
   let volgendeKnooplastId = Math.max(0, ...verzoek.nodalLoads.map((l) => l.id)) + 1;
   const extraKnooplasten = [...extraKnoop.entries()].filter(([, f]) => f.some((c) => Math.abs(c) > 0)).map(([nodeId, f]) => ({ id: volgendeKnooplastId++, nodeId, fx: f[0], fy: f[1], fz: f[2], mx: 0, my: 0, mz: 0 }));
+  if (torsie && verzoek.surfaceLoads?.some((l) => l.qzKnPerM2 !== 0)) {
+    throw new Error("Scheefstand: de torsievariant (EN 1993-1-1 5.3.2(10)) is niet beschikbaar voor een verticale vlaklast op een plaat; het rekenverzoek kent per plaat alleen een uniforme vlaklast. Zet de torsievariant uit of beoordeel de torsie apart.");
+  }
   const surfaceLoads = verzoek.surfaceLoads?.map((last) => last.qzKnPerM2 === 0 ? last : {
     ...last,
     qxKnPerM2: last.qxKnPerM2 - phi * last.qzKnPerM2 * d[0],
@@ -34320,8 +34390,8 @@ init_combinations();
 init_alphaCr();
 init_scheefstandNorm();
 var nl11 = (v, d = 3) => v.toFixed(d).replace(".", ",");
-var isPrimair = (c) => (c.scheefstandAs ?? "x") === "x" && c.scheefstandRichting === 1;
-var zelfdeScheefstand = (a, b) => a !== void 0 && a.scheefstandRichting === b.scheefstandRichting && (a.scheefstandRichting === void 0 || (a.scheefstandAs ?? "x") === (b.scheefstandAs ?? "x"));
+var isPrimair = (c) => (c.scheefstandAs ?? "x") === "x" && c.scheefstandRichting === 1 && !c.scheefstandTorsie;
+var zelfdeScheefstand = (a, b) => a !== void 0 && a.scheefstandRichting === b.scheefstandRichting && (a.scheefstandRichting === void 0 || (a.scheefstandAs ?? "x") === (b.scheefstandAs ?? "x") && a.scheefstandTorsie === true === (b.scheefstandTorsie === true));
 function heeftBetonkolom(model) {
   return model.beams.some((b) => b.checkConfig?.betonKorf && b.checkConfig?.betonKolom);
 }
@@ -34370,7 +34440,14 @@ function planToetsKrachten3D(invoer) {
   if (eindtoestand.length > 0) meldingen.push(eindtoestandVervaltMelding(eindtoestand));
   const imperfectie = zetImperfectieGevallenOpNul(ugt.filter((c) => c.eindtoestand === void 0), invoer.loadCases);
   if (imperfectie.melding) meldingen.push(imperfectie.melding);
-  const ugtCombinaties = metScheefstandRichtingen3D(imperfectie.combinaties, phiPerAs);
+  const torsie = scheefstand.torsie ?? null;
+  const ugtCombinaties = metScheefstandRichtingen3D(imperfectie.combinaties, phiPerAs, { torsie });
+  const torsieAssen = OPEN_FEM_3D_SCHEEFSTAND_ASSEN.filter((as3) => torsie?.[as3] !== void 0);
+  if (torsieAssen.length > 0) {
+    meldingen.push(
+      `De toets rekent ook de torsievarianten van EN 1993-1-1 5.3.2(10) (figuur 5.5) in ${torsieAssen.map((as3) => as3.toUpperCase()).join(" en ")}: de buitenste kolomrijen tegengesteld scheef, lineair ertussen (twee varianten per richting extra).`
+    );
+  }
   if ((model.plates?.length ?? 0) > 0) {
     return {
       analyse,
@@ -34405,7 +34482,7 @@ function planToetsKrachten3D(invoer) {
       soort: "toets",
       combinatie: v,
       analyse: "p-delta",
-      scheefstand: scheefstandVanCombinatie(v, phiPerAs),
+      scheefstand: scheefstandVanCombinatie(v, phiPerAs, torsie),
       bucklingModes: 1
     });
   }
@@ -34427,7 +34504,7 @@ function planToetsKrachten3D(invoer) {
         soort: "eersteOrde",
         combinatie: c,
         analyse: "linear",
-        scheefstand: scheefstandVanCombinatie(c, phiPerAs),
+        scheefstand: scheefstandVanCombinatie(c, phiPerAs, torsie),
         bucklingModes: 0
       });
     }
@@ -34503,7 +34580,7 @@ function stelToetsKrachten3DSamen(plan, uitkomsten) {
     const basisVan = (id2) => alphaCr.find((u) => u.combinatieId === id2 % SCHEEFSTAND_COMBO_OFFSET);
     const aantalToets = plan.ugtCombinaties.length;
     const weigering = {
-      reden: `De toetskrachten zijn niet te bepalen: de tweede-ordeberekening (P-\u0394) met scheefstand ${toetsPhiTekst3D(plan.analyse)} in +X, \u2212X, +Y en \u2212Y faalt in ${mislukt.length} van de ${aantalToets + (plan.eersteOrde?.size ?? 0)} toetsberekeningen. De toets wordt geweigerd; er wordt niet teruggevallen op eerste orde (NEN-EN 1993-1-1 5.2.2(7)b vraagt krachten uit een tweede-ordeberekening met imperfecties). De resultaten van de berekening blijven staan.`,
+      reden: `De toetskrachten zijn niet te bepalen: de tweede-ordeberekening (P-\u0394) met scheefstand ${toetsPhiTekst3D(plan.analyse)} in +X, \u2212X, +Y en \u2212Y${plan.ugtCombinaties.some((c) => c.scheefstandTorsie) ? " (met de torsievarianten van 5.3.2(10))" : ""} faalt in ${mislukt.length} van de ${aantalToets + (plan.eersteOrde?.size ?? 0)} toetsberekeningen. De toets wordt geweigerd; er wordt niet teruggevallen op eerste orde (NEN-EN 1993-1-1 5.2.2(7)b vraagt krachten uit een tweede-ordeberekening met imperfecties). De resultaten van de berekening blijven staan.`,
       perCombinatie: mislukt.map((m) => {
         const u = basisVan(m.id);
         return { ...m, reden: u?.status === "bepaald" ? `${m.reden} (${alphaCrLabel(u)})` : m.reden };
@@ -36531,11 +36608,15 @@ function toetsScheefstand3D2(project, model) {
   const noemer = typeof project.scheefstandNoemer === "number" && project.scheefstandNoemer > 0 ? project.scheefstandNoemer : 200;
   const hoogteM = typeof project.scheefstandHoogteM === "number" && project.scheefstandHoogteM > 0 ? project.scheefstandHoogteM : null;
   const aantalElementen = typeof project.scheefstandAantalElementen === "number" && project.scheefstandAantalElementen >= 1 ? Math.floor(project.scheefstandAantalElementen) : null;
+  const mPerAs = (v) => typeof v === "number" && v >= 1 ? Math.floor(v) : null;
+  const aantalPerAs = { x: mPerAs(project.scheefstandAantalX), y: mPerAs(project.scheefstandAantalY) };
+  const geometrie = leidScheefstandGeometrieAf3D(model);
   const normen = toepasselijkeScheefstandNormen3D(model);
   return {
-    project: bepaalScheefstand3D({ bron, noemer, hoogteM, aantalElementen }, leidScheefstandGeometrieAf3D(model), normen),
+    project: bepaalScheefstand3D({ bron, noemer, hoogteM, aantalElementen, aantalPerAs }, geometrie, normen),
     normen,
-    modelAan: false
+    modelAan: false,
+    torsie: project.scheefstandTorsie === true ? torsieRijen3D(geometrie) : null
   };
 }
 function toets3DOpzet(invoer) {
@@ -44131,6 +44212,7 @@ function applyGeneratedEnvelopeLoads(model, loadCases, wind, roof) {
 }
 
 // src/api/commands/project.ts
+init_scheefstandNorm();
 init_normcombinaties();
 init_normAanduidingen();
 var GEVOLGKLASSEN2 = ["CC1", "CC2", "CC3"];
@@ -44444,6 +44526,52 @@ var eigenFactorenIntrekken = documentCommando({
     };
   }
 });
+function scheefstandVan(document2) {
+  return {
+    enabled: document2.scheefstandEnabled === true,
+    source: SCHEEFSTAND_BRONNEN.includes(document2.scheefstandBron) ? document2.scheefstandBron : "vast",
+    denominator: typeof document2.scheefstandNoemer === "number" && document2.scheefstandNoemer > 0 ? document2.scheefstandNoemer : 200,
+    heightM: document2.scheefstandHoogteM ?? null,
+    members: document2.scheefstandAantalElementen ?? null,
+    membersX: document2.scheefstandAantalX ?? null,
+    membersY: document2.scheefstandAantalY ?? null,
+    torsion: document2.scheefstandTorsie === true
+  };
+}
+var scheefstandLezen = documentCommando({
+  naam: "project.sway.get",
+  beschrijving: "De instellingen van de initi\xEBle scheefstand (EN 1993-1-1 5.3.2): schakelaar voor de resultaten, bron van \u03C6, vaste noemer, handmatige h en m, in 3D m per richting (membersX, membersY) en de torsievarianten van 5.3.2(10). De UGT-toets rekent altijd met scheefstand (issue #199).",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document2) => ({ uitkomst: scheefstandVan(document2) })
+});
+var scheefstandZetten = documentCommando({
+  naam: "project.sway.set",
+  beschrijving: "De initi\xEBle scheefstand (EN 1993-1-1 5.3.2) instellen; alleen de opgegeven velden veranderen. membersX/membersY (alleen 3D, issue #212) overschrijven m per richting (5.3.2(3): een kolom met minder dan 50 % van de gemiddelde verticale kolomkracht mag eruit); null = de gedeelde m of de afleiding uit de kolomrijen. torsion (alleen 3D) zet de torsievarianten van 5.3.2(10) (figuur 5.5) aan: per richting met twee of meer kolomrijen twee varianten extra, wat het aantal P-\u0394-berekeningen van de UGT-toets verdubbelt; niet bij vlaklasten op platen.",
+  invoer: obj({
+    enabled: jaNee("Scheefstand in de RESULTATEN (de UGT-toets rekent er altijd mee)."),
+    source: keuze([...SCHEEFSTAND_BRONNEN], "Bron van \u03C6: vast (1/denominator) of een norm."),
+    denominator: getal5("Vaste noemer x in \u03C6 = 1/x.", { exclusiveMinimum: 0 }),
+    heightM: ofNull(getal5("Handmatige h in m.", { exclusiveMinimum: 0 }), "null = afleiden."),
+    members: ofNull(geheel("Handmatige m, in X en in Y.", { minimum: 1 }), "null = afleiden."),
+    membersX: ofNull(geheel("Alleen 3D: handmatige m_X.", { minimum: 1 }), "null = members of afleiden."),
+    membersY: ofNull(geheel("Alleen 3D: handmatige m_Y.", { minimum: 1 }), "null = members of afleiden."),
+    torsion: jaNee("Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10).")
+  }),
+  uitvoeren: (invoer, document2) => {
+    const nieuw = {
+      ...document2,
+      ...invoer.enabled !== void 0 ? { scheefstandEnabled: invoer.enabled } : {},
+      ...invoer.source !== void 0 ? { scheefstandBron: invoer.source } : {},
+      ...invoer.denominator !== void 0 ? { scheefstandNoemer: invoer.denominator } : {},
+      ...invoer.heightM !== void 0 ? { scheefstandHoogteM: invoer.heightM } : {},
+      ...invoer.members !== void 0 ? { scheefstandAantalElementen: invoer.members } : {},
+      ...invoer.membersX !== void 0 ? { scheefstandAantalX: invoer.membersX } : {},
+      ...invoer.membersY !== void 0 ? { scheefstandAantalY: invoer.membersY } : {},
+      ...invoer.torsion !== void 0 ? { scheefstandTorsie: invoer.torsion } : {}
+    };
+    return { uitkomst: scheefstandVan(nieuw), document: nieuw };
+  }
+});
 var PROJECT_COMMANDOS = [
   projectLezen,
   projectNieuw,
@@ -44455,7 +44583,9 @@ var PROJECT_COMMANDOS = [
   combinatieVerwijderen,
   standaardHerstellen,
   eigenFactorenHouden,
-  eigenFactorenIntrekken
+  eigenFactorenIntrekken,
+  scheefstandLezen,
+  scheefstandZetten
 ];
 
 // src/api/commands/model3dEnvelopeLoads.ts
@@ -48731,17 +48861,6 @@ function rekenDoor(payload, bewerking) {
   })) {
     waarschuwingenVoor.push(m.tekst);
   }
-  if (bewerking === "check" && resultatenLineair) {
-    for (const m of veldpatroonMeldingen({
-      beams: gelezen.model.beams,
-      supports: gelezen.model.supports,
-      loadCases: gelezen.model.loadCases,
-      loads: gelezen.model.loads,
-      lineair: false
-    })) {
-      waarschuwingenVoor.push(`UGT-toets (tweede orde met scheefstand): ${m.tekst}`);
-    }
-  }
   const waarschuwingenNa = [];
   for (const m of meldingenBelastinggevallen({
     loadCases: gelezen.model.loadCases,
@@ -48767,6 +48886,8 @@ function rekenDoor(payload, bewerking) {
     analysetype,
     eindstijfheid,
     multiInput,
+    // De invoer met de deelgevallen per veld (issue #219); zonder veldsplitsing `multiInput` zelf.
+    rekenInput,
     combinaties,
     veldSplitsing,
     veldVarianten: veld.uitkomst?.combinaties ?? [],
@@ -48928,8 +49049,15 @@ function opCheck(payload) {
   let toets;
   try {
     toets = bepaalToetsKrachten2D({
-      basis: d.multiInput,
-      combinaties: d.combinaties,
+      // De veldsgewijze plaatsing (issue #219) ook in de toets: de UGT-varianten
+      // per veldpatroon, elk als volledige P-Δ-som op de invoer met de
+      // deelgevallen. Het patroon zelf komt uit de eerste-orde-invloedslijn
+      // (NEN-EN 1991-1-1 6.2.1(1)); superpositie van tweede-ordeuitkomsten
+      // gebeurt niet. Zonder deze regel stond een veranderlijke vloerlast in
+      // de UGT-toets op alle velden tegelijk (MCP-proef: 12,19 in plaats van
+      // 21,56 kNm in het middenveld).
+      basis: d.rekenInput,
+      combinaties: d.rekenCombinaties,
       scheefstand: {
         project: project.uitkomst,
         normen: toetsNormen,

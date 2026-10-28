@@ -78,6 +78,9 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     scheefstandBron: "vast",
     scheefstandHoogteM: null,
     scheefstandAantalElementen: null,
+    scheefstandAantalX: null,
+    scheefstandAantalY: null,
+    scheefstandTorsie: false,
     gevolgklasse: "CC2",
     // De nationale bijlage (normnaad): zij bepaalt de nationaal bepaalde
     // parameters van elke toetsing, dus een wijziging hoort de resultaten te
@@ -120,6 +123,10 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     scheefstandBron: (m) => { m.scheefstandBron = "en1993"; },
     scheefstandHoogteM: (m) => { m.scheefstandHoogteM = 6; },
     scheefstandAantalElementen: (m) => { m.scheefstandAantalElementen = 3; },
+    // Issue #212 (3D): m per richting en de torsievarianten van 5.3.2(10).
+    scheefstandAantalX: (m) => { m.scheefstandAantalX = 2; },
+    scheefstandAantalY: (m) => { m.scheefstandAantalY = 3; },
+    scheefstandTorsie: (m) => { m.scheefstandTorsie = true; },
     gevolgklasse: (m) => { m.gevolgklasse = "CC3"; },
     // Er is vandaag maar één gevulde bijlage; "naar niets" is de enige
     // wijziging die te maken is, en ook die hoort een nieuwe versie te geven.

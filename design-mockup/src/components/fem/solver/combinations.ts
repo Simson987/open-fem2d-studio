@@ -103,6 +103,12 @@ export interface LoadCombination {
    */
   scheefstandAs?: "x" | "y";
   /**
+   * Alleen in 3D (issue #212): een TORSIEVARIANT van EN 1993-1-1 5.3.2(10),
+   * de buitenste kolomrijen haaks op `scheefstandAs` tegengesteld scheef en
+   * lineair ertussen. Gezet bij het rekenen, niet opgeslagen.
+   */
+  scheefstandTorsie?: boolean;
+  /**
    * Aanwezig = een EINDTOESTANDVARIANT van een UGT-combinatie: dezelfde
    * factoren, maar doorgerekend met de eindstijfheid van het hout
    * E_mean,fin = E_mean/(1 + ψ₂·k_def) (NEN-EN 1995-1-1 2.3.2.2(2)). Gezet door
