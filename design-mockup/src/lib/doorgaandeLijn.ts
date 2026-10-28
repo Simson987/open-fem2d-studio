@@ -338,6 +338,64 @@ function lijnLooptDoor(a: Beam, b: Beam, plates: { nodeIds: number[] }[] | undef
 }
 
 /**
+ * Het deel van het model dat ALLEEN aan `knoop` hangt (issue #199: de luifel-
+ * of T-kolom). Vanaf `knoop` wordt het model doorlopen over alle staven
+ * behalve `uitgesloten` (de staaf of lijn zelf). Komt die tocht bij een
+ * oplegging, een knoop in of op een plaat, een staaf op bedding of een knoop
+ * uit `verboden` (de andere knopen van de staaf zelf: een gesloten lus), dan
+ * hangt het deel ergens aan en is de uitkomst `null`. Anders zweeft het:
+ * alles wat er aan `knoop` zit — een uitkragende ligger, een tweede console
+ * erachter — draagt alleen zijn eigen last naar `knoop` en houdt hem nergens
+ * vast. Knopen in `stop` worden bereikt maar niet verder doorlopen (de voet
+ * van een losse kolom). `staafMagNiet` weigert een bereikte staaf (een andere
+ * kolomlijn).
+ *
+ * Uitkomst: de bereikte staven en knopen (zonder `knoop` zelf en zonder de
+ * stopknopen), of `null`.
+ */
+export function hangendDeel(
+  knoop: number,
+  model: {
+    nodes: readonly Node[];
+    beams: readonly Beam[];
+    supports: readonly { nodeId: number }[];
+    plates?: readonly PlaatVoorEinden[];
+  },
+  uitgesloten: ReadonlySet<number>,
+  verboden: ReadonlySet<number> = new Set(),
+  stop: ReadonlySet<number> = new Set(),
+  staafMagNiet: (b: Beam) => boolean = () => false,
+): { staafIds: number[]; knoopIds: number[] } | null {
+  const opgelegd = new Set(model.supports.map((s) => s.nodeId));
+  const knoopVan = new Map(model.nodes.map((n) => [n.id, n]));
+  const vast = (id: number): boolean => {
+    if (opgelegd.has(id) || verboden.has(id)) return true;
+    const k = knoopVan.get(id);
+    return k !== undefined && knoopInPlaat(k, model.nodes, model.plates);
+  };
+  const staven = new Set<number>();
+  const knopen = new Set<number>([knoop]);
+  const rij = [knoop];
+  while (rij.length > 0) {
+    const n = rij.pop()!;
+    for (const b of model.beams) {
+      if (uitgesloten.has(b.id) || staven.has(b.id) || (b.from !== n && b.to !== n)) continue;
+      if (b.bedding || staafMagNiet(b)) return null;
+      staven.add(b.id);
+      const ander = b.from === n ? b.to : b.from;
+      if (knopen.has(ander)) continue;
+      knopen.add(ander);
+      if (stop.has(ander)) continue;
+      if (vast(ander)) return null;
+      rij.push(ander);
+    }
+  }
+  knopen.delete(knoop);
+  for (const id of stop) knopen.delete(id);
+  return { staafIds: [...staven].sort((a, b) => a - b), knoopIds: [...knopen].sort((a, b) => a - b) };
+}
+
+/**
  * Wat er op een tussenknoop van een lijn aansluit. Een aansluitende staaf
  * houdt de knoop alleen vast als haar ANDERE eind ergens aan vastzit: een
  * oplegging, een plaat (hoek, rand of binnenin, `knoopInPlaat` — hetzelfde
@@ -1054,7 +1112,18 @@ export function bepaalStaafeinden(
         const d2 = richting(b, nodes);
         return d2 !== null && Math.abs(dir.x * d2.z - dir.z * d2.x) <= 1e-6;
       });
-    return alleenInVerlengde ? ("Doorlopend" as const) : ("Gaffel" as const);
+    if (alleenInVerlengde) return "Doorlopend" as const;
+    // DE LUIFEL- OF T-KOLOM (issue #199). Hangt alles wat hier aansluit alleen
+    // aan deze knoop — een uitkragende ligger op de kop van een kolom, zonder
+    // oplegging, plaat of verbinding terug naar de staaf zelf — dan houdt het
+    // de knoop nergens vast: het eind is vrij. Tot oktober 2026 telde elke
+    // aansluitende staaf als gaffel, en kreeg zo'n kolom L in plaats van 2·L.
+    const zelf = new Set<number>([beam.id, ...ledenVanLijn]);
+    const eigenKnopen = new Set<number>([beam.from, beam.to]);
+    for (const b of alleBeams) if (zelf.has(b.id)) { eigenKnopen.add(b.from); eigenKnopen.add(b.to); }
+    eigenKnopen.delete(knoop);
+    const hangend = hangendDeel(knoop, { nodes, beams: alleBeams, supports, plates }, zelf, eigenKnopen);
+    return hangend ? ("Vrij" as const) : ("Gaffel" as const);
   };
   return { begin: eind(beam.from), eind: eind(beam.to) };
 }

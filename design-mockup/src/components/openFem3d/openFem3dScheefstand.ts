@@ -135,7 +135,12 @@ export interface OpenFem3DScheefstand {
 /** Eén losse kolom: een kolomlijn met een vrije kop (issue #199, fase 3). */
 export interface OpenFem3DLosseKolom {
   staafIds: number[];
-  /** De knopen van de lijn boven de voet. */
+  /**
+   * Staven die alleen aan de kolom hangen (de luifel of T, issue #199); hun
+   * lasten krijgen dezelfde eigen φ. Ontbreekt = geen.
+   */
+  aanhangendeStaafIds?: number[];
+  /** De knopen boven de voet, ook die van de aanhangende staven. */
   knoopIds: number[];
   hoogteM: number;
   norm: ScheefstandNorm;
@@ -400,11 +405,12 @@ export function torsieRijen3D(geometrie: Pick<ScheefstandGeometrie3D, "perAs">):
  * De losse kolommen van het model en hun eigen scheefstand (issue #199, fase
  * 3). Een kolomlijn (staven steiler dan 75° die een knoop delen,
  * `leidScheefstandGeometrieAf3D`) is LOS als geen knoop boven de voet een
- * oplegging heeft, in een plaat ligt of een andere staaf raakt: de kop is vrij
- * en de lijn draagt alleen haar eigen lasten. Per richting geldt dan voor haar
- * lasten φ = max(φ_model, φ_eigen/factor). Een kolom die aan iets hangt (een
- * ligger op de kop, ook een uitkragende) is geen losse kolom; daar blijft de
- * φ-eis van het vrije eind gelden.
+ * oplegging heeft of in een plaat ligt, en wat er boven de voet aan haar
+ * vastzit nergens anders aan hangt (`hangendDeel`: geen oplegging, plaat of
+ * andere kolomlijn). Per richting geldt dan voor haar lasten, en die van de
+ * aanhangende staven, φ = max(φ_model, φ_eigen/factor). Zo telt ook de
+ * luifel- of T-kolom (een uitkragende ligger op de kop) als los; een kolom met
+ * een ligger naar iets anders niet, daar blijft de φ-eis van het vrije eind.
  */
 export function eigenKolomScheefstand3D(
   model: Pick<OpenFem3DModel, "nodes" | "beams" | "supports"> & Partial<Pick<OpenFem3DModel, "plates">>,
@@ -415,6 +421,8 @@ export function eigenKolomScheefstand3D(
   const knoop = new Map(model.nodes.map((n) => [n.id, n]));
   const einden = openFem3DEinden({ plates: [], ...model } as OpenFem3DModel);
   const opgelegd = new Set((model.supports ?? []).map((s) => s.nodeId));
+  const inLijn = new Set(geometrie.kolomlijnen.flatMap((l) => l.staafIds));
+  const andereLijn = (id: number, eigen: ReadonlySet<number>) => inLijn.has(id) && !eigen.has(id);
   for (const lijn of geometrie.kolomlijnen) {
     const staven = model.beams.filter((b) => lijn.staafIds.includes(b.id));
     if (staven.length === 0) continue;
@@ -422,11 +430,23 @@ export function eigenKolomScheefstand3D(
     const voet = knopen.reduce((l, id) => ((knoop.get(id)?.z ?? Infinity) < (knoop.get(l)?.z ?? Infinity) ? id : l), knopen[0]);
     const boven = knopen.filter((id) => id !== voet);
     const eigen = new Set(lijn.staafIds);
-    const los = boven.every((id) =>
-      !opgelegd.has(id)
-      && !einden.knoopInPlaat(id)
-      && !model.beams.some((b) => !eigen.has(b.id) && (b.startNodeId === id || b.endNodeId === id)));
-    if (!los || staven.some((b) => b.bedding)) continue;
+    if (staven.some((b) => b.bedding)) continue;
+    if (boven.some((id) => opgelegd.has(id) || einden.knoopInPlaat(id))) continue;
+    // Wat er boven de voet aan de kolom hangt (de luifel of T: een uitkragende
+    // ligger op de kop) mag er zitten, zolang het nergens anders aan vastzit:
+    // geen oplegging, plaat of andere kolomlijn (`hangendDeel`). De voet wordt
+    // bereikt maar niet doorlopen; de aanhangende staven en knopen krijgen
+    // dezelfde eigen φ.
+    const aanhangend = new Set<number>();
+    const knopenMetEigen = new Set<number>(boven);
+    let los = true;
+    for (const id of boven) {
+      const deel = einden.hangendDeel(id, eigen, new Set(), new Set([voet]), (b) => andereLijn(b.id, eigen));
+      if (!deel) { los = false; break; }
+      deel.staafIds.forEach((s) => aanhangend.add(s));
+      deel.knoopIds.forEach((k) => knopenMetEigen.add(k));
+    }
+    if (!los) continue;
     const hoogteM = (lijn.topZmm - lijn.voetZmm) / 1000;
     if (!(hoogteM > 0)) continue;
     const norm = toepasselijkeScheefstandNormen3D({ beams: staven })[0] ?? "en1993";
@@ -435,9 +455,14 @@ export function eigenKolomScheefstand3D(
     const factor = Number.isFinite(rol) ? Math.max(Math.abs(Math.cos(rol)), Math.abs(Math.sin(rol))) : 1;
     const toegepast = phiEigen / factor;
     const perAs: OpenFem3DPhiPerAs = { x: Math.max(phiModel.x, toegepast), y: Math.max(phiModel.y, toegepast) };
-    uit.kolommen.push({ staafIds: [...lijn.staafIds], knoopIds: boven, hoogteM, norm, phiEigen, factor });
-    for (const id of lijn.staafIds) uit.perStaaf.set(id, perAs);
-    for (const id of boven) uit.perKnoop.set(id, perAs);
+    const aanhang = [...aanhangend].sort((a, b) => a - b);
+    const knoopIds = [...knopenMetEigen].sort((a, b) => a - b);
+    uit.kolommen.push({
+      staafIds: [...lijn.staafIds], knoopIds, hoogteM, norm, phiEigen, factor,
+      ...(aanhang.length > 0 ? { aanhangendeStaafIds: aanhang } : {}),
+    });
+    for (const id of [...lijn.staafIds, ...aanhang]) uit.perStaaf.set(id, perAs);
+    for (const id of knoopIds) uit.perKnoop.set(id, perAs);
   }
   return uit;
 }
@@ -447,7 +472,9 @@ export function eigenKolomMelding3D(eigen: OpenFem3DEigenKolomPhi | null): strin
   if (!eigen || eigen.kolommen.length === 0) return null;
   const lijst = eigen.kolommen.map((k) => {
     const draai = k.factor < 1 - 1e-9 ? `, gedraaid: /${getal(k.factor, 3)}` : "";
-    return `staaf ${k.staafIds.join("+")} (h = ${getal(k.hoogteM, 3)} m, ${NORM_ARTIKEL[k.norm]}, ` +
+    return `staaf ${k.staafIds.join("+")}` +
+      (k.aanhangendeStaafIds ? ` met de aanhangende staaf ${k.aanhangendeStaafIds.join(", ")}` : "") +
+      ` (h = ${getal(k.hoogteM, 3)} m, ${NORM_ARTIKEL[k.norm]}, ` +
       `φ_eigen = 1/${getal(1 / k.phiEigen, 0)}${draai})`;
   });
   return "Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan " +

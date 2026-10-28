@@ -15813,6 +15813,35 @@ function lijnLooptDoor(a, b, plates) {
   if (knoop === void 0) return false;
   return !(plates ?? []).some((p2) => p2.nodeIds.includes(knoop));
 }
+function hangendDeel(knoop, model, uitgesloten, verboden = /* @__PURE__ */ new Set(), stop = /* @__PURE__ */ new Set(), staafMagNiet = () => false) {
+  const opgelegd2 = new Set(model.supports.map((s) => s.nodeId));
+  const knoopVan = new Map(model.nodes.map((n2) => [n2.id, n2]));
+  const vast2 = (id2) => {
+    if (opgelegd2.has(id2) || verboden.has(id2)) return true;
+    const k = knoopVan.get(id2);
+    return k !== void 0 && knoopInPlaat(k, model.nodes, model.plates);
+  };
+  const staven = /* @__PURE__ */ new Set();
+  const knopen = /* @__PURE__ */ new Set([knoop]);
+  const rij = [knoop];
+  while (rij.length > 0) {
+    const n2 = rij.pop();
+    for (const b of model.beams) {
+      if (uitgesloten.has(b.id) || staven.has(b.id) || b.from !== n2 && b.to !== n2) continue;
+      if (b.bedding || staafMagNiet(b)) return null;
+      staven.add(b.id);
+      const ander2 = b.from === n2 ? b.to : b.from;
+      if (knopen.has(ander2)) continue;
+      knopen.add(ander2);
+      if (stop.has(ander2)) continue;
+      if (vast2(ander2)) return null;
+      rij.push(ander2);
+    }
+  }
+  knopen.delete(knoop);
+  for (const id2 of stop) knopen.delete(id2);
+  return { staafIds: [...staven].sort((a, b) => a - b), knoopIds: [...knopen].sort((a, b) => a - b) };
+}
 function beschrijfKnoop(knoop, xMm, delen, alleBeams, supports, nodes, plates) {
   const inLijn = new Set(delen.map((d) => d.beam.id));
   const opgelegd2 = new Set(supports.map((s) => s.nodeId));
@@ -16248,7 +16277,16 @@ function bepaalStaafeinden(beam, nodes, alleBeams, supports, ledenVanLijn, plate
       const d2 = richting(b, nodes);
       return d2 !== null && Math.abs(dir.x * d2.z - dir.z * d2.x) <= 1e-6;
     });
-    return alleenInVerlengde ? "Doorlopend" : "Gaffel";
+    if (alleenInVerlengde) return "Doorlopend";
+    const zelf = /* @__PURE__ */ new Set([beam.id, ...ledenVanLijn]);
+    const eigenKnopen = /* @__PURE__ */ new Set([beam.from, beam.to]);
+    for (const b of alleBeams) if (zelf.has(b.id)) {
+      eigenKnopen.add(b.from);
+      eigenKnopen.add(b.to);
+    }
+    eigenKnopen.delete(knoop);
+    const hangend = hangendDeel(knoop, { nodes, beams: alleBeams, supports, plates }, zelf, eigenKnopen);
+    return hangend ? "Vrij" : "Gaffel";
   };
   return { begin: eind(beam.from), eind: eind(beam.to) };
 }
@@ -22026,31 +22064,55 @@ function eigenKolomScheefstand2D(model) {
   });
   const knoop = new Map(model.nodes.map((n2) => [n2.id, n2]));
   const opgelegd2 = new Set(model.supports.map((s) => s.nodeId));
-  const inPlaat = (id2) => {
-    const k = knoop.get(id2);
-    return k !== void 0 && knoopInPlaat(k, model.nodes, model.plates);
+  const modelVoorTocht = {
+    nodes: model.nodes,
+    beams: model.beams,
+    supports: model.supports,
+    plates: model.plates
   };
+  const lijnVan = /* @__PURE__ */ new Map();
+  geometrie.kolomlijnen.forEach((l, i) => l.staafIds.forEach((id2) => lijnVan.set(id2, i)));
   const uit = [];
-  for (const lijn of geometrie.kolomlijnen) {
+  geometrie.kolomlijnen.forEach((lijn, i) => {
     const eigen = new Set(lijn.staafIds);
     const staven = model.beams.filter((b) => eigen.has(b.id));
-    if (staven.length === 0 || staven.some((b) => b.bedding)) continue;
+    if (staven.length === 0 || staven.some((b) => b.bedding)) return;
     const knopen = [...new Set(staven.flatMap((b) => [b.from, b.to]))];
     const voet = knopen.reduce((l, id2) => (knoop.get(id2)?.z ?? Infinity) < (knoop.get(l)?.z ?? Infinity) ? id2 : l, knopen[0]);
     const boven = knopen.filter((id2) => id2 !== voet);
-    const los = boven.every((id2) => !opgelegd2.has(id2) && !inPlaat(id2) && !model.beams.some((b) => !eigen.has(b.id) && (b.from === id2 || b.to === id2)));
-    if (!los) continue;
+    if (boven.some((id2) => opgelegd2.has(id2))) return;
+    const extraStaven = /* @__PURE__ */ new Set();
+    const extraKnopen = new Set(boven);
+    for (const id2 of boven) {
+      const deel = hangendDeel(
+        id2,
+        modelVoorTocht,
+        eigen,
+        /* @__PURE__ */ new Set(),
+        /* @__PURE__ */ new Set([voet]),
+        (b) => lijnVan.has(b.id) && lijnVan.get(b.id) !== i
+      );
+      if (!deel) return;
+      deel.staafIds.forEach((s) => extraStaven.add(s));
+      deel.knoopIds.forEach((k) => extraKnopen.add(k));
+    }
+    if (boven.some((id2) => {
+      const k = knoop.get(id2);
+      return k !== void 0 && knoopInPlaat(k, model.nodes, model.plates);
+    })) return;
     const hoogteM = (lijn.topZmm - lijn.voetZmm) / 1e3;
-    if (!(hoogteM > 0)) continue;
+    if (!(hoogteM > 0)) return;
     const norm5 = toepasselijkeScheefstandNormen(staven)[0] ?? "en1993";
+    const aanhang = [...extraStaven].sort((a, b) => a - b);
     uit.push({
       staafIds: [...lijn.staafIds],
-      knoopIds: boven,
+      knoopIds: [...extraKnopen].sort((a, b) => a - b),
       hoogteM,
       norm: norm5,
-      phiEigen: phiVolgensNorm(norm5, hoogteM, 1).phi
+      phiEigen: phiVolgensNorm(norm5, hoogteM, 1).phi,
+      ...aanhang.length > 0 ? { aanhangendeStaafIds: aanhang } : {}
     });
-  }
+  });
   return uit;
 }
 function eigenKolomPhiKaarten(kolommen, phiModel) {
@@ -22058,14 +22120,14 @@ function eigenKolomPhiKaarten(kolommen, phiModel) {
   const perKnoop = /* @__PURE__ */ new Map();
   for (const k of kolommen) {
     const phi = Math.max(phiModel, k.phiEigen);
-    for (const id2 of k.staafIds) perStaaf.set(id2, phi);
+    for (const id2 of [...k.staafIds, ...k.aanhangendeStaafIds ?? []]) perStaaf.set(id2, phi);
     for (const id2 of k.knoopIds) perKnoop.set(id2, phi);
   }
   return { perStaaf, perKnoop };
 }
 function eigenKolomMelding2D(kolommen, phiModel) {
   if (kolommen.length === 0) return null;
-  const lijst3 = kolommen.map((k) => `staaf ${k.staafIds.join("+")} (h = ${nl6(k.hoogteM)} m, ${NORM_ARTIKEL[k.norm]}, \u03C6_eigen = 1/${nl6(1 / k.phiEigen, 0)}, toegepast \u03C6 = 1/${nl6(1 / Math.max(phiModel, k.phiEigen), 0)})`);
+  const lijst3 = kolommen.map((k) => `staaf ${k.staafIds.join("+")}` + (k.aanhangendeStaafIds ? ` met de aanhangende staaf ${k.aanhangendeStaafIds.join(", ")}` : "") + ` (h = ${nl6(k.hoogteM)} m, ${NORM_ARTIKEL[k.norm]}, \u03C6_eigen = 1/${nl6(1 / k.phiEigen, 0)}, toegepast \u03C6 = 1/${nl6(1 / Math.max(phiModel, k.phiEigen), 0)})`);
   return `Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan en middelt haar scheefstand met niets; haar lasten krijgen \u03C6 = max(\u03C6_model, \u03C6_eigen) met h = haar eigen hoogte en m = 1: ${lijst3.join("; ")}. Daarmee zit haar zijdelingse knik in de toetskrachten en geldt de systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).`;
 }
 var TOETS_HOUT_MELDING = "Hout in de toets: de tweede-ordeberekening (P-\u0394) rekent de houten staven met E_mean, zonder E_d = E_mean/\u03B3_M en zonder boogimperfectie. Dat is niet de volledige route van NEN-EN 1995-1-1 (2.2.2(1)P, 5.4.4); daarom houdt een houten staaf met een vrij eind de kniklengte 2\xB7L.";
@@ -32819,13 +32881,39 @@ function openFem3DEinden(model) {
     perKnoop.set(nodeId, uit);
     return uit;
   };
-  const vrijEind = (beam, nodeId) => {
-    if ((model.supports ?? []).some((support) => support.nodeId === nodeId)) return false;
-    if (beam.bedding) return false;
-    if (model.beams.some((other) => other.id !== beam.id && (other.startNodeId === nodeId || other.endNodeId === nodeId))) {
-      return false;
+  const opgelegd2 = new Set((model.supports ?? []).map((support) => support.nodeId));
+  const hangendDeel2 = (nodeId, uitgesloten, verboden = /* @__PURE__ */ new Set(), stop = /* @__PURE__ */ new Set(), staafMagNiet = () => false) => {
+    const staven = /* @__PURE__ */ new Set();
+    const knopen = /* @__PURE__ */ new Set([nodeId]);
+    const rij = [nodeId];
+    while (rij.length > 0) {
+      const n2 = rij.pop();
+      for (const b of model.beams) {
+        if (uitgesloten.has(b.id) || staven.has(b.id) || b.startNodeId !== n2 && b.endNodeId !== n2) continue;
+        if (b.bedding || staafMagNiet(b)) return null;
+        staven.add(b.id);
+        const ander2 = b.startNodeId === n2 ? b.endNodeId : b.startNodeId;
+        if (knopen.has(ander2)) continue;
+        knopen.add(ander2);
+        if (stop.has(ander2)) continue;
+        if (opgelegd2.has(ander2) || verboden.has(ander2) || knoopInPlaat2(ander2)) return null;
+        rij.push(ander2);
+      }
     }
-    return !knoopInPlaat2(nodeId);
+    knopen.delete(nodeId);
+    for (const id2 of stop) knopen.delete(id2);
+    return { staafIds: [...staven].sort((a, b) => a - b), knoopIds: [...knopen].sort((a, b) => a - b) };
+  };
+  const vrijEind = (beam, nodeId) => {
+    if (opgelegd2.has(nodeId)) return false;
+    if (beam.bedding) return false;
+    if (knoopInPlaat2(nodeId)) return false;
+    if (!model.beams.some((other) => other.id !== beam.id && (other.startNodeId === nodeId || other.endNodeId === nodeId))) {
+      return true;
+    }
+    if (doorlopendEind(beam, nodeId)) return false;
+    const ander2 = beam.startNodeId === nodeId ? beam.endNodeId : beam.startNodeId;
+    return hangendDeel2(nodeId, /* @__PURE__ */ new Set([beam.id]), /* @__PURE__ */ new Set([ander2])) !== null;
   };
   const richting2 = (b) => {
     const a = model.nodes.find((node) => node.id === b.startNodeId);
@@ -32855,7 +32943,7 @@ function openFem3DEinden(model) {
     if (eindVrij && !beginVrij) return "begin";
     return beam.checkConfig?.deflectionClass === "cantilever" ? "kleinste" : null;
   };
-  return { knoopInPlaat: knoopInPlaat2, vrijEind, doorlopendEind, inklemming };
+  return { knoopInPlaat: knoopInPlaat2, vrijEind, doorlopendEind, inklemming, hangendDeel: hangendDeel2 };
 }
 function openFem3DZijdelingseKnik(model, uls, analyseVan, phi, phiPerStaaf) {
   const tweedeOrde = uls.length > 0 && uls.every((c) => analyseVan(c.id) === "p-delta");
@@ -33096,6 +33184,8 @@ function eigenKolomScheefstand3D(model, phiModel) {
   const knoop = new Map(model.nodes.map((n2) => [n2.id, n2]));
   const einden = openFem3DEinden({ plates: [], ...model });
   const opgelegd2 = new Set((model.supports ?? []).map((s) => s.nodeId));
+  const inLijn = new Set(geometrie.kolomlijnen.flatMap((l) => l.staafIds));
+  const andereLijn = (id2, eigen) => inLijn.has(id2) && !eigen.has(id2);
   for (const lijn of geometrie.kolomlijnen) {
     const staven = model.beams.filter((b) => lijn.staafIds.includes(b.id));
     if (staven.length === 0) continue;
@@ -33103,8 +33193,21 @@ function eigenKolomScheefstand3D(model, phiModel) {
     const voet = knopen.reduce((l, id2) => (knoop.get(id2)?.z ?? Infinity) < (knoop.get(l)?.z ?? Infinity) ? id2 : l, knopen[0]);
     const boven = knopen.filter((id2) => id2 !== voet);
     const eigen = new Set(lijn.staafIds);
-    const los = boven.every((id2) => !opgelegd2.has(id2) && !einden.knoopInPlaat(id2) && !model.beams.some((b) => !eigen.has(b.id) && (b.startNodeId === id2 || b.endNodeId === id2)));
-    if (!los || staven.some((b) => b.bedding)) continue;
+    if (staven.some((b) => b.bedding)) continue;
+    if (boven.some((id2) => opgelegd2.has(id2) || einden.knoopInPlaat(id2))) continue;
+    const aanhangend = /* @__PURE__ */ new Set();
+    const knopenMetEigen = new Set(boven);
+    let los = true;
+    for (const id2 of boven) {
+      const deel = einden.hangendDeel(id2, eigen, /* @__PURE__ */ new Set(), /* @__PURE__ */ new Set([voet]), (b) => andereLijn(b.id, eigen));
+      if (!deel) {
+        los = false;
+        break;
+      }
+      deel.staafIds.forEach((s) => aanhangend.add(s));
+      deel.knoopIds.forEach((k) => knopenMetEigen.add(k));
+    }
+    if (!los) continue;
     const hoogteM = (lijn.topZmm - lijn.voetZmm) / 1e3;
     if (!(hoogteM > 0)) continue;
     const norm5 = toepasselijkeScheefstandNormen3D({ beams: staven })[0] ?? "en1993";
@@ -33113,9 +33216,19 @@ function eigenKolomScheefstand3D(model, phiModel) {
     const factor = Number.isFinite(rol) ? Math.max(Math.abs(Math.cos(rol)), Math.abs(Math.sin(rol))) : 1;
     const toegepast = phiEigen / factor;
     const perAs = { x: Math.max(phiModel.x, toegepast), y: Math.max(phiModel.y, toegepast) };
-    uit.kolommen.push({ staafIds: [...lijn.staafIds], knoopIds: boven, hoogteM, norm: norm5, phiEigen, factor });
-    for (const id2 of lijn.staafIds) uit.perStaaf.set(id2, perAs);
-    for (const id2 of boven) uit.perKnoop.set(id2, perAs);
+    const aanhang = [...aanhangend].sort((a, b) => a - b);
+    const knoopIds = [...knopenMetEigen].sort((a, b) => a - b);
+    uit.kolommen.push({
+      staafIds: [...lijn.staafIds],
+      knoopIds,
+      hoogteM,
+      norm: norm5,
+      phiEigen,
+      factor,
+      ...aanhang.length > 0 ? { aanhangendeStaafIds: aanhang } : {}
+    });
+    for (const id2 of [...lijn.staafIds, ...aanhang]) uit.perStaaf.set(id2, perAs);
+    for (const id2 of knoopIds) uit.perKnoop.set(id2, perAs);
   }
   return uit;
 }
@@ -33123,7 +33236,7 @@ function eigenKolomMelding3D(eigen) {
   if (!eigen || eigen.kolommen.length === 0) return null;
   const lijst3 = eigen.kolommen.map((k) => {
     const draai2 = k.factor < 1 - 1e-9 ? `, gedraaid: /${getal5(k.factor, 3)}` : "";
-    return `staaf ${k.staafIds.join("+")} (h = ${getal5(k.hoogteM, 3)} m, ${NORM_ARTIKEL2[k.norm]}, \u03C6_eigen = 1/${getal5(1 / k.phiEigen, 0)}${draai2})`;
+    return `staaf ${k.staafIds.join("+")}` + (k.aanhangendeStaafIds ? ` met de aanhangende staaf ${k.aanhangendeStaafIds.join(", ")}` : "") + ` (h = ${getal5(k.hoogteM, 3)} m, ${NORM_ARTIKEL2[k.norm]}, \u03C6_eigen = 1/${getal5(1 / k.phiEigen, 0)}${draai2})`;
   });
   return `Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan en middelt haar scheefstand met niets; haar lasten krijgen \u03C6 = max(\u03C6_model, \u03C6_eigen) met h = haar eigen hoogte en m = 1: ${lijst3.join("; ")}. Daarmee zit haar zijdelingse knik in de toetskrachten en geldt de systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).`;
 }

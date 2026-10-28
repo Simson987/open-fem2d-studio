@@ -15,7 +15,10 @@
  *
  * EEN KNOOP IS NIET VRIJ als
  *  - er een oplegging op staat;
- *  - er een andere staaf op aansluit;
+ *  - er een andere staaf op aansluit die ergens aan vastzit (een staaf die
+ *    alleen aan deze knoop hangt, zoals de uitkragende ligger op een luifel-
+ *    of T-kolom, houdt niets vast; issue #199), of die in het verlengde
+ *    doorloopt;
  *  - de staaf zelf op bedding ligt (de grond draagt haar over de hele lengte);
  *  - hij in of op een plaat ligt — hoekknoop, randknoop of tussenknoop: het
  *    rekennet maakt elke modelknoop in het plaatvlak die binnen of op de
@@ -52,6 +55,18 @@ export interface OpenFem3DEinden {
   doorlopendEind(beam: OpenFem3DBeam, nodeId: number): boolean;
   /** De inklemming van de staaf, of `null` voor een gewone overspanning. */
   inklemming(beam: OpenFem3DBeam): OpenFem3DInklemming | null;
+  /**
+   * Het deel dat alleen aan `nodeId` hangt, zonder de staven in `uitgesloten`
+   * (issue #199, de luifel- of T-kolom); `null` als het ergens aan vastzit.
+   * Zie `hangendDeel3D`.
+   */
+  hangendDeel(
+    nodeId: number,
+    uitgesloten: ReadonlySet<number>,
+    verboden?: ReadonlySet<number>,
+    stop?: ReadonlySet<number>,
+    staafMagNiet?: (b: OpenFem3DBeam) => boolean,
+  ): { staafIds: number[]; knoopIds: number[] } | null;
 }
 
 /**
@@ -100,13 +115,57 @@ export function openFem3DEinden(model: OpenFem3DModel): OpenFem3DEinden {
     perKnoop.set(nodeId, uit);
     return uit;
   };
-  const vrijEind = (beam: OpenFem3DBeam, nodeId: number): boolean => {
-    if ((model.supports ?? []).some((support) => support.nodeId === nodeId)) return false;
-    if (beam.bedding) return false;
-    if (model.beams.some((other) => other.id !== beam.id && (other.startNodeId === nodeId || other.endNodeId === nodeId))) {
-      return false;
+  // HET HANGENDE DEEL (issue #199): vanaf `nodeId` over alle staaven behalve
+  // `uitgesloten`. Bereikt de tocht een oplegging, een knoop in of op een
+  // plaat, een staaf op bedding of een knoop uit `verboden`, dan zit het deel
+  // ergens aan vast (`null`). Knopen in `stop` worden bereikt maar niet
+  // doorlopen; `staafMagNiet` weigert een bereikte staaf. De 3D-tegenhanger
+  // van `hangendDeel` in `lib/doorgaandeLijn.ts`.
+  const opgelegd = new Set((model.supports ?? []).map((support) => support.nodeId));
+  const hangendDeel = (
+    nodeId: number,
+    uitgesloten: ReadonlySet<number>,
+    verboden: ReadonlySet<number> = new Set(),
+    stop: ReadonlySet<number> = new Set(),
+    staafMagNiet: (b: OpenFem3DBeam) => boolean = () => false,
+  ): { staafIds: number[]; knoopIds: number[] } | null => {
+    const staven = new Set<number>();
+    const knopen = new Set<number>([nodeId]);
+    const rij = [nodeId];
+    while (rij.length > 0) {
+      const n = rij.pop()!;
+      for (const b of model.beams) {
+        if (uitgesloten.has(b.id) || staven.has(b.id) || (b.startNodeId !== n && b.endNodeId !== n)) continue;
+        if (b.bedding || staafMagNiet(b)) return null;
+        staven.add(b.id);
+        const ander = b.startNodeId === n ? b.endNodeId : b.startNodeId;
+        if (knopen.has(ander)) continue;
+        knopen.add(ander);
+        if (stop.has(ander)) continue;
+        if (opgelegd.has(ander) || verboden.has(ander) || knoopInPlaat(ander)) return null;
+        rij.push(ander);
+      }
     }
-    return !knoopInPlaat(nodeId);
+    knopen.delete(nodeId);
+    for (const id of stop) knopen.delete(id);
+    return { staafIds: [...staven].sort((a, b) => a - b), knoopIds: [...knopen].sort((a, b) => a - b) };
+  };
+  const vrijEind = (beam: OpenFem3DBeam, nodeId: number): boolean => {
+    if (opgelegd.has(nodeId)) return false;
+    if (beam.bedding) return false;
+    if (knoopInPlaat(nodeId)) return false;
+    if (!model.beams.some((other) => other.id !== beam.id && (other.startNodeId === nodeId || other.endNodeId === nodeId))) {
+      return true;
+    }
+    // DE LUIFEL- OF T-KOLOM (issue #199). Een voortzetting in het verlengde is
+    // doorlopend (`doorlopendEind`), niet vrij. Hangt verder alles wat hier
+    // aansluit alleen aan deze knoop — een uitkragende ligger op de kop van een
+    // kolom, zonder oplegging, plaat of verbinding terug naar de staaf — dan
+    // houdt het de knoop nergens vast en is het eind vrij. Tot oktober 2026
+    // telde elke aansluitende staaf, en kreeg zo'n kolom L in plaats van 2·L.
+    if (doorlopendEind(beam, nodeId)) return false;
+    const ander = beam.startNodeId === nodeId ? beam.endNodeId : beam.startNodeId;
+    return hangendDeel(nodeId, new Set([beam.id]), new Set([ander])) !== null;
   };
   // DOORLOPEND (issue #205): geen oplegging, geen bedding, niet in een plaat,
   // en ALLEEN staven in het verlengde op de knoop (binnen 1e-6 op het
@@ -145,7 +204,7 @@ export function openFem3DEinden(model: OpenFem3DModel): OpenFem3DEinden {
     if (eindVrij && !beginVrij) return "begin";
     return beam.checkConfig?.deflectionClass === "cantilever" ? "kleinste" : null;
   };
-  return { knoopInPlaat, vrijEind, doorlopendEind, inklemming };
+  return { knoopInPlaat, vrijEind, doorlopendEind, inklemming, hangendDeel };
 }
 
 /**

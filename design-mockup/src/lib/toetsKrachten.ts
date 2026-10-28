@@ -65,7 +65,7 @@ import {
   type ToetsKrachtenOmschrijving,
 } from "../components/fem/solver/alphaCr";
 import { eersteOrdeResultatenVoorToets } from "./eersteOrdeResultaten";
-import { knoopInPlaat, type PlaatVoorEinden } from "./doorgaandeLijn";
+import { hangendDeel, knoopInPlaat, type PlaatVoorEinden } from "./doorgaandeLijn";
 import { plaatMateriaalSoort, type PlaatMateriaalSoort } from "./plaatMateriaal";
 import {
   leidScheefstandGeometrieAf,
@@ -207,7 +207,13 @@ export function toetsScheefstandNormen(
 export interface EigenKolom2D {
   /** De staven van de kolomlijn. */
   staafIds: number[];
-  /** De knopen boven de voet: hun knooplasten krijgen de eigen φ. */
+  /**
+   * Staven die alleen aan de kolom hangen (de luifel of T: een uitkragende
+   * ligger op de kop, `hangendDeel`). Hun lasten gaan via de kolom naar de
+   * voet en krijgen dezelfde eigen φ. Ontbreekt = geen.
+   */
+  aanhangendeStaafIds?: number[];
+  /** De knopen boven de voet, ook die van de aanhangende staven: hun knooplasten krijgen de eigen φ. */
   knoopIds: number[];
   /** De hoogte van de kolom (voet tot kop), in m. */
   hoogteM: number;
@@ -227,9 +233,11 @@ const NORM_ARTIKEL: Record<ScheefstandNorm, string> = {
  *
  * Een kolomlijn (staven steiler dan 75° die een knoop delen,
  * `leidScheefstandGeometrieAf`) is LOS als geen knoop boven haar voet een
- * oplegging heeft, in of op een plaat ligt (`knoopInPlaat`) of een andere
- * staaf raakt: de kop is vrij en de lijn draagt alleen haar eigen lasten. Een
- * staaf op bedding telt nooit als losse kolom.
+ * oplegging heeft of in of op een plaat ligt (`knoopInPlaat`), en wat er boven
+ * de voet aan haar vastzit nergens anders aan hangt (`hangendDeel`): geen
+ * oplegging, geen plaat, geen andere kolomlijn. Zo telt ook de luifel- of
+ * T-kolom (een uitkragende ligger op de kop) als los; de aanhangende staven
+ * krijgen dezelfde eigen φ. Een staaf op bedding telt nooit als losse kolom.
  *
  * φ_eigen volgt de norm van haar materiaal met h = haar eigen hoogte en m = 1
  * (EN 1993-1-1 (5.5), EN 1992-1-1 (5.1), EN 1995-1-1 (5.1)): een kolom met
@@ -248,31 +256,51 @@ export function eigenKolomScheefstand2D(model: {
   });
   const knoop = new Map(model.nodes.map((n) => [n.id, n]));
   const opgelegd = new Set(model.supports.map((s) => s.nodeId));
-  const inPlaat = (id: number): boolean => {
-    const k = knoop.get(id);
-    return k !== undefined && knoopInPlaat(k, model.nodes as never, model.plates);
+  const modelVoorTocht = {
+    nodes: model.nodes as never, beams: model.beams, supports: model.supports, plates: model.plates,
   };
+  // Elke staaf van een kolomlijn: een andere kolomlijn bereiken = geen losse kolom.
+  const lijnVan = new Map<number, number>();
+  geometrie.kolomlijnen.forEach((l, i) => l.staafIds.forEach((id) => lijnVan.set(id, i)));
   const uit: EigenKolom2D[] = [];
-  for (const lijn of geometrie.kolomlijnen) {
+  geometrie.kolomlijnen.forEach((lijn, i) => {
     const eigen = new Set(lijn.staafIds);
     const staven = model.beams.filter((b) => eigen.has(b.id));
-    if (staven.length === 0 || staven.some((b) => b.bedding)) continue;
+    if (staven.length === 0 || staven.some((b) => b.bedding)) return;
     const knopen = [...new Set(staven.flatMap((b) => [b.from, b.to]))];
     const voet = knopen.reduce((l, id) => ((knoop.get(id)?.z ?? Infinity) < (knoop.get(l)?.z ?? Infinity) ? id : l), knopen[0]);
     const boven = knopen.filter((id) => id !== voet);
-    const los = boven.every((id) =>
-      !opgelegd.has(id)
-      && !inPlaat(id)
-      && !model.beams.some((b) => !eigen.has(b.id) && (b.from === id || b.to === id)));
-    if (!los) continue;
+    // Wat er boven de voet aan de kolom hangt (de luifel of T: een uitkragende
+    // ligger op de kop), mag er zitten, zolang het nergens anders aan vastzit:
+    // geen oplegging, geen plaat, geen andere kolomlijn (`hangendDeel`). De
+    // voet wordt bereikt maar niet doorlopen. Die staven en knopen dragen hun
+    // last via de kolom af en krijgen dezelfde eigen φ.
+    if (boven.some((id) => opgelegd.has(id))) return;
+    const extraStaven = new Set<number>();
+    const extraKnopen = new Set<number>(boven);
+    for (const id of boven) {
+      const deel = hangendDeel(id, modelVoorTocht, eigen, new Set(), new Set([voet]),
+        (b) => lijnVan.has(b.id) && lijnVan.get(b.id) !== i);
+      if (!deel) return;
+      deel.staafIds.forEach((s) => extraStaven.add(s));
+      deel.knoopIds.forEach((k) => extraKnopen.add(k));
+    }
+    // Een knoop boven de voet in een plaat: `hangendDeel` toetst alleen de
+    // bereikte knopen, dus de beginknopen hier.
+    if (boven.some((id) => {
+      const k = knoop.get(id);
+      return k !== undefined && knoopInPlaat(k, model.nodes as never, model.plates);
+    })) return;
     const hoogteM = (lijn.topZmm - lijn.voetZmm) / 1000;
-    if (!(hoogteM > 0)) continue;
+    if (!(hoogteM > 0)) return;
     const norm = toepasselijkeScheefstandNormen(staven)[0] ?? "en1993";
+    const aanhang = [...extraStaven].sort((a, b) => a - b);
     uit.push({
-      staafIds: [...lijn.staafIds], knoopIds: boven, hoogteM, norm,
+      staafIds: [...lijn.staafIds], knoopIds: [...extraKnopen].sort((a, b) => a - b), hoogteM, norm,
       phiEigen: phiVolgensNorm(norm, hoogteM, 1).phi,
+      ...(aanhang.length > 0 ? { aanhangendeStaafIds: aanhang } : {}),
     });
-  }
+  });
   return uit;
 }
 
@@ -288,7 +316,7 @@ export function eigenKolomPhiKaarten(kolommen: readonly EigenKolom2D[], phiModel
   const perKnoop = new Map<number, number>();
   for (const k of kolommen) {
     const phi = Math.max(phiModel, k.phiEigen);
-    for (const id of k.staafIds) perStaaf.set(id, phi);
+    for (const id of [...k.staafIds, ...(k.aanhangendeStaafIds ?? [])]) perStaaf.set(id, phi);
     for (const id of k.knoopIds) perKnoop.set(id, phi);
   }
   return { perStaaf, perKnoop };
@@ -298,7 +326,9 @@ export function eigenKolomPhiKaarten(kolommen: readonly EigenKolom2D[], phiModel
 export function eigenKolomMelding2D(kolommen: readonly EigenKolom2D[], phiModel: number): string | null {
   if (kolommen.length === 0) return null;
   const lijst = kolommen.map((k) =>
-    `staaf ${k.staafIds.join("+")} (h = ${nl(k.hoogteM)} m, ${NORM_ARTIKEL[k.norm]}, ` +
+    `staaf ${k.staafIds.join("+")}` +
+      (k.aanhangendeStaafIds ? ` met de aanhangende staaf ${k.aanhangendeStaafIds.join(", ")}` : "") +
+      ` (h = ${nl(k.hoogteM)} m, ${NORM_ARTIKEL[k.norm]}, ` +
       `φ_eigen = 1/${nl(1 / k.phiEigen, 0)}, toegepast φ = 1/${nl(1 / Math.max(phiModel, k.phiEigen), 0)})`);
   return "Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan " +
     "en middelt haar scheefstand met niets; haar lasten krijgen φ = max(φ_model, φ_eigen) met h = haar eigen " +
