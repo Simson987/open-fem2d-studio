@@ -600,12 +600,13 @@ if (!KERN_AANWEZIG) {
   const [r1, r2] = uitkomst;
 
   ok("de kern levert een resultaat per staaf", uitkomst.length === 2);
-  // Zestien: de vijftien die er altijd waren, plus de §5.8-regel die er sinds
-  // de kolomtoets ALTIJD in staat. Deze vloerplaten dragen geen normaaldruk,
-  // dus die regel meldt dat §5.8 niet van toepassing is — met de reden, want
-  // een weggelaten toets is niet te onderscheiden van een toets die slaagde.
-  ok("staaf 1: zestien deeltoetsen", (r1.checks ?? []).length === 16);
-  ok("staaf 2: zestien deeltoetsen", (r2.checks ?? []).length === 16);
+  // Zeventien: de vijftien die er altijd waren, plus de §5.8-regel die er
+  // sinds de kolomtoets ALTIJD in staat, plus de drukzonegrens x_u/d van
+  // 6.1(9) (issue #250). Deze vloerplaten dragen geen normaaldruk, dus de
+  // §5.8-regel meldt dat §5.8 niet van toepassing is — met de reden, want een
+  // weggelaten toets is niet te onderscheiden van een toets die slaagde.
+  ok("staaf 1: zeventien deeltoetsen", (r1.checks ?? []).length === 17);
+  ok("staaf 2: zeventien deeltoetsen", (r2.checks ?? []).length === 17);
 
   // ── De nuttige hoogte ───────────────────────────────────────────────────
   // d = h − c_nom − Ø/2, met c_nom = 25 mm en Ø = 10 mm: 250 en 110 mm. Dat
