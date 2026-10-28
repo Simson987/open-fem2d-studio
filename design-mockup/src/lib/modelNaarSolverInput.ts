@@ -82,6 +82,14 @@ export interface FemModelInvoer {
   scheefstandNoemer: number;
   /** Richting van de equivalente horizontale krachten: +1 = +x, −1 = −x. */
   scheefstandRichting: 1 | -1;
+  /**
+   * Eigen scheefstand per losse kolom in de UGT-toets (issue #199, fase 3;
+   * `eigenKolomScheefstand2D`). Ontbreekt = uit. Alleen de toets, nooit de
+   * resultaten.
+   */
+  scheefstandEigenKolom?: boolean;
+  /** Hout in de UGT-toets volgens NEN-EN 1995-1-1 (issue #199, fase 4). Ontbreekt = uit. */
+  houtToetsEN1995?: boolean;
   axialMaterialLoadPath?: number[];
 }
 

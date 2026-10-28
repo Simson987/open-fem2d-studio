@@ -337,7 +337,9 @@ pub struct TimberBeamCheckInput {
     /// Alleen zetten als die tweede-orde-berekening voldoet aan NEN-EN 1995-1-1:
     /// rekenstijfheden E_d = E_mean/γ_M (2.2.2(1)P) en de imperfecties van
     /// 5.4.4(2), de scheefstand én de boogimperfectie e = 0,0025·l. De app en
-    /// `check_fem_model` zetten het voor hout niet: hun P-Δ rekent met E_mean.
+    /// `check_fem_model` zetten het voor hout alleen met de instelling
+    /// `houtToetsEN1995` (issue #199, fase 4): dan rekent hun P-Δ zo; anders met
+    /// E_mean, en dan niet.
     /// Zie [`ZijdelingseKnikInAnalyse`].
     ///
     /// `None` of weglaten = geen as gedekt, 2·L bij een vrij eind: de veilige

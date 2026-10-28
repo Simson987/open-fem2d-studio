@@ -315,6 +315,11 @@ pub struct ConcreteColumnCheckRequest {
     #[serde(default)]
     #[ts(optional)]
     pub first_order_envelope: Option<Vec<ForcePoint>>,
+    /// Uit welke berekening `forces_envelope` komt (issue #199, fase 5); zie
+    /// hetzelfde veld in `ConcreteBeamCheckInput`. `None` = de oude afleiding.
+    #[serde(default)]
+    #[ts(optional)]
+    pub tweede_orde_in_krachten: Option<crate::input::TweedeOrdeInKrachten>,
     #[serde(default)]
     pub design_situation: DesignSituation,
     #[serde(default)]
@@ -674,7 +679,17 @@ pub fn kolomtoetsen(
     ugt: &[ForcePoint],
     bgt_qp: &[ForcePoint],
     eerste_orde: Option<&[ForcePoint]>,
+    tweede_orde: Option<crate::input::TweedeOrdeInKrachten>,
 ) -> Kolomuitkomst {
+    use crate::input::TweedeOrdeInKrachten as T2;
+    // Zit het tweede-orde-moment om y al in de krachten (issue #199, fase 5)?
+    // Alleen na een fysisch niet-lineaire berekening (§5.8.6). Zonder opgave
+    // de oude afleiding: een eerste-ordelijst erbij = tweede orde in de krachten.
+    let krachten_tweede_orde = match tweede_orde {
+        None => eerste_orde.is_some(),
+        Some(T2::Fysisch) => true,
+        Some(T2::Geen) | Some(T2::Geometrisch) => false,
+    };
     let artikel_poort = "art. 5.8.3.1(1) — NB: \"De waarde van λ_lim moet gelijk aan 20·A·B·C/√n \
                          zijn genomen\"";
     let artikel_kruip = "art. 5.8.4 (5.19) en 5.8.4(4)";
@@ -966,7 +981,8 @@ pub fn kolomtoetsen(
         &gov,
         lengte_mm,
         momentlijst,
-        eerste_orde.is_some(),
+        krachten_tweede_orde,
+        tweede_orde == Some(T2::Geometrisch),
         n_strips,
     );
 
@@ -1181,7 +1197,20 @@ pub fn kolomtoetsen(
     // berekening. De status wordt dan "niet van toepassing" MÉT unity check —
     // geen doorsnedebezwijken en geen maatgevende UC; het oordeel staat in
     // 5.8.8_moment_y.
-    if y_uit.berekend && !slank.tweede_orde_verwaarloosbaar {
+    if tweede_orde == Some(T2::Fysisch) && !slank.tweede_orde_verwaarloosbaar {
+        // Issue #199, fase 5: na een fysisch niet-lineaire berekening (§5.8.6)
+        // zit het tweede-orde-moment om y in de krachten. De poort zegt dan
+        // alleen nog waarom die berekening nodig was.
+        poort.status = CheckStatus::NotApplicable;
+        poort.notes.push(
+            "De UGT-krachten komen uit de fysisch niet-lineaire berekening (§5.8.6: secante \
+             buigstijfheid per segment, met scheurvorming en kruip). Het tweede-orde-moment om y \
+             zit daarmee in M_Ed, en de doorsnedetoetsen hierboven gebruiken het. Deze poort is \
+             informatie over de NOODZAAK van tweede orde; λ/λ_lim telt niet als maatgevende unity \
+             check."
+                .to_string(),
+        );
+    } else if y_uit.berekend && !slank.tweede_orde_verwaarloosbaar {
         poort.status = CheckStatus::NotApplicable;
         poort.notes.push(format!(
             "De tweede-orde-effecten om y zijn bepaald met de nominale kromming van §5.8.8; zie \
@@ -1588,6 +1617,16 @@ fn uc_nul() -> Option<UnityCheck> {
 
 /// §5.8.8 om y. Zie de toelichting hierboven.
 #[allow(clippy::too_many_arguments)]
+/// De kanttekening bij krachten uit een elastische P-Δ-berekening (issue #199,
+/// fase 5, `TweedeOrdeInKrachten::Geometrisch`).
+const ELASTISCH_P_DELTA_NOTITIE: &str =
+    "De UGT-krachten komen uit een P-Δ-berekening met de elastische, ongescheurde stijfheid \
+     (E_cm·I_c). Dat is geen tweede-ordeberekening volgens §5.8: §5.8.6 vraagt scheurvorming en \
+     kruip, §5.8.7 een nominale stijfheid (5.21). Om y telt het tweede-orde-effect daarom niet als \
+     bepaald; §5.8.8 rekent op de EERSTE-ORDE-momenten (de meegestuurde eerste-ordeoplossing) met \
+     e_i (§5.2) en e₂. De doorsnedetoetsen gebruiken de P-Δ-krachten zelf. Wie het tweede-orde-effect \
+     van de verplaatsbare constructie volgens §5.8.6 wil, rekent fysisch niet-lineair.";
+
 fn tweede_orde_om_y(
     section: &ConcreteSection,
     cage: &ReinforcementCage,
@@ -1598,6 +1637,7 @@ fn tweede_orde_om_y(
     lengte_mm: f64,
     momentlijst: &[ForcePoint],
     krachten_tweede_orde: bool,
+    krachten_elastisch_p_delta: bool,
     n_strips: usize,
 ) -> (NamedCheck, Option<NominaalY>, TweedeOrdeYUitkomst) {
     let state = ForceStateSnapshot::from_point(gov);
@@ -1647,7 +1687,10 @@ fn tweede_orde_om_y(
                      komen (§5.8.6, in de app de fysisch niet-lineaire keten); de slankheidspoort \
                      blijft daarom 'voldoet niet' melden."
                         .to_string(),
-                ],
+                ]
+                .into_iter()
+                .chain(krachten_elastisch_p_delta.then(|| ELASTISCH_P_DELTA_NOTITIE.to_string()))
+                .collect(),
             )),
             None,
             uit,
@@ -1655,6 +1698,9 @@ fn tweede_orde_om_y(
     }
 
     let mut notes: Vec<String> = Vec::new();
+    if krachten_elastisch_p_delta {
+        notes.push(ELASTISCH_P_DELTA_NOTITIE.to_string());
+    }
     // φ_ef om y: dezelfde volgorde als om z (§5.8.4).
     let (phi_ef, kruip_onbekend) = match (&slank.kruip, slank.phi_ef, k.phi_inf_t0) {
         (Some(v), _, _) if v.toegestaan => {
@@ -1995,6 +2041,7 @@ pub fn column_check(
         &req.forces_envelope,
         &req.sls_quasi_permanent_envelope,
         req.first_order_envelope.as_deref(),
+        req.tweede_orde_in_krachten,
     );
 
     let z = uit.tweede_as.as_ref();

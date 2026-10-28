@@ -131,6 +131,9 @@ interface Props {
   /** Alleen 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de toets. */
   scheefstandEigenKolom?: boolean;
   setScheefstandEigenKolom?: (v: boolean) => void;
+  /** Alleen 2D (issue #199, fase 4): hout in de toets volgens NEN-EN 1995-1-1. */
+  houtToetsEN1995?: boolean;
+  setHoutToetsEN1995?: (v: boolean) => void;
   /**
    * 1/φ zoals er is GEREKEND. De balk rekent zelf niets uit — App.tsx bepaalt
    * φ op één plek, zodat het scherm nooit iets anders kan tonen dan de motor
@@ -213,6 +216,7 @@ export default function LoadCaseTabBar({
   scheefstandAantalY = null, setScheefstandAantalY,
   scheefstandTorsie = false, setScheefstandTorsie,
   scheefstandEigenKolom = false, setScheefstandEigenKolom,
+  houtToetsEN1995 = false, setHoutToetsEN1995,
   scheefstandPhiNoemer, scheefstandPhiNoemerY, scheefstandAfgeleideHoogteM = 0,
   scheefstandAfgeleidAantal = 1, scheefstandAfgeleidAantalY, scheefstandToelichting = "",
   scheefstandWaarschuwingen = [],
@@ -990,7 +994,7 @@ export default function LoadCaseTabBar({
           <span>{t("loadCases.swayTorsion")}</span>
         </label>
       )}
-      {setScheefstandEnabled && scheefstandIn3D && setScheefstandEigenKolom && (
+      {setScheefstandEnabled && setScheefstandEigenKolom && (
         <label
           className={`lc-tab-toggle${scheefstandEigenKolom ? " active" : ""}`}
           title={t("loadCases.swayOwnColumnTitle")}
@@ -1002,6 +1006,20 @@ export default function LoadCaseTabBar({
             onChange={(e) => setScheefstandEigenKolom(e.target.checked)}
           />
           <span>{t("loadCases.swayOwnColumn")}</span>
+        </label>
+      )}
+      {setScheefstandEnabled && !scheefstandIn3D && setHoutToetsEN1995 && (
+        <label
+          className={`lc-tab-toggle${houtToetsEN1995 ? " active" : ""}`}
+          title={t("loadCases.timberEn1995Title")}
+          data-hout-toets-en1995
+        >
+          <input
+            type="checkbox"
+            checked={houtToetsEN1995}
+            onChange={(e) => setHoutToetsEN1995(e.target.checked)}
+          />
+          <span>{t("loadCases.timberEn1995")}</span>
         </label>
       )}
 

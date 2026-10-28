@@ -102,6 +102,7 @@ fn invoer(cage: ReinforcementCage, envelop: Vec<ForcePoint>) -> ConcreteBeamChec
         column: None,
         sls_quasi_permanent_envelope: vec![],
         first_order_envelope: None,
+        tweede_orde_in_krachten: None,
         staafstand: None,
         staafstand_notities: None,
     }

@@ -616,7 +616,11 @@
       "refusedNonlinear": "De fysisch niet-lineaire ronde van de toetskrachten liep vast: {{reden}} De toetsing is geweigerd; de resultaten van de berekening blijven staan.",
       "otherForcesTitle": "Niet op het tekenvlak",
       "otherForcesBody": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak. De toetskrachten zijn tweede orde (P-Δ) met scheefstand φ = 1/{{noemer}}; de resultaten op het tekenvlak volgen de instellingen Analyse en Scheefstand. Zet Analyse op tweede orde en de Scheefstand aan, met φ = 1/{{noemer}}, om de maatgevende plek daar te zien.",
-      "otherForcesBodySame": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak, ook al rekenen de resultaten tweede orde met dezelfde scheefstand φ = 1/{{noemer}}. De toets rekende hier apart, bijvoorbeeld zonder de UGT-eindtoestandvarianten van hout (E_mean,fin). De krachten op het tekenvlak zijn daarom niet die van de toets."
+      "otherForcesBodySame": "Combinatie \"{{naam}}\" van de toetsing staat niet met dezelfde krachten op het tekenvlak, ook al rekenen de resultaten tweede orde met dezelfde scheefstand φ = 1/{{noemer}}. De toets rekende hier apart, bijvoorbeeld zonder de UGT-eindtoestandvarianten van hout (E_mean,fin). De krachten op het tekenvlak zijn daarom niet die van de toets.",
+      "forcesViewShow": "Toetskrachten (2e orde)",
+      "forcesViewShowTitle": "Toon op het tekenvlak de krachten waarop de laatste toetsing rekende: tweede orde (P-Δ) met scheefstand, in +x en −x (issue #199). De resultaten zelf veranderen niet.",
+      "forcesViewOn": "Toetskrachten (2e orde + scheefstand φ = 1/{{noemer}}): {{naam}}",
+      "forcesViewBack": "Terug naar de resultaten"
     },
     "layout": {
       "dragCheckSplit": "Sleep om de verdeling model/toetsing aan te passen",
@@ -1102,6 +1106,8 @@
     "swayTorsionTitle": "Torsievarianten van de scheefstand (EN 1993-1-1 §5.3.2(10), figuur 5.5): per richting met twee of meer kolomrijen twee varianten extra, waarin de buitenste rijen tegengesteld scheefstaan en de scheefstand ertussen lineair verloopt (een starre verdraaiing van de plattegrond). Verdubbelt het aantal P-Δ-berekeningen van de UGT-toets. Niet bij vlaklasten op platen.",
     "swayOwnColumn": "φ losse kolom",
     "swayOwnColumnTitle": "Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan en middelt haar scheefstand met niets. In de UGT-toets krijgen haar lasten φ = max(φ_model, φ_eigen), met φ_eigen volgens de norm van haar materiaal, h = haar eigen hoogte en m = 1. Daarmee zit haar zijdelingse knik in de toetskrachten en geldt voor een stalen losse kolom de systeemlengte L in plaats van 2·L (NEN-EN 1993-1-1 5.2.2(7)b). De resultaten veranderen niet.",
+    "timberEn1995": "Hout EN 1995",
+    "timberEn1995Title": "Hout in de UGT-toets volgens NEN-EN 1995-1-1 (issue #199, fase 4): de tweede-ordeberekening rekent de houten staven met E_d = E_mean/γ_M (2.2.2(1)P), elke gedrukte houten staaf krijgt de boogimperfectie e = 0,0025·l (5.4.4(2)), en een staande houten staaf met een vrij eind krijgt de systeemlengte L in plaats van 2·L. De resultaten veranderen niet.",
     "swayDirectionTitle": "Richting van de equivalente horizontale krachten: BEIDE. De UGT-toets rekent elke combinatie met de scheefstand in +x én in −x (EN 1993-1-1 5.3.2(2): in de meest ongunstige richting) en neemt per staaf de ongunstigste van de twee; met het vinkje Scheefstand aan rekenen ook de resultaten zo, en noemt de combinatienaam de richting. De hier opgeslagen voorkeursrichting ({{richting}}) bepaalt alleen welke variant het oorspronkelijke combinatienummer houdt.",
     "dialogTitle": "Belastinggevallen & combinaties",
     "casesTab": "Gevallen ({{aantal}})",

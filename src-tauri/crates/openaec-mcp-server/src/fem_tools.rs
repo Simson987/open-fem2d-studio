@@ -1362,7 +1362,11 @@ fn schema_fem_model() -> Value {
             "scheefstandHoogteM": { "type": ["number", "null"], "exclusiveMinimum": 0, "default": null,
                 "description": "Hoogte h in m voor alpha_h; null = uit het model afleiden." },
             "scheefstandAantalElementen": { "type": ["integer", "null"], "minimum": 1, "default": null,
-                "description": "Aantal dragende verticale elementen m voor alpha_m; null = uit het model afleiden." }
+                "description": "Aantal dragende verticale elementen m voor alpha_m; null = uit het model afleiden." },
+            "scheefstandEigenKolom": { "type": "boolean", "default": false,
+                "description": "Alleen de UGT-toets (issue #199, fase 3): een losse kolom (een kolomlijn waarvan geen knoop boven de voet een oplegging heeft, in een plaat ligt of een andere staaf raakt) krijgt op haar lasten phi = max(phi_model, phi_eigen), met phi_eigen volgens de norm van haar materiaal, h = haar eigen hoogte en m = 1. Daarmee geldt voor een stalen losse kolom de systeemlengte (EN 1993-1-1 5.2.2(7)b). De resultaten veranderen niet." },
+            "houtToetsEN1995": { "type": "boolean", "default": false,
+                "description": "Alleen de UGT-toets (issue #199, fase 4): hout volgens EN 1995-1-1. De tweede-ordeberekening rekent de houten staven met E_d = E_mean/gamma_M (2.2.2(1)P; gamma_M 1,30 massief, 1,25 gelamineerd en CLT), elke gedrukte houten staaf krijgt de boogimperfectie e = 0,0025*l (5.4.4(2)) als vervangende lasten, en een staande houten staaf met een vrij eind krijgt de systeemlengte L in plaats van 2*L als de scheefstand minstens die van (5.1) met h = de staaflengte is. De resultaten veranderen niet." }
         }
     })
 }
@@ -1545,12 +1549,14 @@ mod tests {
             "scheefstandBron",
             "scheefstandHoogteM",
             "scheefstandAantalElementen",
+            "scheefstandEigenKolom",
+            "houtToetsEN1995",
         ] {
             assert!(velden.contains_key(veld), "modelschema mist `{veld}`");
         }
         assert_eq!(
             velden.len(),
-            13,
+            15,
             "modelschema kent een veld dat de sidecar weigert"
         );
         assert_eq!(model["additionalProperties"], json!(false));

@@ -337,6 +337,7 @@ log("\n[10] de klik naar het tekenvlak, de weergave en de vertalingen");
   const app = leesBron("src/App.tsx");
   const { useMaatgevendMarkeringStore } = await import("./src/stores/maatgevendMarkeringStore.ts");
   const { useCheckStore } = await import("./src/stores/checkStore.ts");
+  const { kiesToetsCombinatie } = await import("./src/lib/toetsWeergave.ts");
   async function toon(doel, combinatieResultaten, instellingen = {}) {
     const gezet = {};
     const meldingen = [];
@@ -353,6 +354,9 @@ log("\n[10] de klik naar het tekenvlak, de weergave en de vertalingen");
         setShowLoads: (v) => { gezet.lasten = v; },
       },
       setResultsTabActive: (v) => { gezet.resultaten = v; },
+      // Issue #199, fase 6: de toetsweergave van het tekenvlak.
+      setToetsWeergaveId: (id) => { gezet.toetsWeergave = id; },
+      kiesToetsCombinatie,
       dynamischeImport: async () => ({ notifyInfo: (titel, tekst) => meldingen.push({ titel, tekst }) }),
       i18next: { t: (k, o) => (o?.naam ? `${k}|${o.naam}${o.noemer ? `|1/${o.noemer}` : ""}` : k) },
     });
@@ -367,8 +371,10 @@ log("\n[10] de klik naar het tekenvlak, de weergave en de vertalingen");
   const resultaat3 = {};
   const gerekend = new Map([[3, resultaat3]]);
   const varianten = [{ id: 3, name: "UGT 6.10b" }, { id: 1_000_003, name: "UGT 6.10b (scheefstand −x)" }];
+  // Eerst een toetsronde waarin de −x-variant GEEN krachten heeft: dan kan het
+  // tekenvlak haar ook niet als toetsset tonen (fase 6), en volgt de melding.
   useCheckStore.setState({ lastRunAt: 42, lastRunData: {
-    combinations: varianten, combinationResults: new Map([[3, resultaat3], [1_000_003, {}]]) },
+    combinations: varianten, combinationResults: new Map([[3, resultaat3]]) },
     toets: { analyse: { soort: "tweedeOrdeGeometrisch", phi: 1 / 200, noemer: 200, bron: "vast", scheefstandModelAan: false, hergebruikt: false },
       meldingen: [], alphaCr: [], weigering: null } });
   const a = await toon({ beamId: 7, combinatieId: 3, positieMm: 2500 }, gerekend);
@@ -400,12 +406,25 @@ log("\n[10] de klik naar het tekenvlak, de weergave en de vertalingen");
     houtPhi.meldingen[0]?.tekst === "common:app.check.otherForcesBody|UGT 6.10b (scheefstand −x)|1/268", JSON.stringify(houtPhi.meldingen));
   useCheckStore.setState({ toets: { ...useCheckStore.getState().toets,
     analyse: { ...useCheckStore.getState().toets.analyse, phi: 1 / 200, noemer: 200, bron: "vast" } } });
+  // Issue #199, fase 6: heeft de toetsronde krachten voor de combinatie, dan
+  // schakelt het tekenvlak naar de TOETSSET (met de markering) in plaats van
+  // alleen een melding te geven. Tot fase 6 bleef het bij de melding (B4).
+  useCheckStore.setState({ lastRunData: {
+    combinations: varianten, combinationResults: new Map([[3, resultaat3], [1_000_003, {}]]) } });
+  const toetsset = await toon({ beamId: 7, combinatieId: 1_000_003, positieMm: 2500 }, gerekend);
+  check("fase 6: een toetscombinatie die niet op het tekenvlak staat → het tekenvlak toont de toetsset, gemarkeerd, zonder melding",
+    toetsset.gezet.toetsWeergave === 1_000_003 && toetsset.gezet.combinatie === undefined && toetsset.gezet.resultaten === true
+      && toetsset.markering?.combinatieId === 1_000_003 && toetsset.markering?.positieMm === 2500 && toetsset.meldingen.length === 0,
+    JSON.stringify(toetsset));
   // Dezelfde combinatie op het tekenvlak, maar met ANDERE krachten: de
   // resultaten zijn eerste orde, de toets tweede orde met scheefstand.
   await toon({ beamId: 7, combinatieId: 3, positieMm: 2500 }, gerekend);
   const anders = await toon({ beamId: 7, combinatieId: 3, positieMm: 2500 }, new Map([[3, {}]]));
-  check("dezelfde combinatie met andere krachten op het tekenvlak: niet omschakelen, geen markering, wel een melding",
-    anders.gezet.combinatie === undefined && anders.markering === null && anders.meldingen.length === 1, JSON.stringify(anders));
+  check("dezelfde combinatie met andere krachten op het tekenvlak: de toetsset getoond (fase 6), de resultaatcombinatie niet gezet, geen melding",
+    anders.gezet.toetsWeergave === 3 && anders.gezet.combinatie === undefined && anders.markering?.combinatieId === 3
+      && anders.meldingen.length === 0, JSON.stringify(anders));
+  check("klik op een combinatie MET dezelfde krachten: terug naar de resultaten (toetsweergave uit)",
+    a.gezet.toetsWeergave === null, JSON.stringify(a.gezet));
   const c = await toon({ plateId: 5, combinatieId: 3, positieMm: null }, gerekend);
   check("plaat: de plaat geselecteerd en de combinatie gezet, geen markering (een plaat heeft geen positie x)",
     c.gezet.selectie?.type === "plate" && c.gezet.combinatie === 3 && c.markering === null, JSON.stringify(c));

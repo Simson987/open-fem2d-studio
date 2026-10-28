@@ -157,6 +157,9 @@ export function buildOpenFem3DConcreteCheckInputs(
       // Om z zonder de globale scheefstand: de kern voegt e_i en e₂ om z zelf
       // toe (`eersteOrdeZonderScheefstandOmZ`).
       ...(eersteOrde ? { first_order_envelope: eersteOrdeZonderScheefstandOmZ(envelopeFor(ulsCombinations, eersteOrde)) } : {}),
+      // Issue #199, fase 5: de toets in 3D is elastische P-Δ (geen fysische
+      // ronde), dus "Geometrisch": §5.8.8 om y op de eerste-ordemomenten.
+      ...(combinationSet?.toetsAnalyse ? { tweede_orde_in_krachten: "Geometrisch" as const } : {}),
       n_strips: cfg?.betonStroken && cfg.betonStroken > 0 ? Math.round(cfg.betonStroken) : DEFAULT_N_STRIPS,
       steel_branch: cfg?.betonStaaltak ?? "Horizontal",
       design_situation: "PersistentTransient",

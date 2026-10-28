@@ -218,6 +218,12 @@ export interface SolverDistLoadInput {
   startFrac?: number;
   /** Deellast: einde van het belaste deel als fractie 0..1. Default 1. */
   endFrac?: number;
+  /**
+   * Geen scheefstandmetgezel op deze last: een vervangende last van een
+   * imperfectie zelf (de boogimperfectie van hout in de toets, issue #199,
+   * fase 4) krijgt er geen tweede imperfectie bij.
+   */
+  geenScheefstand?: true;
 }
 
 /** Point force/moment applied directly on a node — added in step 1c. */
@@ -226,6 +232,8 @@ export interface SolverPointLoadInput {
   fx?: number;   // N
   fz?: number;   // N
   my?: number;   // N·mm
+  /** Zie `SolverDistLoadInput.geenScheefstand`. */
+  geenScheefstand?: true;
 }
 
 /**
@@ -370,6 +378,14 @@ export interface ScheefstandInput {
   phi: number;
   /** Richting van de equivalente horizontale krachten: +1 = +x, -1 = −x. */
   richting: 1 | -1;
+  /**
+   * Eigen scheefstand per losse kolom (issue #199, fase 3; alleen de
+   * UGT-toets): per staaf-id de φ van de lijnlasten en staafpuntlasten op die
+   * staaf, in plaats van `phi`. Ontbreekt = overal `phi`.
+   */
+  phiPerStaaf?: ReadonlyMap<number, number>;
+  /** Idem per knoop-id, voor de knooplasten. */
+  phiPerKnoop?: ReadonlyMap<number, number>;
 }
 
 /**

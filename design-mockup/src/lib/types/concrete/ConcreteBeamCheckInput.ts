@@ -11,6 +11,7 @@ import type { Staafstand } from "../steel/Staafstand";
 import type { SteelBranch } from "./SteelBranch";
 import type { StructuralClass } from "./StructuralClass";
 import type { StructuralSystem } from "./StructuralSystem";
+import type { TweedeOrdeInKrachten } from "./TweedeOrdeInKrachten";
 
 /**
  * Invoer voor één betonnen staaf: een doorsnede met een wapeningskorf.
@@ -218,6 +219,13 @@ sls_quasi_permanent_envelope: Array<ForcePoint>,
  * uitgevoerd, met de reden.
  */
 first_order_envelope?: Array<ForcePoint>, 
+/**
+ * Uit welke berekening `forces_envelope` komt, voor §5.8 (issue #199,
+ * fase 5). Zie [`TweedeOrdeInKrachten`]. `None` = de oude afleiding: een
+ * meegestuurde `first_order_envelope` betekent "tweede orde in de
+ * krachten" (zoals vóór dit veld).
+ */
+tweede_orde_in_krachten?: TweedeOrdeInKrachten, 
 /**
  * De §5.8-gegevens: geschoord of ongeschoord, de kniklengte, de kruip en
  * de twee keuzen die §9.5 nodig heeft.

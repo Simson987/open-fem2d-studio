@@ -1,0 +1,23 @@
+/* De schakelaar "Toetskrachten (2e orde)" onderaan het tekenvlak (issue #199, fase 6). */
+.toetsweergave-balk {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100% - 32px));
+  display: flex;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+}
+.toetsweergave-balk > * {
+  pointer-events: auto;
+}
+.toetsweergave-melding {
+  width: 100%;
+  border-left-color: var(--oa-accent, var(--oa-warning));
+  background: var(--oa-panel);
+}
+.toetsweergave-knop {
+  box-shadow: var(--oa-shadow-panel);
+}

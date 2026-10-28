@@ -276,6 +276,22 @@ export const STAALHAL_STANDAARD: StaalhalParameters = {
 /** De spantafstand die de standaardparameters opleveren (voor documentatie en schema). */
 export const STAALHAL_STANDAARD_SPANTAFSTAND_MM = 6_000;
 
+/**
+ * De beginstand van de wizard "Stalen hal…" (issue #199): het voorbeeldmodel
+ * `STAALHAL_STANDAARD`, maar met TREK-ALLEEN verbanden. De UGT-toets rekent
+ * altijd P-Δ met scheefstand, en dan knikken de wandverbanden CHS 88,9×4 van
+ * het voorbeeldmodel zelf (N = −29,3 kN tegen π²·E·I/L² = 19,97 kN onder
+ * "wind langs", α_cr = 0,688): de toets van de standaardhal werd geweigerd.
+ * Slanke kruisverbanden zijn in de praktijk trek-alleen; met die beginstand is
+ * de hal uit de wizard meteen toetsbaar. Het voorbeeldmodel zelf (en de
+ * standaard van de MCP-tool `staalhal_maken`) blijft ongewijzigd: het is de
+ * referentie van de verificatie (docs/verificatie/3d-raamwerk).
+ */
+export const STAALHAL_WIZARD_BEGINSTAND: StaalhalParameters = {
+  ...STAALHAL_STANDAARD,
+  verbanden: { ...STAALHAL_STANDAARD.verbanden, trekAlleen: true },
+};
+
 // ── Belastinggevallen ───────────────────────────────────────────────────────
 
 /** Vaste id's van de levels (horizontale stramienassen) van de hal. */

@@ -478,6 +478,10 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
         // `additionalProperties: false` het en rekent een client na een
         // P-Δ-berekening r_m en φ_ef met tweede-orde-momenten.
         "first_order_envelope",
+        // Uit welke berekening de krachten komen (issue #199, fase 5): zonder
+        // dit veld leest de kern een meegestuurde eerste-ordelijst als "het
+        // tweede-orde-moment om y zit al in M_Ed".
+        "tweede_orde_in_krachten",
         // Noemt bij een staande staaf de zijden in wereldtermen; zonder dit
         // veld in het schema weigert `additionalProperties: false` het.
         "staafstand",
@@ -499,7 +503,7 @@ async fn schema_van_check_concrete_beam_is_volledig_en_strikt() {
     assert_eq!(props["detail"]["enum"], json!(["volledig", "samenvatting"]));
     assert_eq!(
         props.as_object().unwrap().len(),
-        24 + 1,
+        25 + 1,
         "het schema kent een veld dat ConcreteBeamCheckInput weigert"
     );
 

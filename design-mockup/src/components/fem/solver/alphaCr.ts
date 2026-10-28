@@ -71,7 +71,7 @@ import { buildMesh } from "./engine";
 import type { LoadCombination } from "./combinations";
 import type { ElementForces, MultiInput, SolverResult } from "./types";
 import type { Analysetype } from "../femTypes";
-import { noemerTekst, phiLosseKolom } from "../../../lib/scheefstandNorm";
+import { noemerTekst, phiLosseKolom, phiVolgensNorm } from "../../../lib/scheefstandNorm";
 
 /** De grens van EN 1993-1-1 5.2.1(3): eerste orde alleen bij α_cr ≥ 10. */
 export const ALPHA_CR_GRENS_EERSTE_ORDE = 10;
@@ -483,6 +483,21 @@ export interface StabiliteitVoorToets {
    * In de toetsset altijd de toets-φ.
    */
   scheefstandPhi?: number;
+  /**
+   * Per staaf de φ waarmee haar lasten zijn gerekend als die van
+   * `scheefstandPhi` afwijkt: de eigen scheefstand van een losse kolom (issue
+   * #199, fase 3, `eigenKolomScheefstand2D`). Daarmee haalt die kolom de
+   * φ-eis van `zijdelingseKnikInVlakModel`.
+   */
+  scheefstandPhiPerStaaf?: ReadonlyMap<number, number>;
+  /**
+   * De toets rekent hout volgens NEN-EN 1995-1-1 (issue #199, fase 4,
+   * instelling `houtToetsEN1995`): E_d = E_mean/γ_M, de boogimperfectie
+   * e = 0,0025·l en de onderverdeling zitten in de toetskrachten. Dan mag de
+   * houtbouwer de zijdelingse knik van een staande houten staaf als gedekt
+   * melden (`zijdelingseKnikHoutInVlakModel`).
+   */
+  houtEN1995?: boolean;
 }
 
 /** Wat `zijdelingseKnikInVlakModel` beslist voor één staaf met een vrij eind. */
@@ -521,21 +536,65 @@ export interface ZijdelingseKnikBesluit {
  * (`toetsSet2D`, issue #199): altijd tweede orde met scheefstand, met de φ van
  * de toets. De eerste twee voorwaarden zijn daar dus altijd waar; ze blijven
  * staan als bewaking voor een aanroeper met eigen stabiliteitsgegevens. De
- * voorwaarde "staand" en de φ-eis blijven echte voorwaarden, tot de eigen φ
- * per losse kolom in de berekening zit.
+ * voorwaarde "staand" en de φ-eis blijven echte voorwaarden. Met de eigen φ
+ * per losse kolom (issue #199, fase 3, instelling `scheefstandEigenKolom`)
+ * telt voor zo'n kolom de φ van haar eigen lasten (`scheefstandPhiPerStaaf`,
+ * over `staafIds`: de staven van de getoetste lijn; de kleinste telt), en die
+ * haalt de eis.
  *
  * Geldt alles behalve de φ-eis, dan komt er een kanttekening die zegt waarom
  * het toch 2·L is.
  */
+/**
+ * De houten tegenhanger van `zijdelingseKnikInVlakModel` (issue #199, fase 4):
+ * om y de systeemlengte L voor een STAANDE houten staaf met één vrij eind, als
+ * de toets hout volgens NEN-EN 1995-1-1 rekent (`houtEN1995`: E_d, boog e,
+ * onderverdeling) en de φ van haar lasten minstens die van NEN-EN 1995-1-1
+ * (5.1) is met h = haar lengte (0,005 voor h ≤ 5 m, 0,005·√(5/h) daarboven).
+ * Zonder `houtEN1995` niets: dan 2·L, met de vaste houtmelding.
+ */
+export function zijdelingseKnikHoutInVlakModel(
+  stabiliteit: StabiliteitVoorToets | undefined,
+  staand: boolean,
+  lengteM: number,
+  staafIds: readonly number[] = [],
+): ZijdelingseKnikBesluit {
+  if (!staand || !stabiliteit?.houtEN1995) return {};
+  if (stabiliteit.analysetype === "eersteOrde" || !stabiliteit.scheefstandAan) return {};
+  const nodig = phiVolgensNorm("en1995", lengteM, 1).phi;
+  const perStaaf = stabiliteit.scheefstandPhiPerStaaf;
+  const eigen = perStaaf && staafIds.length > 0 && staafIds.every((id) => perStaaf.has(id))
+    ? Math.min(...staafIds.map((id) => perStaaf.get(id)!))
+    : undefined;
+  const gebruikt = eigen ?? stabiliteit.scheefstandPhi;
+  if (gebruikt !== undefined && Number.isFinite(gebruikt) && gebruikt >= nodig * (1 - 1e-9)) {
+    return { veld: { y: true, z: false } };
+  }
+  return {
+    notitie:
+      "VRIJ STAAFEIND, HOUT VOLGENS NEN-EN 1995-1-1: de toets rekent E_d en de boogimperfectie, maar de " +
+      (gebruikt !== undefined && Number.isFinite(gebruikt) && gebruikt > 0
+        ? `scheefstand φ = 1/${nl(1 / gebruikt, 0)} is kleiner dan `
+        : "scheefstand φ is niet bekend en dus niet aantoonbaar minstens ") +
+      `φ = 1/${nl(1 / nodig, 0)} volgens NEN-EN 1995-1-1 (5.1) met h = ${nl(lengteM, 3)} m, haar eigen lengte. ` +
+      "De kniklengte in het vlak blijft 2·L; zet 'φ losse kolom' aan of geef de kniklengte zelf op.",
+  };
+}
+
 export function zijdelingseKnikInVlakModel(
   stabiliteit: StabiliteitVoorToets | undefined,
   staand: boolean,
   lengteM: number,
+  staafIds: readonly number[] = [],
 ): ZijdelingseKnikBesluit {
   if (!staand) return {};
   if (!stabiliteit || stabiliteit.analysetype === "eersteOrde" || !stabiliteit.scheefstandAan) return {};
   const nodig = phiLosseKolom(lengteM);
-  const gebruikt = stabiliteit.scheefstandPhi;
+  const perStaaf = stabiliteit.scheefstandPhiPerStaaf;
+  const eigen = perStaaf && staafIds.length > 0 && staafIds.every((id) => perStaaf.has(id))
+    ? Math.min(...staafIds.map((id) => perStaaf.get(id)!))
+    : undefined;
+  const gebruikt = eigen ?? stabiliteit.scheefstandPhi;
   if (gebruikt !== undefined && Number.isFinite(gebruikt) && gebruikt >= nodig * (1 - 1e-9)) {
     return { veld: { y: true, z: false } };
   }

@@ -26,8 +26,8 @@ import {
   staalhalProfielUitKeuze,
   STAALHAL_GEVAL,
   STAALHAL_PROFIEL_GROEPEN,
-  STAALHAL_STANDAARD,
   STAALHAL_STANDAARD_SPANTAFSTAND_MM,
+  STAALHAL_WIZARD_BEGINSTAND,
   type StaalhalDaktype,
   type StaalhalParameters,
   type StaalhalProbleem,
@@ -68,7 +68,9 @@ interface Toestand {
 }
 
 function standaardToestand(): Toestand {
-  const s = STAALHAL_STANDAARD;
+  // Issue #199: de wizard begint met trek-alleen verbanden (zie
+  // `STAALHAL_WIZARD_BEGINSTAND`); de rest is het voorbeeldmodel.
+  const s = STAALHAL_WIZARD_BEGINSTAND;
   return {
     lengteMm: s.lengteMm,
     breedteMm: s.breedteMm,

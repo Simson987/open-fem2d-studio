@@ -66,8 +66,10 @@ export interface RekenInstellingen {
   scheefstandAantalX: number | null;
   scheefstandAantalY: number | null;
   scheefstandTorsie: boolean;
-  /** 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de UGT-toets. */
+  /** 2D en 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de UGT-toets. */
   scheefstandEigenKolom: boolean;
+  /** 2D (issue #199, fase 4): hout in de UGT-toets volgens NEN-EN 1995-1-1 (E_d, boogimperfectie). */
+  houtToetsEN1995: boolean;
   /**
    * Gevolgklasse, CC1/CC2/CC3: de klasse waarmee de standaardcombinaties
    * rekenen (in de app die uit de projectinstellingen). Volgens NEN-EN 1990 NB
@@ -107,6 +109,7 @@ const VELDEN: Record<keyof RekenInstellingen, true> = {
   scheefstandAantalY: true,
   scheefstandTorsie: true,
   scheefstandEigenKolom: true,
+  houtToetsEN1995: true,
   gevolgklasse: true,
   nationaleBijlage: true,
 };

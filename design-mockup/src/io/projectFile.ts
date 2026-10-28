@@ -560,6 +560,11 @@ export interface ProjectFile {
    */
   scheefstandEigenKolom?: boolean;
   /**
+   * 2D (issue #199, fase 4, optioneel): hout in de UGT-toets volgens
+   * NEN-EN 1995-1-1 (E_d, boogimperfectie). Ontbreekt = uit.
+   */
+  houtToetsEN1995?: boolean;
+  /**
    * Eigen doorsneden uit de profieleditor waarnaar staven verwijzen
    * (`EIGEN:<naam>`); v2, optioneel — geen versie-bump. Ontbreekt het veld
    * (ouder bestand), dan blijft de lokaal bewaarde lijst ongemoeid.
@@ -679,7 +684,7 @@ const BEKENDE_TOPVELDEN: readonly string[] = [
   "combinatiesVervangenBijOpenen", "structuralGrid",
   "scheefstandEnabled", "scheefstandNoemer", "scheefstandRichting",
   "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
-  "scheefstandAantalX", "scheefstandAantalY", "scheefstandTorsie", "scheefstandEigenKolom",
+  "scheefstandAantalX", "scheefstandAantalY", "scheefstandTorsie", "scheefstandEigenKolom", "houtToetsEN1995",
   "eigenDoorsneden", "eigenCltOpbouwen", "projectInfo", "windInstellingen",
   "rapport", "modelDimension", "model3d", "openFem3dViewSets", "openFem3dStandaardViewsUitRapport",
   // Oude veldnaam van de 3D-weergaven (ontwikkelspoor `frame3d`); bij openen

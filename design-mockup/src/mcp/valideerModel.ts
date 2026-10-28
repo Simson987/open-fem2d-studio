@@ -116,6 +116,10 @@ const MODEL_VELDEN = [
   // De normkeuze van de scheefstand (basisaudit nr 19): de sidecar rekent φ
   // hiermee zoals de app; het MCP-schema kent dezelfde drie velden.
   "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
+  // Issue #199, fase 3: de eigen scheefstand per losse kolom in de UGT-toets.
+  "scheefstandEigenKolom",
+  // Issue #199, fase 4: hout in de UGT-toets volgens NEN-EN 1995-1-1.
+  "houtToetsEN1995",
 ] as const;
 
 const NODE_VELDEN = ["id", "x", "z"] as const;
@@ -848,7 +852,7 @@ export function controleerVelden(rauw: unknown): string[] {
   keurVelden(rauw, MODEL_VELDEN, "model", fouten);
 
   // Vlaggen op modelniveau.
-  for (const vlag of ["selfWeightEnabled", "scheefstandEnabled"] as const) {
+  for (const vlag of ["selfWeightEnabled", "scheefstandEnabled", "scheefstandEigenKolom", "houtToetsEN1995"] as const) {
     if (rauw[vlag] !== undefined && typeof rauw[vlag] !== "boolean") {
       fouten.push(`model.${vlag}: moet true of false zijn.`);
     }

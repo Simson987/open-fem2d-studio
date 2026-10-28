@@ -82,6 +82,7 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     scheefstandAantalY: null,
     scheefstandTorsie: false,
     scheefstandEigenKolom: false,
+    houtToetsEN1995: false,
     gevolgklasse: "CC2",
     // De nationale bijlage (normnaad): zij bepaalt de nationaal bepaalde
     // parameters van elke toetsing, dus een wijziging hoort de resultaten te
@@ -130,6 +131,8 @@ log("\n[1] Elke rekeninstelling verandert de versie");
     scheefstandTorsie: (m) => { m.scheefstandTorsie = true; },
     // Issue #199, fase 3: de eigen scheefstand per losse kolom.
     scheefstandEigenKolom: (m) => { m.scheefstandEigenKolom = true; },
+    // Issue #199, fase 4: hout in de toets volgens NEN-EN 1995-1-1.
+    houtToetsEN1995: (m) => { m.houtToetsEN1995 = true; },
     gevolgklasse: (m) => { m.gevolgklasse = "CC3"; },
     // Er is vandaag maar één gevulde bijlage; "naar niets" is de enige
     // wijziging die te maken is, en ook die hoort een nieuwe versie te geven.

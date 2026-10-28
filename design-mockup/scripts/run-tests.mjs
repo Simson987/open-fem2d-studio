@@ -218,6 +218,12 @@ const BUNDEL_TESTS = new Set([
   // de barrel; de sidecar gebruikt dezelfde functie, dus hoort dit ook tegen de
   // bundel.
   "toets-krachten",
+  // De eigen scheefstand per losse kolom in 2D (issue #199, fase 3): engine
+  // (φ per staaf en knoop) en toetsKrachten — beide in de barrel.
+  "scheefstand-losse-kolom-2d",
+  // Hout in de UGT-toets volgens NEN-EN 1995-1-1 (issue #199, fase 4): E_d,
+  // boogimperfectie, de houtbouwer en de sidecar — alles in de barrel.
+  "hout-toets-en1995",
   "hoekverdraaiing",
   // Bewaakt dat de kniklengte van een HOUTEN staaf tot in de toetsinvoer
   // komt (buckling_length_y_m/_z_m in TimberBeamCheckInput). Praat alleen met
@@ -747,6 +753,9 @@ const ALLEEN_BRON = new Map([
   ["staalhal-wizard-ui", "React-interactie van de wizard Stalen hal in Chromium (stappen, mm-invoer, voorbeeld, meldingen); de generator zelf draait ook in de bundel via staalhal-sidecar."],
   ["ifc-import-ui", "React-interactie van \"Rekenmodel importeren\" in Chromium (knop op het IFC-tabblad, keuzevenster, vraag bij niet-opgeslagen werk, verslag, foutmelding); de import zelf draait ook in de bundel via ifc-analyse-sidecar."],
   ["rekengang-generatie", "Asynchrone rekenregie van de app met afgeschermde React- en native IO-grenzen, uitgevoerd uit de AST van App.tsx (scripts/bron-uitvoeren.mjs); niet beschikbaar in de sidecarbundel."],
+  ["staalhal-wizard-verbanden", "Issue #199: de wizard begint met trek-alleen verbanden. Leest de wizardbron (StaalhalWizard.tsx, React) en rekent met de aparte 3D-kern (open-fem-3d); de wizardmodule staat niet in de 2D-sidecarbundel."],
+  ["toets-weergave", "Issue #199, fase 6: de toetskrachten als diagram op het tekenvlak. `lib/toetsWeergave` en App.tsx (broncontrole) staan niet in de sidecarbundel; het is weergave in de app, geen rekenweg."],
+  ["luifel-kolom", "Issue #199: de luifel- of T-kolom in 2D en 3D. De 2D-helft (doorgaandeLijn, toetsKrachten) staat in de barrel, maar de 3D-helft (`openFem3dUitkraging`, `openFem3dScheefstand`, `openFem3dModel`) niet; de 2D-regel loopt via de bundel ook mee in `scheefstand-losse-kolom-2d`."],
   ["toets-app-route", "Issue #199: de route van de 2D-app naar de toetskern (handleRunMemberChecks uit de AST van App.tsx, scripts/bron-uitvoeren.mjs), met de echte checkStore (zustand), de staalbouwer, `bediening/rapportExport` en de toetsbrug als apart proces. App, store en bediening staan niet in de sidecarbundel; de toetsrekengang zelf (`lib/toetsKrachten`) wordt tegen de bundel getoetst in `toets-krachten`."],
   ["toetskrachten-weergave", "Issue #199, taak 7: wat scherm en rapport over de toetskrachten zeggen — de scheefstand- en analysetekst van App.tsx (uit de AST, scripts/bron-uitvoeren.mjs) en het toetsingspaneel en de rapportsecties (React, gerenderd met react-dom/server, met de checkStore). React, App en store staan niet in de sidecarbundel; de gedeelde tekstfuncties (`alphaCr.analyseToelichting`) worden tegen de bundel getoetst in `alpha-cr`."],
   ["toets-drie-wegen", "Issue #199: dezelfde toetsinvoer en UC langs de app (handleRunMemberChecks uit de AST van App.tsx, de echte checkStore en de toetsbrug), de sidecar uit de bron en `check_fem_model` via de gebouwde MCP-server. App en store staan niet in de sidecarbundel; de bundel zelf wordt hier al getoetst, want de MCP-server draait hem."],

@@ -2043,6 +2043,13 @@ export interface FemStore {
    */
   scheefstandEigenKolom: boolean;
   setScheefstandEigenKolom: (v: boolean) => void;
+  /**
+   * 2D (issue #199, fase 4): hout in de UGT-toets volgens NEN-EN 1995-1-1:
+   * E_d = E_mean/γ_M, de boogimperfectie e = 0,0025·l en de systeemlengte bij
+   * een staand vrij eind. Standaard uit.
+   */
+  houtToetsEN1995: boolean;
+  setHoutToetsEN1995: (v: boolean) => void;
   /** Canvas view mode: false = model-only (no loads drawn), true = LC active loads visible. */
   showLoads: boolean;
   setShowLoads: (v: boolean) => void;
@@ -2126,6 +2133,7 @@ export interface FemStore {
     scheefstandAantalY?: number | null;
     scheefstandTorsie?: boolean;
     scheefstandEigenKolom?: boolean;
+    houtToetsEN1995?: boolean;
     /**
      * Gevolgklasse uit de projectgegevens van het bestand. Ontbreekt → de
      * klasse uit het kenmerk van de standaardcombinaties in het bestand, en
@@ -2353,6 +2361,7 @@ export function useFemStore(opties?: {
   const [scheefstandAantalY, setScheefstandAantalY] = useState<number | null>(null);
   const [scheefstandTorsie, setScheefstandTorsie] = useState<boolean>(false);
   const [scheefstandEigenKolom, setScheefstandEigenKolom] = useState<boolean>(false);
+  const [houtToetsEN1995, setHoutToetsEN1995] = useState<boolean>(false);
   // Eén versie van alles buiten het model dat de uitkomst bepaalt. Elk veld
   // van `RekenInstellingen` is verplicht, dus een nieuwe instelling kan hier
   // niet ontbreken zonder dat het niet compileert.
@@ -2386,7 +2395,7 @@ export function useFemStore(opties?: {
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
       scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
-      scheefstandTorsie, scheefstandEigenKolom, gevolgklasse,
+      scheefstandTorsie, scheefstandEigenKolom, houtToetsEN1995, gevolgklasse,
       nationaleBijlage: projectBijlage,
     }),
     [
@@ -2394,7 +2403,7 @@ export function useFemStore(opties?: {
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
       scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
-      scheefstandTorsie, scheefstandEigenKolom, gevolgklasse, projectBijlage,
+      scheefstandTorsie, scheefstandEigenKolom, houtToetsEN1995, gevolgklasse, projectBijlage,
     ],
   );
   // Canvas view mode: false = "Model" tab (no loads drawn), true = LC active.
@@ -3305,6 +3314,7 @@ export function useFemStore(opties?: {
     scheefstandAantalY, setScheefstandAantalY,
     scheefstandTorsie, setScheefstandTorsie,
     scheefstandEigenKolom, setScheefstandEigenKolom,
+    houtToetsEN1995, setHoutToetsEN1995,
     showLoads, setShowLoads,
     pendingLoadFocus, setPendingLoadFocus,
     canUndo, canRedo, undo, redo,
@@ -3412,6 +3422,7 @@ export function useFemStore(opties?: {
       scheefstandAantalY?: number | null;
       scheefstandTorsie?: boolean;
       scheefstandEigenKolom?: boolean;
+      houtToetsEN1995?: boolean;
       gevolgklasse?: Gevolgklasse;
       /** De nationale bijlage uit de projectgegevens van het bestand, zoals gelezen. */
       nationaleBijlage?: unknown;
@@ -3525,6 +3536,7 @@ export function useFemStore(opties?: {
       setScheefstandAantalY(mPerAs(p.scheefstandAantalY));
       setScheefstandTorsie(p.scheefstandTorsie === true);
       setScheefstandEigenKolom(p.scheefstandEigenKolom === true);
+      setHoutToetsEN1995(p.houtToetsEN1995 === true);
       // v2-velden; v1-bestanden (of Nieuw) vallen terug op de defaults.
       // (De combinaties zijn hierboven al gezet, samen met de gevallen.)
       const nieuwGrid = p.structuralGrid ?? DEFAULT_STRUCTURAL_GRID;

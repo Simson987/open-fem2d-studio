@@ -18,6 +18,8 @@ import { maakWachtpoort, type Wachtpoort } from "./io/bestandskoppeling";
 import SettingsDialog, { applyTheme, themeId, type SettingsTabId } from "./components/settings/SettingsDialog";
 import SneltoetsenDialog from "./components/SneltoetsenDialog";
 import OnopgeslagenDialog, { type OnopgeslagenKeuze } from "./components/OnopgeslagenDialog";
+import ToetsWeergaveBalk from "./components/fem/ToetsWeergaveBalk";
+import { kiesToetsCombinatie } from "./lib/toetsWeergave";
 import CanvasMeldingen from "./components/fem/CanvasMeldingen";
 import { materiaalVanStaaf } from "./lib/variantInvoer";
 import { erIsEenDialoogOpen } from "./components/Modal";
@@ -167,6 +169,8 @@ import {
 import {
   bepaalToetsKrachten2D,
   bepaalToetsScheefstand,
+  eigenKolomScheefstand2D,
+  houtStavenVoorToets,
   scheefstandToelichtingToets,
   toetsOmschrijving,
   toetsScheefstandNormen,
@@ -1375,6 +1379,8 @@ function App() {
     scheefstandTorsie: fem.scheefstandTorsie,
     // Issue #199, fase 3: de eigen scheefstand per losse kolom.
     scheefstandEigenKolom: fem.scheefstandEigenKolom,
+    // Issue #199, fase 4: hout in de toets volgens NEN-EN 1995-1-1.
+    houtToetsEN1995: fem.houtToetsEN1995,
     // Eigen doorsneden reizen mee in het projectbestand: een staaf met
     // `EIGEN:<naam>` moet op een andere machine dezelfde doorsnede vinden.
     // Alleen de doorsneden die dit model daadwerkelijk gebruikt — anders
@@ -1605,6 +1611,7 @@ function App() {
         scheefstandAantalY: parsed.scheefstandAantalY,
         scheefstandTorsie: parsed.scheefstandTorsie,
         scheefstandEigenKolom: parsed.scheefstandEigenKolom,
+        houtToetsEN1995: parsed.houtToetsEN1995,
         gevolgklasse:
           bestandsklasse === "CC1" || bestandsklasse === "CC2" || bestandsklasse === "CC3"
             ? bestandsklasse
@@ -2143,6 +2150,25 @@ function App() {
   // Wanneer true: alle krachten-overlays aan (M+V+N+vervorming+reacties).
   // Wordt uit-gezet zodra de gebruiker op Model of een LC-tab klikt.
   const [resultsTabActive, setResultsTabActive] = useState(false);
+  // Issue #199, fase 6: het tekenvlak toont de TOETSSET in plaats van de
+  // resultaten. `null` = de resultaten; anders het id van de getoonde
+  // toetscombinatie (uit `lastRunData`, `lib/toetsWeergave.ts`).
+  const [toetsWeergaveId, setToetsWeergaveId] = useState<number | null>(null);
+  const toetsRonde = useCheckStore((s) => s.lastRunData);
+  const toetsWeergave = useMemo(() => {
+    const id = kiesToetsCombinatie(toetsRonde, toetsWeergaveId);
+    return id !== null && toetsRonde ? { id, ronde: toetsRonde } : null;
+  }, [toetsRonde, toetsWeergaveId]);
+  // Kiest de gebruiker zelf een combinatie of de omhullende, dan weer de
+  // resultaten op het tekenvlak.
+  const vorigeKeuzeRef = useRef({ combinatie: fem.activeCombinationId, omhullende: fem.envelopeView });
+  useEffect(() => {
+    const vorige = vorigeKeuzeRef.current;
+    vorigeKeuzeRef.current = { combinatie: fem.activeCombinationId, omhullende: fem.envelopeView };
+    if (vorige.combinatie !== fem.activeCombinationId || (!vorige.omhullende && fem.envelopeView)) {
+      setToetsWeergaveId(null);
+    }
+  }, [fem.activeCombinationId, fem.envelopeView]);
   // Tab in the project-tree (verkenner) — controlled door App zodat Berekenen
   // automatisch naar "results" springt.
   const [treeTab, setTreeTab] = useState<"project" | "view" | "results">("project");
@@ -2345,6 +2371,25 @@ function App() {
     const toetsing = useCheckStore.getState().lastRunData;
     const getoond = fem.combinationResults?.get(id);
     if (!getoond || toetsing?.combinationResults.get(id) !== getoond) {
+      // Issue #199, fase 6: de toetsset zelf op het tekenvlak, met de
+      // markering erop, in plaats van alleen een melding.
+      if (kiesToetsCombinatie(toetsing, id) !== null) {
+        setToetsWeergaveId(id);
+        fem.setEnvelopeView(false);
+        fem.setShowLoads(true);
+        setResultsTabActive(true);
+        if (doel.beamId !== undefined && doel.positieMm !== null) {
+          markering.zet({
+            beamId: doel.beamId,
+            positieMm: doel.positieMm,
+            combinatieId: id,
+            rondeVan: useCheckStore.getState().lastRunAt,
+          });
+        } else {
+          markering.wis();
+        }
+        return;
+      }
       markering.wis();
       const naam = toetsing?.combinations.find((c) => c.id === id)?.name ?? String(id);
       // Het advies noemt de φ van de TOETS (die kan door hout hoger liggen dan
@@ -2362,6 +2407,7 @@ function App() {
       )).catch(() => {});
       return;
     }
+    setToetsWeergaveId(null);
     fem.setActiveCombinationId(id);
     fem.setEnvelopeView(false);
     fem.setShowLoads(true);
@@ -3253,7 +3299,15 @@ function App() {
           normen: toetsScheefstandNormen(fem.beams, fem.plates),
           richting: fem.scheefstandRichting,
           modelAan: fem.scheefstandEnabled,
+          // Issue #199, fase 3: de eigen φ per losse kolom, alleen met de instelling.
+          ...(fem.scheefstandEigenKolom
+            ? { eigenKolommen: eigenKolomScheefstand2D({
+                nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
+              }) }
+            : {}),
         },
+        // Issue #199, fase 4: hout volgens NEN-EN 1995-1-1, alleen met de instelling.
+        ...(fem.houtToetsEN1995 ? { hout: { gammaM: houtStavenVoorToets(fem.beams) } } : {}),
         analysetype: fem.analysetype,
         resultaten: perCase && hergebruikMag
           ? { perCase, combinationResults: resultaten, ...(alphaCrResultaten ? { alphaCr: alphaCrResultaten } : {}) }
@@ -4016,7 +4070,7 @@ function App() {
       // en stil verloren gaan bij het afsluiten.
       fem.scheefstandBron, fem.scheefstandHoogteM, fem.scheefstandAantalElementen,
       fem.scheefstandAantalX, fem.scheefstandAantalY, fem.scheefstandTorsie, fem.scheefstandEigenKolom,
-      openFem3d]);
+      fem.houtToetsEN1995, openFem3d]);
 
   // C2: sluitbeveiliging. Tauri: onCloseRequested + native dialoog (dekt de
   // titelbalk-sluitknop, Bestand → Afsluiten en Alt+F4). Browser: beforeunload.
@@ -4526,17 +4580,37 @@ function App() {
                 setStructuralGrid={fem.setStructuralGrid}
                 verplaatsStramienAs={fem.verplaatsStramienAs}
                 grid={grid}
-                combinations={fem.rekenCombinaties}
-                activeCombinationId={fem.activeCombinationId}
-                envelopeView={fem.envelopeView}
-                combinationResults={solverStatus.kind === "solved" ? fem.combinationResults : null}
-                envelope={solverStatus.kind === "solved" ? fem.envelope : null}
+                // Issue #199, fase 6: in de toetsweergave de toetsset.
+                combinations={toetsWeergave ? toetsWeergave.ronde.combinations : fem.rekenCombinaties}
+                activeCombinationId={toetsWeergave ? toetsWeergave.id : fem.activeCombinationId}
+                envelopeView={toetsWeergave ? false : fem.envelopeView}
+                combinationResults={toetsWeergave
+                  ? toetsWeergave.ronde.combinationResults
+                  : solverStatus.kind === "solved" ? fem.combinationResults : null}
+                envelope={toetsWeergave ? null : solverStatus.kind === "solved" ? fem.envelope : null}
                 displayFlags={displayFlags}
                 setDisplayFlags={setDisplayFlags}
                 resultsMode={resultsTabActive}
                 onZoomChange={setZoomPct}
                 onOpenCheckForBeam={handleOpenCheckForBeam}
               />
+              {resultsTabActive && (
+                <ToetsWeergaveBalk
+                  getoond={toetsWeergave
+                    ? toetsWeergave.ronde.combinations.find((c) => c.id === toetsWeergave.id)?.name ?? String(toetsWeergave.id)
+                    : null}
+                  noemer={toetsVanRonde?.analyse ? noemerTekst(toetsVanRonde.analyse.noemer) : null}
+                  beschikbaar={kiesToetsCombinatie(toetsRonde, fem.activeCombinationId, true) !== null}
+                  onAan={() => {
+                    const id = kiesToetsCombinatie(toetsRonde, fem.activeCombinationId, true);
+                    if (id === null) return;
+                    setToetsWeergaveId(id);
+                    fem.setEnvelopeView(false);
+                    fem.setShowLoads(true);
+                  }}
+                  onUit={() => setToetsWeergaveId(null)}
+                />
+              )}
               <CanvasMeldingen
                 meldingen={fem.belastingMeldingen}
                 onToonHout={() => {
@@ -5332,6 +5406,8 @@ function App() {
           setScheefstandTorsie={fem.setScheefstandTorsie}
           scheefstandEigenKolom={fem.scheefstandEigenKolom}
           setScheefstandEigenKolom={fem.setScheefstandEigenKolom}
+          houtToetsEN1995={fem.houtToetsEN1995}
+          setHoutToetsEN1995={fem.setHoutToetsEN1995}
           // φ_X en φ_Y, m_X en m_Y (issue #194): de balk toont beide richtingen.
           scheefstandPhiNoemer={scheefstandBalk.noemer}
           scheefstandPhiNoemerY={scheefstandBalk.noemerY}
@@ -5397,6 +5473,8 @@ function App() {
           setScheefstandTorsie={fem.setScheefstandTorsie}
           scheefstandEigenKolom={fem.scheefstandEigenKolom}
           setScheefstandEigenKolom={fem.setScheefstandEigenKolom}
+          houtToetsEN1995={fem.houtToetsEN1995}
+          setHoutToetsEN1995={fem.setHoutToetsEN1995}
           // De uitkomst en de afleiding gaan als GEGEVEN mee naar de balk: de
           // balk toont wat er is gerekend en rekent niets zelf, zodat er geen
           // tweede plek is waar φ kan ontstaan.

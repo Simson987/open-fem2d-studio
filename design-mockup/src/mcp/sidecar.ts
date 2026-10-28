@@ -73,6 +73,8 @@ import {
 import {
   bepaalToetsKrachten2D,
   bepaalToetsScheefstand,
+  eigenKolomScheefstand2D,
+  houtStavenVoorToets,
   scheefstandToelichtingToets,
   toetsOmschrijving,
   toetsScheefstandNormen,
@@ -581,6 +583,8 @@ function leesModel(payload: Record<string, unknown>): GelezenModel {
       scheefstandEnabled: bestand.scheefstandEnabled ?? false,
       scheefstandNoemer: bestand.scheefstandNoemer ?? 200,
       scheefstandRichting: bestand.scheefstandRichting ?? 1,
+      scheefstandEigenKolom: bestand.scheefstandEigenKolom === true,
+      houtToetsEN1995: bestand.houtToetsEN1995 === true,
     };
     // De normkeuze van de scheefstand uit het bestand: φ zoals de app hem
     // bepaalt, of de vaste noemer als er geen (of "vast") gekozen is.
@@ -657,6 +661,8 @@ function leesModel(payload: Record<string, unknown>): GelezenModel {
     scheefstandNoemer:
       typeof rauw.scheefstandNoemer === "number" ? rauw.scheefstandNoemer : 200,
     scheefstandRichting: rauw.scheefstandRichting === -1 ? -1 : 1,
+    scheefstandEigenKolom: rauw.scheefstandEigenKolom === true,
+    houtToetsEN1995: rauw.houtToetsEN1995 === true,
   };
   // Ook een los model mag de normkeuze dragen — het is "exact de vorm van een
   // projectbestand", zegt het toolschema.
@@ -1745,7 +1751,17 @@ function opCheck(payload: Record<string, unknown>) {
         normen: toetsNormen,
         richting: gelezen.model.scheefstandRichting,
         modelAan: gelezen.model.scheefstandEnabled,
+        // Issue #199, fase 3: de eigen φ per losse kolom, alleen met de
+        // instelling `scheefstandEigenKolom` (projectbestand of model), zoals de app.
+        ...(gelezen.model.scheefstandEigenKolom
+          ? { eigenKolommen: eigenKolomScheefstand2D({
+              nodes: gelezen.model.nodes, beams: gelezen.model.beams,
+              supports: gelezen.model.supports, plates: gelezen.model.plates ?? [],
+            }) }
+          : {}),
       },
+      // Issue #199, fase 4: hout volgens NEN-EN 1995-1-1, zoals de app.
+      ...(gelezen.model.houtToetsEN1995 ? { hout: { gammaM: houtStavenVoorToets(gelezen.model.beams) } } : {}),
       analysetype: d.analysetype,
       resultaten: { perCase: d.perCase, combinationResults: d.combinationResults },
     });

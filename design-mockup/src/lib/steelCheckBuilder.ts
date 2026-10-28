@@ -1525,6 +1525,7 @@ export function buildSteelCheckInputs(ruweData: SteelBuildData): SteelBuildResul
           ruweData.stabiliteit,
           referentieVanStaaf(beam, data.nodes).staafstand === "Staand",
           lengthMm / 1000,
+          ledenVanLijn.size > 0 ? [...ledenVanLijn] : [beam.id],
         )
       : {};
     // De kanttekening ("blijft 2·L") alleen als de kern ook echt 2·L neemt:

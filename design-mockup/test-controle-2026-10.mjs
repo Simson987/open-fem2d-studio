@@ -600,17 +600,25 @@ log("\n[K5] Doorgaande lijn over een kolomkop met overstek: veld en overstek apa
 log("\n[K5] Klasse 'uitkraging' zonder herkend vrij eind: vanaf het eind met de kleinste verplaatsing");
 // HEA 200 S355 (I = 36,92·10⁶), L = 3000, ingeklemd op knoop 1; op de punt staat
 // een (onbelaste) stijl 2 → 3, dus knoop 2 is geen vrij eind. Klasse
+// [Issue #199, luifel-/T-kolom: een stijl die alleen aan de punt HANGT, houdt
+// die punt nergens vast; tot oktober 2026 telde zij toch als gaffel. Om hier het
+// geval "geen vrij eind herkend" te houden, staat de kop van de stijl nu op een
+// horizontale veer (xSpring, 1 kN/mm) en hangt de stijl met een scharnier
+// (startRy) aan de punt. Zo houdt zij de punt alleen horizontaal vast en draait
+// zij niet mee met de punt; er werkt geen horizontale last, dus de zakking en de
+// handberekening hieronder veranderen niet.]
+// Klasse
 // "uitkraging": gemeten vanaf het eind met de kleinste verplaatsing, de
 // inklemming. Hand: F = 10 kN op de punt (Q), G: q = 5 kN/m:
 // w_kar = qL⁴/8EI + FL³/3EI = 6,530 + 11,608 = 18,138 mm.
 {
   const m = { ...ALGEMEEN, plates: [],
     nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }, { id: 3, x: 3000, z: 1000 }],
-    supports: [{ nodeId: 1, type: "fixed" }],
+    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 3, type: "xSpring", k: 1 }],
     loads: [{ id: 1, type: "lineLoad", beamId: 1, caseId: 1, q: -5 }, { id: 2, type: "pointForce", nodeId: 2, caseId: 2, fz: -10 }],
     beams: [
       { id: 1, from: 1, to: 2, material: "S355", profile: "HEA200", checkConfig: { deflectionClass: "cantilever" } },
-      { id: 2, from: 2, to: 3, material: "S355", profile: "HEA100" },
+      { id: 2, from: 2, to: 3, material: "S355", profile: "HEA100", releases: { startRy: true } },
     ],
   };
   const inv = staalVan(m).inputs.find((i) => i.beam_id === 1);

@@ -89,6 +89,7 @@ fn verzoek(bracing: Schoring, phi: Option<f64>) -> ConcreteColumnCheckRequest {
         ],
         sls_quasi_permanent_envelope: vec![],
         first_order_envelope: None,
+        tweede_orde_in_krachten: None,
         design_situation: Default::default(),
         steel_branch: Default::default(),
     }
