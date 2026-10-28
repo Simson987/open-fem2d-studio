@@ -112,6 +112,53 @@ debug = 0
 strip = "debuginfo"
 incremental = false
 
+# Ook een dev-build rekent geoptimaliseerd. De rekenkernen draaien in het
+# app-proces (Tauri-commando's); met opt-level 0 rekende een dev-app ruim tien
+# keer zo traag als de release (NAFEMS LE1 in open-fem-3d: 1,95 s tegen 0,20 s).
+# Afhankelijkheden (lineaire algebra) en de reken- en toetscrates daarom op 3;
+# de app-crate zelf blijft op 0, zodat opnieuw bouwen snel blijft.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev.package.open-fem-3d]
+opt-level = 3
+
+[profile.dev.package.openaec-native-fem]
+opt-level = 3
+
+[profile.dev.package.frame3d-solver]
+opt-level = 3
+
+[profile.dev.package.mechanics]
+opt-level = 3
+
+[profile.dev.package.section-properties]
+opt-level = 3
+
+[profile.dev.package.steel-check]
+opt-level = 3
+
+[profile.dev.package.concrete-check]
+opt-level = 3
+
+[profile.dev.package.timber-check]
+opt-level = 3
+
+[profile.dev.package.plaat-check]
+opt-level = 3
+
+[profile.dev.package.nen-en-1993-1-1-section]
+opt-level = 3
+
+[profile.dev.package.nen-en-1993-1-1-stability]
+opt-level = 3
+
+[profile.dev.package.nen-en-1993-1-1-ltb]
+opt-level = 3
+
+[profile.dev.package.nen-en-1992-1-1]
+opt-level = 3
+
 [profile.release]
 strip = "symbols"
 lto = "thin"
