@@ -2312,7 +2312,11 @@ pub(crate) fn solve_fixed(
         draaiing.controleer(context, request, invoer, &results)?;
     }
     if let Some(mechanisme) = &mechanisme {
-        mechanisme.controleer(context, request, los, &staaf_van, &results, false)?;
+        // Stoot de belasting de vrije beweging aan, dan ook de knoop en de
+        // vrijheidsgraad erbij (#243, `mechanismevorm`).
+        mechanisme
+            .controleer(context, request, los, &staaf_van, &results, false)
+            .map_err(|fout| met_vorm(fout, &model.input))?;
     }
     plaatbedding::controleer_vlak(context, &model.plaat)?;
     let gedrukt = gedrukte_staven(&model, &results);
