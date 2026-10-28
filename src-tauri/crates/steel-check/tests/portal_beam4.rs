@@ -250,19 +250,36 @@ fn portal_beam4_ltb_chi_is_one() {
     );
 }
 
+/// Alle unity checks liggen onder 1 (referentie: UC_max = 0,62, buiging
+/// maatgevend). De STATUS is sinds issue #243 (punt 089) echter niet meer
+/// "Ok": de omhullende van deze test bevat per combinatie alleen de punten
+/// uit de referentie (x = 2491 en 5000 mm), niet x = 0. De eindmomenten
+/// waaruit β en B* van de kiptoets volgen zijn daarmee doorgetrokken, niet
+/// gemeten, en de staaf is NIET VOLLEDIG GETOETST. Geen enkel getal verandert;
+/// alleen `status` en `governing_check_id` (zie de snapshot).
 #[test]
 fn portal_beam4_governing_ok() {
     let r = run();
-    // Reference: all checks OK, UC_max = 0.62 (bending governs)
     assert!(
         r.uc_max < 1.0,
         "expected uc_max < 1.0 (reference: 0.62), got {}",
         r.uc_max
     );
-    assert_eq!(r.status, CheckStatus::Ok);
+    assert_eq!(r.status, CheckStatus::NotApplicable);
+    assert!(
+        r.governing_check_id.starts_with("NIET VOLLEDIG GETOETST: de kip (6.3.2)")
+            && r.governing_check_id.contains("combinaties 21, 11"),
+        "{}",
+        r.governing_check_id
+    );
 }
 
 /// Regressiesnapshot van het volledige resultaat.
+///
+/// Okt 2026 (issue #243, punt 089): alleen `status` (Ok → NotApplicable) en
+/// `governing_check_id` (6.2.5_bending_y → "NIET VOLLEDIG GETOETST: de kip
+/// (6.3.2) berust op eindmomenten die niet gemeten maar doorgetrokken zijn …")
+/// veranderen; geen unity check, waarde of notitie. Zie `portal_beam4_governing_ok`.
 ///
 /// Sept 2026 (b) bijgewerkt na de nabeschouwing op de kipreparatie.
 /// **Geen enkele unity check en geen enkele tussenwaarde verandert**; het

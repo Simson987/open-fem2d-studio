@@ -2738,6 +2738,28 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
         make_stability(ltb)
     };
     checks.push(ltb_check);
+    // Issue #243 (punt 089): reikt de omhullende van een combinatie met
+    // buiging niet tot beide staafeinden, dan zijn de eindmomenten waaruit β
+    // en B* (NB.NB.4.3) volgen niet gemeten maar doorgetrokken — en dat is
+    // de onveilige richting (zie `envelop_notities`). Alleen een notitie liet
+    // de staaf op "voldoet" staan; nu is hij NIET VOLLEDIG GETOETST, tenzij
+    // een gerekende toets al faalt. Alleen bij een GEREKENDE kiptoets: een
+    // geweigerde of n.v.t.-kiptoets gebruikt die eindmomenten niet.
+    let kip_eindmomenten_doorgetrokken: Vec<u32> =
+        if kip_weigering.is_none() && doorsnede.kip_nvt.is_none() {
+            per_combinatie
+                .iter()
+                .filter(|k| k.ltb.as_ref().is_some_and(|l| l.uc.is_some()))
+                .filter(|k| !k.geo.envelop_notities.is_empty())
+                .filter(|k| {
+                    env.iter()
+                        .any(|fp| fp.combination_id == k.c && fp.forces.my_ed.abs() > M_NUL_KNM)
+                })
+                .map(|k| k.c)
+                .collect()
+        } else {
+            Vec::new()
+        };
     // Welke flens "boven" is, in wereldtermen. De kiptoets kiest per steun de
     // gedrukte flens uit het teken van M_y en de afleiding noemt die flens
     // BOVEN of ONDER. Bij een staande staaf is dat geen wereldbegrip; zie
@@ -3268,6 +3290,7 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
         || knik_ontbreekt
         || kip_ontbreekt
         || wringing_ontbreekt.is_some()
+        || !kip_eindmomenten_doorgetrokken.is_empty()
     {
         CheckStatus::NotApplicable
     } else {
@@ -3280,6 +3303,18 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
         }
         if let Some(reden) = &wringing_ontbreekt {
             redenen.push(reden.clone());
+        }
+        if !kip_eindmomenten_doorgetrokken.is_empty() {
+            let combis: Vec<String> =
+                kip_eindmomenten_doorgetrokken.iter().map(|c| c.to_string()).collect();
+            redenen.push(format!(
+                "de kip (6.3.2) berust op eindmomenten die niet gemeten maar doorgetrokken zijn: \
+                 de krachtenomhullende van {} {} reikt niet tot beide staafeinden, terwijl \
+                 β en B* (NB.NB.4.3) uit de momenten op de staafeinden volgen; geef de omhullende \
+                 ook op x = 0 en x = L",
+                if combis.len() == 1 { "combinatie" } else { "combinaties" },
+                combis.join(", ")
+            ));
         }
         let ontbreekt: Vec<&str> = [
             (knik_ontbreekt, "de kolomknik (6.3.1) bij druk"),
