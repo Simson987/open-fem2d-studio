@@ -158,7 +158,7 @@ is_cantilever: boolean,
  * beide `Gaffel` (met `is_cantilever` voor een vrij eind), het gedrag van
  * vóór dit veld.
  */
-staafeinden?: Staafeinden,
+staafeinden?: Staafeinden, 
 /**
  * Zijdelingse steunen als fracties van de staaflengte, per rand — dezelfde
  * vorm als bij staal (`top_flange_positions` = bovenrand,

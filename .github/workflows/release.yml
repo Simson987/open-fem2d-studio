@@ -315,6 +315,29 @@ jobs:
           find artifacts -name '*.deb' -exec cp {} release/ \;
           ls -la release/
 
+      # Zoals OpenAEC Blueprint: controlesommen, en de controlesommen en de
+      # AppImage ondertekend met de OpenPGP-sleutel van de organisatie. Zonder
+      # sleutel blijft het bij de controlesommen.
+      - name: Checksums and OpenPGP signature (Linux)
+        env:
+          OPENAEC_GPG_PRIVATE_KEY: ${{ secrets.OPENAEC_GPG_PRIVATE_KEY }}
+          OPENAEC_GPG_PASSPHRASE: ${{ secrets.OPENAEC_GPG_PASSPHRASE }}
+          OPENAEC_GPG_FINGERPRINT: ${{ vars.OPENAEC_GPG_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          (cd release && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+          if [[ -z "${OPENAEC_GPG_PRIVATE_KEY:-}" || -z "${OPENAEC_GPG_PASSPHRASE:-}" || -z "${OPENAEC_GPG_FINGERPRINT:-}" ]]; then
+            echo "OpenPGP-sleutel niet beschikbaar; niet ondertekend."; exit 0
+          fi
+          export GNUPGHOME=$(mktemp -d)
+          printf '%s\n' "$OPENAEC_GPG_PRIVATE_KEY" | gpg --batch --import
+          fpr=$(tr -d ' ' <<< "$OPENAEC_GPG_FINGERPRINT")
+          gpg --batch --list-secret-keys --with-colons | grep -q "$fpr" || { echo "::error::de sleutel is niet $fpr"; exit 1; }
+          for f in release/SHA256SUMS release/*.AppImage; do
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$OPENAEC_GPG_PASSPHRASE" --local-user "$fpr" --armor --detach-sign --output "$f.asc" "$f"
+            gpg --batch --verify "$f.asc" "$f"
+          done
+
       - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
@@ -327,5 +350,5 @@ jobs:
             **Downloads:**
             - **Windows:** `.exe` (NSIS-installer) / `.msi`
             - **macOS:** `.dmg` (universal)
-            - **Linux:** `.AppImage` / `.deb`
+            - **Linux:** `.AppImage` / `.deb` (OpenPGP: `.asc`, controlesommen in `SHA256SUMS`)
           files: release/*
