@@ -160,6 +160,13 @@ const KRUISTABEL: &[Rij] = &[
         mcp: Some("check_koudgevormd_beams"),
         reden: "",
     },
+    // Natuursteen (issue #99): de elementtoets langs alle drie de wegen.
+    Rij {
+        tauri: Some("check_natural_stone_elements"),
+        toetsbrug: Some("check_natural_stone_elements"),
+        mcp: Some("check_natural_stone_elements"),
+        reden: "",
+    },
     Rij {
         tauri: Some("list_concrete_classes"),
         toetsbrug: Some("list_concrete_classes"),

@@ -45,6 +45,7 @@ use spanning_check::SpanningBeamCheckInput;
 use aluminium_check::AluminiumBeamCheckInput;
 use metselwerk_check::MetselwerkWandInput;
 use koudgevormd_check::KoudgevormdBeamCheckInput;
+use natuursteen_check::NatuursteenElementInput;
 use steel_check::BeamCheckInput;
 use timber_check::clt::CltBeamCheckInput;
 use timber_check::TimberBeamCheckInput;
@@ -277,6 +278,16 @@ pub fn behandel(v: Verzoek) -> Result<Value, String> {
             let inputs: Vec<KoudgevormdBeamCheckInput> =
                 serde_json::from_value(inputs).map_err(|e| format!("invoer koudgevormd: {e}"))?;
             serde_json::to_value(koudgevormd_check::check_all_koudgevormd_beams(inputs))
+                .map_err(|e| e.to_string())
+        }
+        // Natuursteen (issue #99): de elementtoets. Zelfde typen en functie als
+        // het Tauri-command en de MCP-tool van dezelfde naam
+        // (`openaec-mcp-server/src/natural_stone_tools.rs`).
+        "check_natural_stone_elements" => {
+            let inputs = v.inputs.ok_or("check_natural_stone_elements vraagt om `inputs`")?;
+            let inputs: Vec<NatuursteenElementInput> =
+                serde_json::from_value(inputs).map_err(|e| format!("natuursteeninvoer: {e}"))?;
+            serde_json::to_value(natuursteen_check::check_all_natuursteen_elements(inputs))
                 .map_err(|e| e.to_string())
         }
         // Platen (wandschijven): de elementspanningen per UGT-combinatie getoetst
