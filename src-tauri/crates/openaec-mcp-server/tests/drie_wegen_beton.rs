@@ -1220,14 +1220,14 @@ async fn de_bgt_combinatie_en_de_nieuwe_gegevens_komen_door_alle_drie_de_wegen()
     eis_gelijk("toetsbrug", &brug, "MCP-server", &mcp);
 
     for (naam, r) in [("Tauri", &tauri), ("toetsbrug", &brug), ("MCP", &mcp)] {
-        // Zestien toetsen: 6.1 (2×), 6.2, 7.3 (2×), 7.4.2, negen keer 9.2/8.2
-        // en één keer §5.8. Die laatste staat er ALTIJD, ook bij een balk zonder
+        // Zeventien toetsen: 6.1 (2×), 6.1(9) (drukzonegrens, issue #250),
+        // 6.2, 7.3 (2×), 7.4.2, negen keer 9.2/8.2 en één keer §5.8. Die laatste staat er ALTIJD, ook bij een balk zonder
         // normaaldruk zoals deze: dan meldt hij dat §5.8 niet van toepassing is.
         // Een weggelaten toets is niet te onderscheiden van een toets die
         // slaagde.
         assert_eq!(
             r["checks"].as_array().expect("checks").len(),
-            16,
+            17,
             "{naam}: er ontbreekt een toets"
         );
 
