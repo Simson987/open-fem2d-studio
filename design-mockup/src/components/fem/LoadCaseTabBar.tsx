@@ -990,7 +990,7 @@ export default function LoadCaseTabBar({
           <span>{t("loadCases.swayTorsion")}</span>
         </label>
       )}
-      {setScheefstandEnabled && scheefstandIn3D && setScheefstandEigenKolom && (
+      {setScheefstandEnabled && setScheefstandEigenKolom && (
         <label
           className={`lc-tab-toggle${scheefstandEigenKolom ? " active" : ""}`}
           title={t("loadCases.swayOwnColumnTitle")}

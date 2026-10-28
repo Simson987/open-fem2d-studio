@@ -4326,7 +4326,7 @@
           },
           "ownColumnSway": {
             "type": "boolean",
-            "description": "Alleen 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(φ_model, φ_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte."
+            "description": "2D en 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(φ_model, φ_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte."
           }
         },
         "additionalProperties": false

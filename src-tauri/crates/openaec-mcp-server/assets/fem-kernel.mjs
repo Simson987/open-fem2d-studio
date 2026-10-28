@@ -17331,11 +17331,13 @@ function analyseToelichting(invoer) {
   }
   return regels.join("\n");
 }
-function zijdelingseKnikInVlakModel(stabiliteit, staand, lengteM) {
+function zijdelingseKnikInVlakModel(stabiliteit, staand, lengteM, staafIds = []) {
   if (!staand) return {};
   if (!stabiliteit || stabiliteit.analysetype === "eersteOrde" || !stabiliteit.scheefstandAan) return {};
   const nodig = phiLosseKolom(lengteM);
-  const gebruikt = stabiliteit.scheefstandPhi;
+  const perStaaf = stabiliteit.scheefstandPhiPerStaaf;
+  const eigen = perStaaf && staafIds.length > 0 && staafIds.every((id2) => perStaaf.has(id2)) ? Math.min(...staafIds.map((id2) => perStaaf.get(id2))) : void 0;
+  const gebruikt = eigen ?? stabiliteit.scheefstandPhi;
   if (gebruikt !== void 0 && Number.isFinite(gebruikt) && gebruikt >= nodig * (1 - 1e-9)) {
     return { veld: { y: true, z: false } };
   }
@@ -18159,7 +18161,8 @@ function buildSteelCheckInputs(ruweData) {
     const zijdelings = eenVrijEind ? zijdelingseKnikInVlakModel(
       ruweData.stabiliteit,
       referentieVanStaaf(beam, data.nodes).staafstand === "Staand",
-      lengthMm / 1e3
+      lengthMm / 1e3,
+      ledenVanLijn.size > 0 ? [...ledenVanLijn] : [beam.id]
     ) : {};
     if (zijdelings.notitie && !kniklengteYOpgegeven) staafNotities.push(zijdelings.notitie);
     inputs.push({
@@ -20542,6 +20545,14 @@ function buildMesh(input, loadFactor, options = {}) {
   }
   const sch = input.scheefstand;
   const schFactor = sch ? sch.richting * sch.phi : 0;
+  const schFactorStaaf = (beamId) => {
+    const eigen = sch?.phiPerStaaf?.get(beamId);
+    return sch && eigen !== void 0 ? sch.richting * eigen : schFactor;
+  };
+  const schFactorKnoop = (nodeId) => {
+    const eigen = sch?.phiPerKnoop?.get(nodeId);
+    return sch && eigen !== void 0 ? sch.richting * eigen : schFactor;
+  };
   const plateInfo = [];
   const pasPlaatEigengewichtToe = (p2, elementIds) => {
     if (p2.selfWeightCaseId === void 0) return;
@@ -20924,9 +20935,10 @@ function buildMesh(input, loadFactor, options = {}) {
         gxB = dir === "x" ? qb : 0;
         gyB = dir === "z" ? qb : 0;
       }
-      const qxA = gxA + schFactor * -gyA;
+      const schLast = schFactorStaaf(ld.beamId);
+      const qxA = gxA + schLast * -gyA;
       const qyA = gyA;
-      const qxB = gxB + schFactor * -gyB;
+      const qxB = gxB + schLast * -gyB;
       const qyB = gyB;
       const aFrac = Math.min(1, Math.max(0, ld.startFrac ?? 0));
       const bFrac = Math.min(1, Math.max(0, ld.endFrac ?? 1));
@@ -21017,13 +21029,13 @@ function buildMesh(input, loadFactor, options = {}) {
     if (fx === 0 && fz === 0) continue;
     zetRandkrachten(verdeelRandpuntlastConsistent(rand.nodeIds, rand.s, t * rand.L, fx, fz));
   }
-  const pasKnooplastToe = (meshNid, fx_N, fz_N, my_Nmm, f) => {
+  const pasKnooplastToe = (meshNid, fx_N, fz_N, my_Nmm, f, schLast = schFactor) => {
     const node = mesh.getNode(meshNid);
     const ex = node?.loads ?? { fx: 0, fy: 0, moment: 0 };
     mesh.updateNode(meshNid, {
       loads: {
         // Scheefstand-companion: fx += φ·(−fz)·richting (fz < 0 = omlaag).
-        fx: ex.fx + (fx_N + schFactor * -fz_N) * f,
+        fx: ex.fx + (fx_N + schLast * -fz_N) * f,
         fy: ex.fy + fz_N * f,
         // my in N·mm → mesh moment in N·m  → /1000
         moment: ex.moment + my_Nmm / 1e3 * f
@@ -21037,7 +21049,7 @@ function buildMesh(input, loadFactor, options = {}) {
       if (f === 0) continue;
       const meshNid = nodeIdMap.get(pl.nodeId);
       if (meshNid === void 0) continue;
-      pasKnooplastToe(meshNid, pl.fx ?? 0, pl.fz ?? 0, pl.my ?? 0, f);
+      pasKnooplastToe(meshNid, pl.fx ?? 0, pl.fz ?? 0, pl.my ?? 0, f, schFactorKnoop(pl.nodeId));
     }
   }
   if (staafPuntlasten) {
@@ -21051,7 +21063,7 @@ function buildMesh(input, loadFactor, options = {}) {
       for (const k of knopen) {
         if (Math.abs(k.t - t) < Math.abs(beste.t - t)) beste = k;
       }
-      pasKnooplastToe(beste.meshNodeId, bpl.fx ?? 0, bpl.fz ?? 0, bpl.my ?? 0, f);
+      pasKnooplastToe(beste.meshNodeId, bpl.fx ?? 0, bpl.fz ?? 0, bpl.my ?? 0, f, schFactorStaaf(bpl.beamId));
     }
   }
   const tls = input.thermalLoads;
@@ -21951,6 +21963,7 @@ function eersteOrdeResultatenVoorToets(toets, resultaten, beams) {
 }
 
 // src/lib/toetsKrachten.ts
+init_doorgaandeLijn();
 init_plaatMateriaal();
 init_scheefstandNorm();
 var nl6 = (v, d = 3) => v.toFixed(d).replace(".", ",");
@@ -22000,6 +22013,61 @@ function toetsScheefstandNormen(beams, plates = []) {
   }
   return SCHEEFSTAND_NORMEN.filter((n2) => uit.has(n2));
 }
+var NORM_ARTIKEL = {
+  en1993: "EN 1993-1-1 (5.5)",
+  en1992: "EN 1992-1-1 (5.1)",
+  en1995: "EN 1995-1-1 (5.1)"
+};
+function eigenKolomScheefstand2D(model) {
+  const geometrie = leidScheefstandGeometrieAf({
+    nodes: [...model.nodes],
+    beams: [...model.beams],
+    supports: [...model.supports]
+  });
+  const knoop = new Map(model.nodes.map((n2) => [n2.id, n2]));
+  const opgelegd2 = new Set(model.supports.map((s) => s.nodeId));
+  const inPlaat = (id2) => {
+    const k = knoop.get(id2);
+    return k !== void 0 && knoopInPlaat(k, model.nodes, model.plates);
+  };
+  const uit = [];
+  for (const lijn of geometrie.kolomlijnen) {
+    const eigen = new Set(lijn.staafIds);
+    const staven = model.beams.filter((b) => eigen.has(b.id));
+    if (staven.length === 0 || staven.some((b) => b.bedding)) continue;
+    const knopen = [...new Set(staven.flatMap((b) => [b.from, b.to]))];
+    const voet = knopen.reduce((l, id2) => (knoop.get(id2)?.z ?? Infinity) < (knoop.get(l)?.z ?? Infinity) ? id2 : l, knopen[0]);
+    const boven = knopen.filter((id2) => id2 !== voet);
+    const los = boven.every((id2) => !opgelegd2.has(id2) && !inPlaat(id2) && !model.beams.some((b) => !eigen.has(b.id) && (b.from === id2 || b.to === id2)));
+    if (!los) continue;
+    const hoogteM = (lijn.topZmm - lijn.voetZmm) / 1e3;
+    if (!(hoogteM > 0)) continue;
+    const norm5 = toepasselijkeScheefstandNormen(staven)[0] ?? "en1993";
+    uit.push({
+      staafIds: [...lijn.staafIds],
+      knoopIds: boven,
+      hoogteM,
+      norm: norm5,
+      phiEigen: phiVolgensNorm(norm5, hoogteM, 1).phi
+    });
+  }
+  return uit;
+}
+function eigenKolomPhiKaarten(kolommen, phiModel) {
+  const perStaaf = /* @__PURE__ */ new Map();
+  const perKnoop = /* @__PURE__ */ new Map();
+  for (const k of kolommen) {
+    const phi = Math.max(phiModel, k.phiEigen);
+    for (const id2 of k.staafIds) perStaaf.set(id2, phi);
+    for (const id2 of k.knoopIds) perKnoop.set(id2, phi);
+  }
+  return { perStaaf, perKnoop };
+}
+function eigenKolomMelding2D(kolommen, phiModel) {
+  if (kolommen.length === 0) return null;
+  const lijst3 = kolommen.map((k) => `staaf ${k.staafIds.join("+")} (h = ${nl6(k.hoogteM)} m, ${NORM_ARTIKEL[k.norm]}, \u03C6_eigen = 1/${nl6(1 / k.phiEigen, 0)}, toegepast \u03C6 = 1/${nl6(1 / Math.max(phiModel, k.phiEigen), 0)})`);
+  return `Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan en middelt haar scheefstand met niets; haar lasten krijgen \u03C6 = max(\u03C6_model, \u03C6_eigen) met h = haar eigen hoogte en m = 1: ${lijst3.join("; ")}. Daarmee zit haar zijdelingse knik in de toetskrachten en geldt de systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).`;
+}
 var TOETS_HOUT_MELDING = "Hout in de toets: de tweede-ordeberekening (P-\u0394) rekent de houten staven met E_mean, zonder E_d = E_mean/\u03B3_M en zonder boogimperfectie. Dat is niet de volledige route van NEN-EN 1995-1-1 (2.2.2(1)P, 5.4.4); daarom houdt een houten staaf met een vrij eind de kniklengte 2\xB7L.";
 function eindtoestandVervaltMelding(eindtoestand) {
   return `Vervallen in de toets: ${eindtoestand.length} eindtoestandvariant${eindtoestand.length === 1 ? "" : "en"} van UGT-combinaties (` + eindtoestand.map((c) => c.name).join("; ") + "). De eindstijfheid E_mean,fin (NEN-EN 1995-1-1 2.3.2.2(2)) hoort bij een eerste-ordeberekening (2.2.2(1)P); de toets rekent altijd tweede orde. De BGT-eindtoestand blijft in de resultaten. LET OP: de krachtsverdeling in de eindtoestand is daarmee in de UGT-toets NIET beoordeeld. In deze statisch onbepaalde constructie rekent de toets het hout met E_mean, dus stijver dan met E_mean,fin (eindtoestand) en dan met E_d = E_mean/\u03B3_M (tweede orde, 2.2.2(1)P): de staven van staal of beton krijgen in de toets daardoor MINDER kracht dan in beide normroutes en kunnen te licht getoetst zijn. Beoordeel de krachtsverdeling in de eindtoestand apart; de resultaten tonen de eindtoestandvarianten.";
@@ -22035,10 +22103,21 @@ function bepaalToetsKrachten2D(invoer) {
     true,
     scheefstand.richting
   );
+  const eigenKolommen = scheefstand.eigenKolommen ?? [];
+  const metEigen = eigenKolommen.length > 0;
+  const kaarten = metEigen ? eigenKolomPhiKaarten(eigenKolommen, ts.phi) : null;
+  if (metEigen) meldingen.push(eigenKolomMelding2D(eigenKolommen, ts.phi));
   const resultaatStatus = resultaten ? getSecondOrderState(resultaten.perCase) : void 0;
   const resultaatScheef = resultaatStatus?.input.scheefstand;
-  const hergebruikt = resultaten !== void 0 && analysetype !== "eersteOrde" && scheefstand.modelAan && eindtoestand.length === 0 && resultaatScheef !== void 0 && resultaatScheef.richting === scheefstand.richting && Math.abs(resultaatScheef.phi - ts.phi) <= ts.phi * TOETS_PHI_MARGE;
-  const toetsInvoer = hergebruikt ? resultaatStatus.input : { ...basis, scheefstand: { phi: ts.phi, richting: scheefstand.richting } };
+  const hergebruikt = !metEigen && resultaten !== void 0 && analysetype !== "eersteOrde" && scheefstand.modelAan && eindtoestand.length === 0 && resultaatScheef !== void 0 && resultaatScheef.richting === scheefstand.richting && Math.abs(resultaatScheef.phi - ts.phi) <= ts.phi * TOETS_PHI_MARGE;
+  const toetsInvoer = hergebruikt ? resultaatStatus.input : {
+    ...basis,
+    scheefstand: {
+      phi: ts.phi,
+      richting: scheefstand.richting,
+      ...kaarten ? { phiPerStaaf: kaarten.perStaaf, phiPerKnoop: kaarten.perKnoop } : {}
+    }
+  };
   const perCase = hergebruikt ? resultaten.perCase : tweedeOrdePerCombinatie(toetsInvoer).perCase;
   const combinationResults = /* @__PURE__ */ new Map();
   const mislukt = [];
@@ -22083,7 +22162,8 @@ function bepaalToetsKrachten2D(invoer) {
     combinationResults: weigering ? /* @__PURE__ */ new Map() : combinationResults,
     alphaCr,
     weigering,
-    meldingen
+    meldingen,
+    ...kaarten ? { eigenKolom: { kolommen: [...eigenKolommen], perStaaf: kaarten.perStaaf } } : {}
   };
 }
 function alphaCrUitResultaten(ugtCombinaties, vanResultaten) {
@@ -22156,7 +22236,8 @@ function toetsSet2D(toets, resultaten, beams) {
       analysetype: toets.analyse.soort,
       alphaCr: toets.alphaCr,
       scheefstandAan: true,
-      scheefstandPhi: toets.analyse.phi
+      scheefstandPhi: toets.analyse.phi,
+      ...toets.eigenKolom ? { scheefstandPhiPerStaaf: toets.eigenKolom.perStaaf } : {}
     },
     eersteOrdeResultaten: eersteOrdeResultatenVoorToets(
       { perCase: toets.perCase, ugtCombinaties: toets.ugtCombinaties },
@@ -33042,11 +33123,11 @@ function eigenKolomMelding3D(eigen) {
   if (!eigen || eigen.kolommen.length === 0) return null;
   const lijst3 = eigen.kolommen.map((k) => {
     const draai2 = k.factor < 1 - 1e-9 ? `, gedraaid: /${getal5(k.factor, 3)}` : "";
-    return `staaf ${k.staafIds.join("+")} (h = ${getal5(k.hoogteM, 3)} m, ${NORM_ARTIKEL[k.norm]}, \u03C6_eigen = 1/${getal5(1 / k.phiEigen, 0)}${draai2})`;
+    return `staaf ${k.staafIds.join("+")} (h = ${getal5(k.hoogteM, 3)} m, ${NORM_ARTIKEL2[k.norm]}, \u03C6_eigen = 1/${getal5(1 / k.phiEigen, 0)}${draai2})`;
   });
   return `Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan en middelt haar scheefstand met niets; haar lasten krijgen \u03C6 = max(\u03C6_model, \u03C6_eigen) met h = haar eigen hoogte en m = 1: ${lijst3.join("; ")}. Daarmee zit haar zijdelingse knik in de toetskrachten en geldt de systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).`;
 }
-var NORM_ARTIKEL = {
+var NORM_ARTIKEL2 = {
   en1993: "EN 1993-1-1 (5.5)",
   en1992: "EN 1992-1-1 (5.1)",
   en1995: "EN 1995-1-1 (5.1)"
@@ -48679,7 +48760,7 @@ var scheefstandZetten = documentCommando({
     membersX: ofNull(geheel2("Alleen 3D: handmatige m_X.", { minimum: 1 }), "null = members of afleiden."),
     membersY: ofNull(geheel2("Alleen 3D: handmatige m_Y.", { minimum: 1 }), "null = members of afleiden."),
     torsion: jaNee("Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10)."),
-    ownColumnSway: jaNee("Alleen 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(\u03C6_model, \u03C6_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte.")
+    ownColumnSway: jaNee("2D en 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(\u03C6_model, \u03C6_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte.")
   }),
   uitvoeren: (invoer, document2) => {
     const nieuw = {
@@ -50749,7 +50830,9 @@ var MODEL_VELDEN = [
   // hiermee zoals de app; het MCP-schema kent dezelfde drie velden.
   "scheefstandBron",
   "scheefstandHoogteM",
-  "scheefstandAantalElementen"
+  "scheefstandAantalElementen",
+  // Issue #199, fase 3: de eigen scheefstand per losse kolom in de UGT-toets.
+  "scheefstandEigenKolom"
 ];
 var NODE_VELDEN = ["id", "x", "z"];
 var BEAM_VELDEN = [
@@ -51360,7 +51443,7 @@ function controleerVelden(rauw) {
     return ["model: moet een JSON-object zijn."];
   }
   keurVelden(rauw, MODEL_VELDEN, "model", fouten);
-  for (const vlag of ["selfWeightEnabled", "scheefstandEnabled"]) {
+  for (const vlag of ["selfWeightEnabled", "scheefstandEnabled", "scheefstandEigenKolom"]) {
     if (rauw[vlag] !== void 0 && typeof rauw[vlag] !== "boolean") {
       fouten.push(`model.${vlag}: moet true of false zijn.`);
     }
@@ -52489,7 +52572,8 @@ function leesModel(payload) {
       selfWeightEnabled: bestand.selfWeightEnabled ?? false,
       scheefstandEnabled: bestand.scheefstandEnabled ?? false,
       scheefstandNoemer: bestand.scheefstandNoemer ?? 200,
-      scheefstandRichting: bestand.scheefstandRichting ?? 1
+      scheefstandRichting: bestand.scheefstandRichting ?? 1,
+      scheefstandEigenKolom: bestand.scheefstandEigenKolom === true
     };
     const scheef2 = leesScheefstand(
       bestand,
@@ -52549,7 +52633,8 @@ function leesModel(payload) {
     selfWeightEnabled: rauw.selfWeightEnabled === true,
     scheefstandEnabled: rauw.scheefstandEnabled === true,
     scheefstandNoemer: typeof rauw.scheefstandNoemer === "number" ? rauw.scheefstandNoemer : 200,
-    scheefstandRichting: rauw.scheefstandRichting === -1 ? -1 : 1
+    scheefstandRichting: rauw.scheefstandRichting === -1 ? -1 : 1,
+    scheefstandEigenKolom: rauw.scheefstandEigenKolom === true
   };
   const scheef = leesScheefstand(rauw, model, model.scheefstandNoemer);
   model.scheefstandNoemer = scheef.noemer;
@@ -53201,7 +53286,15 @@ function opCheck(payload) {
         project: project.uitkomst,
         normen: toetsNormen,
         richting: gelezen.model.scheefstandRichting,
-        modelAan: gelezen.model.scheefstandEnabled
+        modelAan: gelezen.model.scheefstandEnabled,
+        // Issue #199, fase 3: de eigen φ per losse kolom, alleen met de
+        // instelling `scheefstandEigenKolom` (projectbestand of model), zoals de app.
+        ...gelezen.model.scheefstandEigenKolom ? { eigenKolommen: eigenKolomScheefstand2D({
+          nodes: gelezen.model.nodes,
+          beams: gelezen.model.beams,
+          supports: gelezen.model.supports,
+          plates: gelezen.model.plates ?? []
+        }) } : {}
       },
       analysetype: d.analysetype,
       resultaten: { perCase: d.perCase, combinationResults: d.combinationResults }
@@ -54516,6 +54609,9 @@ export {
   eigenGewichtOverzicht,
   eigenGewichtPerMeter,
   eigenGewichtVanDoorsnede,
+  eigenKolomMelding2D,
+  eigenKolomPhiKaarten,
+  eigenKolomScheefstand2D,
   eindstijfheidInvoer,
   eindtoestandKandidaten,
   eindtoestandVervaltMelding,

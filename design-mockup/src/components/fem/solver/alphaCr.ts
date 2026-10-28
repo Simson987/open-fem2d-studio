@@ -483,6 +483,13 @@ export interface StabiliteitVoorToets {
    * In de toetsset altijd de toets-φ.
    */
   scheefstandPhi?: number;
+  /**
+   * Per staaf de φ waarmee haar lasten zijn gerekend als die van
+   * `scheefstandPhi` afwijkt: de eigen scheefstand van een losse kolom (issue
+   * #199, fase 3, `eigenKolomScheefstand2D`). Daarmee haalt die kolom de
+   * φ-eis van `zijdelingseKnikInVlakModel`.
+   */
+  scheefstandPhiPerStaaf?: ReadonlyMap<number, number>;
 }
 
 /** Wat `zijdelingseKnikInVlakModel` beslist voor één staaf met een vrij eind. */
@@ -521,8 +528,11 @@ export interface ZijdelingseKnikBesluit {
  * (`toetsSet2D`, issue #199): altijd tweede orde met scheefstand, met de φ van
  * de toets. De eerste twee voorwaarden zijn daar dus altijd waar; ze blijven
  * staan als bewaking voor een aanroeper met eigen stabiliteitsgegevens. De
- * voorwaarde "staand" en de φ-eis blijven echte voorwaarden, tot de eigen φ
- * per losse kolom in de berekening zit.
+ * voorwaarde "staand" en de φ-eis blijven echte voorwaarden. Met de eigen φ
+ * per losse kolom (issue #199, fase 3, instelling `scheefstandEigenKolom`)
+ * telt voor zo'n kolom de φ van haar eigen lasten (`scheefstandPhiPerStaaf`,
+ * over `staafIds`: de staven van de getoetste lijn; de kleinste telt), en die
+ * haalt de eis.
  *
  * Geldt alles behalve de φ-eis, dan komt er een kanttekening die zegt waarom
  * het toch 2·L is.
@@ -531,11 +541,16 @@ export function zijdelingseKnikInVlakModel(
   stabiliteit: StabiliteitVoorToets | undefined,
   staand: boolean,
   lengteM: number,
+  staafIds: readonly number[] = [],
 ): ZijdelingseKnikBesluit {
   if (!staand) return {};
   if (!stabiliteit || stabiliteit.analysetype === "eersteOrde" || !stabiliteit.scheefstandAan) return {};
   const nodig = phiLosseKolom(lengteM);
-  const gebruikt = stabiliteit.scheefstandPhi;
+  const perStaaf = stabiliteit.scheefstandPhiPerStaaf;
+  const eigen = perStaaf && staafIds.length > 0 && staafIds.every((id) => perStaaf.has(id))
+    ? Math.min(...staafIds.map((id) => perStaaf.get(id)!))
+    : undefined;
+  const gebruikt = eigen ?? stabiliteit.scheefstandPhi;
   if (gebruikt !== undefined && Number.isFinite(gebruikt) && gebruikt >= nodig * (1 - 1e-9)) {
     return { veld: { y: true, z: false } };
   }

@@ -165,6 +165,7 @@ import {
 import {
   bepaalToetsKrachten2D,
   bepaalToetsScheefstand,
+  eigenKolomScheefstand2D,
   scheefstandToelichtingToets,
   toetsOmschrijving,
   toetsScheefstandNormen,
@@ -3247,6 +3248,12 @@ function App() {
           normen: toetsScheefstandNormen(fem.beams, fem.plates),
           richting: fem.scheefstandRichting,
           modelAan: fem.scheefstandEnabled,
+          // Issue #199, fase 3: de eigen φ per losse kolom, alleen met de instelling.
+          ...(fem.scheefstandEigenKolom
+            ? { eigenKolommen: eigenKolomScheefstand2D({
+                nodes: fem.nodes, beams: fem.beams, supports: fem.supports, plates: fem.plates,
+              }) }
+            : {}),
         },
         analysetype: fem.analysetype,
         resultaten: perCase && hergebruikMag

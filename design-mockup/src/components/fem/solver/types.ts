@@ -370,6 +370,14 @@ export interface ScheefstandInput {
   phi: number;
   /** Richting van de equivalente horizontale krachten: +1 = +x, -1 = −x. */
   richting: 1 | -1;
+  /**
+   * Eigen scheefstand per losse kolom (issue #199, fase 3; alleen de
+   * UGT-toets): per staaf-id de φ van de lijnlasten en staafpuntlasten op die
+   * staaf, in plaats van `phi`. Ontbreekt = overal `phi`.
+   */
+  phiPerStaaf?: ReadonlyMap<number, number>;
+  /** Idem per knoop-id, voor de knooplasten. */
+  phiPerKnoop?: ReadonlyMap<number, number>;
 }
 
 /**

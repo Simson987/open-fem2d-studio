@@ -218,6 +218,9 @@ const BUNDEL_TESTS = new Set([
   // de barrel; de sidecar gebruikt dezelfde functie, dus hoort dit ook tegen de
   // bundel.
   "toets-krachten",
+  // De eigen scheefstand per losse kolom in 2D (issue #199, fase 3): engine
+  // (φ per staaf en knoop) en toetsKrachten — beide in de barrel.
+  "scheefstand-losse-kolom-2d",
   "hoekverdraaiing",
   // Bewaakt dat de kniklengte van een HOUTEN staaf tot in de toetsinvoer
   // komt (buckling_length_y_m/_z_m in TimberBeamCheckInput). Praat alleen met

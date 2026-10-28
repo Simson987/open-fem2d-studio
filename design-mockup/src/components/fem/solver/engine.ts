@@ -54,6 +54,7 @@ import type {
   PlateResult,
   PlateElementStress,
   PlateStressRange,
+  ScheefstandInput,
 } from "./types";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
 import { VELD_GEVAL_OFFSET } from "./types";
@@ -1047,8 +1048,20 @@ export function buildMesh(
   // Scheefstand-factor (hier al nodig voor het plaat-eigengewicht hieronder;
   // de volledige toelichting staat bij het lastenblok verderop): elke
   // verticale last krijgt een horizontale metgezel H = φ·V, richting ±x.
-  const sch = (input as any).scheefstand as { phi: number; richting: 1 | -1 } | undefined;
+  const sch = (input as any).scheefstand as ScheefstandInput | undefined;
   const schFactor = sch ? sch.richting * sch.phi : 0;
+  // Eigen scheefstand per losse kolom (issue #199, fase 3): een staaf of knoop
+  // in de map krijgt haar eigen φ; de rest de model-φ. Zonder map is elke
+  // factor `schFactor`, dus bit-gelijk aan vóór de map. Plaatlasten
+  // (eigengewicht, randlasten) houden de model-φ.
+  const schFactorStaaf = (beamId: number): number => {
+    const eigen = sch?.phiPerStaaf?.get(beamId);
+    return sch && eigen !== undefined ? sch.richting * eigen : schFactor;
+  };
+  const schFactorKnoop = (nodeId: number): number => {
+    const eigen = sch?.phiPerKnoop?.get(nodeId);
+    return sch && eigen !== undefined ? sch.richting * eigen : schFactor;
+  };
 
   // ── Wandschijven meshen (platen, P2.2) ────────────────────────────────────
   // Per (hierboven al gevalideerde) plaat: eigen mesh-materiaal (E, ν, ρ) en
@@ -1624,9 +1637,10 @@ export function buildMesh(
       // een H in +richting moet geven. Voor globale z-lasten is dit
       // bit-identiek aan het oude pad (gy = q); een lokale last krijgt zo
       // een companion op basis van zijn échte verticale aandeel.
-      const qxA = gxA + schFactor * -gyA;
+      const schLast = schFactorStaaf(ld.beamId);
+      const qxA = gxA + schLast * -gyA;
       const qyA = gyA;
-      const qxB = gxB + schFactor * -gyB;
+      const qxB = gxB + schLast * -gyB;
       const qyB = gyB;
 
       // Deellast? (startFrac/endFrac, fracties 0..1; ontbreken = volle lengte)
@@ -1754,13 +1768,14 @@ export function buildMesh(
   /** Eén knooplast (N, N·mm) additief op een MESH-knoop zetten. */
   const pasKnooplastToe = (
     meshNid: number, fx_N: number, fz_N: number, my_Nmm: number, f: number,
+    schLast: number = schFactor,
   ): void => {
     const node = mesh.getNode(meshNid);
     const ex = node?.loads ?? { fx: 0, fy: 0, moment: 0 };
     mesh.updateNode(meshNid, {
       loads: {
         // Scheefstand-companion: fx += φ·(−fz)·richting (fz < 0 = omlaag).
-        fx: ex.fx + (fx_N + schFactor * -fz_N) * f,
+        fx: ex.fx + (fx_N + schLast * -fz_N) * f,
         fy: ex.fy + fz_N * f,
         // my in N·mm → mesh moment in N·m  → /1000
         moment: ex.moment + (my_Nmm / 1000) * f,
@@ -1775,7 +1790,7 @@ export function buildMesh(
       if (f === 0) continue;
       const meshNid = nodeIdMap.get(pl.nodeId);
       if (meshNid === undefined) continue;
-      pasKnooplastToe(meshNid, pl.fx ?? 0, pl.fz ?? 0, pl.my ?? 0, f);
+      pasKnooplastToe(meshNid, pl.fx ?? 0, pl.fz ?? 0, pl.my ?? 0, f, schFactorKnoop(pl.nodeId));
     }
   }
 
@@ -1797,7 +1812,7 @@ export function buildMesh(
       for (const k of knopen) {
         if (Math.abs(k.t - t) < Math.abs(beste.t - t)) beste = k;
       }
-      pasKnooplastToe(beste.meshNodeId, bpl.fx ?? 0, bpl.fz ?? 0, bpl.my ?? 0, f);
+      pasKnooplastToe(beste.meshNodeId, bpl.fx ?? 0, bpl.fz ?? 0, bpl.my ?? 0, f, schFactorStaaf(bpl.beamId));
     }
   }
 

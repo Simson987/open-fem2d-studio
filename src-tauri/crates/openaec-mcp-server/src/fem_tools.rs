@@ -1360,7 +1360,9 @@ fn schema_fem_model() -> Value {
             "scheefstandHoogteM": { "type": ["number", "null"], "exclusiveMinimum": 0, "default": null,
                 "description": "Hoogte h in m voor alpha_h; null = uit het model afleiden." },
             "scheefstandAantalElementen": { "type": ["integer", "null"], "minimum": 1, "default": null,
-                "description": "Aantal dragende verticale elementen m voor alpha_m; null = uit het model afleiden." }
+                "description": "Aantal dragende verticale elementen m voor alpha_m; null = uit het model afleiden." },
+            "scheefstandEigenKolom": { "type": "boolean", "default": false,
+                "description": "Alleen de UGT-toets (issue #199, fase 3): een losse kolom (een kolomlijn waarvan geen knoop boven de voet een oplegging heeft, in een plaat ligt of een andere staaf raakt) krijgt op haar lasten phi = max(phi_model, phi_eigen), met phi_eigen volgens de norm van haar materiaal, h = haar eigen hoogte en m = 1. Daarmee geldt voor een stalen losse kolom de systeemlengte (EN 1993-1-1 5.2.2(7)b). De resultaten veranderen niet." }
         }
     })
 }
@@ -1543,12 +1545,13 @@ mod tests {
             "scheefstandBron",
             "scheefstandHoogteM",
             "scheefstandAantalElementen",
+            "scheefstandEigenKolom",
         ] {
             assert!(velden.contains_key(veld), "modelschema mist `{veld}`");
         }
         assert_eq!(
             velden.len(),
-            13,
+            14,
             "modelschema kent een veld dat de sidecar weigert"
         );
         assert_eq!(model["additionalProperties"], json!(false));

@@ -66,7 +66,7 @@ export interface RekenInstellingen {
   scheefstandAantalX: number | null;
   scheefstandAantalY: number | null;
   scheefstandTorsie: boolean;
-  /** 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de UGT-toets. */
+  /** 2D en 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de UGT-toets. */
   scheefstandEigenKolom: boolean;
   /**
    * Gevolgklasse, CC1/CC2/CC3: de klasse waarmee de standaardcombinaties

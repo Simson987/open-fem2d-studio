@@ -65,8 +65,10 @@ import {
   type ToetsKrachtenOmschrijving,
 } from "../components/fem/solver/alphaCr";
 import { eersteOrdeResultatenVoorToets } from "./eersteOrdeResultaten";
+import { knoopInPlaat, type PlaatVoorEinden } from "./doorgaandeLijn";
 import { plaatMateriaalSoort, type PlaatMateriaalSoort } from "./plaatMateriaal";
 import {
+  leidScheefstandGeometrieAf,
   phiVolgensNorm,
   SCHEEFSTAND_BRON_LABEL,
   SCHEEFSTAND_NORMEN,
@@ -199,6 +201,111 @@ export function toetsScheefstandNormen(
   return SCHEEFSTAND_NORMEN.filter((n) => uit.has(n));
 }
 
+// ── De eigen scheefstand per losse kolom (fase 3) ───────────────────────────
+
+/** Eén losse kolom met haar eigen scheefstand (issue #199, fase 3). */
+export interface EigenKolom2D {
+  /** De staven van de kolomlijn. */
+  staafIds: number[];
+  /** De knopen boven de voet: hun knooplasten krijgen de eigen φ. */
+  knoopIds: number[];
+  /** De hoogte van de kolom (voet tot kop), in m. */
+  hoogteM: number;
+  /** De norm van haar materiaal. */
+  norm: ScheefstandNorm;
+  /** φ volgens die norm met h = `hoogteM` en m = 1, in rad. */
+  phiEigen: number;
+}
+
+const NORM_ARTIKEL: Record<ScheefstandNorm, string> = {
+  en1993: "EN 1993-1-1 (5.5)", en1992: "EN 1992-1-1 (5.1)", en1995: "EN 1995-1-1 (5.1)",
+};
+
+/**
+ * De losse kolommen van een 2D-model en hun eigen scheefstand (issue #199,
+ * fase 3; de 2D-tegenhanger van `eigenKolomScheefstand3D`).
+ *
+ * Een kolomlijn (staven steiler dan 75° die een knoop delen,
+ * `leidScheefstandGeometrieAf`) is LOS als geen knoop boven haar voet een
+ * oplegging heeft, in of op een plaat ligt (`knoopInPlaat`) of een andere
+ * staaf raakt: de kop is vrij en de lijn draagt alleen haar eigen lasten. Een
+ * staaf op bedding telt nooit als losse kolom.
+ *
+ * φ_eigen volgt de norm van haar materiaal met h = haar eigen hoogte en m = 1
+ * (EN 1993-1-1 (5.5), EN 1992-1-1 (5.1), EN 1995-1-1 (5.1)): een kolom met
+ * een vrije kop hangt nergens aan en middelt haar scheefstand met niets. De
+ * model-φ middelt over alle kolommen (α_m) en de gebouwhoogte (α_h) en is voor
+ * zo'n kolom te klein. Een staaf zonder normmateriaal krijgt EN 1993.
+ */
+export function eigenKolomScheefstand2D(model: {
+  nodes: readonly { id: number; x: number; z: number }[];
+  beams: readonly Beam[];
+  supports: readonly { nodeId: number }[];
+  plates?: readonly PlaatVoorEinden[];
+}): EigenKolom2D[] {
+  const geometrie = leidScheefstandGeometrieAf({
+    nodes: [...model.nodes], beams: [...model.beams], supports: [...model.supports],
+  });
+  const knoop = new Map(model.nodes.map((n) => [n.id, n]));
+  const opgelegd = new Set(model.supports.map((s) => s.nodeId));
+  const inPlaat = (id: number): boolean => {
+    const k = knoop.get(id);
+    return k !== undefined && knoopInPlaat(k, model.nodes as never, model.plates);
+  };
+  const uit: EigenKolom2D[] = [];
+  for (const lijn of geometrie.kolomlijnen) {
+    const eigen = new Set(lijn.staafIds);
+    const staven = model.beams.filter((b) => eigen.has(b.id));
+    if (staven.length === 0 || staven.some((b) => b.bedding)) continue;
+    const knopen = [...new Set(staven.flatMap((b) => [b.from, b.to]))];
+    const voet = knopen.reduce((l, id) => ((knoop.get(id)?.z ?? Infinity) < (knoop.get(l)?.z ?? Infinity) ? id : l), knopen[0]);
+    const boven = knopen.filter((id) => id !== voet);
+    const los = boven.every((id) =>
+      !opgelegd.has(id)
+      && !inPlaat(id)
+      && !model.beams.some((b) => !eigen.has(b.id) && (b.from === id || b.to === id)));
+    if (!los) continue;
+    const hoogteM = (lijn.topZmm - lijn.voetZmm) / 1000;
+    if (!(hoogteM > 0)) continue;
+    const norm = toepasselijkeScheefstandNormen(staven)[0] ?? "en1993";
+    uit.push({
+      staafIds: [...lijn.staafIds], knoopIds: boven, hoogteM, norm,
+      phiEigen: phiVolgensNorm(norm, hoogteM, 1).phi,
+    });
+  }
+  return uit;
+}
+
+/**
+ * De φ per staaf en per knoop voor de toetsinvoer: max(φ_model, φ_eigen) op
+ * de lasten van elke losse kolom. Vervangen, nooit optellen.
+ */
+export function eigenKolomPhiKaarten(kolommen: readonly EigenKolom2D[], phiModel: number): {
+  perStaaf: Map<number, number>;
+  perKnoop: Map<number, number>;
+} {
+  const perStaaf = new Map<number, number>();
+  const perKnoop = new Map<number, number>();
+  for (const k of kolommen) {
+    const phi = Math.max(phiModel, k.phiEigen);
+    for (const id of k.staafIds) perStaaf.set(id, phi);
+    for (const id of k.knoopIds) perKnoop.set(id, phi);
+  }
+  return { perStaaf, perKnoop };
+}
+
+/** De melding over de eigen scheefstand van de losse kolommen, of null zonder losse kolom. */
+export function eigenKolomMelding2D(kolommen: readonly EigenKolom2D[], phiModel: number): string | null {
+  if (kolommen.length === 0) return null;
+  const lijst = kolommen.map((k) =>
+    `staaf ${k.staafIds.join("+")} (h = ${nl(k.hoogteM)} m, ${NORM_ARTIKEL[k.norm]}, ` +
+      `φ_eigen = 1/${nl(1 / k.phiEigen, 0)}, toegepast φ = 1/${nl(1 / Math.max(phiModel, k.phiEigen), 0)})`);
+  return "Eigen scheefstand per losse kolom (issue #199, fase 3): een kolom met een vrije kop hangt nergens aan " +
+    "en middelt haar scheefstand met niets; haar lasten krijgen φ = max(φ_model, φ_eigen) met h = haar eigen " +
+    `hoogte en m = 1: ${lijst.join("; ")}. Daarmee zit haar zijdelingse knik in de toetskrachten en geldt de ` +
+    "systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).";
+}
+
 // ── De toetsrekengang 2D ────────────────────────────────────────────────────
 
 /** De analyse waarmee de toetskrachten zijn bepaald. */
@@ -254,6 +361,12 @@ export interface ToetsKrachten2D {
   alphaCr: AlphaCrUitkomst[];
   /** `null` = de toets heeft krachten. Anders geen krachten, met de reden. */
   weigering: ToetsWeigering | null;
+  /**
+   * De eigen scheefstand per losse kolom (issue #199, fase 3), alleen als die
+   * aan staat en het model een losse kolom heeft: de kolommen en per staaf de
+   * toegepaste φ (voor de φ-eis van een vrij staafeind in de staaltoets).
+   */
+  eigenKolom?: { kolommen: EigenKolom2D[]; perStaaf: Map<number, number> };
   /** Wat er verder te melden is (Nederlands): hout, de toets-φ, vervallen varianten. */
   meldingen: string[];
 }
@@ -279,6 +392,12 @@ export interface ToetsKrachtenInvoer2D {
     richting: 1 | -1;
     /** De schakelaar Scheefstand van het model (voor de resultaten). */
     modelAan: boolean;
+    /**
+     * De losse kolommen (`eigenKolomScheefstand2D`) als de instelling
+     * `scheefstandEigenKolom` aan staat (issue #199, fase 3). Leeg of
+     * ontbrekend = overal de toets-φ, zoals vóór fase 3.
+     */
+    eigenKolommen?: readonly EigenKolom2D[];
   };
   /** Het analysetype van het model, dus van de resultaatrekengang. */
   analysetype: Analysetype;
@@ -404,9 +523,17 @@ export function bepaalToetsKrachten2D(invoer: ToetsKrachtenInvoer2D): ToetsKrach
   );
 
   // ── Hergebruik of een eigen rekengang ────────────────────────────────────
+  // De eigen scheefstand per losse kolom (fase 3): max(φ_toets, φ_eigen) op
+  // haar lasten. De resultaten kennen die niet, dus dan geen hergebruik.
+  const eigenKolommen = scheefstand.eigenKolommen ?? [];
+  const metEigen = eigenKolommen.length > 0;
+  const kaarten = metEigen ? eigenKolomPhiKaarten(eigenKolommen, ts.phi) : null;
+  if (metEigen) meldingen.push(eigenKolomMelding2D(eigenKolommen, ts.phi)!);
+
   const resultaatStatus = resultaten ? getSecondOrderState(resultaten.perCase) : undefined;
   const resultaatScheef = resultaatStatus?.input.scheefstand;
   const hergebruikt =
+    !metEigen &&
     resultaten !== undefined &&
     analysetype !== "eersteOrde" &&
     scheefstand.modelAan &&
@@ -417,7 +544,14 @@ export function bepaalToetsKrachten2D(invoer: ToetsKrachtenInvoer2D): ToetsKrach
 
   const toetsInvoer: MultiInput = hergebruikt
     ? resultaatStatus!.input
-    : { ...basis, scheefstand: { phi: ts.phi, richting: scheefstand.richting } };
+    : {
+        ...basis,
+        scheefstand: {
+          phi: ts.phi,
+          richting: scheefstand.richting,
+          ...(kaarten ? { phiPerStaaf: kaarten.perStaaf, phiPerKnoop: kaarten.perKnoop } : {}),
+        },
+      };
   const perCase = hergebruikt ? resultaten!.perCase : tweedeOrdePerCombinatie(toetsInvoer).perCase;
 
   // ── Per combinatie apart: een divergerende som raakt de andere niet ──────
@@ -478,6 +612,7 @@ export function bepaalToetsKrachten2D(invoer: ToetsKrachtenInvoer2D): ToetsKrach
     alphaCr,
     weigering,
     meldingen,
+    ...(kaarten ? { eigenKolom: { kolommen: [...eigenKolommen], perStaaf: kaarten.perStaaf } } : {}),
   };
 }
 
@@ -631,6 +766,7 @@ export function toetsSet2D(
       alphaCr: toets.alphaCr,
       scheefstandAan: true,
       scheefstandPhi: toets.analyse.phi,
+      ...(toets.eigenKolom ? { scheefstandPhiPerStaaf: toets.eigenKolom.perStaaf } : {}),
     },
     eersteOrdeResultaten: eersteOrdeResultatenVoorToets(
       { perCase: toets.perCase, ugtCombinaties: toets.ugtCombinaties },
