@@ -2478,7 +2478,11 @@ mod tests {
         let lagen = k.layers(s.h_mm);
         let o = MnKappaOptions { n_strips: 50 };
         let diagram = mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &o);
-        assert_eq!(diagram.m_max_knm, 113.12286139035288);
+        // Vóór issue #239 113,12286139035288: sinds het door de 2Ø12 boven
+        // verdrongen beton niet meer meetelt verschuift het evenwicht en daarmee
+        // M_max met +0,003 % (beide getallen uit dezelfde kern; dit is een
+        // ketentest, geen handwaarde).
+        assert_eq!(diagram.m_max_knm, 113.12613603011955);
         let g = Betongegevens {
             section: &s,
             cage: &k,
@@ -2491,7 +2495,7 @@ mod tests {
         };
         let stappen = mn_kappa_deelstappen(&g, &diagram, &o, None);
         let m_rd = stappen.iter().find(|d| d.id == "m_rd_max").unwrap();
-        assert_eq!(m_rd.value, Some(113.12286139035288));
+        assert_eq!(m_rd.value, Some(113.12613603011955));
         for id in [
             "uitgangspunten",
             "f_cd",

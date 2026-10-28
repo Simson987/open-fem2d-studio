@@ -196,8 +196,9 @@ fn een_verkeerd_aantal_krachten_is_een_fout() {
 ///   staat er dus bij, anders zou de test een verschil van 1/n² als fout
 ///   aanwijzen dat geen fout is;
 /// * wapening: E_s = 200 000 N/mm² op haar arm ten opzichte van h/2. Het door
-///   de wapening verdrongen beton wordt niet afgetrokken, gelijk aan de rest
-///   van de kern.
+///   de wapening verdrongen beton telt sinds issue #239 niet meer mee, dus de
+///   wapening draagt netto (E_s − E_c0) — de klassieke getransformeerde
+///   doorsnede met (n − 1)·A_s.
 #[test]
 fn een_ongescheurde_balk_levert_de_ongescheurde_stijfheid() {
     let n_strips = 200_u32;
@@ -221,10 +222,11 @@ fn een_ongescheurde_balk_levert_de_ongescheurde_stijfheid() {
     let (arm_bot, arm_top) = (46.0 - h / 2.0, 456.0 - h / 2.0);
 
     let n = n_strips as f64;
-    let a_e = e_c0 * b * h + e_s * (a_bot + a_top);
-    let s_e = e_s * (a_bot * arm_bot + a_top * arm_top);
+    let e_netto = e_s - e_c0;
+    let a_e = e_c0 * b * h + e_netto * (a_bot + a_top);
+    let s_e = e_netto * (a_bot * arm_bot + a_top * arm_top);
     let i_e = e_c0 * b * h.powi(3) / 12.0 * (1.0 - 1.0 / (n * n))
-        + e_s * (a_bot * arm_bot.powi(2) + a_top * arm_top.powi(2));
+        + e_netto * (a_bot * arm_bot.powi(2) + a_top * arm_top.powi(2));
     let verwacht = (i_e - s_e * s_e / a_e) * 1e-9; // N·mm² → kNm²
 
     let gemeten = r.segments[0].ei_knm2.expect("een stijfheid");
@@ -370,7 +372,10 @@ fn m0_klopt_bij_een_asymmetrische_korf() {
         seg.ei_knm2.unwrap() * 1e-3,
         zonder * 1e-3
     );
-    assert!(seg.ei_knm2.unwrap() > 1.15 * zonder);
+    // Drempel 1,10 (was 1,15): sinds issue #239 telt het verdrongen beton niet
+    // mee, M₀ is daardoor kleiner (−2,71 i.p.v. −3,09 kNm) en het verschil
+    // ruim 13 % in plaats van ruim 15 %.
+    assert!(seg.ei_knm2.unwrap() > 1.10 * zonder);
 
     // En bij een negatief moment keert het teken van de kromming om terwijl
     // EI positief blijft.

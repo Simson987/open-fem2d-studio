@@ -93,9 +93,12 @@ fn handberekening_1_enkelvoudig_gewapende_balk_spanningsblok() {
 /// nét niet (ε_c2 = 2,0 ‰ < ε_yd = 2,174 ‰): σ_s = E_s·ε_c2 = 400 N/mm².
 ///
 /// ```text
-///   N_Rd = f_cd·b·h + (A_s1 + A_s2)·σ_s
-///        = 20·300·500 + (603,19 + 226,19)·400 = 3 000 000 + 331 752 = 3 331,8 kN
+///   N_Rd = f_cd·(b·h − A_s1 − A_s2) + (A_s1 + A_s2)·σ_s
+///        = 20·(150 000 − 829,38) + 829,38·400 = 2 983 412 + 331 752 = 3 315,2 kN
 /// ```
+///
+/// Netto betondoorsnede sinds issue #239: het staaloppervlak telt niet ook
+/// als beton mee (bruto was 3 331,8 kN, +0,5 %).
 #[test]
 fn handberekening_2_zuivere_druk() {
     let s = doorsnede();
@@ -103,8 +106,9 @@ fn handberekening_2_zuivere_druk() {
     let m = materiaal(SteelBranch::Horizontal);
     let lagen = k.layers(s.h_mm);
     let n_rd = axial_compression_capacity_kn(&s, &lagen, &m, &MnKappaOptions::default());
-    let hand = (20.0 * 300.0 * 500.0 + (603.186 + 226.195) * 400.0) * 1e-3;
-    assert_relative_eq!(hand, 3331.75, max_relative = 1e-4);
+    let a_s = 603.186 + 226.195;
+    let hand = (20.0 * (300.0 * 500.0 - a_s) + a_s * 400.0) * 1e-3;
+    assert_relative_eq!(hand, 3315.16, max_relative = 1e-4);
     // Uniforme rek: de strookintegratie is exact, onafhankelijk van het aantal stroken.
     assert_relative_eq!(n_rd, hand, max_relative = 1e-6);
     let n_rd_3 = axial_compression_capacity_kn(&s, &lagen, &m, &MnKappaOptions { n_strips: 3 });
@@ -123,10 +127,11 @@ fn handberekening_2_zuivere_druk() {
 
     // Bij zuivere druk (κ = 0) is het moment om het midden van de doorsnede
     // NIET nul: de korf is asymmetrisch, het plastisch zwaartepunt ligt onder
-    // het midden. Handberekening: beton symmetrisch → 0; staal
-    //   boven 2Ø12: 226,19·400 = 90,48 kN op +206 mm → +18,64 kNm
-    //   onder 3Ø16: 603,19·400 = 241,27 kN op −204 mm → −49,22 kNm
-    //   M(κ = 0) = −30,58 kNm.
+    // het midden. Handberekening: bruto beton symmetrisch → 0; per laag netto
+    // (σ_s − f_cd) = 400 − 20 = 380 N/mm² (verdrongen beton, issue #239):
+    //   boven 2Ø12: 226,19·380 = 85,95 kN op +206 mm → +17,71 kNm
+    //   onder 3Ø16: 603,19·380 = 229,21 kN op −204 mm → −46,76 kNm
+    //   M(κ = 0) = −29,05 kNm.
     let st = solve_state(
         &s,
         &lagen,
@@ -136,8 +141,8 @@ fn handberekening_2_zuivere_druk() {
         &MnKappaOptions::default(),
     )
     .unwrap();
-    let m_hand = (226.195 * 400.0 * 206.0 - 603.186 * 400.0 * 204.0) * 1e-6;
-    assert_relative_eq!(m_hand, -30.58, max_relative = 1e-3);
+    let m_hand = (226.195 * 380.0 * 206.0 - 603.186 * 380.0 * 204.0) * 1e-6;
+    assert_relative_eq!(m_hand, -29.05, max_relative = 1e-3);
     assert_relative_eq!(st.m_knm, m_hand, max_relative = 2e-3);
 
     // Net onder N_Rd kan de doorsnede dus geen positief moment dragen: de
@@ -170,10 +175,13 @@ fn handberekening_2_zuivere_druk() {
 /// ```
 /// Staal (rek lineair, druk positief):
 /// ```text
-///   onder 3Ø16 op z = 46:  ε = 3,5‰·46/500 = 0,322 ‰ → σ = 64,4 N/mm², F = 38,85 kN, arm −204 mm → M = −7,92 kNm
-///   boven 2Ø12 op z = 456: ε = 3,192 ‰ > ε_yd → σ = 434,78, F = 98,34 kN, arm +206 mm → M = +20,26 kNm
-///   N = 2 428,6 + 38,85 + 98,34 = 2 565,8 kN (druk);  M = 102,04 − 7,92 + 20,26 = 114,38 kNm
+///   onder 3Ø16 op z = 46:  ε = 3,5‰·46/500 = 0,322 ‰ → σ_s = 64,4, σ_c = 20·(1 − (1 − 0,161)²) = 5,92;
+///                          netto F = 603,19·58,48 = 35,28 kN, arm −204 mm → M = −7,20 kNm
+///   boven 2Ø12 op z = 456: ε = 3,192 ‰ > ε_yd → σ_s = 434,78, σ_c = f_cd = 20;
+///                          netto F = 226,19·414,78 = 93,82 kN, arm +206 mm → M = +19,33 kNm
+///   N = 2 428,6 + 35,28 + 93,82 = 2 557,7 kN (druk);  M = 102,04 − 7,20 + 19,33 = 114,17 kNm
 /// ```
+/// Netto per laag (σ_s − σ_c): het verdrongen beton telt niet mee (issue #239).
 #[test]
 fn handberekening_3_punt_van_het_mn_diagram_x_gelijk_h() {
     let s = doorsnede();
@@ -189,12 +197,14 @@ fn handberekening_3_punt_van_het_mn_diagram_x_gelijk_h() {
     let m_c = int_sz - f_c * h / 2.0;
     let a_s1 = 3.0 * PI * 64.0;
     let a_s2 = 2.0 * PI * 36.0;
-    let f_s1 = a_s1 * 200_000.0 * (0.0035 * 46.0 / 500.0);
-    let f_s2 = a_s2 * 500.0 / 1.15;
+    let eps_1: f64 = 0.0035 * 46.0 / 500.0;
+    let sigma_c1 = f_cd * (1.0 - (1.0 - eps_1 / 0.002).powi(2));
+    let f_s1 = a_s1 * (200_000.0 * eps_1 - sigma_c1);
+    let f_s2 = a_s2 * (500.0 / 1.15 - f_cd);
     let n_hand = (f_c + f_s1 + f_s2) * 1e-3;
     let m_hand = (m_c + f_s1 * (46.0 - 250.0) + f_s2 * (456.0 - 250.0)) * 1e-6;
-    assert_relative_eq!(n_hand, 2565.8, max_relative = 1e-3);
-    assert_relative_eq!(m_hand, 114.38, max_relative = 1e-3);
+    assert_relative_eq!(n_hand, 2557.7, max_relative = 1e-3);
+    assert_relative_eq!(m_hand, 114.17, max_relative = 1e-3);
 
     // Rekenkern: leg N op en de kromming 7,0·10⁻³/m; verwacht exact deze
     // toestand. Met 400 stroken is de integratiefout < 10⁻⁴ (zie de
@@ -329,4 +339,32 @@ fn stroken_convergentie_bezwijkmoment() {
             assert!(afw < 1e-3, "n = {n}: afwijking {afw}");
         }
     }
+}
+
+/// Issue #239 (C5) — korte kolom 300 × 500, C30/37, B500B, alleen onder 3Ø16
+/// (A_s = 603,19 mm²), α_cc = 1,0 → f_cd = 20 N/mm². Zuivere druk:
+///
+/// ```text
+///   N_Rd = (150 000 − 603,19)·20 + 603,19·400 = 2 987 936 + 241 274 = 3 229,2 kN
+///   (bruto was 150 000·20 + 241 274 = 3 241,27 kN, +0,37 %)
+///   N_Rd,trek = 603,19·434,78 = 262,25 kN (ongewijzigd)
+/// ```
+/// Bij N_Ed = 1,35·2 392 = 3 229,2 kN is UC = 1,000 en niet 0,996.
+#[test]
+fn issue_239_zuivere_druk_telt_het_staaloppervlak_niet_als_beton() {
+    let s = doorsnede();
+    let k = korf(0);
+    let m = materiaal(SteelBranch::Horizontal);
+    let lagen = k.layers(s.h_mm);
+    let a_s = 3.0 * PI * 64.0;
+    let hand = ((150_000.0 - a_s) * 20.0 + a_s * 400.0) * 1e-3;
+    assert_relative_eq!(hand, 3229.2, max_relative = 1e-4);
+    let n_rd = axial_compression_capacity_kn(&s, &lagen, &m, &MnKappaOptions::default());
+    assert_relative_eq!(n_rd, hand, max_relative = 1e-9);
+    assert_relative_eq!(1.35 * 2392.0 / n_rd, 1.0, max_relative = 1e-4);
+    let n_t = nen_en_1992_1_1::axial_tension_capacity_kn(&lagen, &m);
+    assert_relative_eq!(n_t, a_s * 500.0 / 1.15 * 1e-3, max_relative = 1e-9);
+    // Net boven N_Rd is er geen evenwicht meer.
+    let d = mn_kappa_diagram(&s, &lagen, &m, -hand * 1.0001, 1.0, &MnKappaOptions::default());
+    assert_eq!(d.failure_mode, FailureMode::AxialCapacityExceeded);
 }

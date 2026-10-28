@@ -39,10 +39,14 @@
 //!   praktisch eindpunt — dat staat in het resultaat als
 //!   [`FailureMode::SteelStrainLimit`] en niet als normbezwijken.
 //!
-//! Vereenvoudiging: het door de wapening verdrongen beton wordt niet van de
-//! betondrukkracht afgetrokken — dezelfde vereenvoudiging als in de
-//! klassieke handberekening, zodat beide sporen vergelijkbaar blijven. Het
-//! effect is van de orde A_s/A_c (≈ 0,5 %).
+//! Het door de wapening VERDRONGEN beton wordt van de betonkrachten
+//! afgetrokken (issue #239): ter plaatse van elke laag telt σ_c(ε)·A_s niet
+//! als beton mee. Zo is de zuivere-drukcapaciteit
+//! N_Rd = (A_c − A_s)·f_cd + A_s·σ_s(ε_c2) — de netto betondoorsnede — en niet
+//! het bruto oppervlak b·h plus het staal, dat het staaloppervlak twee keer
+//! liet dragen (+0,37 % bij 300 × 500 met 3Ø16, ≈ +2 % bij 4 % wapening).
+//! De norm schrijft dit niet letterlijk voor; het is fysisch juist en aan de
+//! veilige kant.
 //!
 //! Tekenconventie **inwendig**: druk positief; κ > 0 = druk boven, trek
 //! onder (positief moment in de conventie van `mechanics`). Aan de
@@ -275,6 +279,12 @@ pub fn internal_forces(
         let f = s * l.area_mm2;
         n_s += f;
         m_s += f * arm;
+        // Verdrongen beton (issue #239): op de plaats van het staal is geen
+        // beton. De stroken hierboven integreren over de bruto doorsnede, dus
+        // de betonspanning bij de rek van deze laag gaat er weer af.
+        let verdrongen = mat.sigma_c(e) * l.area_mm2;
+        n_c -= verdrongen;
+        m_c -= verdrongen * arm;
         eps_s.push(e);
         sigma_s.push(s);
         f_s.push(f);
@@ -655,7 +665,8 @@ pub fn mn_kappa_diagram(
 }
 
 /// Normaalkrachtcapaciteit onder zuivere druk (kN, positief getal):
-/// N_Rd,c = ∫σ_c dA + Σ A_s·σ_s bij ε = ε_c2 over de hele doorsnede (6.1(4)).
+/// N_Rd,c = ∫σ_c dA_c,netto + Σ A_s·σ_s bij ε = ε_c2 over de hele doorsnede
+/// (6.1(4)); met A_c,netto = A_c − A_s, zie de moduledoc (issue #239).
 pub fn axial_compression_capacity_kn(
     section: &RectConcreteSection,
     layers: &[RebarLayer],

@@ -76,9 +76,15 @@ fn stijfheidsmateriaal(basis: NonlinearBasis, phi_ef: f64) -> DesignMaterial {
 ///   die rekent met λ, η en `mat.steel.sigma`, geen van alle geraakt.
 /// * In `internal_forces` is `mat.concrete.sigma(ε)` vervangen door
 ///   `mat.sigma_c(ε)`, en dat is bij `nonlinear: None` letterlijk diezelfde
-///   aanroep. Het bewijs staat hieronder: **113,12286139035288 kNm** is de
-///   waarde die vóór deze uitbreiding al in `openaec-mcp-server/README.md`
-///   stond opgeschreven, en die komt er tot op het laatste bit weer uit.
+///   aanroep. Vóór deze uitbreiding stond 113,12286139035288 kNm al in
+///   `openaec-mcp-server/README.md`, en die kwam er tot op het laatste bit
+///   weer uit.
+///
+/// Issue #239 heeft de vastgelegde M-N-κ-getallen daarna bewust verschoven:
+/// het door de 2Ø12 verdrongen beton telt niet meer mee (113,12286… →
+/// 113,12613… kNm; M₀ bij N = −200/−800 kN van −0,981/−4,128 naar
+/// −0,889/−3,764 kNm, netto σ_s − σ_c per laag, zie `tests/handberekening.rs`).
+/// Het spanningsblok is ongewijzigd.
 #[test]
 fn doorsnedetoetsing_is_bit_identiek_gebleven() {
     let s = doorsnede();
@@ -93,8 +99,8 @@ fn doorsnedetoetsing_is_bit_identiek_gebleven() {
         blok.m_rd_knm, 113.29232963145907,
         "spanningsblok, 2Ø12 boven"
     );
-    assert_eq!(mnk.m_max_knm, 113.12286139035288, "M-N-κ, 2Ø12 boven");
-    assert_eq!(mnk.kappa_u_per_m, 0.07026452382057882);
+    assert_eq!(mnk.m_max_knm, 113.12613603011955, "M-N-κ, 2Ø12 boven");
+    assert_eq!(mnk.kappa_u_per_m, 0.069949027700722);
 
     // Enkelvoudig gewapend: alleen onder 3Ø16 (de handberekening van
     // `tests/handberekening.rs`, M_Rd = 113,33 kNm).
@@ -111,7 +117,7 @@ fn doorsnedetoetsing_is_bit_identiek_gebleven() {
     );
 
     // En M(κ = 0) bij druk, de waarden waar de M₀-correctie op gebouwd is.
-    for (n, verwacht) in [(-200.0, -0.9808796482167925), (-800.0, -4.127887365409146)] {
+    for (n, verwacht) in [(-200.0, -0.8891005450204198), (-800.0, -3.764203672387587)] {
         let st = solve_state(&s, &lagen, &m, n, 0.0, &o).unwrap();
         assert_eq!(st.m_knm, verwacht, "M₀ bij N = {n} kN");
     }
@@ -141,7 +147,7 @@ fn een_niet_lineair_materiaal_besmet_het_toetsmateriaal_niet() {
     );
     assert_eq!(
         mn_kappa_diagram(&s, &lagen, &m, 0.0, 1.0, &o).m_max_knm,
-        113.12286139035288
+        113.12613603011955
     );
 }
 

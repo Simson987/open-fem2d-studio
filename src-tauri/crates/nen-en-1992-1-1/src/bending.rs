@@ -31,8 +31,10 @@
 //!   x = A_s·f_yd / (η·f_cd·b·λ),   M_Rd = A_s·f_yd·(d − λ·x/2).
 //! ```
 //!
-//! Zelfde vereenvoudiging als in `mnkappa`: verdrongen beton bij de
-//! drukwapening wordt niet afgetrokken.
+//! Vereenvoudiging van de klassieke handberekening: het door drukwapening
+//! verdrongen beton binnen het blok wordt hier NIET afgetrokken. De M-N-κ-
+//! route (`mnkappa`) doet dat sinds issue #239 wel; het verschil is van de
+//! orde A_s2·η·f_cd (bij 2Ø12 en C30/37 ≈ 4,5 kN drukkracht).
 
 use crate::section::{ConcreteSection, RebarLayer, RectConcreteSection};
 use crate::stress_strain::DesignMaterial;
