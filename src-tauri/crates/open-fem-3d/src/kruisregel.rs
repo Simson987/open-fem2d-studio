@@ -104,7 +104,7 @@ mod tests {
             schema_version: 1, analysis: AnalysisKind::Linear, nodes,
             materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
             sections: vec![Section3D { id: 1, name: "strip".into(), area_m2: 5e-4, iy_m4: 1e-8, iz_m4: 1e-8,
-                torsion_j_m4: 1e-8, shear_area_y_m2: None, shear_area_z_m2: None }],
+                torsion_j_m4: 1e-8, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
             members, supports: vec![], nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],
             thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
             tension_only_fit: None, tension_only_cross_rule: true, max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,

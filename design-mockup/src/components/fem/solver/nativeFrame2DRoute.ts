@@ -813,6 +813,7 @@ async function nativeConformingFrameResultToSolverResult(
   });
   frameResult.plateElements = membraneResult.plateElements;
   frameResult.maxDisplacement = Math.max(frameResult.maxDisplacement, membraneResult.maxDisplacement);
+  if (membraneResult.plateNodeDisplacements) frameResult.plateNodeDisplacements = membraneResult.plateNodeDisplacements;
   return input.plates?.some(plate => plate.threeLayer)
     ? voegNativeDrieLagencontroleToe(input, frameResult)
     : frameResult;

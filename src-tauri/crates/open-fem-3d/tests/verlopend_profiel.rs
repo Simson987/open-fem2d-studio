@@ -40,7 +40,7 @@ fn rechthoek(id: usize, b: f64, h: f64) -> Section3D {
         id, name: format!("{:.1}x{:.1}", b * 1000.0, h * 1000.0), area_m2: b * h,
         iy_m4: b * h.powi(3) / 12.0, iz_m4: h * b.powi(3) / 12.0,
         torsion_j_m4: a * c.powi(3) * (1.0 / 3.0 - 0.21 * c / a * (1.0 - c.powi(4) / (12.0 * a.powi(4)))),
-        shear_area_y_m2: None, shear_area_z_m2: None,
+        shear_area_y_m2: None, shear_area_z_m2: None, height_m: Some(h), width_m: Some(b),
     }
 }
 
@@ -772,7 +772,7 @@ fn e_kruisregel_met_een_verlopende_diagonaal() {
     let (a_kolom, i_kolom) = (0.01, 1e-4);
     let kolom = Section3D {
         id: 1, name: "kolom".into(), area_m2: a_kolom, iy_m4: i_kolom, iz_m4: i_kolom, torsion_j_m4: i_kolom,
-        shear_area_y_m2: None, shear_area_z_m2: None,
+        shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None,
     };
     let strip = delen(11, 3, 0.01, 0.02, 0.08);
     let mut alle = vec![kolom, rechthoek(2, 0.01, 0.04), rechthoek(3, 0.01, 0.02)];

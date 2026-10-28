@@ -789,6 +789,12 @@ export interface SolverResult {
   maxDisplacement: number;
   /** Plaatspanningen per plaat — alleen aanwezig wanneer het model platen bevat. */
   plateElements?: PlateResult[];
+  /**
+   * Verplaatsing (mm) van elke meshknoop van een plaat of schijf, op mesh-id.
+   * Alleen bij platen. Een combinatie en de omhullende superponeren deze, zodat
+   * hun `maxDisplacement` dezelfde knopen ziet als een belastinggeval (#228).
+   */
+  plateNodeDisplacements?: Map<number, { ux: number; uz: number }>;
 }
 
 /**

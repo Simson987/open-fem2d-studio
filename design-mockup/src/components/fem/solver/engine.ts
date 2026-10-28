@@ -2057,8 +2057,10 @@ function convertResult(
   //    Pa → N/mm² (÷1e6), membraankrachten N/m → kN/m (÷1000), plus
   //    min/max-ranges per component voor de kleurenlegenda.
   let plateResults: PlateResult[] | undefined;
+  let plateNodeDisplacements: Map<number, { ux: number; uz: number }> | undefined;
   if (plateInfo && plateInfo.length > 0) {
     plateResults = [];
+    plateNodeDisplacements = new Map();
     for (const info of plateInfo) {
       for (const nid of info.region.nodeIds) {
         const idx = indexById.get(nid);
@@ -2067,6 +2069,7 @@ function convertResult(
         const ux = (engineResult.displacements[base + 0] ?? 0) * 1000;
         const uz = (engineResult.displacements[base + 1] ?? 0) * 1000;
         maxDisp = Math.max(maxDisp, Math.hypot(ux, uz));
+        plateNodeDisplacements.set(nid, { ux, uz });
       }
 
       const mkRange = (): PlateStressRange => ({ min: Infinity, max: -Infinity });
@@ -2132,6 +2135,7 @@ function convertResult(
   return {
     displacements, reactions, elements, maxDisplacement: maxDisp,
     ...(plateResults ? { plateElements: plateResults } : {}),
+    ...(plateNodeDisplacements ? { plateNodeDisplacements } : {}),
   };
 }
 

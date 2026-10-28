@@ -6,7 +6,7 @@ use open_fem_3d::{
 
 fn section() -> Section3D {
     Section3D { id: 1, name: "reference".into(), area_m2: 0.01, iy_m4: 8e-6,
-        iz_m4: 12e-6, torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None }
+        iz_m4: 12e-6, torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
 }
 
 #[test]
@@ -851,4 +851,188 @@ fn pendulum_columns_under_a_diaphragm_name_the_sway_of_the_diaphragm() {
     // Alleen verticale lasten: de kern lost het op, maar het mechanisme blijft een fout.
     let error = solve(columns((0..4).map(|i| load(i + 1, 2 * i + 2, 0.0, -10.0)).collect())).unwrap_err();
     assert!(error.contains(sway), "{error}");
+}
+
+#[test]
+fn rigid_diaphragm_on_four_columns_reports_the_reduced_residual_not_a_false_alarm() {
+    // #238: vier ingeklemde kolommen CHS 219.1×8 (A = 5306 mm², I = 2,96·10⁷ mm⁴,
+    // J = 2I), L = 4 m, hoeken van een vlak 6 × 6 m, koppen 5–8 in een starre
+    // schijf, F_x = 20 kN op kop 5 (x = y = 0). E = 210 000 N/mm², ν = 0,3.
+    // Handberekening (koppen draaien vrij om X/Y, dus uitkragende kolommen):
+    //   k = 3EI/L³ = 3·210e6·2,96e-5/64 = 291,375 kN/m per kolom
+    //   GJ/L = 210e6/2,6 · 5,92e-5 / 4 = 1195,38 kNm/rad per kolom
+    //   K_θ = 4·k·(3² + 3²) + 4·GJ/L = 25 760,5 kNm/rad
+    //   θ_z = F·3 / K_θ = 60 / 25 760,5 = 2,3291e-3 rad
+    //   u_x,5 = F/(4k) + 3·θ_z = 24,147 mm
+    let e = 210e6_f64;
+    let (a, i) = (5306e-6, 2.96e-5);
+    let mut nodes = Vec::new();
+    let mut members = Vec::new();
+    let mut supports = Vec::new();
+    for (n, (x, y)) in [(0.0, 0.0), (6.0, 0.0), (0.0, 6.0), (6.0, 6.0)].into_iter().enumerate() {
+        nodes.push(Node3D { id: n + 1, x, y, z: 0.0 });
+        nodes.push(Node3D { id: n + 5, x, y, z: 4.0 });
+        members.push(member(n + 1, n + 1, n + 5));
+        supports.push(fixed(n + 1));
+    }
+    let mut input = request(nodes, members, supports,
+        vec![NodalLoad3D { id: 1, node_id: 5, fx: 20.0, fy: 0.0, fz: 0.0, mx: 0.0, my: 0.0, mz: 0.0 }]);
+    input.materials[0].nu = 0.3;
+    input.sections[0] = Section3D { id: 1, name: "CHS 219.1x8".into(), area_m2: a, iy_m4: i, iz_m4: i,
+        torsion_j_m4: 2.0 * i, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None };
+    input.diaphragms.push(Diaphragm3D { id: 1, node_ids: vec![5, 6, 7, 8] });
+    let result = solve(input).unwrap();
+
+    let k = 3.0 * e * i / 64.0;
+    let gj_l = e / 2.6 * 2.0 * i / 4.0;
+    let theta = 60.0 / (4.0 * k * 18.0 + 4.0 * gj_l);
+    close(theta, 2.3291e-3, 1e-4, 0.0);
+    let kop5 = result.displacements.iter().find(|d| d.node_id == 5).unwrap();
+    // Axiale en afschuifvervorming wijken minder dan 0,5 % af van de handwaarde.
+    close(kop5.rz, theta, 5e-3, 0.0);
+    close(kop5.ux, 20.0 / (4.0 * k) + 3.0 * theta, 5e-3, 0.0);
+
+    let evenwicht = result.equilibrium.as_ref().unwrap();
+    assert!(evenwicht.residual_ok && evenwicht.relative_residual < 1e-9, "{evenwicht:?}");
+    // De diagnostiek mag het evenwicht niet tegenspreken.
+    assert!(!result.diagnostics.iter().any(|m| m.contains("exceeds tolerance")), "{:?}", result.diagnostics);
+    let residu = result.diagnostics.iter().find(|m| m.starts_with("Constrained 3D residual"));
+    if let Some(melding) = residu {
+        assert!(melding.contains("gereduceerd"), "{melding}");
+    }
+}
+
+#[test]
+fn thermal_gradient_uses_the_real_section_height_not_sqrt_12i_over_a() {
+    // #221: IPE300 (catalogus A = 5381 mm², I_y = 8356·10⁴ mm⁴, h = 300 mm),
+    // ΔT over lokaal z = 20 K, α = 12·10⁻⁶/K. EN 1991-1-5 §4: ΔT_M werkt
+    // tussen boven- en onderkant, dus κ = α·ΔT/h met h = 300 mm, niet
+    // √(12I/A) = 431,7 mm.
+    //   κ = 12e-6 · 20 / 0,300 = 8,0·10⁻⁴ /m
+    //   uitkraging L = 4 m: θ_tip = κL = 3,20·10⁻³ rad, w_tip = κL²/2 = 6,40 mm
+    //   tweezijdig ingeklemd: M = E·I·κ = 210e6 · 8,356e-5 · 8e-4 = 14,04 kNm
+    let ipe300 = Section3D { id: 1, name: "IPE300".into(), area_m2: 5381e-6, iy_m4: 8356e-8, iz_m4: 604e-8,
+        torsion_j_m4: 20.1e-8, shear_area_y_m2: None, shear_area_z_m2: None,
+        height_m: Some(0.300), width_m: Some(0.150) };
+    let gradient = ThermalLoad3D { id: 1, member_id: 1, delta_t_uniform_k: 0.0,
+        delta_t_gradient_y_k: 0.0, delta_t_gradient_z_k: 20.0 };
+    let kappa = 12e-6 * 20.0 / 0.300;
+    let nodes = vec![Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 4.0, y: 0.0, z: 0.0 }];
+
+    let mut console = request(nodes.clone(), vec![member(1, 1, 2)], vec![fixed(1)], vec![]);
+    console.sections[0] = ipe300.clone();
+    console.materials[0].alpha_per_k = Some(12e-6);
+    console.thermal_loads.push(gradient.clone());
+    let result = solve(console.clone()).unwrap();
+    let tip = result.displacements.iter().find(|d| d.node_id == 2).unwrap();
+    close(tip.ry.abs(), kappa * 4.0, 1e-9, 0.0);
+    close(tip.uz.abs(), kappa * 16.0 / 2.0, 1e-9, 0.0);
+    close(tip.uz.abs() * 1000.0, 6.40, 1e-9, 0.0);
+
+    let mut clamped = request(nodes.clone(), vec![member(1, 1, 2)], vec![fixed(1), fixed(2)], vec![]);
+    clamped.sections[0] = ipe300.clone();
+    clamped.materials[0].alpha_per_k = Some(12e-6);
+    clamped.thermal_loads.push(gradient.clone());
+    let result = solve(clamped).unwrap();
+    let moment = result.diagrams.moment_y.iter().find(|d| d.member_id == 1).unwrap();
+    close(moment.max_abs_value, 210e6 * 8356e-8 * kappa, 1e-9, 0.0);
+    close(moment.max_abs_value, 14.04, 1e-3, 0.0);
+
+    // Breedte voor een gradiënt in lokaal y: κ = α·ΔT/b, b = 150 mm.
+    let mut sideways = console.clone();
+    sideways.thermal_loads[0].delta_t_gradient_z_k = 0.0;
+    sideways.thermal_loads[0].delta_t_gradient_y_k = 20.0;
+    let result = solve(sideways).unwrap();
+    let tip = result.displacements.iter().find(|d| d.node_id == 2).unwrap();
+    close(tip.rz.abs(), 12e-6 * 20.0 / 0.150 * 4.0, 1e-9, 0.0);
+
+    // Zonder hoogte geen stille aanname: een duidelijke weigering.
+    let mut missing = console.clone();
+    missing.sections[0].height_m = None;
+    let error = solve(missing).unwrap_err();
+    assert!(error.contains("mist de hoogte (heightM)"), "{error}");
+    let mut missing = console;
+    missing.thermal_loads[0].delta_t_gradient_y_k = 5.0;
+    missing.sections[0].width_m = None;
+    let error = solve(missing).unwrap_err();
+    assert!(error.contains("mist de breedte (widthM)"), "{error}");
+}
+
+fn ipe300_section() -> Section3D {
+    Section3D { id: 1, name: "IPE300".into(), area_m2: 5381e-6, iy_m4: 8356e-8, iz_m4: 604e-8,
+        torsion_j_m4: 20.1e-8, shear_area_y_m2: None, shear_area_z_m2: None,
+        height_m: Some(0.300), width_m: Some(0.150) }
+}
+
+/// Scharnier (alleen draaien om lokaal/globaal Y vrij) en rol (ook X vrij).
+fn hinge_y(node_id: usize, roller: bool) -> Support3D {
+    Support3D { node_id, ux: !roller, uy: true, uz: true, rx: true, ry: false, rz: true, ..Default::default() }
+}
+
+#[test]
+fn field_moment_of_a_partial_triangular_load_is_found_between_stations() {
+    // #242, deeltest 067: IPE300, 6 m scharnier–rol, driehoekslast 0 → 6 kN/m
+    // tussen x = 2 en 5 m. R_A = 9·2/6 = 3 kN, R_B = 6 kN;
+    // V(x) = 3 − (x − 2)² = 0 bij x = 2 + √3 = 3,732 m;
+    // M_max = 3x − (x − 2)³/3 = 9,4641 kNm (station t = 0,60 gaf 9,4347).
+    let mut input = request(
+        vec![Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 6.0, y: 0.0, z: 0.0 }],
+        vec![member(1, 1, 2)], vec![hinge_y(1, false), hinge_y(2, true)], vec![],
+    );
+    input.sections[0] = ipe300_section();
+    input.member_loads.push(MemberLoad3D {
+        id: 1, member_id: 1, qz_start_kn_per_m: 0.0, qz_end_kn_per_m: -6.0,
+        start_position_m: Some(2.0), end_position_m: Some(5.0), ..Default::default()
+    });
+    let result = solve(input).unwrap();
+    let x0 = 2.0 + 3.0_f64.sqrt();
+    let m_hand = 3.0 * x0 - (x0 - 2.0).powi(3) / 3.0;
+    close(m_hand, 9.4641, 1e-5, 0.0);
+    let moment = result.diagrams.moment_y.iter().find(|d| d.member_id == 1).unwrap();
+    close(moment.max_abs_value, m_hand, 1e-9, 0.0);
+    let piek = moment.points.iter().max_by(|a, b| a.value.abs().total_cmp(&b.value.abs())).unwrap();
+    close(piek.t * 6.0, x0, 1e-9, 0.0);
+    // Alle lijnen van het element houden dezelfde stations.
+    let shear = result.diagrams.shear_z.iter().find(|d| d.member_id == 1).unwrap();
+    assert_eq!(shear.points.len(), moment.points.len());
+    assert!(shear.points.iter().any(|p| (p.t - piek.t).abs() < 1e-12 && p.value.abs() < 1e-9));
+    // De stations blijven oplopend.
+    assert!(moment.points.windows(2).all(|w| w[0].t < w[1].t));
+}
+
+#[test]
+fn field_moment_of_a_two_span_beam_is_9ql2_over_128() {
+    // #242, deeltest 091: doorgaande ligger 2 × 5 m, q = 10 kN/m, IPE300.
+    // Reacties 3qL/8, 10qL/8, 3qL/8 = 18,75 / 62,5 / 18,75 kN; steunmoment
+    // −qL²/8 = −31,25 kNm; veldmoment 9qL²/128 = 17,578 kNm op x = 3L/8 =
+    // 1,875 m (de stations t = 0,35/0,40 gaven 17,500).
+    let mut input = request(
+        vec![Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 5.0, y: 0.0, z: 0.0 },
+            Node3D { id: 3, x: 10.0, y: 0.0, z: 0.0 }],
+        vec![member(1, 1, 2), member(2, 2, 3)],
+        vec![hinge_y(1, false), hinge_y(2, true), hinge_y(3, true)], vec![],
+    );
+    input.sections[0] = ipe300_section();
+    for id in [1, 2] {
+        input.member_loads.push(MemberLoad3D {
+            id, member_id: id, qz_start_kn_per_m: -10.0, qz_end_kn_per_m: -10.0, ..Default::default()
+        });
+    }
+    let result = solve(input).unwrap();
+    let r = |id| result.reactions.iter().find(|r| r.node_id == id).unwrap().fz;
+    close(r(1), 18.75, 1e-9, 1e-9);
+    close(r(2), 62.5, 1e-9, 1e-9);
+    close(r(3), 18.75, 1e-9, 1e-9);
+    let veld = 9.0 * 10.0 * 25.0 / 128.0;
+    close(veld, 17.578125, 1e-12, 0.0);
+    for (id, x_veld) in [(1, 1.875), (2, 5.0 - 1.875)] {
+        let moment = result.diagrams.moment_y.iter().find(|d| d.member_id == id).unwrap();
+        close(moment.max_abs_value, 31.25, 1e-9, 0.0);
+        // Het veldmoment heeft het andere teken dan het steunmoment.
+        let steun = if id == 1 { moment.points.last().unwrap().value } else { moment.points[0].value };
+        let veldwaarde = if steun < 0.0 { moment.max_value } else { -moment.min_value };
+        close(veldwaarde, veld, 1e-9, 0.0);
+        let punt = moment.points.iter().find(|p| (p.value.abs() - veld).abs() < 1e-9).unwrap();
+        close(punt.t * 5.0, x_veld, 1e-9, 0.0);
+    }
 }

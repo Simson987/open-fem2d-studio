@@ -21,7 +21,7 @@ const IZ: f64 = 12e-6;
 
 fn doorsnede() -> Section3D {
     Section3D { id: 1, name: "proef".into(), area_m2: 0.01, iy_m4: IY, iz_m4: IZ,
-        torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None }
+        torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
 }
 
 fn knoop(id: usize, x: f64, y: f64, z: f64) -> Node3D { Node3D { id, x, y, z } }
@@ -832,7 +832,7 @@ fn samen_met_bedding_en_knik() {
     let mut r = verzoek(vec![knoop(1, 0.0, 0.0, 0.0), knoop(2, l, 0.0, 0.0)], vec![ligger],
         vec![steun(1, [true, true, true, false, false, false]), steun(2, [false, true, true, false, false, false])]);
     r.sections = vec![Section3D { id: 1, name: "bedding".into(), area_m2: 0.01, iy_m4: iy, iz_m4: 100.0 * iy,
-        torsion_j_m4: 1e-5, shear_area_y_m2: None, shear_area_z_m2: None }];
+        torsion_j_m4: 1e-5, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }];
     r.nodal_loads.push(knooplast(1, 2, [-1000.0, 0.0, 0.0, 0.0, 0.0, 0.0]));
     r.buckling_modes = 3;
     let uit = solve(r.clone()).unwrap();
@@ -987,6 +987,10 @@ fn samen_met_een_plaat() {
 fn temperatuur_op_een_scharnierende_ligger() {
     let nodes = vec![knoop(1, 0.0, 0.0, 0.0), knoop(2, 6.0, 0.0, 0.0)];
     let mut r = verzoek(nodes, vec![scharnierend(staaf(1, 1, 2))], vec![scharnier(1), scharnier(2)]);
+    // Werkelijke maten voor het temperatuurverschil (#221); bij vrije
+    // einddraaiing blijft het moment toch nul.
+    r.sections[0].height_m = Some(0.3);
+    r.sections[0].width_m = Some(0.15);
     r.thermal_loads.push(open_fem_3d::ThermalLoad3D {
         id: 1, member_id: 1, delta_t_uniform_k: 30.0, delta_t_gradient_y_k: 10.0, delta_t_gradient_z_k: 20.0,
     });

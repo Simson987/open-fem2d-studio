@@ -109,11 +109,14 @@ fn zoek_knoop<'a>(request: &'a SolveRequest3D, staaf: &Member3D, id: usize) -> R
         .ok_or_else(|| format!("staaf {} verwijst naar ontbrekende knoop {id}", staaf.id))
 }
 
-/// Dezelfde stijfheidsgetallen: het kernelement is dan hetzelfde.
+/// Dezelfde stijfheidsgetallen en maten: het kernelement is dan hetzelfde.
+/// De maten tellen mee omdat een temperatuurverschil over de doorsnede met
+/// de werkelijke hoogte en breedte rekent (#221).
 fn gelijk(a: &Section3D, b: &Section3D) -> bool {
     a.id == b.id || (a.area_m2 == b.area_m2 && a.iy_m4 == b.iy_m4 && a.iz_m4 == b.iz_m4
         && a.torsion_j_m4 == b.torsion_j_m4 && a.shear_area_y_m2 == b.shear_area_y_m2
-        && a.shear_area_z_m2 == b.shear_area_z_m2)
+        && a.shear_area_z_m2 == b.shear_area_z_m2
+        && a.height_m == b.height_m && a.width_m == b.width_m)
 }
 
 /// De verschillende doorsneden waarmee de staaf rekent, in volgorde van de
@@ -242,7 +245,7 @@ mod tests {
 
     fn doorsnede_met(id: usize, a: f64) -> Section3D {
         Section3D { id, name: format!("d{id}"), area_m2: a, iy_m4: a * 1e-2, iz_m4: a * 2e-2, torsion_j_m4: a * 1e-3,
-            shear_area_y_m2: None, shear_area_z_m2: None }
+            shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
     }
 
     fn verzoek(ids: Vec<usize>, tussen: Vec<Node3D>) -> SolveRequest3D {

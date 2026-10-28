@@ -203,8 +203,10 @@ export function nativeMembraneResultToSolverResult(
   const displacements = new Map<number, { ux: number; uz: number; ry: number }>();
   const reactions = new Map<number, { fx: number; fz: number; my: number }>();
   let maxDisplacement = 0;
+  const plateNodeDisplacements = new Map<number, { ux: number; uz: number }>();
   for (const node of result.nodes) {
     maxDisplacement = Math.max(maxDisplacement, Math.hypot(node.uxM, node.uyM) * 1000);
+    plateNodeDisplacements.set(node.nodeId, { ux: node.uxM * 1000, uz: node.uyM * 1000 });
   }
   for (const [uiId, meshId] of built.nodeIdMap) {
     const node = nodes.get(meshId);
@@ -258,7 +260,7 @@ export function nativeMembraneResultToSolverResult(
       },
     };
   });
-  return { displacements, reactions, elements: new Map(), maxDisplacement, plateElements };
+  return { displacements, reactions, elements: new Map(), maxDisplacement, plateElements, plateNodeDisplacements };
 }
 
 export function nativeQuadResultToSolverResult(

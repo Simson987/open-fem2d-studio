@@ -146,7 +146,7 @@ fn request_from_case(
             iz_m4: section.Iz,
             torsion_j_m4: section.J,
             shear_area_y_m2: None,
-            shear_area_z_m2: None,
+            shear_area_z_m2: None, height_m: None, width_m: None,
         }],
         members,
         supports,

@@ -765,6 +765,9 @@ export function buildOpenFem3DSolveRequest(
           iyM4: doorsnede.iyMm4 * 1e-12,
           izM4: doorsnede.izMm4 * 1e-12,
           torsionJM4: doorsnede.itMm4 * 1e-12,
+          // Werkelijke maten voor een temperatuurverschil over de doorsnede (#221).
+          heightM: doorsnede.maten.h * 1e-3,
+          widthM: doorsnede.maten.b * 1e-3,
         });
       }
       return id;
@@ -784,7 +787,13 @@ export function buildOpenFem3DSolveRequest(
       let torsionJMm4: number;
       let shearAreaYMm2: number | undefined;
       let shearAreaZMm2: number | undefined;
-      const catalogue = STEEL_SECTION_DIMS[profileKey(profile)]?.props;
+      // Werkelijke hoogte (lokaal z) en breedte (lokaal y) in mm: een
+      // temperatuurverschil over de doorsnede werkt daarover (EN 1991-1-5,
+      // #221). Onbekend: niet meesturen, de kern weigert dan een gradiënt.
+      let heightMm: number | undefined;
+      let widthMm: number | undefined;
+      const catalogueDims = STEEL_SECTION_DIMS[profileKey(profile)];
+      const catalogue = catalogueDims?.props;
       const rectangle = parseRechthoek(profile);
       const eigen = isEigenProfiel(profile) ? zoekEigenDoorsnede(profile) : undefined;
       if (eigen) {
@@ -794,15 +803,21 @@ export function buildOpenFem3DSolveRequest(
         torsionJMm4 = props.it_mm4;
         shearAreaYMm2 = props.av_y_mm2;
         shearAreaZMm2 = props.av_z_mm2;
+        // Bij gedraaide hoofdassen liggen h en b niet langs lokaal z en y.
+        if (!principal) { heightMm = props.h_mm; widthMm = props.b_mm; }
       } else if (catalogue) {
         izMm4 = catalogue.iz;
         torsionJMm4 = catalogue.it;
         shearAreaYMm2 = catalogue.avY;
         shearAreaZMm2 = catalogue.avZ;
+        heightMm = catalogueDims.h;
+        widthMm = catalogueDims.b;
       } else if (rectangle) {
         izMm4 = rectangle.h * rectangle.b ** 3 / 12;
         torsionJMm4 = rechthoekTorsieconstante(rectangle.b, rectangle.h);
         shearAreaYMm2 = shearAreaZMm2 = 5 / 6 * rectangle.b * rectangle.h;
+        heightMm = rectangle.h;
+        widthMm = rectangle.b;
       } else {
         throw new Error(
           `Staaf ${beam.id}: profiel "${profile}" mist Iz en J voor een ruimtelijke berekening. ` +
@@ -825,6 +840,8 @@ export function buildOpenFem3DSolveRequest(
         iyM4: iyMm4 * 1e-12,
         izM4: izMm4 * 1e-12,
         torsionJM4: torsionJMm4 * 1e-12,
+        ...(heightMm !== undefined && Number.isFinite(heightMm) && heightMm > 0 ? { heightM: heightMm * 1e-3 } : {}),
+        ...(widthMm !== undefined && Number.isFinite(widthMm) && widthMm > 0 ? { widthM: widthMm * 1e-3 } : {}),
         ...(beam.shearDeformation ? {
           shearAreaYM2: shearAreaYMm2! * 1e-6,
           shearAreaZM2: shearAreaZMm2! * 1e-6,
@@ -1104,7 +1121,9 @@ export interface OpenFem3DSolveRequestBody {
   nodes: { id: number; x: number; y: number; z: number }[];
   materials: { id: number; name: string; eMpa: number; nu: number; gMpa?: number; alphaPerK: number }[];
   sections: { id: number; name: string; areaM2: number; iyM4: number; izM4: number; torsionJM4: number;
-    shearAreaYM2?: number; shearAreaZM2?: number }[];
+    shearAreaYM2?: number; shearAreaZM2?: number;
+    /** Werkelijke hoogte langs lokaal z en breedte langs lokaal y in m (#221). */
+    heightM?: number; widthM?: number }[];
   members: {
     id: number; startNodeId: number; endNodeId: number; materialId: number; sectionId: number;
     /**

@@ -1712,7 +1712,7 @@ mod tests {
             schema_version: 2, analysis: AnalysisKind::Linear, nodes,
             materials: vec![Material3D { id: 1, name: "S235".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
             sections: vec![Section3D { id: 1, name: "HEA".into(), area_m2: 5e-3, iy_m4: 1e-5, iz_m4: 1e-5,
-                torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None }],
+                torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
             members, supports, nodal_loads: vec![], member_loads: vec![], member_point_loads: vec![],
             thermal_loads: vec![], plates: vec![], shell_elements: vec![], surface_loads: vec![], diaphragms: vec![],
             tension_only_fit: None, tension_only_cross_rule: false, max_iterations: 50, tolerance: 1e-10, buckling_modes: 0,

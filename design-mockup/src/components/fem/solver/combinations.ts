@@ -705,8 +705,24 @@ export function combineResults(
 
   // Knopen én de gecombineerde veldkromme langs de staven (issue #32): de
   // combinatie is lineair, dus de stationsarrays hierboven zijn exact.
-  const maxDisp = grootsteVerplaatsing(displacements.values(), elements.values());
-  return { displacements, reactions, elements, maxDisplacement: maxDisp, plateElements };
+  let maxDisp = grootsteVerplaatsing(displacements.values(), elements.values());
+  // De meshknopen van platen en schijven (#228): dezelfde bron als per
+  // belastinggeval. Zonder hen las een wandschijf alleen haar hoekknopen.
+  let plateNodeDisplacements: Map<number, { ux: number; uz: number }> | undefined;
+  for (const [caseId, factor] of combo.factors) {
+    const r = perCase.get(idVan(caseId));
+    if (!r?.plateNodeDisplacements) continue;
+    plateNodeDisplacements ??= new Map();
+    for (const [nid, d] of r.plateNodeDisplacements) {
+      const som = plateNodeDisplacements.get(nid) ?? { ux: 0, uz: 0 };
+      plateNodeDisplacements.set(nid, { ux: som.ux + factor * d.ux, uz: som.uz + factor * d.uz });
+    }
+  }
+  for (const d of plateNodeDisplacements?.values() ?? []) maxDisp = Math.max(maxDisp, Math.hypot(d.ux, d.uz));
+  return {
+    displacements, reactions, elements, maxDisplacement: maxDisp, plateElements,
+    ...(plateNodeDisplacements ? { plateNodeDisplacements } : {}),
+  };
 }
 
 // ── Envelope ──────────────────────────────────────────────────────────────
