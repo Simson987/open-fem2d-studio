@@ -1,0 +1,20 @@
+[package]
+name = "nen-en-1996-1-1"
+version = "2026.44.0"
+license = "LGPL-3.0-or-later"
+edition = "2021"
+description = "Rekenregels NEN-EN 1996-1-1 (metselwerk): f_k, effectieve hoogte, Φ, geconcentreerde last, afschuiving en buiging uit het vlak"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+serde = { workspace = true }
+ts-rs = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }
+
+[[test]]
+name = "handberekening"
+path = "tests/handberekening.rs"
