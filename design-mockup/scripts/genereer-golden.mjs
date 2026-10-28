@@ -417,10 +417,15 @@ void solve_ms;
 void bundle_hash;
 void solver_version;
 
-if (waarden.warnings.length > 0) {
+// De melding dat het eigen gewicht UIT staat (#231) is geen rekenprobleem
+// maar een vaste eigenschap van dit portaal: het rekent bewust zonder eigen
+// gewicht (de invarianten hieronder ook). Die ene melding mag dus in het
+// gouden bestand; elke andere waarschuwing stopt de generatie.
+const echteWaarschuwingen = waarden.warnings.filter((w) => !w.startsWith("Eigen gewicht staat UIT"));
+if (echteWaarschuwingen.length > 0) {
   stop(
     "De solve leverde waarschuwingen op; een gouden bestand hoort van een schone " +
-      `berekening te komen:\n    ${waarden.warnings.join("\n    ")}`,
+      `berekening te komen:\n    ${echteWaarschuwingen.join("\n    ")}`,
   );
 }
 if (waarden.skipped_beams.length > 0) {
