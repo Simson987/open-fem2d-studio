@@ -1051,7 +1051,9 @@ function rekenDoor(payload: Record<string, unknown>) {
   // Veranderlijke vloerbelasting veldsgewijs (issue #219, NEN-EN 1991-1-1
   // 6.2.1(1)): dezelfde stap als de app, alleen bij eerste orde. Zonder geval
   // over meer velden is `rekenInput` de invoer zelf.
-  const veldSplitsing = nonlinear ? null : splitsVeldgevallen(multiInput, gelezen.model.loadCases);
+  // Trek-alleen staven (#234): ook niet-lineair, dus geen veldpatronen.
+  const metTrekAlleen = gelezen.model.beams.some((b) => b.tensionOnly);
+  const veldSplitsing = nonlinear || metTrekAlleen ? null : splitsVeldgevallen(multiInput, gelezen.model.loadCases);
   const rekenInput = veldSplitsing?.input ?? multiInput;
 
   const start = Date.now();
@@ -1267,7 +1269,7 @@ function rekenDoor(payload: Record<string, unknown>) {
     supports: gelezen.model.supports,
     loadCases: gelezen.model.loadCases,
     loads: gelezen.model.loads,
-    lineair: !nonlinear,
+    lineair: !nonlinear && !metTrekAlleen,
   })) {
     waarschuwingen.push(m.tekst);
   }

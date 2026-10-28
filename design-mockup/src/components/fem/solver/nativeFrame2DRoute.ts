@@ -847,6 +847,138 @@ async function solveNativeFrame2DWithRecovery(
   }
 }
 
+// ── Trek-alleen staven (issue #234) ─────────────────────────────────────────
+//
+// De Rust-raamwerkkern kent geen trek-alleen staaf, wel een normaalkrachthuls
+// per staafeind (`releases.uxEnd`). De statuslus staat daarom hier, met
+// dezelfde regels als de TypeScript-kern (`losOpMetAxiaalVoorwaarden` in
+// core/solver/NonlinearSolver.ts):
+//   - een actieve trek-alleen staaf met een gemiddelde drukkracht valt uit:
+//     huls aan het eind van zijn laatste deelelement;
+//   - een uitgeschakelde staaf doet weer mee als hij in de nieuwe stand zou
+//     rekken: N_proef = E·A·(δ/L − α·ΔT) > 0, δ de verlenging tussen zijn
+//     eindknopen;
+//   - bij tweede orde (en FNL zonder schijven) convergeert de verzameling
+//     eerst met lineaire rondes, daarna de niet-lineaire vanaf die stand;
+//   - een terugkerende stand of te veel rondes is een fout.
+
+type FrameRequest = ReturnType<typeof buildNativeFrame2DRequest> & { membrane?: unknown };
+
+const MAX_TREK_RONDES = 50;
+
+function metAxiaalLos(request: FrameRequest, losseLeden: Set<number>): FrameRequest {
+  const kopie = {
+    ...request,
+    members: request.members.map(member => {
+      if (!losseLeden.has(member.id)) return member;
+      // Een axiale eindveer vervalt met de huls: een veer op een losse
+      // vrijheidsgraad telt niet (zelfde regel als bij het opbouwen).
+      const { uxEndKnPerM: _veer, ...springs } = member.springs as Record<string, number>;
+      return { ...member, releases: { ...member.releases, uxEnd: true }, springs };
+    }),
+  } as FrameRequest;
+  const mesh = frameMeshes.get(request);
+  if (mesh) frameMeshes.set(kopie, mesh);
+  return kopie;
+}
+
+function lineaireKopie(request: FrameRequest): FrameRequest {
+  const { loadPath: _loadPath, ...rest } = request as FrameRequest & { loadPath?: unknown };
+  const kopie = {
+    ...rest,
+    analysis: "linear",
+    materials: request.materials.map(({ id, eMpa }) => ({ id, eMpa })),
+  } as FrameRequest;
+  const mesh = frameMeshes.get(request);
+  if (mesh) frameMeshes.set(kopie, mesh);
+  return kopie;
+}
+
+/**
+ * Los één Rust-verzoek op, met de trek-alleen-lus als `input` zulke staven
+ * heeft. `uit` = de model-id's van de uitgeschakelde staven, of `undefined`
+ * als het model er geen heeft.
+ */
+async function solveNativeFrame2DTrekAlleen(
+  input: MultiInput, request: FrameRequest,
+): Promise<{ native: NativeFrame2DResult; request: FrameRequest; uit?: number[] }> {
+  const trekStaven = input.beams.filter(beam => beam.tensionOnly === true);
+  if (trekStaven.length === 0) {
+    return { native: await solveNativeFrame2DWithRecovery(request), request };
+  }
+  const mesh = frameMeshes.get(request);
+  if (!mesh) throw new Error("De Rust 2D-raamwerkroute mist de bijbehorende staafindeling.");
+  const knopen = new Map(request.nodes.map(node => [node.id, node]));
+  const doorsnede = new Map(request.sections.map(section => [section.id, section]));
+  const materiaal = new Map(request.materials.map(material => [material.id, material]));
+  const thermisch = new Map<number, number>();
+  for (const load of request.thermalLoads) {
+    thermisch.set(load.memberId, (thermisch.get(load.memberId) ?? 0) + load.deltaTK * load.alphaPerK);
+  }
+  const naam = (ids: Iterable<number>) => [...ids].sort((a, b) => a - b).join(", ");
+
+  const fase = async (basis: FrameRequest, start: Set<number>) => {
+    let uit = new Set(start);
+    const gezien = new Set<string>();
+    for (let ronde = 1; ronde <= MAX_TREK_RONDES; ronde++) {
+      const losseLeden = new Set([...uit].map(beamId => {
+        const segmenten = mesh.segmentsByBeam.get(beamId)!;
+        return segmenten[segmenten.length - 1].id;
+      }));
+      const verzoek = metAxiaalLos(basis, losseLeden);
+      const native = await solveNativeFrame2DWithRecovery(verzoek);
+      const leden = new Map(native.members.map(member => [member.memberId, member]));
+      const verplaatsing = new Map(native.nodes.map(node => [node.nodeId, node.displacement]));
+      const kracht = new Map<number, number>();
+      let schaal = 0;
+      for (const beam of trekStaven) {
+        const segmenten = mesh.segmentsByBeam.get(beam.id)!;
+        let som = 0;
+        for (const segment of segmenten) {
+          if (!uit.has(beam.id)) {
+            const n = leden.get(segment.id)?.normalForceKn ?? [];
+            som += n.length ? n.reduce((a, b) => a + b, 0) / n.length : 0;
+          } else {
+            const a = knopen.get(segment.startNodeId)!, b = knopen.get(segment.endNodeId)!;
+            const ua = verplaatsing.get(segment.startNodeId)!, ub = verplaatsing.get(segment.endNodeId)!;
+            const L = Math.hypot(b.x - a.x, b.y - a.y);
+            const c = (b.x - a.x) / L, sn = (b.y - a.y) / L;
+            const delta = (ub[0] - ua[0]) * c + (ub[1] - ua[1]) * sn;
+            const ea = materiaal.get(beam.id)!.eMpa * 1000 * doorsnede.get(segment.id)!.areaM2;
+            som += ea * (delta / L - (thermisch.get(segment.id) ?? 0));
+          }
+        }
+        const n = som / segmenten.length;
+        kracht.set(beam.id, n);
+        schaal = Math.max(schaal, Math.abs(n));
+      }
+      const tol = 1e-9 * Math.max(schaal, 1);
+      const volgende = new Set<number>();
+      for (const beam of trekStaven) {
+        const n = kracht.get(beam.id)!;
+        if (uit.has(beam.id) ? !(n > tol) : n < -tol) volgende.add(beam.id);
+      }
+      if (naam(volgende) === naam(uit)) return { native, request: verzoek, uit };
+      gezien.add(naam(uit));
+      if (gezien.has(naam(volgende))) {
+        throw new Error("De trek-alleen-iteratie keert terug naar een eerdere stand en convergeert niet "
+          + `(uitgeschakeld afwisselend ${naam(uit) || "geen"} en ${naam(volgende) || "geen"}). `
+          + "Er is geen eenduidige krachtsverdeling met alleen getrokken verbanden.");
+      }
+      uit = volgende;
+    }
+    throw new Error(`De trek-alleen-iteratie is na ${MAX_TREK_RONDES} rondes niet geconvergeerd; `
+      + "er wordt geen krachtsverdeling gegeven.");
+  };
+
+  let start = new Set<number>();
+  if (request.analysis !== "linear" && !request.membrane) {
+    start = (await fase(lineaireKopie(request), start)).uit;
+  }
+  const eind = await fase(request, start);
+  return { native: eind.native, request: eind.request, uit: [...eind.uit].sort((a, b) => a - b) };
+}
+
 export async function solveAllCasesNativeFrame2D(
   input: MultiInput, analysis: FrameAnalysis = "linear",
 ): Promise<Map<number, SolverResult>> {
@@ -866,11 +998,13 @@ export async function solveAllCasesNativeFrame2D(
       if (!request.nodalLoads.length && !request.memberLoads.length
           && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)
           && !request.thermalLoads.length) continue;
-      const result = await solveNativeFrame2DWithRecovery(request);
-      perCase.set(loadCase.id + offset, coupled
-        ? await nativeConformingFrameResultToSolverResult(directionalInput, coupled.request, coupled.built, result,
-          directionalInput.supports)
-        : nativeFrame2DResultToSolverResult(request, result));
+      const { native: result, request: opgelost, uit } = await solveNativeFrame2DTrekAlleen(directionalInput, request);
+      const uitkomst = coupled
+        ? await nativeConformingFrameResultToSolverResult(directionalInput,
+          opgelost as typeof coupled.request, coupled.built, result, directionalInput.supports)
+        : nativeFrame2DResultToSolverResult(opgelost, result);
+      if (uit) uitkomst.trekAlleenUitgeschakeld = uit;
+      perCase.set(loadCase.id + offset, uitkomst);
     }
   };
   await solveDirection(input.scheefstand?.richting, 0);
@@ -881,10 +1015,14 @@ export async function solveAllCasesNativeFrame2D(
   return perCase;
 }
 
-/** Each second-order combination is solved at its full factored load. */
+/**
+ * Each combination is solved at its full factored load: second order and FNL
+ * always, first order ("linear") when the model has tension-only members
+ * (issue #234) and superposition no longer holds.
+ */
 export async function solveAllCombinationsNativeFrame2D(
   input: MultiInput, combinations: readonly LoadCombination[],
-  analysis: "geometric" | "material" | "combined" = "geometric",
+  analysis: FrameAnalysis = "geometric",
 ): Promise<Map<number, SolverResult>> {
   const results = new Map<number, SolverResult>();
   for (const combination of combinations) {
@@ -899,11 +1037,17 @@ export async function solveAllCombinationsNativeFrame2D(
       ? buildNativeConformingFrame2DRequest(directionalInput, factor, analysis)
       : undefined;
     const request = coupled?.request ?? buildNativeFrame2DRequest(directionalInput, factor, analysis);
-    const result = await solveNativeFrame2DWithRecovery(request);
-    results.set(combination.id, coupled
-      ? await nativeConformingFrameResultToSolverResult(directionalInput, coupled.request, coupled.built, result,
-        directionalInput.supports)
-      : nativeFrame2DResultToSolverResult(request, result));
+    // Een combinatie zonder enige last: hetzelfde als de superpositie (nul).
+    if (analysis === "linear" && !request.nodalLoads.length && !request.memberLoads.length
+        && !request.memberPointLoads.some(load => load.pxKn !== 0 || load.pyKn !== 0)
+        && !request.thermalLoads.length) continue;
+    const { native: result, request: opgelost, uit } = await solveNativeFrame2DTrekAlleen(directionalInput, request);
+    const uitkomst = coupled
+      ? await nativeConformingFrameResultToSolverResult(directionalInput,
+        opgelost as typeof coupled.request, coupled.built, result, directionalInput.supports)
+      : nativeFrame2DResultToSolverResult(opgelost, result);
+    if (uit) uitkomst.trekAlleenUitgeschakeld = uit;
+    results.set(combination.id, uitkomst);
   }
   return results;
 }

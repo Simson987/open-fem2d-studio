@@ -585,6 +585,7 @@ export const SPIEGELREGELS_STAAF: { [K in keyof Required<Beam>]: string } = {
   checkConfig: "per veld, zie SPIEGELREGELS_TOETSCONFIG",
   loadRole: "gelijk: het staaftype hangt niet aan de tekenrichting",
   bedding: "gelijk: over de hele staaf",
+  tensionOnly: "gelijk: trek blijft trek, welke kant de staaf ook op wijst",
 };
 
 type ConfigRegel = "gelijk" | "fracties" | "zonesMm";

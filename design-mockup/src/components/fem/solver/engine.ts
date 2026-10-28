@@ -961,6 +961,12 @@ export function buildMesh(
      * van beide buren samen kL — de tributaire lengte.
      */
     const zetBedding = (meshId: number): void => {
+      if (b.tensionOnly) {
+        // Trek-alleen (issue #234): alle deelelementen in één groep met het
+        // model-id als sleutel, zodat de staaf als geheel uitvalt en de kern
+        // het model-id terugmeldt (`axiaalUitgeschakeld`).
+        mesh.updateBeamElement(meshId, { tensionOnly: true, tensionOnlyGroup: b.id });
+      }
       if (!b.bedding) return;
       mesh.updateBeamElement(meshId, {
         onGrade: { enabled: true, k: b.bedding.kLijn * 1e6, b: 1 },
@@ -2136,6 +2142,9 @@ function convertResult(
     displacements, reactions, elements, maxDisplacement: maxDisp,
     ...(plateResults ? { plateElements: plateResults } : {}),
     ...(plateNodeDisplacements ? { plateNodeDisplacements } : {}),
+    // De groepsleutel van een trek-alleen staaf is zijn model-id (buildMesh).
+    ...(Array.isArray(engineResult.axiaalUitgeschakeld)
+      ? { trekAlleenUitgeschakeld: [...engineResult.axiaalUitgeschakeld] } : {}),
   };
 }
 
@@ -2428,7 +2437,53 @@ export function solveAllCases(input: MultiInput): MultiLcResult {
     losGevallenOp(tegen, perCase, SCHEEFSTAND_ID_OFFSET);
     registreerScheefstandRichtingen(perCase, input.scheefstand.richting);
   }
+  if (heeftTrekAlleen(input)) {
+    (perCase as any)[TREK_ALLEEN_KEY] = { input, cache: new Map() } satisfies TrekAlleenState;
+  }
   return { perCase };
+}
+
+// ── Trek-alleen staven: per combinatie oplossen (issue #234) ───────────────
+//
+// Met een trek-alleen staaf is het model niet meer lineair: welke diagonaal
+// van een kruisverband werkt, hangt af van de TOTALE belasting. Superpositie
+// van de belastinggevallen geeft dan een verkeerde krachtsverdeling (gemeten
+// in #234: de getrokken schoor 12,02 kN alleen, of in een combinatie met de
+// gevallen afzonderlijk opgeteld een stand waarin beide diagonalen half
+// meedoen). Daarom hangt `solveAllCases` dan — net als het tweede-ordepad —
+// de invoer aan de perCase-Map, en lost `combineResults` elke combinatie
+// eerste orde als geheel op (`solveCombinationFirstOrder`, met de iteratie
+// van de kern). De per-geval-resultaten blijven bestaan voor de weergave
+// per belastinggeval; elk is op zichzelf ook met de iteratie opgelost.
+
+const TREK_ALLEEN_KEY = "__femTrekAlleen";
+
+interface TrekAlleenState {
+  input: MultiInput;
+  /** Per combinatiesleutel (zie `tweedeOrdeSleutel`); `null` = geen last. */
+  cache: Map<string, SolverResult | null>;
+}
+
+/** Heeft deze invoer minstens één trek-alleen staaf? */
+export function heeftTrekAlleen(input: { beams: readonly { tensionOnly?: boolean }[] }): boolean {
+  return input.beams.some((b) => b.tensionOnly === true);
+}
+
+/**
+ * Het eerste-orde-combinatieresultaat van een model met trek-alleen staven,
+ * gememoiseerd aan de perCase-Map uit `solveAllCases`. `undefined` = aan deze
+ * Map hangt geen trek-alleen-status (superpositie is dan geldig); `null` = de
+ * combinatie activeert geen last.
+ */
+export function trekAlleenCombinatieResultaat(
+  perCase: Map<number, SolverResult>,
+  combo: SecondOrderCombo,
+): SolverResult | null | undefined {
+  const ta = (perCase as any)[TREK_ALLEEN_KEY] as TrekAlleenState | undefined;
+  if (!ta) return undefined;
+  const sleutel = tweedeOrdeSleutel(combo);
+  if (!ta.cache.has(sleutel)) ta.cache.set(sleutel, solveCombinationFirstOrder(ta.input, combo));
+  return ta.cache.get(sleutel)!;
 }
 
 /** Heeft de opgebouwde mesh ten minste één werkzame last (knoop, verdeeld of thermisch)? */

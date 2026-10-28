@@ -138,6 +138,7 @@ import { solveAllCasesNativeFrame2D, solveAllCombinationsNativeFrame2D } from ".
 import {
   eersteOrdeCombinatieResultaat,
   getSecondOrderInput,
+  heeftTrekAlleen,
   zetCombinatieResultaat,
   zetSolverLogOpvanger,
 } from "./components/fem/solver/engine";
@@ -2261,7 +2262,8 @@ function App() {
       // deelgevallen per veld rekenen mee; de varianten komen achter hun
       // basiscombinatie. Zonder zo'n geval is `veld.combinaties` dezelfde
       // lijst en `veld.input` dezelfde invoer.
-      const lineair = fem.analysetype === "eersteOrde";
+      // Trek-alleen staven (#234) maken de berekening niet-lineair: geen superpositie van veldpatronen.
+      const lineair = fem.analysetype === "eersteOrde" && !fem.beams.some((b) => b.tensionOnly);
       const veldSplitsing = lineair ? splitsVeldgevallen(multiInput, fem.loadCases) : null;
       const rekenInput = veldSplitsing?.input ?? multiInput;
       const { perCase } = !lineair
@@ -2347,7 +2349,7 @@ function App() {
         && !fem.beams.some(beam => beam.axialMaterialLaw))
       throw new Error("Kies bij ten minste één staaf een axiale staal- of betonwet voor Rust-FNL.");
     // Issue #219: veldsgewijze plaatsing alleen bij een lineaire berekening.
-    const veldSplitsing = analysis === "linear" ? splitsVeldgevallen(multiInput, fem.loadCases) : null;
+    const veldSplitsing = analysis === "linear" && !fem.beams.some((b) => b.tensionOnly) ? splitsVeldgevallen(multiInput, fem.loadCases) : null;
     const rekenInput = veldSplitsing?.input ?? multiInput;
     const perCase = nativeFrame
       ? await solveAllCasesNativeFrame2D(rekenInput, analysis)
@@ -2365,7 +2367,13 @@ function App() {
           : solveAllCasesNativeMembrane2D(adjustedInput, "linear"));
       if (generatie !== rekenGeneratieRef.current) return null;
     }
-    const combinationResults = analysis === "linear"
+    // Trek-alleen staven (issue #234): ook eerste orde geldt de superpositie
+    // niet meer; elke combinatie wordt dan als geheel door Rust opgelost (met
+    // de statuslus van nativeFrame2DRoute), net als bij tweede orde.
+    const perCombinatie = analysis === "linear" && nativeFrame && heeftTrekAlleen(rekenInput);
+    const combinationResults = perCombinatie
+      ? await solveAllCombinationsNativeFrame2D(rekenInput, rekenCombinaties, "linear")
+      : analysis === "linear"
       ? new Map(await Promise.all(rekenCombinaties.map(async combination => [
         combination.id,
         await voegNativeDrieLagencontroleToe(multiInput, combineResults(combination, perCase)),
@@ -2376,7 +2384,7 @@ function App() {
         : await solveAllCombinationsNativeMembrane2D(multiInput, fem.actieveCombinaties, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
     const envelope = computeEnvelope(rekenCombinaties, perCase,
-      analysis === "linear" ? undefined : combinationResults);
+      analysis === "linear" && !perCombinatie ? undefined : combinationResults);
     laatsteMultiInputRef.current = multiInput;
     const stabiliteit = bepaalStabiliteit(multiInput, combinationResults);
     const outputs = { perCase, combinationResults, envelope, stabiliteit, veldpatronen: veld.uitkomst };
@@ -2482,6 +2490,14 @@ function App() {
     // Dezelfde model-invoer waarmee de synchrone gang gerekend heeft — niet
     // opnieuw opgebouwd, zodat er geen tweede vertaling van het model bestaat.
     const input = getSecondOrderInput(outputs.perCase) ?? multiInput;
+    // De (5.19)-rekengang hieronder superponeert bij de Rust-route de eerste-
+    // orde-gevallen; met trek-alleen staven (issue #234) klopt dat niet. Dan
+    // liever een duidelijke weigering dan een stil verkeerde φ_ef.
+    if (nativeRust && input && heeftTrekAlleen(input)) {
+      throw new Error("Fysisch niet-lineair beton met trek-alleen staven wordt via de Rust-route niet "
+        + "ondersteund: de eerste-ordemomenten voor (5.19) zouden gesuperponeerd worden. Reken met de "
+        + "TypeScript-kern of zonder trek-alleen staven.");
+    }
     if (!input) {
       notifyWarning(
         i18next.t("common:app.nonlinear.title"),

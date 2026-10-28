@@ -7,7 +7,7 @@
 
 import { Matrix } from '../math/Matrix';
 import { Mesh } from '../fem/Mesh';
-import { ISolverResult, IBeamForces, IElementStress, AnalysisType, getConnectionTypes, getReleasedLocalDofs, getSprungLocalDofs, getBeamDistributedLoads } from '../fem/types';
+import { ISolverResult, IBeamForces, IElementStress, AnalysisType, getConnectionTypes, getDOFConnectionTypes, getReleasedLocalDofs, getSprungLocalDofs, getBeamDistributedLoads } from '../fem/types';
 import {
   calculateBeamLength,
   calculateBeamAngle,
@@ -69,6 +69,11 @@ export class SingulierStelselFout extends Error {
    * vastgezet, maar dat moment kan nergens heen — een echt mechanisme.
    */
   readonly koppelOpScharnierknoop: boolean;
+  /**
+   * Extra uitleg achter de melding, bijvoorbeeld welke trek-alleen staven
+   * op het moment van de singulariteit waren uitgeschakeld (issue #234).
+   */
+  aanvulling = '';
   constructor(v: {
     meshKnoopId: number; xMm: number; zMm: number;
     richting: 'x' | 'z' | 'rotatie'; losseKnoop: boolean; origineel: string;
@@ -110,7 +115,8 @@ export class SingulierStelselFout extends Error {
           'of dwarskrachthuls (release Tx/Tz) niet de enige verbinding is.';
     return (
       `Het stelsel is singulier: ${knoop} op (${mmTekst(this.xMm)}, ${mmTekst(this.zMm)}) mm ` +
-      `kan vrij ${beweging}. ${oorzaak} (Oorspronkelijke melding: ${this.origineel})`
+      `kan vrij ${beweging}. ${oorzaak}${this.aanvulling ? ' ' + this.aanvulling : ''} ` +
+      `(Oorspronkelijke melding: ${this.origineel})`
     );
   }
 }
@@ -1115,6 +1121,241 @@ export function solveNonlinear(
   mesh: Mesh,
   options: Partial<NonlinearSolverOptions> = {}
 ): ISolverResult {
+  const groepen = verzamelAxiaalGroepen(mesh);
+  if (groepen.length === 0) return solveNonlinearKern(mesh, options);
+  return losOpMetAxiaalVoorwaarden(mesh, options, groepen);
+}
+
+// ── Trek-alleen (en druk-alleen) staven — issue #234 ──────────────────────
+//
+// WAT. Een windverband van strip of rondstaal kan geen druk opnemen: het
+// knikt bij een verwaarloosbare kracht uit en draagt dan niets meer. Van een
+// kruisverband werkt dus alleen de getrokken diagonaal. Rekent het model
+// beide diagonalen als gewone staaf, dan krijgt de trekdiagonaal ongeveer de
+// helft van de kracht (onveilig) en wordt de drukdiagonaal op knik afgekeurd
+// (te streng) — gemeten in issue #234: −53 % in de trekschoor.
+//
+// HOE. Iteratief, per oplossing (dus per belastinggeval of per combinatie;
+// superpositie geldt niet meer):
+//   1. alle trek-alleen staven actief, oplossen;
+//   2. een actieve staaf(groep) met een gemiddelde drukkracht wordt
+//      uitgeschakeld: een normaalkrachthuls aan het eind van het laatste
+//      deelelement (lokaal DOF u2), dezelfde statische condensatie als een
+//      release Tx. Lasten, krachtenrecovery, K_g en het gemengde pad volgen
+//      die release vanzelf via `getReleasedLocalDofs`;
+//   3. een uitgeschakelde staaf wordt weer actief als hij in de nieuwe stand
+//      zou rekken: N_proef = EA/L·δ − N_th > 0, met δ de verlenging tussen
+//      zijn eindknopen (de knoopverplaatsing, niet het losgemaakte
+//      staafeinde) en N_th de thermische term;
+//   4. herhalen tot de verzameling uitgeschakelde staven niet meer verandert.
+// Een stand die al eerder voorkwam (kringloop) of het maximum aantal rondes
+// is een FOUT met de betrokken staven — geen stille laatste stand.
+//
+// Het wordt hier, op het niveau van de hele oplossing, gedaan zodat elk pad —
+// lineair, P-Δ, fysisch niet-lineair, staven met schijven — hetzelfde doet.
+// Bij P-Δ is dat een buitenlus om de geometrisch niet-lineaire oplossing.
+// De oude, alleen lineaire, route (`solveWithAxialConstraints`) maakte de
+// assemblage wel axiaal los, maar de lastvector en de krachtenrecovery niet,
+// en las de normaalkracht van een losgemaakte staaf (altijd 0) om te beslissen
+// of hij terug moest: dat sloeg om en om tot het maximum.
+
+/** Eén trek-alleen of druk-alleen staafgroep (een modelstaaf met zijn deelelementen). */
+interface AxiaalGroep {
+  sleutel: number;
+  soort: 'trek' | 'druk';
+  /** Rekenelement-id's in kettingvolgorde (invoegvolgorde van de mesh). */
+  staafIds: number[];
+}
+
+const MAX_AXIAAL_RONDES = 50;
+
+function verzamelAxiaalGroepen(mesh: Mesh): AxiaalGroep[] {
+  const groepen = new Map<number, AxiaalGroep>();
+  for (const beam of mesh.beamElements.values()) {
+    let soort: 'trek' | 'druk' | null = null;
+    if (beam.tensionOnly) soort = 'trek';
+    else {
+      // Oude aanduiding via het aansluitingstype ('tension_only' /
+      // 'pressure_only'); de app zet die niet, maar de kern kende hem.
+      const { start, end } = getConnectionTypes(beam);
+      if (start === 'tension_only' || end === 'tension_only') soort = 'trek';
+      else if (start === 'pressure_only' || end === 'pressure_only') soort = 'druk';
+    }
+    if (!soort) continue;
+    const sleutel = beam.tensionOnly ? (beam.tensionOnlyGroup ?? beam.id) : beam.id;
+    const g = groepen.get(sleutel);
+    if (g) g.staafIds.push(beam.id);
+    else groepen.set(sleutel, { sleutel, soort, staafIds: [beam.id] });
+  }
+  return [...groepen.values()];
+}
+
+/**
+ * Maak een rekenelement axiaal los aan zijn eind (Tx = 'hinge' op het
+ * eindeinde) en geef de functie terug die het oorspronkelijke element
+ * terugzet. `updateBeamElement` vervangt het object in de mesh; het origineel
+ * blijft dus onaangeroerd en gaat bij het herstellen gewoon terug.
+ */
+export function maakAxiaalLos(mesh: Mesh, beamId: number): () => void {
+  const origineel = mesh.beamElements.get(beamId);
+  if (!origineel) return () => {};
+  const { start, end } = getDOFConnectionTypes(origineel);
+  mesh.updateBeamElement(beamId, {
+    startConnections: { ...start },
+    endConnections: { ...end, Tx: 'hinge' },
+  });
+  return () => { mesh.beamElements.set(beamId, origineel); };
+}
+
+/**
+ * Schakel de gegeven trek-alleen groepen uit (zie `maakAxiaalLos`). Voor wie
+ * buiten de solver met dezelfde stand verder rekent, zoals de bepaling van
+ * α_cr met de actieve staven (alphaCr.ts).
+ */
+export function schakelAxiaalGroepenUit(mesh: Mesh, sleutels: Iterable<number>): () => void {
+  const uit = new Set(sleutels);
+  const herstel: (() => void)[] = [];
+  for (const g of verzamelAxiaalGroepen(mesh)) {
+    if (uit.has(g.sleutel)) herstel.push(maakAxiaalLos(mesh, g.staafIds[g.staafIds.length - 1]));
+  }
+  return () => { for (const h of herstel.reverse()) h(); };
+}
+
+function losOpMetAxiaalVoorwaarden(
+  mesh: Mesh,
+  options: Partial<NonlinearSolverOptions>,
+  groepen: AxiaalGroep[],
+): ISolverResult {
+  const log = (regel: SolverLogRegel): void => { options.onLog?.(regel); };
+  // Knoopindex van de verplaatsingsvector: het gemengde pad nummert alleen
+  // de actieve knopen, het frame-pad alle knopen in invoegvolgorde.
+  const index = options.analysisType === 'mixed_beam_plate'
+    ? buildNodeIdToIndex(mesh, 'mixed_beam_plate')
+    : new Map([...mesh.nodes.keys()].map((id, i) => [id, i] as const));
+
+  const naam = (sleutels: Iterable<number>) => [...sleutels].sort((a, b) => a - b).join(', ');
+
+  // Bij tweede orde (en fysisch niet-lineair) convergeert de verzameling eerst
+  // met lineaire rondes; daarna volgen de niet-lineaire rondes vanaf die
+  // verzameling — dezelfde aanpak als de 3D-kern (open-fem-3d/trek_alleen.rs).
+  // Zonder die eerste fase rekent de eerste P-Δ-ronde met álle verbanden
+  // actief; staan ze daarin allemaal op druk (kolomverkorting onder grote
+  // verticale last), dan valt in de tweede ronde het hele verband weg, en
+  // knikt een ongeschoord portaal dat in de eindstand wél geschoord is.
+  // Gemeten: portaal HEA120 met 2 × 240 kN en wind, eindstand schoor 4 actief,
+  // maar een "niet convergent"-fout via de tussenstand zonder verbanden.
+  let uit = new Set<number>();
+  if (options.geometricNonlinear || options.materialNonlinear) {
+    uit = axiaalRondes(mesh, { ...options, geometricNonlinear: false, materialNonlinear: false },
+      groepen, index, uit, naam, log).uit;
+  }
+  const { res, uit: eind } = axiaalRondes(mesh, options, groepen, index, uit, naam, log);
+  return { ...res, axiaalUitgeschakeld: [...eind].sort((a, b) => a - b) };
+}
+
+/** De statusrondes van één fase, vanaf de verzameling `start`. */
+function axiaalRondes(
+  mesh: Mesh,
+  options: Partial<NonlinearSolverOptions>,
+  groepen: AxiaalGroep[],
+  index: Map<number, number>,
+  start: Set<number>,
+  naam: (sleutels: Iterable<number>) => string,
+  log: (regel: SolverLogRegel) => void,
+): { res: ISolverResult; uit: Set<number> } {
+  let uit = new Set(start);
+  const gezien = new Set<string>();
+  for (let ronde = 1; ronde <= MAX_AXIAAL_RONDES; ronde++) {
+    const herstel = schakelAxiaalGroepenUit(mesh, uit);
+    let res: ISolverResult;
+    try {
+      res = solveNonlinearKern(mesh, options);
+    } catch (e) {
+      if (uit.size > 0 && e instanceof SingulierStelselFout) {
+        e.aanvulling =
+          `Dat ontstaat doordat de gedrukte trek-alleen staaf/staven (rekengroep ${naam(uit)}) ` +
+          'zijn uitgeschakeld: zonder hen is de constructie in deze belasting niet stabiel. ' +
+          'Voeg een verband toe dat in deze richting op trek werkt.';
+      }
+      throw e;
+    } finally {
+      herstel();
+    }
+
+    // Per groep de (proef)normaalkracht, trek positief.
+    const kracht = new Map<number, number>();
+    let schaal = 0;
+    for (const g of groepen) {
+      let som = 0;
+      for (const id of g.staafIds) {
+        const beam = mesh.beamElements.get(id)!;
+        if (!uit.has(g.sleutel)) {
+          const bf = res.beamForces.get(id);
+          // N1/N2 zijn DRUK-positief (BeamForces.ts).
+          som += bf ? -(bf.N1 + bf.N2) / 2 : 0;
+        } else {
+          const knopen = mesh.getBeamElementNodes(beam);
+          const material = mesh.getMaterial(beam.materialId);
+          if (!knopen || !material) continue;
+          const [n1, n2] = knopen;
+          const i1 = index.get(n1.id), i2 = index.get(n2.id);
+          if (i1 === undefined || i2 === undefined) continue;
+          const L = Math.hypot(n2.x - n1.x, n2.y - n1.y);
+          const c = (n2.x - n1.x) / L, sn = (n2.y - n1.y) / L;
+          const d = res.displacements;
+          const delta = (d[i2 * 3] - d[i1 * 3]) * c + (d[i2 * 3 + 1] - d[i1 * 3 + 1]) * sn;
+          const thermisch = calculateBeamThermalLocalForces(beam, material)[3];
+          som += material.E * beam.section.A / L * delta - thermisch;
+        }
+      }
+      const n = som / g.staafIds.length;
+      kracht.set(g.sleutel, n);
+      schaal = Math.max(schaal, Math.abs(n));
+    }
+    // Een kracht van 1e-9 van de grootste telt als nul: een staaf die precies
+    // spanningsloos is, blijft in de stand waarin hij staat.
+    const tol = 1e-9 * Math.max(schaal, 1);
+    const volgende = new Set<number>();
+    for (const g of groepen) {
+      const n = kracht.get(g.sleutel)!;
+      const nuUit = uit.has(g.sleutel);
+      const ongunstig = g.soort === 'trek' ? n < -tol : n > tol;
+      const gunstig = g.soort === 'trek' ? n > tol : n < -tol;
+      if (nuUit ? !gunstig : ongunstig) volgende.add(g.sleutel);
+    }
+
+    const sleutel = naam(volgende);
+    if (sleutel === naam(uit)) {
+      log({
+        soort: 'info',
+        tekst: uit.size > 0
+          ? `Trek-alleen: na ${ronde} ronde(s) uitgeschakeld (gedrukt): rekengroep ${naam(uit)}`
+          : `Trek-alleen: na ${ronde} ronde(s) alle ${groepen.length} staaf(groep)en actief`,
+      });
+      return { res, uit };
+    }
+    gezien.add(naam(uit));
+    if (gezien.has(sleutel)) {
+      throw new Error(
+        'De trek-alleen-iteratie keert terug naar een eerdere stand en convergeert niet ' +
+        `(uitgeschakeld afwisselend ${naam(uit) || 'geen'} en ${sleutel || 'geen'}). ` +
+        'Er is geen eenduidige krachtsverdeling met alleen getrokken verbanden; ' +
+        'controleer de verbanden of maak een ervan een gewone staaf.'
+      );
+    }
+    log({ soort: 'info', tekst: `Trek-alleen ronde ${ronde}: uitgeschakeld ${sleutel || 'geen'}` });
+    uit = volgende;
+  }
+  throw new Error(
+    `De trek-alleen-iteratie is na ${MAX_AXIAAL_RONDES} rondes niet geconvergeerd; ` +
+    'er wordt geen krachtsverdeling gegeven.'
+  );
+}
+
+function solveNonlinearKern(
+  mesh: Mesh,
+  options: Partial<NonlinearSolverOptions> = {}
+): ISolverResult {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
   // Mixed beam+plate analysis: beams AND plates together
@@ -1189,17 +1430,6 @@ export function solveNonlinear(
       `${numDofs} vrijheidsgraden — ${soortAnalyse}`,
   });
 
-  // Check if any beam has tension/pressure-only connections
-  let hasAxialConstraints = false;
-  for (const beam of mesh.beamElements.values()) {
-    const { start, end } = getConnectionTypes(beam);
-    if (start === 'tension_only' || start === 'pressure_only' ||
-        end === 'tension_only' || end === 'pressure_only') {
-      hasAxialConstraints = true;
-      break;
-    }
-  }
-
   // Initialize section states for material nonlinearity
   let sectionStates = new Map<number, ISectionState>();
 
@@ -1230,12 +1460,9 @@ export function solveNonlinear(
     }
   }
 
-  // For linear analysis, just solve once (or iteratively for axial constraints)
+  // For linear analysis, just solve once. Trek-alleen staven: zie
+  // `losOpMetAxiaalVoorwaarden` — die lus ligt om deze functie heen.
   if (!opts.geometricNonlinear && !opts.materialNonlinear) {
-    if (hasAxialConstraints) {
-      return solveWithAxialConstraints(mesh, F, opts);
-    }
-
     const K = assembleGlobalStiffnessWithGeometric(mesh, axialForces, false);
     log({ soort: 'info', tekst: `Stijfheidsmatrix geassembleerd (${K.rows}×${K.cols})` });
     const { K: Kbc, F: Fbc } = applyBoundaryConditions(K, F, mesh);
@@ -2469,102 +2696,5 @@ function solveMixed(
     maxVonMises,
     minVonMises,
     stressRanges: ranges,
-  };
-}
-
-/**
- * Iterative solver for tension-only and pressure-only beam connections.
- * Beams that violate their axial constraint are released (axial DOFs zeroed)
- * and the system is re-solved until convergence.
- */
-function solveWithAxialConstraints(
-  mesh: Mesh,
-  F: number[],
-  opts: NonlinearSolverOptions
-): ISolverResult {
-  const maxIter = opts.maxIterations || 20;
-  const axialReleasedBeamIds = new Set<number>();
-
-  for (let iter = 0; iter < maxIter; iter++) {
-    // Assemble with current axial releases using the Assembler
-    const K = assembleGlobalStiffnessMatrix(mesh, 'frame', axialReleasedBeamIds);
-    const { K: Kbc, F: Fbc } = applyBoundaryConditions(K, F, mesh);
-    const displacements = losFrameStelselOp(Kbc, Fbc, mesh);
-
-    const { beamForces, axialForces } = calculateAllInternalForces(mesh, displacements);
-
-    // Check each beam with tension/pressure-only connections
-    let changed = false;
-    for (const beam of mesh.beamElements.values()) {
-      const { start, end } = getConnectionTypes(beam);
-      const hasTensionOnly = start === 'tension_only' || end === 'tension_only';
-      const hasPressureOnly = start === 'pressure_only' || end === 'pressure_only';
-
-      if (!hasTensionOnly && !hasPressureOnly) continue;
-
-      const N = axialForces.get(beam.id) ?? 0;
-      const shouldRelease =
-        (hasTensionOnly && N < 0) ||   // compression in tension-only → release
-        (hasPressureOnly && N > 0);     // tension in pressure-only → release
-
-      const isReleased = axialReleasedBeamIds.has(beam.id);
-
-      if (shouldRelease && !isReleased) {
-        axialReleasedBeamIds.add(beam.id);
-        changed = true;
-      } else if (!shouldRelease && isReleased) {
-        axialReleasedBeamIds.delete(beam.id);
-        changed = true;
-      }
-    }
-
-    // Converged — return this result
-    if (!changed) {
-      const reactions = K.multiplyVector(displacements);
-      for (let i = 0; i < reactions.length; i++) {
-        reactions[i] = reactions[i] - F[i];
-      }
-
-      let maxVonMises = 0;
-      for (const forces of beamForces.values()) {
-        maxVonMises = Math.max(maxVonMises, Math.abs(forces.maxM));
-      }
-
-      return {
-        displacements,
-        reactions,
-        elementStresses: new Map(),
-        beamForces,
-        maxVonMises,
-        minVonMises: 0
-      };
-    }
-  }
-
-  // If not converged, solve one final time with current releases
-  const K = assembleGlobalStiffnessMatrix(mesh, 'frame', axialReleasedBeamIds);
-  const { K: Kbc, F: Fbc } = applyBoundaryConditions(K, F, mesh);
-  const displacements = losFrameStelselOp(Kbc, Fbc, mesh);
-  const { beamForces } = calculateAllInternalForces(mesh, displacements);
-
-  const reactions = K.multiplyVector(displacements);
-  for (let i = 0; i < reactions.length; i++) {
-    reactions[i] = reactions[i] - F[i];
-  }
-
-  let maxVonMises = 0;
-  for (const forces of beamForces.values()) {
-    maxVonMises = Math.max(maxVonMises, Math.abs(forces.maxM));
-  }
-
-  console.warn('Axial constraint iteration did not converge within', maxIter, 'iterations');
-
-  return {
-    displacements,
-    reactions,
-    elementStresses: new Map(),
-    beamForces,
-    maxVonMises,
-    minVonMises: 0
   };
 }

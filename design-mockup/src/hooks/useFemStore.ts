@@ -2408,7 +2408,7 @@ export function useFemStore(opties?: {
       // Veranderlijke vloerbelasting over meer velden bij een NIET-lineaire
       // berekening: geen veldpatronen, dus luid melden (issue #219).
       veldpatroonMeldingen({
-        beams, supports, loadCases, loads, lineair: analysetype === "eersteOrde",
+        beams, supports, loadCases, loads, lineair: analysetype === "eersteOrde" && !beams.some((b) => b.tensionOnly),
       }).map((m): GevalMelding => ({
         niveau: m.niveau, caseId: m.caseId, tekst: m.tekst,
         kop: {

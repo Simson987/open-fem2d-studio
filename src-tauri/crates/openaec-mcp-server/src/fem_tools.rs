@@ -1031,7 +1031,9 @@ fn schema_beams() -> Value {
                     "enum": ["gevelLinks", "gevelRechts", "dakPlat", "dakHellend", "overstek", "vloer", "binnen"],
                     "description": "Constructieve rol, alleen gebruikt door de belastinggeneratoren." },
                 "veren": schema_veren(),
-                "bedding": schema_bedding()
+                "bedding": schema_bedding(),
+                "tensionOnly": { "type": "boolean",
+                    "description": "Trek-alleen staaf (bijv. een windverband of kruisschoor van strip/rondstaal): de berekening schakelt hem per belastinggeval en per combinatie uit zolang hij op druk staat (N = 0, geen stijfheid, ook niet in α_cr); combinaties worden dan als geheel opgelost in plaats van gesuperponeerd. De staaltoets toetst alleen trek (NEN-EN 1993-1-1 6.2.3), geen knik. Weggelaten of false = gewone staaf." }
             }
         }
     })

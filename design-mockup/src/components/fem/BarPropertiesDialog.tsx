@@ -123,6 +123,8 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
   // Aan/uit plus k en b als tekst, zodat een leeg veld leeg kan blijven tot
   // OK; pas bij OK wordt er een `bedding` gezet of weggehaald.
   const [beddingAan, setBeddingAan] = useState(!!beam.bedding);
+  // Trek-alleen (issue #234): lokaal tot OK; alleen `true` gaat het bestand in.
+  const [trekAlleen, setTrekAlleen] = useState(beam.tensionOnly === true);
   const [beddingKStr, setBeddingKStr] = useState(beam.bedding?.k?.toString() ?? "50000");
   const [beddingBStr, setBeddingBStr] = useState(beam.bedding?.b?.toString() ?? "");
   const buildBedding = (): Beam["bedding"] => {
@@ -330,6 +332,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
     onUpdate?.({
       material, profile, profileEnd,
       releases, veren, checkConfig: buildCheckConfig(), bedding: buildBedding(),
+      tensionOnly: trekAlleen ? true : undefined,
     });
     onClose();
   };
@@ -347,6 +350,7 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
   const huidigeInvoer = JSON.stringify({
     material, profile, profileEnd: profileEnd ?? null,
     releases, veren, cfg: buildCheckConfig() ?? null, bedding: buildBedding() ?? null,
+    trekAlleen,
   });
   const [beginInvoer] = useState(huidigeInvoer);
   const gewijzigd = huidigeInvoer !== beginInvoer;
@@ -574,6 +578,14 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
                 <div className="bar-props-hint">
                   {t("barDialog.connectionsHint")}
                 </div>
+                <label className="bar-props-hint" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={trekAlleen}
+                    onChange={(e) => setTrekAlleen(e.target.checked)} />
+                  {t("barDialog.tensionOnly")}
+                </label>
+                {trekAlleen && (
+                  <div className="bar-props-hint">{t("barDialog.tensionOnlyHint")}</div>
+                )}
               </div>
 
               <div className="bar-props-section">

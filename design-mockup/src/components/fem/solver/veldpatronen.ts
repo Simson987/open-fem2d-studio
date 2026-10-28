@@ -46,7 +46,8 @@
  * knooplast op een veldgrens, plaatrandlasten, temperatuur) staat samen in
  * één deelgeval "overig" dat als geheel aan of uit gaat.
  *
- * ALLEEN LINEAIR. Superpositie geldt alleen bij een eerste-orde-berekening.
+ * ALLEEN LINEAIR. Superpositie geldt alleen bij een eerste-orde-berekening
+ * zonder trek-alleen staven (issue #234).
  * Bij tweede orde of fysisch niet-lineair rekenen worden GEEN varianten
  * gemaakt; `veldpatroonMeldingen` geeft dan een waarschuwing per geval, zodat
  * het ontbreken van de ongunstige plaatsing niet stil blijft.
@@ -627,7 +628,7 @@ export function veldpatroonMeldingen(p: {
         `Belastinggeval ${lc.id} ("${lc.name}") is veranderlijke vloerbelasting op ${groepen.size} velden, ` +
         "maar wordt bij deze niet-lineaire berekening NIET veldsgewijs ongunstig geplaatst " +
         "(NEN-EN 1991-1-1 6.2.1(1); NEN-EN 1992-1-1 5.1.3, NEN-EN 1993-1-1 AB.2): superpositie " +
-        "van veldpatronen is bij tweede orde of fysisch niet-lineair rekenen ongeldig, en het geval " +
+        "van veldpatronen is bij tweede orde, fysisch niet-lineair rekenen of trek-alleen staven ongeldig, en het geval " +
         "staat dus steeds op alle velden tegelijk. Veldmomenten en steunmomenten kunnen daardoor te " +
         "laag uitkomen. Reken eerste orde (dan worden de veldpatronen automatisch gemaakt), of maak " +
         "eigen combinaties met het geval per veld in een eigen belastinggeval.",

@@ -1273,6 +1273,8 @@
       "connectionEnd": "Anschluss Ende",
       "bedding": "Bettung",
       "beddingNone": "keine",
+      "tensionOnly": "Nur Zug",
+      "tensionOnlyHint": "Fällt aus, solange er gedrückt ist (N = 0); Kombinationen als Ganzes berechnet, nur Zug nachgewiesen (6.2.3).",
       "noLoads": "Keine Lasten auf diesem Stab"
     },
     "load": {
@@ -1488,6 +1490,8 @@
     "startA": "Anfang A",
     "endB": "Ende B",
     "connectionsHint": "Je Ende N, V und M: starr, Gelenk (gelöst) oder Feder mit Steifigkeit — N und V in kN/mm, M in kNm/rad.",
+    "tensionOnly": "Nur Zug (z. B. Windverband aus Flach- oder Rundstahl)",
+    "tensionOnlyHint": "Der Stab fällt je Lastfall und je Kombination aus, solange er gedrückt ist (N = 0); Kombinationen werden dann als Ganzes berechnet. Nachgewiesen wird nur Zug (EN 1993-1-1 6.2.3), kein Knicken.",
     "foundation": "Stab auf Bettung",
     "foundationToggle": "Über die ganze Länge elastisch gebettet (Winkler)",
     "foundationModulus": "Bettungsmodul k",

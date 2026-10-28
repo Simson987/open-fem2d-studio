@@ -83,6 +83,13 @@ export interface SolverBeamInput {
    */
   bedding?: { kLijn: number };
   /**
+   * Trek-alleen staaf (issue #234, bijvoorbeeld een windverband): valt uit
+   * zolang hij op druk staat. Superpositie van belastinggevallen geldt dan
+   * niet meer; de combinaties worden elk als geheel opgelost (zie
+   * `getTrekAlleenState` in engine.ts). Ontbreekt = gewone staaf.
+   */
+  tensionOnly?: boolean;
+  /**
    * Optionele segmentindeling met een eigen I per segment (mm⁴) — zie
    * SolverBeamSegmentInput. ONTBREEKT het veld, dan rekent de staaf precies
    * zoals hij dat zonder segmenten deed: één doorsnede over de volle lengte.
@@ -795,6 +802,13 @@ export interface SolverResult {
    * hun `maxDisplacement` dezelfde knopen ziet als een belastinggeval (#228).
    */
   plateNodeDisplacements?: Map<number, { ux: number; uz: number }>;
+  /**
+   * Trek-alleen staven (model-id's) die in DEZE oplossing op druk kwamen en
+   * zijn uitgeschakeld: hun N is nul en ze dragen niet bij aan de stijfheid
+   * (ook niet bij α_cr). Ontbreekt = geen trek-alleen staven in het model, of
+   * een gesuperponeerd resultaat. Issue #234.
+   */
+  trekAlleenUitgeschakeld?: number[];
 }
 
 /**

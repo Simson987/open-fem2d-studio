@@ -4008,6 +4008,147 @@ function countNonPositivePivots(K) {
   return nonPositive;
 }
 function solveNonlinear(mesh, options = {}) {
+  const groepen2 = verzamelAxiaalGroepen(mesh);
+  if (groepen2.length === 0) return solveNonlinearKern(mesh, options);
+  return losOpMetAxiaalVoorwaarden(mesh, options, groepen2);
+}
+function verzamelAxiaalGroepen(mesh) {
+  const groepen2 = /* @__PURE__ */ new Map();
+  for (const beam of mesh.beamElements.values()) {
+    let soort = null;
+    if (beam.tensionOnly) soort = "trek";
+    else {
+      const { start, end } = getConnectionTypes(beam);
+      if (start === "tension_only" || end === "tension_only") soort = "trek";
+      else if (start === "pressure_only" || end === "pressure_only") soort = "druk";
+    }
+    if (!soort) continue;
+    const sleutel = beam.tensionOnly ? beam.tensionOnlyGroup ?? beam.id : beam.id;
+    const g = groepen2.get(sleutel);
+    if (g) g.staafIds.push(beam.id);
+    else groepen2.set(sleutel, { sleutel, soort, staafIds: [beam.id] });
+  }
+  return [...groepen2.values()];
+}
+function maakAxiaalLos(mesh, beamId) {
+  const origineel = mesh.beamElements.get(beamId);
+  if (!origineel) return () => {
+  };
+  const { start, end } = getDOFConnectionTypes(origineel);
+  mesh.updateBeamElement(beamId, {
+    startConnections: { ...start },
+    endConnections: { ...end, Tx: "hinge" }
+  });
+  return () => {
+    mesh.beamElements.set(beamId, origineel);
+  };
+}
+function schakelAxiaalGroepenUit(mesh, sleutels) {
+  const uit = new Set(sleutels);
+  const herstel = [];
+  for (const g of verzamelAxiaalGroepen(mesh)) {
+    if (uit.has(g.sleutel)) herstel.push(maakAxiaalLos(mesh, g.staafIds[g.staafIds.length - 1]));
+  }
+  return () => {
+    for (const h of herstel.reverse()) h();
+  };
+}
+function losOpMetAxiaalVoorwaarden(mesh, options, groepen2) {
+  const log = (regel2) => {
+    options.onLog?.(regel2);
+  };
+  const index = options.analysisType === "mixed_beam_plate" ? buildNodeIdToIndex(mesh, "mixed_beam_plate") : new Map([...mesh.nodes.keys()].map((id2, i) => [id2, i]));
+  const naam = (sleutels) => [...sleutels].sort((a, b) => a - b).join(", ");
+  let uit = /* @__PURE__ */ new Set();
+  if (options.geometricNonlinear || options.materialNonlinear) {
+    uit = axiaalRondes(
+      mesh,
+      { ...options, geometricNonlinear: false, materialNonlinear: false },
+      groepen2,
+      index,
+      uit,
+      naam,
+      log
+    ).uit;
+  }
+  const { res, uit: eind } = axiaalRondes(mesh, options, groepen2, index, uit, naam, log);
+  return { ...res, axiaalUitgeschakeld: [...eind].sort((a, b) => a - b) };
+}
+function axiaalRondes(mesh, options, groepen2, index, start, naam, log) {
+  let uit = new Set(start);
+  const gezien = /* @__PURE__ */ new Set();
+  for (let ronde = 1; ronde <= MAX_AXIAAL_RONDES; ronde++) {
+    const herstel = schakelAxiaalGroepenUit(mesh, uit);
+    let res;
+    try {
+      res = solveNonlinearKern(mesh, options);
+    } catch (e) {
+      if (uit.size > 0 && e instanceof SingulierStelselFout) {
+        e.aanvulling = `Dat ontstaat doordat de gedrukte trek-alleen staaf/staven (rekengroep ${naam(uit)}) zijn uitgeschakeld: zonder hen is de constructie in deze belasting niet stabiel. Voeg een verband toe dat in deze richting op trek werkt.`;
+      }
+      throw e;
+    } finally {
+      herstel();
+    }
+    const kracht = /* @__PURE__ */ new Map();
+    let schaal = 0;
+    for (const g of groepen2) {
+      let som = 0;
+      for (const id2 of g.staafIds) {
+        const beam = mesh.beamElements.get(id2);
+        if (!uit.has(g.sleutel)) {
+          const bf = res.beamForces.get(id2);
+          som += bf ? -(bf.N1 + bf.N2) / 2 : 0;
+        } else {
+          const knopen = mesh.getBeamElementNodes(beam);
+          const material = mesh.getMaterial(beam.materialId);
+          if (!knopen || !material) continue;
+          const [n1, n22] = knopen;
+          const i1 = index.get(n1.id), i2 = index.get(n22.id);
+          if (i1 === void 0 || i2 === void 0) continue;
+          const L = Math.hypot(n22.x - n1.x, n22.y - n1.y);
+          const c = (n22.x - n1.x) / L, sn = (n22.y - n1.y) / L;
+          const d = res.displacements;
+          const delta = (d[i2 * 3] - d[i1 * 3]) * c + (d[i2 * 3 + 1] - d[i1 * 3 + 1]) * sn;
+          const thermisch = calculateBeamThermalLocalForces(beam, material)[3];
+          som += material.E * beam.section.A / L * delta - thermisch;
+        }
+      }
+      const n2 = som / g.staafIds.length;
+      kracht.set(g.sleutel, n2);
+      schaal = Math.max(schaal, Math.abs(n2));
+    }
+    const tol = 1e-9 * Math.max(schaal, 1);
+    const volgende = /* @__PURE__ */ new Set();
+    for (const g of groepen2) {
+      const n2 = kracht.get(g.sleutel);
+      const nuUit = uit.has(g.sleutel);
+      const ongunstig = g.soort === "trek" ? n2 < -tol : n2 > tol;
+      const gunstig = g.soort === "trek" ? n2 > tol : n2 < -tol;
+      if (nuUit ? !gunstig : ongunstig) volgende.add(g.sleutel);
+    }
+    const sleutel = naam(volgende);
+    if (sleutel === naam(uit)) {
+      log({
+        soort: "info",
+        tekst: uit.size > 0 ? `Trek-alleen: na ${ronde} ronde(s) uitgeschakeld (gedrukt): rekengroep ${naam(uit)}` : `Trek-alleen: na ${ronde} ronde(s) alle ${groepen2.length} staaf(groep)en actief`
+      });
+      return { res, uit };
+    }
+    gezien.add(naam(uit));
+    if (gezien.has(sleutel)) {
+      throw new Error(
+        `De trek-alleen-iteratie keert terug naar een eerdere stand en convergeert niet (uitgeschakeld afwisselend ${naam(uit) || "geen"} en ${sleutel || "geen"}). Er is geen eenduidige krachtsverdeling met alleen getrokken verbanden; controleer de verbanden of maak een ervan een gewone staaf.`
+      );
+    }
+    log({ soort: "info", tekst: `Trek-alleen ronde ${ronde}: uitgeschakeld ${sleutel || "geen"}` });
+    uit = volgende;
+  }
+  throw new Error(
+    `De trek-alleen-iteratie is na ${MAX_AXIAAL_RONDES} rondes niet geconvergeerd; er wordt geen krachtsverdeling gegeven.`
+  );
+}
+function solveNonlinearKern(mesh, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   if (opts.analysisType === "mixed_beam_plate") {
     return solveMixed(mesh, opts);
@@ -4054,14 +4195,6 @@ function solveNonlinear(mesh, options = {}) {
     soort: "info",
     tekst: `Model: ${mesh.getNodeCount()} knopen, ${mesh.beamElements.size} staven, ${numDofs} vrijheidsgraden \u2014 ${soortAnalyse}`
   });
-  let hasAxialConstraints = false;
-  for (const beam of mesh.beamElements.values()) {
-    const { start, end } = getConnectionTypes(beam);
-    if (start === "tension_only" || start === "pressure_only" || end === "tension_only" || end === "pressure_only") {
-      hasAxialConstraints = true;
-      break;
-    }
-  }
   let sectionStates = /* @__PURE__ */ new Map();
   if (opts.materialNonlinear) {
     if (opts.materialType === "concrete") {
@@ -4078,9 +4211,6 @@ function solveNonlinear(mesh, options = {}) {
     }
   }
   if (!opts.geometricNonlinear && !opts.materialNonlinear) {
-    if (hasAxialConstraints) {
-      return solveWithAxialConstraints(mesh, F, opts);
-    }
     const K2 = assembleGlobalStiffnessWithGeometric(mesh, axialForces, false);
     log({ soort: "info", tekst: `Stijfheidsmatrix geassembleerd (${K2.rows}\xD7${K2.cols})` });
     const { K: Kbc, F: Fbc } = applyBoundaryConditions(K2, F, mesh);
@@ -4973,74 +5103,7 @@ function solveMixed(mesh, opts) {
     stressRanges: ranges
   };
 }
-function solveWithAxialConstraints(mesh, F, opts) {
-  const maxIter = opts.maxIterations || 20;
-  const axialReleasedBeamIds = /* @__PURE__ */ new Set();
-  for (let iter = 0; iter < maxIter; iter++) {
-    const K2 = assembleGlobalStiffnessMatrix(mesh, "frame", axialReleasedBeamIds);
-    const { K: Kbc2, F: Fbc2 } = applyBoundaryConditions(K2, F, mesh);
-    const displacements2 = losFrameStelselOp(Kbc2, Fbc2, mesh);
-    const { beamForces: beamForces2, axialForces } = calculateAllInternalForces(mesh, displacements2);
-    let changed = false;
-    for (const beam of mesh.beamElements.values()) {
-      const { start, end } = getConnectionTypes(beam);
-      const hasTensionOnly = start === "tension_only" || end === "tension_only";
-      const hasPressureOnly = start === "pressure_only" || end === "pressure_only";
-      if (!hasTensionOnly && !hasPressureOnly) continue;
-      const N = axialForces.get(beam.id) ?? 0;
-      const shouldRelease = hasTensionOnly && N < 0 || // compression in tension-only → release
-      hasPressureOnly && N > 0;
-      const isReleased = axialReleasedBeamIds.has(beam.id);
-      if (shouldRelease && !isReleased) {
-        axialReleasedBeamIds.add(beam.id);
-        changed = true;
-      } else if (!shouldRelease && isReleased) {
-        axialReleasedBeamIds.delete(beam.id);
-        changed = true;
-      }
-    }
-    if (!changed) {
-      const reactions2 = K2.multiplyVector(displacements2);
-      for (let i = 0; i < reactions2.length; i++) {
-        reactions2[i] = reactions2[i] - F[i];
-      }
-      let maxVonMises2 = 0;
-      for (const forces of beamForces2.values()) {
-        maxVonMises2 = Math.max(maxVonMises2, Math.abs(forces.maxM));
-      }
-      return {
-        displacements: displacements2,
-        reactions: reactions2,
-        elementStresses: /* @__PURE__ */ new Map(),
-        beamForces: beamForces2,
-        maxVonMises: maxVonMises2,
-        minVonMises: 0
-      };
-    }
-  }
-  const K = assembleGlobalStiffnessMatrix(mesh, "frame", axialReleasedBeamIds);
-  const { K: Kbc, F: Fbc } = applyBoundaryConditions(K, F, mesh);
-  const displacements = losFrameStelselOp(Kbc, Fbc, mesh);
-  const { beamForces } = calculateAllInternalForces(mesh, displacements);
-  const reactions = K.multiplyVector(displacements);
-  for (let i = 0; i < reactions.length; i++) {
-    reactions[i] = reactions[i] - F[i];
-  }
-  let maxVonMises = 0;
-  for (const forces of beamForces.values()) {
-    maxVonMises = Math.max(maxVonMises, Math.abs(forces.maxM));
-  }
-  console.warn("Axial constraint iteration did not converge within", maxIter, "iterations");
-  return {
-    displacements,
-    reactions,
-    elementStresses: /* @__PURE__ */ new Map(),
-    beamForces,
-    maxVonMises,
-    minVonMises: 0
-  };
-}
-var SingulierStelselFout, DEFAULT_OPTIONS;
+var SingulierStelselFout, DEFAULT_OPTIONS, MAX_AXIAAL_RONDES;
 var init_NonlinearSolver = __esm({
   "src/core/solver/NonlinearSolver.ts"() {
     "use strict";
@@ -5068,6 +5131,11 @@ var init_NonlinearSolver = __esm({
        * vastgezet, maar dat moment kan nergens heen — een echt mechanisme.
        */
       koppelOpScharnierknoop;
+      /**
+       * Extra uitleg achter de melding, bijvoorbeeld welke trek-alleen staven
+       * op het moment van de singulariteit waren uitgeschakeld (issue #234).
+       */
+      aanvulling = "";
       constructor(v) {
         super("");
         this.name = "SingulierStelselFout";
@@ -5084,7 +5152,7 @@ var init_NonlinearSolver = __esm({
       tekstVoor(knoop) {
         const beweging = this.richting === "x" ? "horizontaal verschuiven (x)" : this.richting === "z" ? "verticaal verschuiven (z)" : "draaien";
         const oorzaak = this.koppelOpScharnierknoop ? "Op deze knoop komen alleen scharnierende staafeinden (release Ry) samen en geen oplegging houdt de draaiing tegen, maar er werkt een koppel op: dat moment kan nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star aansluit, of maak \xE9\xE9n staafeinde op deze knoop star." : this.losseKnoop ? "Deze knoop is met geen enkele staaf verbonden (een losse knoop): verwijder hem, of verbind hem met de constructie." : this.richting === "rotatie" ? "Niets houdt die rotatie tegen: waarschijnlijk hebben alle staafeinden op deze knoop een scharnier (release Ry) terwijl de knoop zelf geen rotatiesteun heeft. Laat \xE9\xE9n staaf star aansluiten, of haal het scharnier weg op een scharnieroplegging." : "Niets houdt die verplaatsing tegen: controleer de opleggingen, of de staven daar werkelijk aan elkaar vastzitten, en of een normaalkracht- of dwarskrachthuls (release Tx/Tz) niet de enige verbinding is.";
-        return `Het stelsel is singulier: ${knoop} op (${mmTekst(this.xMm)}, ${mmTekst(this.zMm)}) mm kan vrij ${beweging}. ${oorzaak} (Oorspronkelijke melding: ${this.origineel})`;
+        return `Het stelsel is singulier: ${knoop} op (${mmTekst(this.xMm)}, ${mmTekst(this.zMm)}) mm kan vrij ${beweging}. ${oorzaak}${this.aanvulling ? " " + this.aanvulling : ""} (Oorspronkelijke melding: ${this.origineel})`;
       }
     };
     DEFAULT_OPTIONS = {
@@ -5100,6 +5168,7 @@ var init_NonlinearSolver = __esm({
       tolerance: 1e-6,
       loadSteps: 1
     };
+    MAX_AXIAAL_RONDES = 50;
   }
 });
 
@@ -14504,6 +14573,9 @@ function combineResults(combo, perCase) {
     } else {
       return res;
     }
+  } else {
+    const ta = trekAlleenCombinatieResultaat(perCase, combo);
+    if (ta) return ta;
   }
   const sr = getScheefstandRichtingen(perCase);
   const tegen2 = sr !== void 0 && combo.scheefstandRichting !== void 0 && combo.scheefstandRichting !== sr.primair;
@@ -15488,7 +15560,8 @@ var init_referentierichting = __esm({
       veren: "begin en eind verwisseld",
       checkConfig: "per veld, zie SPIEGELREGELS_TOETSCONFIG",
       loadRole: "gelijk: het staaftype hangt niet aan de tekenrichting",
-      bedding: "gelijk: over de hele staaf"
+      bedding: "gelijk: over de hele staaf",
+      tensionOnly: "gelijk: trek blijft trek, welke kant de staaf ook op wijst"
     };
     SPIEGELREGELS_TOETSCONFIG = {
       bucklingLengthY_m: "gelijk",
@@ -16964,42 +17037,47 @@ function bepaalAlphaCr(input, combinaties, combinationResults, opties = {}) {
       uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "geen_druk" });
       continue;
     }
-    const instabiel = (alpha) => {
-      const geschaald = /* @__PURE__ */ new Map();
-      for (const [id2, n2] of axiaal) geschaald.set(id2, n2 * alpha);
-      const k = assembleGlobalStiffnessWithGeometric(mesh, geschaald, true);
-      const { K } = applyBoundaryConditions(k, nul, mesh);
-      return countNonPositivePivots(K) > 0;
-    };
-    if (instabiel(1e-9)) {
-      uit.push({
-        combinatieId: combo.id,
-        naam: combo.name,
-        alphaCr: null,
-        status: "niet_bepaald",
-        reden: "het stelsel is zonder normaalkracht al niet positief definiet (mechanisme of ontbrekende oplegging)"
-      });
-      continue;
-    }
-    let laag;
-    let hoog;
-    if (!instabiel(ALPHA_CR_GRENS_EERSTE_ORDE)) {
-      if (!instabiel(ALPHA_CR_ZOEKGRENS)) {
-        uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "boven_grens", grens: ALPHA_CR_ZOEKGRENS });
+    const herstel = schakelAxiaalGroepenUit(mesh, res.trekAlleenUitgeschakeld ?? []);
+    try {
+      const instabiel = (alpha) => {
+        const geschaald = /* @__PURE__ */ new Map();
+        for (const [id2, n2] of axiaal) geschaald.set(id2, n2 * alpha);
+        const k = assembleGlobalStiffnessWithGeometric(mesh, geschaald, true);
+        const { K } = applyBoundaryConditions(k, nul, mesh);
+        return countNonPositivePivots(K) > 0;
+      };
+      if (instabiel(1e-9)) {
+        uit.push({
+          combinatieId: combo.id,
+          naam: combo.name,
+          alphaCr: null,
+          status: "niet_bepaald",
+          reden: "het stelsel is zonder normaalkracht al niet positief definiet (mechanisme of ontbrekende oplegging)"
+        });
         continue;
       }
-      laag = ALPHA_CR_GRENS_EERSTE_ORDE;
-      hoog = ALPHA_CR_ZOEKGRENS;
-    } else {
-      laag = 0;
-      hoog = ALPHA_CR_GRENS_EERSTE_ORDE;
+      let laag;
+      let hoog;
+      if (!instabiel(ALPHA_CR_GRENS_EERSTE_ORDE)) {
+        if (!instabiel(ALPHA_CR_ZOEKGRENS)) {
+          uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: null, status: "boven_grens", grens: ALPHA_CR_ZOEKGRENS });
+          continue;
+        }
+        laag = ALPHA_CR_GRENS_EERSTE_ORDE;
+        hoog = ALPHA_CR_ZOEKGRENS;
+      } else {
+        laag = 0;
+        hoog = ALPHA_CR_GRENS_EERSTE_ORDE;
+      }
+      for (let i = 0; i < 16; i++) {
+        const mid = (laag + hoog) / 2;
+        if (instabiel(mid)) hoog = mid;
+        else laag = mid;
+      }
+      uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: (laag + hoog) / 2, status: "bepaald" });
+    } finally {
+      herstel();
     }
-    for (let i = 0; i < 16; i++) {
-      const mid = (laag + hoog) / 2;
-      if (instabiel(mid)) hoog = mid;
-      else laag = mid;
-    }
-    uit.push({ combinatieId: combo.id, naam: combo.name, alphaCr: (laag + hoog) / 2, status: "bepaald" });
   }
   return uit;
 }
@@ -17947,6 +18025,11 @@ function buildSteelCheckInputs(ruweData) {
       steel_grade: grade.toUpperCase(),
       length_m: lengthMm / 1e3,
       forces_envelope: forcesEnvelope,
+      // Trek-alleen staaf (issue #234): de kern toetst dan alleen trek
+      // (NEN-EN 1993-1-1 6.2.3) en meldt de grootste drukkracht zonder haar te
+      // toetsen; knik (6.3.1) van een uitgeschakelde schoor vervalt. Alleen
+      // meegeven als het aan staat, zodat elke andere invoer byte-gelijk blijft.
+      ...beam.tensionOnly === true ? { tension_only: true } : {},
       // Dezelfde afleiding als het tekenvlak toont (`lib/kipsteunen.ts`): wat
       // hier de kern in gaat, staat als symbool op de staaf.
       lateral_bracing: kipsteunenVanStaaf(cfg, lengthMm, "staal").lateral_bracing,
@@ -20125,6 +20208,9 @@ function buildMesh(input, loadFactor, options = {}) {
       };
     };
     const zetBedding = (meshId) => {
+      if (b.tensionOnly) {
+        mesh.updateBeamElement(meshId, { tensionOnly: true, tensionOnlyGroup: b.id });
+      }
       if (!b.bedding) return;
       mesh.updateBeamElement(meshId, {
         onGrade: { enabled: true, k: b.bedding.kLijn * 1e6, b: 1 }
@@ -20957,7 +21043,9 @@ function convertResult(mesh, engineResult, nodeIdMap, beamIdMap, supports, plate
     elements,
     maxDisplacement: maxDisp,
     ...plateResults ? { plateElements: plateResults } : {},
-    ...plateNodeDisplacements ? { plateNodeDisplacements } : {}
+    ...plateNodeDisplacements ? { plateNodeDisplacements } : {},
+    // De groepsleutel van een trek-alleen staaf is zijn model-id (buildMesh).
+    ...Array.isArray(engineResult.axiaalUitgeschakeld) ? { trekAlleenUitgeschakeld: [...engineResult.axiaalUitgeschakeld] } : {}
   };
 }
 function beddingSplitsFracties(L_mm, E_nmm2, I_mm4, kLijn) {
@@ -21091,7 +21179,20 @@ function solveAllCases(input) {
     losGevallenOp(tegen2, perCase, SCHEEFSTAND_ID_OFFSET);
     registreerScheefstandRichtingen(perCase, input.scheefstand.richting);
   }
+  if (heeftTrekAlleen(input)) {
+    perCase[TREK_ALLEEN_KEY] = { input, cache: /* @__PURE__ */ new Map() };
+  }
   return { perCase };
+}
+function heeftTrekAlleen(input) {
+  return input.beams.some((b) => b.tensionOnly === true);
+}
+function trekAlleenCombinatieResultaat(perCase, combo) {
+  const ta = perCase[TREK_ALLEEN_KEY];
+  if (!ta) return void 0;
+  const sleutel = tweedeOrdeSleutel(combo);
+  if (!ta.cache.has(sleutel)) ta.cache.set(sleutel, solveCombinationFirstOrder(ta.input, combo));
+  return ta.cache.get(sleutel);
 }
 function meshHeeftLasten(mesh) {
   for (const node of mesh.nodes.values()) {
@@ -21289,7 +21390,7 @@ function buildMatrices(input) {
   }
   return { K, nDof, nodeIndex: uiNodeIndex, beams: beamCache, rigidConstraints, springs };
 }
-var MAX_MIXED_DOFS, KNOOP_TOL_MM, MIN_SEGMENT_MM, actieveLogOpvanger, SCHEEFSTAND_ID_OFFSET, SCHEEFSTAND_KEY, SECOND_ORDER_KEY;
+var MAX_MIXED_DOFS, KNOOP_TOL_MM, MIN_SEGMENT_MM, actieveLogOpvanger, SCHEEFSTAND_ID_OFFSET, SCHEEFSTAND_KEY, TREK_ALLEEN_KEY, SECOND_ORDER_KEY;
 var init_engine = __esm({
   "src/components/fem/solver/engine.ts"() {
     "use strict";
@@ -21309,6 +21410,7 @@ var init_engine = __esm({
     MIN_SEGMENT_MM = 25;
     SCHEEFSTAND_ID_OFFSET = 1e6;
     SCHEEFSTAND_KEY = "__femScheefstandRichtingen";
+    TREK_ALLEEN_KEY = "__femTrekAlleen";
     SECOND_ORDER_KEY = "__femSecondOrder";
   }
 });
@@ -24843,7 +24945,9 @@ function bouwMultiInput(model) {
         ...sneden && sneden.length > 0 ? { extraSneden: sneden } : {},
         // Bedding: k [kN/m³] · b [mm] → lijnstijfheid in N/mm². 1 kN/m³ =
         // 1e3 N / 1e9 mm³ = 1e-6 N/mm³. Alleen aanwezig als er een bedding is.
-        ...b.bedding && b.bedding.k > 0 && b.bedding.b > 0 ? { bedding: { kLijn: b.bedding.k * 1e-6 * b.bedding.b } } : {}
+        ...b.bedding && b.bedding.k > 0 && b.bedding.b > 0 ? { bedding: { kLijn: b.bedding.k * 1e-6 * b.bedding.b } } : {},
+        // Trek-alleen (issue #234); alleen aanwezig als het aan staat.
+        ...b.tensionOnly === true ? { tensionOnly: true } : {}
       };
     }),
     supports: model.supports.map((s) => ({ nodeId: s.nodeId, type: s.type, k: liftSpringK(s) })),
@@ -25286,7 +25390,7 @@ function veldpatroonMeldingen(p2) {
       caseId: lc.id,
       niveau: "waarschuwing",
       velden: groepen2.size,
-      tekst: `Belastinggeval ${lc.id} ("${lc.name}") is veranderlijke vloerbelasting op ${groepen2.size} velden, maar wordt bij deze niet-lineaire berekening NIET veldsgewijs ongunstig geplaatst (NEN-EN 1991-1-1 6.2.1(1); NEN-EN 1992-1-1 5.1.3, NEN-EN 1993-1-1 AB.2): superpositie van veldpatronen is bij tweede orde of fysisch niet-lineair rekenen ongeldig, en het geval staat dus steeds op alle velden tegelijk. Veldmomenten en steunmomenten kunnen daardoor te laag uitkomen. Reken eerste orde (dan worden de veldpatronen automatisch gemaakt), of maak eigen combinaties met het geval per veld in een eigen belastinggeval.`
+      tekst: `Belastinggeval ${lc.id} ("${lc.name}") is veranderlijke vloerbelasting op ${groepen2.size} velden, maar wordt bij deze niet-lineaire berekening NIET veldsgewijs ongunstig geplaatst (NEN-EN 1991-1-1 6.2.1(1); NEN-EN 1992-1-1 5.1.3, NEN-EN 1993-1-1 AB.2): superpositie van veldpatronen is bij tweede orde, fysisch niet-lineair rekenen of trek-alleen staven ongeldig, en het geval staat dus steeds op alle velden tegelijk. Veldmomenten en steunmomenten kunnen daardoor te laag uitkomen. Reken eerste orde (dan worden de veldpatronen automatisch gemaakt), of maak eigen combinaties met het geval per veld in een eigen belastinggeval.`
     });
   }
   return uit;
@@ -28621,7 +28725,8 @@ var PROJECT_FORMAT_VERSION_3D_TAPERED = 6;
 var PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING = 7;
 var PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS = 8;
 var PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS = 9;
-var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS;
+var PROJECT_FORMAT_VERSION_2D_TENSION_ONLY = 10;
+var PROJECT_FORMAT_VERSION_MAX = PROJECT_FORMAT_VERSION_2D_TENSION_ONLY;
 var SOORTEN = ["6.10a", "6.10b", "6.14b", "6.15b", "6.16b"];
 function combinationsToFile(combos) {
   return combos.map((c) => ({
@@ -28696,7 +28801,7 @@ function serializeProject(state) {
   const model3d = modelDimension === "3d" ? parseOpenFem3DModel(state.model3d) : void 0;
   const file = {
     format: PROJECT_FORMAT_ID,
-    version: modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0) ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS : model3d?.plates?.some((plate) => plate.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING : model3d?.beams.some((beam) => beam.profileNameEnd !== void 0) ? PROJECT_FORMAT_VERSION_3D_TAPERED : model3d?.beams.some((beam) => beam.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_BEDDING : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
+    version: state.beams?.some((beam) => beam.tensionOnly === true) ? PROJECT_FORMAT_VERSION_2D_TENSION_ONLY : modelDimension !== "3d" ? PROJECT_FORMAT_VERSION : (model3d?.envelopePanels?.length ?? 0) > 0 || model3d?.loadPanels?.some((panel) => (panel.openings?.length ?? 0) > 0) ? PROJECT_FORMAT_VERSION_3D_ENVELOPE_PANELS : model3d?.analysisMaterials && Object.keys(model3d.analysisMaterials).length > 0 ? PROJECT_FORMAT_VERSION_3D_ANALYSIS_MATERIALS : model3d?.plates?.some((plate) => plate.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_PLATE_BEDDING : model3d?.beams.some((beam) => beam.profileNameEnd !== void 0) ? PROJECT_FORMAT_VERSION_3D_TAPERED : model3d?.beams.some((beam) => beam.bedding !== void 0) ? PROJECT_FORMAT_VERSION_3D_BEDDING : (model3d?.loadPanels?.length ?? 0) > 0 ? PROJECT_FORMAT_VERSION_3D_LOAD_PANELS : PROJECT_FORMAT_VERSION_3D,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
     ...state,
     modelDimension,
@@ -42802,7 +42907,10 @@ var BEAM_VELDEN = [
   // waar deze lijst voor is: niet een tikfout tegenhouden, maar een geldig
   // model weigeren, waarna de drie wegen verschillende antwoorden geven.
   "veren",
-  "bedding"
+  "bedding",
+  // Trek-alleen staaf (issue #234): valt uit zolang hij op druk staat. Zelfde
+  // spiegel in `schema_beams` (fem_tools.rs).
+  "tensionOnly"
 ];
 var RELEASE_VELDEN = [
   "startTx",
@@ -43439,6 +43547,9 @@ function controleerVelden(rauw) {
     }
     keurVeren(b.veren, `${pad}.veren`, fouten);
     keurBedding(b.bedding, `${pad}.bedding`, fouten);
+    if (b.tensionOnly !== void 0 && typeof b.tensionOnly !== "boolean") {
+      fouten.push(`${pad}.tensionOnly: moet true of false zijn.`);
+    }
     if (b.checkConfig !== void 0) {
       fouten.push(...keurCheckConfig(b.checkConfig, `${pad}.checkConfig`));
     }
@@ -44817,7 +44928,8 @@ function rekenDoor(payload) {
   }
   const metStations = detail === "stations";
   const multiInput = bouwMultiInput(gelezen.model);
-  const veldSplitsing = nonlinear ? null : splitsVeldgevallen(multiInput, gelezen.model.loadCases);
+  const metTrekAlleen = gelezen.model.beams.some((b) => b.tensionOnly);
+  const veldSplitsing = nonlinear || metTrekAlleen ? null : splitsVeldgevallen(multiInput, gelezen.model.loadCases);
   const rekenInput = veldSplitsing?.input ?? multiInput;
   const start = Date.now();
   let perCaseResultaat;
@@ -44969,7 +45081,7 @@ function rekenDoor(payload) {
     supports: gelezen.model.supports,
     loadCases: gelezen.model.loadCases,
     loads: gelezen.model.loads,
-    lineair: !nonlinear
+    lineair: !nonlinear && !metTrekAlleen
   })) {
     waarschuwingen.push(m.tekst);
   }
@@ -46270,6 +46382,7 @@ export {
   handmatigeStuwdruk,
   handtekeningVanGeneratie,
   handtekeningVanModel,
+  heeftTrekAlleen,
   hellendDakBron,
   hellendDakCpe,
   hellendDakParagraaf,
@@ -46436,6 +46549,7 @@ export {
   synchroniseerWindCombinaties,
   timberDeflectionNumerators,
   toetsdataInReferentierichting,
+  trekAlleenCombinatieResultaat,
   valideer,
   valideerModel,
   valideerPlaatOpeningen,
