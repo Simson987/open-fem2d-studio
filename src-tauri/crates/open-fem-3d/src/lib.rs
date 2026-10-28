@@ -17,6 +17,7 @@ mod schijven;
 mod shell;
 mod trek_alleen;
 mod tweede_orde;
+mod veldmaximum;
 mod verloop;
 pub use shell::{
     PlateAxes3D, PlateExtreme3D, PlateSummary3D, ShellElementResult3D, ShellNodeResult3D, ShellValues3D,
@@ -1791,6 +1792,10 @@ fn convert_result(
         }
     }
     let mut engine_diagrams = compute_diagrams_3d(&results);
+    // Veldextremen tussen de 21 vaste stations van de kern (#242): een extra
+    // station waar de dwarskracht nul is, vóór de correcties hieronder zodat
+    // die ook dat station bijwerken.
+    veldmaximum::voeg_toe(&results.element_forces, &mut engine_diagrams);
     // Globale lijnlasten (#80): de axiale component als lijnlast in de N-lijn
     // en de eindnormaalkrachten van elk kerndeel, vóór de bedding en het
     // samenvoegen van geknipte staven (zie `globale_lasten`).
