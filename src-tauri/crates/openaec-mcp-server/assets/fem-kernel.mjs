@@ -15459,6 +15459,8 @@ var init_referentierichting = __esm({
       kCr: "gelijk",
       performLtbCheck: "gelijk",
       ltbLoadPosition: "gelijk",
+      // Boven/onder is een ZIJDE in de referentierichting, geen positie.
+      schuineRand: "gelijk",
       // Een kruipfactor en de herkomst ervan: materiaaleigenschappen van de plaat,
       // niet van de tekenrichting.
       cltKdef: "gelijk",
@@ -18386,6 +18388,9 @@ function buildTimberCheckInputs(ruweData) {
       // de plaatselijke b(x) × h(x) en met k_h uit de hoogte ter plaatse.
       ...bEindMm !== void 0 ? { width_end_mm: bEindMm } : {},
       ...hEindMm !== void 0 ? { height_end_mm: hEindMm } : {},
+      // Welke rand schuin loopt, voor art. 6.4.2 (issue #253). Alleen bij een
+      // verloop; leeg = de kern toetst de ongunstigste aanname (6.39).
+      ...hEindMm !== void 0 && cfg.schuineRand !== void 0 ? { schuine_rand: cfg.schuineRand } : {},
       // Aanwezig = samengestelde doorsnede uit de profieleditor; de kern
       // rekent dan met de lamellen in plaats van met b × h. Afwezig = de
       // rechthoek hierboven, precies zoals voorheen.
@@ -42202,6 +42207,8 @@ var CHECKCONFIG_VELDEN = [
   "kCr",
   "performLtbCheck",
   "ltbLoadPosition",
+  // Issue #253: welke rand van een verlopende houten ligger schuin loopt (6.4.2).
+  "schuineRand",
   // Kruislaaghout: de vervormingsfactor k_def van §7.2 met zijn bron. Tabel 3.2
   // kent geen rij voor kruislaaghout, dus is er niets om op terug te vallen;
   // zonder deze twee blijft de doorbuigingstoets van een CLT-staaf uit, met
@@ -42210,6 +42217,7 @@ var CHECKCONFIG_VELDEN = [
   "cltKdefBron"
 ];
 var LTB_LASTPOSITIES = ["centreOfGravity", "compressionEdge", "tensionEdge"];
+var SCHUINE_RANDEN = ["Boven", "Onder", "Beide"];
 var KOLOM_VELDEN = [
   "bracing",
   "buckling_length",
@@ -42657,6 +42665,7 @@ function keurCheckConfig(waarde, cpad) {
     fouten.push(`${cpad}.performLtbCheck: moet true of false zijn, maar is ${JSON.stringify(cc.performLtbCheck)}.`);
   }
   keurEnum(cc.ltbLoadPosition, LTB_LASTPOSITIES, `${cpad}.ltbLoadPosition`, fouten);
+  keurEnum(cc.schuineRand, SCHUINE_RANDEN, `${cpad}.schuineRand`, fouten);
   keurGetal(cc.cltKdef, `${cpad}.cltKdef`, fouten, { nietNegatief: true });
   if (cc.cltKdefBron !== void 0 && typeof cc.cltKdefBron !== "string") {
     fouten.push(`${cpad}.cltKdefBron: moet een tekst zijn (de productverklaring of ETA), maar is ${JSON.stringify(cc.cltKdefBron)}.`);

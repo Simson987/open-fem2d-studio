@@ -151,6 +151,9 @@ log("\n[d] De veldpoort (keurCheckConfig) — dezelfde als voor `check_config` i
     fouten({ kCr: 0.67, performLtbCheck: false, ltbLoadPosition: "compressionEdge" }).length, 0);
   check("geldig: kCr 1 → geen fouten", fouten({ kCr: 1 }).length, 0);
   check("geldig: performLtbCheck true → geen fouten", fouten({ performLtbCheck: true }).length, 0);
+  for (const rand of ["Boven", "Onder", "Beide"]) {
+    check(`geldig: schuineRand ${rand} → geen fouten (issue #253)`, fouten({ schuineRand: rand }).length, 0);
+  }
   for (const [naam, cc, patroon] of [
     ["kCr 0", { kCr: 0 }, /kCr.*groter dan nul/],
     ["kCr -1", { kCr: -1 }, /kCr.*groter dan nul/],
@@ -160,6 +163,8 @@ log("\n[d] De veldpoort (keurCheckConfig) — dezelfde als voor `check_config` i
     ["performLtbCheck als 0", { performLtbCheck: 0 }, /performLtbCheck.*true of false/],
     ["ltbLoadPosition onbekend", { ltbLoadPosition: "bovenrand" }, /ltbLoadPosition.*geen geldige waarde/],
     ["ltbLoadPosition in Rust-spelling", { ltbLoadPosition: "CompressionEdge" }, /ltbLoadPosition.*geen geldige waarde/],
+    // Issue #253: de schuine rand van een verlopende ligger (6.4.2).
+    ["schuineRand onbekend", { schuineRand: "links" }, /schuineRand.*geen geldige waarde/],
     ["tikfout k_cr (snake_case)", { k_cr: 0.67 }, /onbekend veld `k_cr`.*kCr/],
     ["tikfout perform_ltb_check", { perform_ltb_check: false }, /onbekend veld `perform_ltb_check`/],
   ]) {

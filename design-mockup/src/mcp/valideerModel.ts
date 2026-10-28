@@ -175,6 +175,8 @@ const CHECKCONFIG_VELDEN = [
   // kiptoets aan/uit (6.3.3(5)) en het aangrijpingspunt van de belasting
   // (tabel 6.1). Tot dan zaten ze vast in de houtbouwer.
   "kCr", "performLtbCheck", "ltbLoadPosition",
+  // Issue #253: welke rand van een verlopende houten ligger schuin loopt (6.4.2).
+  "schuineRand",
   // Kruislaaghout: de vervormingsfactor k_def van §7.2 met zijn bron. Tabel 3.2
   // kent geen rij voor kruislaaghout, dus is er niets om op terug te vallen;
   // zonder deze twee blijft de doorbuigingstoets van een CLT-staaf uit, met
@@ -184,6 +186,8 @@ const CHECKCONFIG_VELDEN = [
 
 /** De drie aangrijpingspunten van tabel 6.1, in de spelling van `checkConfig`. */
 const LTB_LASTPOSITIES = ["centreOfGravity", "compressionEdge", "tensionEdge"] as const;
+/** De schuine rand van een verlopende houten ligger (6.4.2), als de Rust-enum `SchuineRand`. */
+const SCHUINE_RANDEN = ["Boven", "Onder", "Beide"] as const;
 
 /**
  * De velden van het §5.8-blok (`ConcreteColumnInput`), inclusief de drie om de
@@ -758,6 +762,7 @@ export function keurCheckConfig(waarde: unknown, cpad: string): string[] {
     fouten.push(`${cpad}.performLtbCheck: moet true of false zijn, maar is ${JSON.stringify(cc.performLtbCheck)}.`);
   }
   keurEnum(cc.ltbLoadPosition, LTB_LASTPOSITIES, `${cpad}.ltbLoadPosition`, fouten);
+  keurEnum(cc.schuineRand, SCHUINE_RANDEN, `${cpad}.schuineRand`, fouten);
   // k_def is een KRUIPFACTOR: w_fin = w_inst + k_def · w_qp. Negatief zou de
   // eindzakking kleiner maken dan de momentane, wat geen kruip is; 0 betekent
   // "geen kruip" en mag. Er is geen bovengrens in de norm — tabel 3.2 gaat voor

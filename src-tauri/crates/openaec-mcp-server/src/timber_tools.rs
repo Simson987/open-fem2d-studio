@@ -276,7 +276,12 @@ fn schema_houten_staaf() -> Value {
             "width_end_mm": { "type": "number", "exclusiveMinimum": 0,
                 "description": "Breedte b aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'width_mm' is dan de breedte aan het begin (x = 0). Weglaten = b verloopt niet." },
             "height_end_mm": { "type": "number", "exclusiveMinimum": 0,
-                "description": "Hoogte h aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'height_mm' is dan de hoogte aan het begin (x = 0). Dit is de maat van een voor afschot schuin afgezaagde balk. De kern toetst elke doorsnedetoets (6.1.x) op elk rekenpunt met de plaatselijke rechthoek b(x) x h(x), met k_h van art. 3.2(3)/3.3(3) uit de hoogte ter plaatse, en rekent de stabiliteitstoetsen (6.3.2, 6.3.3) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Niet te combineren met 'custom_section'. Weglaten = h verloopt niet; zijn beide eindmaten weg of gelijk aan het begin, dan is de staaf prismatisch." }
+                "description": "Hoogte h aan het EIND van de staaf (x = L) van een VERLOPENDE staaf; 'height_mm' is dan de hoogte aan het begin (x = 0). Dit is de maat van een voor afschot schuin afgezaagde balk. De kern toetst elke doorsnedetoets (6.1.x) op elk rekenpunt met de plaatselijke rechthoek b(x) x h(x), met k_h van art. 3.2(3)/3.3(3) uit de hoogte ter plaatse, en rekent de stabiliteitstoetsen (6.3.2, 6.3.3) met de kleinste doorsnede in het veld; het resultaat krijgt dan een veld 'verloop' met de zes toetsdoorsneden en het maatgevende punt. Niet te combineren met 'custom_section'. Weglaten = h verloopt niet; zijn beide eindmaten weg of gelijk aan het begin, dan is de staaf prismatisch. Verloopt h, dan toetst elk rekenpunt ook art. 6.4.2 aan de schuine rand (toets '6.4.2_tapered_edge', k_m,α uit (6.39)/(6.40)); zie 'schuine_rand'." },
+            "schuine_rand": {
+                "type": "string",
+                "enum": ["Boven", "Onder", "Beide"],
+                "description": "Welke rand van een verlopende ligger (hoogte verloopt) schuin loopt, voor de toets van EN 1995-1-1 6.4.2: \"Boven\" of \"Onder\" (het momentteken per doorsnede kiest dan (6.39) schuine rand op trek of (6.40) schuine rand op druk; positief M_y = trek onder) of \"Beide\" (symmetrisch, per rand tan α = Δh/(2L), (6.39)). Weglaten = niet bekend: de kern toetst de ONGUNSTIGSTE aanname, één schuine rand op trek (6.39), en meldt dat in de toets. Zonder verloop in de hoogte doet dit veld niets."
+            }
         },
         "required": [
             "beam_id", "width_mm", "height_mm", "strength_class",
@@ -400,7 +405,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "check_timber_beams",
-            "description": "Run the EN 1995-1-1 (+C1+A1:2011/NB:2013) timber check on a list of rectangular b x h members: tension and compression parallel to the grain (§6.1; at a tension point the compression check is NotApplicable with sigma_c,0,d = 0, and column buckling has no unity check), bending with k_m (§6.1.6), combined bending and axial tension (§6.2.3, eq. 6.17/6.18) and combined bending and axial compression on cross-section level (§6.2.4, eq. 6.19/6.20), shear with k_cr (§6.1.7), column buckling (§6.3.2), lateral-torsional buckling (§6.3.3) and the deflection pair w_fin/w_add including creep k_def (§7.2). k_mod: `load_duration` applies to ALL combinations unless `load_duration_per_combination` gives the class per ULS combination (EN 1995-1-1 3.1.3(2), the shortest-duration load in a combination governs); without that list the permanent-only combination is NOT checked with k_mod 'Permanent'. `check_fem_model` builds the list from the load cases. Returns one TimberBeamCheckResult per member with the full derivation, in the order of the input list. Same input and output types as the Tauri command `check_timber_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::check_all_timber_beams`. NOT included: compression perpendicular to the grain, notched members, connections, fire and vibration.",
+            "description": "Run the EN 1995-1-1 (+C1+A1:2011/NB:2013) timber check on a list of rectangular b x h members: tension and compression parallel to the grain (§6.1; at a tension point the compression check is NotApplicable with sigma_c,0,d = 0, and column buckling has no unity check), bending with k_m (§6.1.6), combined bending and axial tension (§6.2.3, eq. 6.17/6.18) and combined bending and axial compression on cross-section level (§6.2.4, eq. 6.19/6.20), bending at the tapered edge of a member whose height varies (§6.4.2, eq. 6.38-6.40, see `schuine_rand`), shear with k_cr (§6.1.7), column buckling (§6.3.2), lateral-torsional buckling (§6.3.3) and the deflection pair w_fin/w_add including creep k_def (§7.2). k_mod: `load_duration` applies to ALL combinations unless `load_duration_per_combination` gives the class per ULS combination (EN 1995-1-1 3.1.3(2), the shortest-duration load in a combination governs); without that list the permanent-only combination is NOT checked with k_mod 'Permanent'. `check_fem_model` builds the list from the load cases. Returns one TimberBeamCheckResult per member with the full derivation, in the order of the input list. Same input and output types as the Tauri command `check_timber_beams` and the toetsbrug opdracht of that name; all three run through `timber_check::check_all_timber_beams`. NOT included: compression perpendicular to the grain, notched members, connections, fire and vibration.",
             "inputSchema": schema_invoerlijst(
                 schema_houten_staaf(),
                 "De houten staven die getoetst moeten worden.",
@@ -537,6 +542,8 @@ mod tests {
             // eind van de staaf.
             "width_end_mm",
             "height_end_mm",
+            // Issue #253: welke rand schuin loopt, voor 6.4.2.
+            "schuine_rand",
             // Het vrije eind en de 2e-orde-regel daarbij (L in plaats van 2·L).
             "is_cantilever",
             "zijdelingse_knik_in_analyse",

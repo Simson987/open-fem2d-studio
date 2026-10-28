@@ -1003,6 +1003,9 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // de plaatselijke b(x) × h(x) en met k_h uit de hoogte ter plaatse.
       ...(bEindMm !== undefined ? { width_end_mm: bEindMm } : {}),
       ...(hEindMm !== undefined ? { height_end_mm: hEindMm } : {}),
+      // Welke rand schuin loopt, voor art. 6.4.2 (issue #253). Alleen bij een
+      // verloop; leeg = de kern toetst de ongunstigste aanname (6.39).
+      ...(hEindMm !== undefined && cfg.schuineRand !== undefined ? { schuine_rand: cfg.schuineRand } : {}),
       // Aanwezig = samengestelde doorsnede uit de profieleditor; de kern
       // rekent dan met de lamellen in plaats van met b × h. Afwezig = de
       // rechthoek hierboven, precies zoals voorheen.

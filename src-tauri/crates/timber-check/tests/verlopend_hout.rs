@@ -89,6 +89,7 @@ fn staaf(
         staaf_notities: None,
         width_end_mm: b_eind,
         height_end_mm: h_eind,
+        schuine_rand: None,
         zijdelingse_knik_in_analyse: None,
     }
 }
@@ -219,7 +220,13 @@ fn uitkrager_met_verlopende_hoogte_vindt_het_maximum_van_m_over_w() {
         "x = 0, L/5, 2L/5, 3L/5, 4L/5, L"
     );
     let m = v.maatgevend.as_ref().expect("maatgevend punt");
-    assert_eq!(m.toets_id, "6.1.6_bending");
+    // Sinds issue #253 toetst elk rekenpunt ook art. 6.4.2 aan de schuine rand.
+    // tan α = 300/3000 = 0,1 en zonder opgegeven rand (6.39):
+    // k_m,α = 1/√(1 + (24/(0,75·4)·0,1)² + (24/0,4·0,01)²) = 1/√2, constant
+    // langs de staaf; die toets is dus maatgevend op HETZELFDE punt, met
+    // UC = 0,507813·√2 = 0,718155.
+    assert_eq!(m.toets_id, "6.4.2_tapered_edge");
+    assert!((m.uc - 0.507813 * 2f64.sqrt()).abs() < 1e-5, "UC 6.4.2 = {}", m.uc);
     assert_eq!(m.doorsnede.x_mm, 1000.0);
     assert!((m.doorsnede.maten.h_mm - 400.0).abs() < 1e-9);
     assert!((m.doorsnede.w_y_mm3 - 100.0 * 400.0 * 400.0 / 6.0).abs() < 1e-6);

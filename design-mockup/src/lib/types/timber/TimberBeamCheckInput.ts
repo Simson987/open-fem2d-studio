@@ -7,6 +7,7 @@ import type { LoadDurationClass } from "./LoadDurationClass";
 import type { LtbLoadCase } from "./LtbLoadCase";
 import type { LtbLoadPosition } from "./LtbLoadPosition";
 import type { NationaleBijlage } from "../norm/NationaleBijlage";
+import type { SchuineRand } from "./SchuineRand";
 import type { ServiceClass } from "./ServiceClass";
 import type { ZijdelingseKnikInAnalyse } from "../steel/ZijdelingseKnikInAnalyse";
 
@@ -274,6 +275,18 @@ width_end_mm?: number,
  * rekenhoogte verloopt over de overspanning, en k_h verloopt mee.
  */
 height_end_mm?: number,
+/**
+ * Welke rand van een VERLOPENDE ligger (hoogte verloopt) schuin loopt,
+ * voor de toets van EN 1995-1-1 6.4.2 aan die rand (issue #253).
+ *
+ * `None` of weglaten = niet bekend (een 2D-model legt het niet vast): de
+ * kern toetst dan de ONGUNSTIGSTE aanname, één schuine rand op trek
+ * (6.39), en zegt dat in de toets. `Boven`/`Onder`: het momentteken per
+ * doorsnede kiest (6.39) of (6.40). `Beide`: symmetrisch verloop, elke
+ * rand met tan α = Δh/(2L). Zonder verloop in de hoogte doet het veld
+ * niets.
+ */
+schuine_rand?: SchuineRand,
 /**
  * Om welke assen de globale berekening tweede orde (P-Δ) MET scheefstand
  * is en de staaf kan laten uitbuigen. Alleen van belang bij een vrij

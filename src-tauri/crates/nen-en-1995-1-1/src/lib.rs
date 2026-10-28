@@ -31,6 +31,7 @@
 pub(crate) const NDP: nationale_bijlage::Ndp1995 =
     nationale_bijlage::Ndp1995::voor(nationale_bijlage::NationaleBijlage::NL);
 
+pub mod afgeschuind;
 pub mod bending;
 pub mod clt;
 pub mod clt_toets;

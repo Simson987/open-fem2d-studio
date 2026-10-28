@@ -929,11 +929,13 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
     );
     assert_eq!(
         staaf["properties"].as_object().unwrap().len(),
-        33,
-        "het schema van de houten staaf hoort precies deze 33 velden van TimberBeamCheckInput te kennen 
+        34,
+        "het schema van de houten staaf hoort precies deze 34 velden van TimberBeamCheckInput te kennen 
          (25 + load_duration_per_combination + staaf_notities + width_end_mm + height_end_mm + bijlage
-         + deflection_quasi_perm_fin_mm + is_cantilever + zijdelingse_knik_in_analyse)"
+         + deflection_quasi_perm_fin_mm + is_cantilever + zijdelingse_knik_in_analyse + schuine_rand)"
     );
+    // Issue #253: de schuine rand voor 6.4.2 is voor een client op te geven.
+    assert_eq!(staaf["properties"]["schuine_rand"]["enum"], json!(["Boven", "Onder", "Beide"]));
     // Issue #23: de langeduurzakking van 2.2.3(4) is voor een client op te geven.
     assert!(
         staaf["properties"]["deflection_quasi_perm_fin_mm"].is_object(),

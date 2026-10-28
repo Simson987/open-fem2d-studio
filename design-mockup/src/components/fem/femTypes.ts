@@ -241,6 +241,13 @@ export interface BeamCheckConfig {
    * Rust-enum `LtbLoadPosition`, in de spelling van dit object.
    */
   ltbLoadPosition?: "centreOfGravity" | "compressionEdge" | "tensionEdge";
+  /**
+   * Hout, VERLOPENDE ligger (hoogte verloopt): welke rand schuin loopt, voor de
+   * toets van EN 1995-1-1 6.4.2 aan die rand (issue #253). Leeg = niet bekend:
+   * de kern toetst dan de ongunstigste aanname, de schuine rand op trek
+   * (6.39). Dezelfde namen als de Rust-enum `SchuineRand`.
+   */
+  schuineRand?: "Boven" | "Onder" | "Beide";
   // Kruislaaghout (CLT)
   /**
    * Vervormingsfactor k_def voor de kruip van EN 1995-1-1 §7.2 bij

@@ -100,6 +100,7 @@ fn ligger(segment_m: f64, l_ef_override_m: f64) -> TimberBeamCheckResult {
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        schuine_rand: None,
         zijdelingse_knik_in_analyse: None,
     })
 }

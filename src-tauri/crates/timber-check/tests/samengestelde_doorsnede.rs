@@ -112,6 +112,7 @@ fn invoer(custom: Option<CustomSection>, vz_kn: f64, my_knm: f64) -> TimberBeamC
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
+        schuine_rand: None,
         zijdelingse_knik_in_analyse: None,
     }
 }
