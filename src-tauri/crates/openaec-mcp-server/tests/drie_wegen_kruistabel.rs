@@ -140,6 +140,13 @@ const KRUISTABEL: &[Rij] = &[
         mcp: Some("check_aluminium_beams"),
         reden: "",
     },
+    // Metselwerk (NEN-EN 1996-1-1, issue #98): de wandtoets langs alle drie de wegen.
+    Rij {
+        tauri: Some("check_masonry_walls"),
+        toetsbrug: Some("check_masonry_walls"),
+        mcp: Some("check_masonry_walls"),
+        reden: "",
+    },
     Rij {
         tauri: Some("list_concrete_classes"),
         toetsbrug: Some("list_concrete_classes"),

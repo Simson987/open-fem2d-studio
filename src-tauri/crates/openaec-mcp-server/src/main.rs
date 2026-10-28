@@ -68,6 +68,9 @@ mod timber_tools;
 /// Aluminium (NEN-EN 1999-1-1, issue #5): legeringen en staaftoets. Zie
 /// `aluminium_tools.rs`.
 mod aluminium_tools;
+/// Metselwerk (NEN-EN 1996-1-1, issue #98): de wandtoets. Zie
+/// `masonry_tools.rs`.
+mod masonry_tools;
 
 /// De plaattoets (wandschijven, belast in het vlak): `check_plates`. Roept
 /// dezelfde `plaat_check::check_all_plates` aan als het Tauri-command en de
@@ -565,6 +568,7 @@ fn tool_definitions() -> Value {
     lijst.extend(concrete_tools::tool_definitions());
     lijst.extend(timber_tools::tool_definitions());
     lijst.extend(aluminium_tools::tool_definitions());
+    lijst.extend(masonry_tools::tool_definitions());
     lijst.extend(plate_tools::tool_definitions());
     lijst.extend(gui_tools::tool_definitions());
     lijst.extend(api_tools::tool_definitions());
@@ -675,6 +679,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         // Aluminium: `aluminium_check::check_all_aluminium_beams`, dezelfde
         // functie als het Tauri-command en de toetsbrug.
         alu if aluminium_tools::is_aluminium_tool(alu) => aluminium_tools::dispatch(alu, args).await,
+        // Metselwerk: `metselwerk_check::check_all_metselwerk_walls`, dezelfde
+        // functie als het Tauri-command en de toetsbrug.
+        mw if masonry_tools::is_masonry_tool(mw) => masonry_tools::dispatch(mw, args).await,
         // De plaattoets: `plaat_check::check_all_plates`, dezelfde functie als
         // het Tauri-command en de toetsbrug. Zie `plate_tools.rs`.
         plaat if plate_tools::is_plate_tool(plaat) => plate_tools::dispatch(plaat, args).await,

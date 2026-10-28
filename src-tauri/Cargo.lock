@@ -2546,6 +2546,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "metselwerk-check"
+version = "2026.44.0"
+dependencies = [
+ "approx",
+ "mechanics",
+ "nen-en-1993-1-1-section",
+ "nen-en-1996-1-1",
+ "serde",
+ "serde_json",
+ "steel-check",
+ "ts-rs",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2731,6 +2745,15 @@ dependencies = [
  "nationale-bijlage",
  "nen-en-1993-1-1-section",
  "nen-en-1993-1-1-stability",
+ "serde",
+ "ts-rs",
+]
+
+[[package]]
+name = "nen-en-1996-1-1"
+version = "2026.44.0"
+dependencies = [
+ "approx",
  "serde",
  "ts-rs",
 ]
@@ -3114,6 +3137,7 @@ dependencies = [
  "concrete-check",
  "embed-resource",
  "frame3d-solver",
+ "metselwerk-check",
  "nen-en-1992-1-1",
  "nen-en-1993-1-1-section",
  "nen-en-1993-1-8-las",
@@ -3168,6 +3192,7 @@ dependencies = [
  "base64 0.22.1",
  "concrete-check",
  "frame3d-solver",
+ "metselwerk-check",
  "nationale-bijlage",
  "nen-en-1992-1-1",
  "nen-en-1993-1-1-section",
@@ -5184,6 +5209,7 @@ version = "2026.44.0"
 dependencies = [
  "aluminium-check",
  "concrete-check",
+ "metselwerk-check",
  "nationale-bijlage",
  "nen-en-1990",
  "nen-en-1992-1-1",

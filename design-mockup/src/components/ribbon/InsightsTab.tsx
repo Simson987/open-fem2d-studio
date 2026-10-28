@@ -24,11 +24,13 @@ interface Props {
   onOpenZichtbaarheid?: () => void;
   onOpenPrestressedBeam?: () => void;
   onOpenVolumeWorkbench?: () => void;
+  /** Opent de metselwerktoets (NEN-EN 1996-1-1, issue #98). */
+  onOpenMasonryCheck?: () => void;
 }
 
 const stub = (label: string) => () => console.log(`TODO: ${label}`);
 
-export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench }: Props) {
+export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench, onOpenMasonryCheck }: Props) {
   const { t } = useTranslation("ribbon");
   const openInsights = () => onShowInsights?.();
   const goto = (mode: "element" | "system" | "dof" | "logs" | "errors") => () => {
@@ -69,6 +71,17 @@ export default function InsightsTab({ onShowInsights, onShowInsightsMode, onExpo
               label={t("insights.volumeWorkbench")}
               size="large"
               onClick={onOpenVolumeWorkbench}
+            />
+          </RibbonGroup>
+        )}
+
+        {onOpenMasonryCheck && (
+          <RibbonGroup label={t("insights.toolsGroup")}>
+            <RibbonButton
+              icon={solverInfoIcon}
+              label={t("insights.masonryCheck")}
+              size="large"
+              onClick={onOpenMasonryCheck}
             />
           </RibbonGroup>
         )}

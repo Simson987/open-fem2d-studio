@@ -39,5 +39,6 @@ concrete-check = { path = "../concrete-check" }
 nen-en-1992-1-1 = { path = "../nen-en-1992-1-1" }
 spanning-check = { path = "../spanning-check" }
 aluminium-check = { path = "../aluminium-check" }
+metselwerk-check = { path = "../metselwerk-check" }
 plaat-check = { path = "../plaat-check" }
 nen-en-1993-1-8-las = { path = "../nen-en-1993-1-8-las" }

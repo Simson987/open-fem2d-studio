@@ -61,6 +61,8 @@ interface RibbonProps {
   onOpenZichtbaarheid?: () => void;
   onOpenPrestressedBeam?: () => void;
   onOpenVolumeWorkbench?: () => void;
+  /** Metselwerktoets (NEN-EN 1996-1-1, issue #98). */
+  onOpenMasonryCheck?: () => void;
   onFilterSelection?: () => void;
   /** Export standalone HTML report (browser + Tauri). */
   onExportHtml?: () => void;
@@ -165,7 +167,7 @@ export default function Ribbon({
   onOpenFem3DSupportPreset, onOpenFem3DSpringTool, onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad,
   onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
   onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns, onOpenFem3DConnectNodes, onOpenFem3DMergeNodes,
-  onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench,
+  onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench, onOpenMasonryCheck,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
   onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView, onImportIfcAnalysisModel,
@@ -366,7 +368,7 @@ export default function Ribbon({
           onOpenAiAssistant={onOpenAiAssistant}
         />;
       case "insights":
-        return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} onOpenPrestressedBeam={onOpenPrestressedBeam} onOpenVolumeWorkbench={onOpenVolumeWorkbench} />;
+        return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} onOpenPrestressedBeam={onOpenPrestressedBeam} onOpenVolumeWorkbench={onOpenVolumeWorkbench} onOpenMasonryCheck={onOpenMasonryCheck} />;
       case "ifc":
         return <IfcTab
           onExportIfc={onExportIfc}

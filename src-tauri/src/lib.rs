@@ -32,6 +32,8 @@ use timber_check::{TimberBeamCheckInput, TimberBeamCheckResult};
 // Aluminium (NEN-EN 1999-1-1, issue #5). Eigen `use`-regel.
 use aluminium_check::{AluminiumBeamCheckInput, AluminiumBeamCheckResult};
 use nen_en_1999_1_1::AluminiumLegering;
+// Metselwerk (NEN-EN 1996-1-1, issue #98). Eigen `use`-regel.
+use metselwerk_check::{MetselwerkWandInput, MetselwerkWandResult};
 
 /// Het bedieningskanaal van de app — alleen actief met de instelling
 /// "Bediening door een AI-assistent toestaan (MCP)" of `OPENAEC_GUI_CONTROL=1`.
@@ -299,6 +301,15 @@ async fn check_aluminium_beams(
     Ok(aluminium_check::check_all_aluminium_beams(inputs))
 }
 
+/// Metselwerk (NEN-EN 1996-1-1, issue #98): de wandtoets. Zelfde typen en
+/// dezelfde functie als de toetsbrug en de MCP-tool `check_masonry_walls`.
+#[tauri::command]
+async fn check_masonry_walls(
+    inputs: Vec<MetselwerkWandInput>,
+) -> Result<Vec<MetselwerkWandResult>, String> {
+    Ok(metselwerk_check::check_all_metselwerk_walls(inputs))
+}
+
 /// Vrije spanningstoets (geen norm): een doorsnede plus een toelaatbare
 /// spanning, getoetst op de vergelijkspanning van von Mises. Bedoeld voor
 /// materialen die buiten EN 1992/1993/1995 vallen — natuursteen, een
@@ -560,6 +571,7 @@ pub fn run() {
             check_stress_beams,
             list_aluminium_alloys,
             check_aluminium_beams,
+            check_masonry_walls,
             check_plates,
             check_fillet_welds,
             bereken_doorsneden,

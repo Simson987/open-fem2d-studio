@@ -1335,7 +1335,9 @@
       "shearHelp": "Normfaktoren und cot(θ) sind explizite Eingaben. Rust berechnet Asw/s, VRd,max und die Ausnutzung der Bügel.",
       "requiredAsw": "Erforderliches Asw/s",
       "providedUtilization": "Bügel-Ausnutzung"
-    }
+    },
+    "masonryCheck": "Mauerwerkswand",
+    "toolsGroup": "Rechenhilfen"
   },
   "ifc": {
     "fileOps": "Datei",
