@@ -44400,6 +44400,28 @@ function zelfHash() {
     return null;
   }
 }
+function invoerHash(payload) {
+  const haal = process.getBuiltinModule;
+  if (typeof haal !== "function") return null;
+  const geordend = (v) => {
+    if (Array.isArray(v)) return v.map(geordend);
+    if (v !== null && typeof v === "object") {
+      const uit = {};
+      for (const k of Object.keys(v).sort()) {
+        uit[k] = geordend(v[k]);
+      }
+      return uit;
+    }
+    return v;
+  };
+  try {
+    const crypto = haal("node:crypto");
+    const tekst2 = JSON.stringify(geordend(payload)) ?? "null";
+    return `sha256:${crypto.createHash("sha256").update(tekst2).digest("hex")}`;
+  } catch {
+    return null;
+  }
+}
 var InvoerFout = class extends Error {
   constructor(melding, detail) {
     super(melding);
@@ -45115,7 +45137,10 @@ function opSolve(payload) {
   const d = rekenDoor(payload);
   const antwoord = {
     solver_version: version,
+    // De hash van de SOLVERBUNDEL (zelfde voor elk model met deze bundel);
+    // `model_hash` is die van de invoer (issue #244, punt 063).
     bundle_hash: zelfHash(),
+    model_hash: invoerHash(payload),
     units: EENHEDEN,
     nonlinear_used: d.nonlinear,
     cases_requested: d.gevraagd,
@@ -46358,6 +46383,7 @@ export {
   ifcAnalyseProject,
   importeerIfcAnalyseModel,
   importeurVoorBestand,
+  invoerHash,
   isAfgeleidVanStandaard,
   isAsgelijndeRechthoek,
   isBgtEindtoestand,

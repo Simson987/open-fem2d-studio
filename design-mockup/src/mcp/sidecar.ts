@@ -204,6 +204,42 @@ function zelfHash(): string | null {
   }
 }
 
+/**
+ * SHA-256 van de INVOER van deze berekening (issue #244, punt 063), in
+ * `sha256:<hex>`-vorm: het verzoek als JSON met de sleutels op elk niveau
+ * gesorteerd, zodat dezelfde invoer in een andere sleutelvolgorde dezelfde
+ * hash geeft. `bundle_hash` is iets anders: de hash van de solverbundel, gelijk
+ * voor elk model dat met dezelfde bundel gerekend wordt. Samen identificeren
+ * ze een uitkomst: wélk model, met wélke rekenkern. `null` zonder
+ * `process.getBuiltinModule` (Node < 22.3), net als `zelfHash`.
+ */
+export function invoerHash(payload: unknown): string | null {
+  const haal = process.getBuiltinModule;
+  if (typeof haal !== "function") return null;
+  const geordend = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(geordend);
+    if (v !== null && typeof v === "object") {
+      const uit: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        uit[k] = geordend((v as Record<string, unknown>)[k]);
+      }
+      return uit;
+    }
+    return v;
+  };
+  try {
+    const crypto = haal("node:crypto") as {
+      createHash(alg: string): {
+        update(data: string): { digest(codering: string): string };
+      };
+    };
+    const tekst = JSON.stringify(geordend(payload)) ?? "null";
+    return `sha256:${crypto.createHash("sha256").update(tekst).digest("hex")}`;
+  } catch {
+    return null;
+  }
+}
+
 // ── Payload lezen ──────────────────────────────────────────────────────────
 
 /** Payload deugt niet (vorm, veld, type) → INVOER_ONGELDIG. */
@@ -1360,7 +1396,10 @@ function opSolve(payload: Record<string, unknown>) {
 
   const antwoord = {
     solver_version: PAKKET_VERSIE,
+    // De hash van de SOLVERBUNDEL (zelfde voor elk model met deze bundel);
+    // `model_hash` is die van de invoer (issue #244, punt 063).
     bundle_hash: zelfHash(),
+    model_hash: invoerHash(payload),
     units: EENHEDEN,
     nonlinear_used: d.nonlinear,
     cases_requested: d.gevraagd,

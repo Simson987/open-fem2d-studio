@@ -415,11 +415,13 @@ async fn solve_fem_model_levert_het_gouden_resultaat() {
     // `solve_ms` is een klok; `bundle_hash` en `solver_version` veranderen bij
     // elke herbouw van de bundel ook als er geen getal verschuift. De
     // bundelidentiteit wordt bewaakt door `build.rs` en de handshake, niet hier.
+    // `model_hash` (issue #244, punt 063) is de identiteit van de invoer, geen
+    // rekenwaarde; bewaakt in `test-sidecar.mjs` [7].
     let mut kaal = gemeten.clone();
     let map = kaal
         .as_object_mut()
         .expect("structuredContent is een object");
-    for vluchtig in ["solve_ms", "bundle_hash", "solver_version"] {
+    for vluchtig in ["solve_ms", "bundle_hash", "model_hash", "solver_version"] {
         assert!(
             map.remove(vluchtig).is_some(),
             "`{vluchtig}` hoort in het tooluitvoer te staan; ontbreekt hij, dan is \
