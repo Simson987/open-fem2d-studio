@@ -35,6 +35,33 @@ pub struct StrengthClass {
     pub rho_mean: f64,
 }
 
+/// Editie van de productnorm waaruit [`SOFTWOOD`] komt (issue #243, punt 074).
+///
+/// De C-klassen hieronder volgen EN 338:2009 tabel 1, niet EN 338:2016. Het
+/// verschil zit in f_t,0,k: EN 338:2016 geeft bijvoorbeeld voor C24 14,5 in
+/// plaats van 14,0 N/mm²; bij de lage klassen ligt EN 338:2016 juist lager.
+/// Wie op EN 338:2016 wil rekenen, vervangt deze tabel als geheel. De
+/// controle van 19-10-2026 noemt de 2009-waarden voor C24 veilig en
+/// verdedigbaar en vraagt alleen dat de editie vermeld wordt. Vandaar deze
+/// constante: hij komt in de toetsuitvoer, zodat een lezer weet uit welke
+/// editie f_t,0,k e.d. komen.
+pub const BRON_NAALDHOUT: &str = "EN 338:2009 tabel 1";
+
+/// Editie van de productnorm waaruit [`GLULAM`] komt: EN 14080:2013 tabel 5
+/// (homogeen gelamineerd hout, GL-h).
+pub const BRON_GELAMINEERD: &str = "EN 14080:2013 tabel 5";
+
+impl StrengthClass {
+    /// Productnorm met editie en tabel waaruit de karakteristieke waarden van
+    /// deze klasse komen (issue #243, punt 074).
+    pub fn bron(&self) -> &'static str {
+        match self.timber_type {
+            TimberType::Solid => BRON_NAALDHOUT,
+            TimberType::Glulam => BRON_GELAMINEERD,
+        }
+    }
+}
+
 const fn softwood(
     name: &'static str,
     f_mk: f64,
@@ -101,7 +128,7 @@ const fn glulam(
     }
 }
 
-/// Massief naaldhout — EN 338.
+/// Massief naaldhout — EN 338:2009 tabel 1 (zie [`BRON_NAALDHOUT`]).
 pub const SOFTWOOD: &[StrengthClass] = &[
     softwood(
         "C14", 14.0, 8.0, 0.4, 16.0, 2.0, 3.0, 7000.0, 4700.0, 230.0, 440.0, 290.0, 350.0,
@@ -132,7 +159,7 @@ pub const SOFTWOOD: &[StrengthClass] = &[
     ),
 ];
 
-/// Gelamineerd hout (homogeen) — EN 14080.
+/// Gelamineerd hout (homogeen) — EN 14080:2013 (zie [`BRON_GELAMINEERD`]).
 ///
 /// GL32h had hier E_0,mean = 13 700. Dat is de waarde uit het ingetrokken
 /// EN 1194:1999 (tabel 6.2 van een Eurocode-5-leerboek citeert die norm met
