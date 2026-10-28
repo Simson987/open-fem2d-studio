@@ -1366,6 +1366,7 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
     checkConfig?: { betonKorf?: unknown };
     profileEnd?: string;
     releases?: { startRy?: boolean; endRy?: boolean };
+    bedding?: { k?: number; b?: number };
   }[];
   const supports = (m.supports ?? []) as { nodeId: number; type: string; k?: number }[];
   const plates = (m.plates ?? []) as {
@@ -1570,14 +1571,43 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
     (b.ernst === "fout" ? errors : warnings).push(b.tekst);
   }
 
+  // BEDDING ALS STEUN (issue #246). Een staaf op bedding (Winkler, k·b > 0)
+  // wordt over zijn hele lengte verticaal gedragen; de kern telt die
+  // stijfheid op de verticale vrijheidsgraden van zijn eindknopen (globaal z,
+  // zie `assembleGlobalStiffnessWithGeometric`). Voor de noodzakelijke
+  // voorwaarden hieronder telt zo'n staaf dus als verticale steun op de plaats
+  // van beide eindknopen — en daarmee, als die op verschillende x liggen, ook
+  // tegen rotatie van het geheel. Tot oktober 2026 telde alleen een oplegging,
+  // en werd een ligger die alleen op bedding rust (met één xRoller) als
+  // mechanisme geweigerd (Hetényi: w = Pβ/(2kb) = 3,77 mm, M = P/(4β) = 33,2 kNm).
+  // HORIZONTAAL telt de bedding niet: de kleine wrijvingsstijfheid die de kern
+  // daar toevoegt (0,1 % van k·b·L) is een numeriek hulpmiddel tegen een
+  // singulier stelsel, geen constructieve steun.
+  const beddingKnopen = new Set<number>();
+  for (const b of beams) {
+    const kb = b.bedding;
+    if (!kb || !(typeof kb.k === "number" && kb.k > 0) || !(typeof kb.b === "number" && kb.b > 0)) continue;
+    for (const id of [b.from, b.to]) {
+      const knoop = knoopById.get(id);
+      if (!knoop || beddingKnopen.has(id)) continue;
+      beddingKnopen.add(id);
+      vastgezetteRichtingen.z.push(knoop.x);
+    }
+  }
+
   // Mechanismecontrole — noodzakelijke voorwaarden voor een vlak raamwerk:
   // verplaatsing in x en in z moet ergens verhinderd zijn, en rotatie van het
   // geheel ook (door een inklemming/rotatieveer, of door twee steunpunten die
   // dezelfde richting op verschillende plaatsen vasthouden).
   if (supports.length === 0) {
     errors.push(
-      "Het model heeft geen opleggingen — voeg randvoorwaarden toe. Zonder " +
-        "opleggingen is de constructie een mechanisme.",
+      beddingKnopen.size > 0
+        ? "Het model heeft geen opleggingen. De bedding draagt de staven verticaal en " +
+          "tegen draaien, maar niet horizontaal (de kleine wrijvingsstijfheid in de " +
+          "rekenkern is alleen een numeriek hulpmiddel). Voeg ten minste één oplegging " +
+          "toe die de horizontale richting vasthoudt, bijvoorbeeld een xRoller."
+        : "Het model heeft geen opleggingen — voeg randvoorwaarden toe. Zonder " +
+          "opleggingen is de constructie een mechanisme.",
     );
   } else {
     if (vastgezetteRichtingen.x.length === 0) {
@@ -1620,7 +1650,9 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
       }),
     ];
     for (const deel of samenhangendeDelen([...actief], verbindingen)) {
-      if (!deel.some((id) => gesteund.has(id))) {
+      // Een deel op bedding is verticaal gesteund (issue #246); of het als
+      // geheel stabiel is, toetst de kinematische controle verderop.
+      if (!deel.some((id) => gesteund.has(id) || beddingKnopen.has(id))) {
         errors.push(
           `Het constructiedeel met knopen ${deel.slice(0, 6).join(", ")}` +
             `${deel.length > 6 ? ", …" : ""} heeft geen enkele oplegging en ` +

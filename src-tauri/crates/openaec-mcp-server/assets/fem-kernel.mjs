@@ -43786,9 +43786,20 @@ function valideerModel(rauw, opties = {}) {
   ).bevindingen) {
     (b.ernst === "fout" ? errors : warnings).push(b.tekst);
   }
+  const beddingKnopen = /* @__PURE__ */ new Set();
+  for (const b of beams) {
+    const kb = b.bedding;
+    if (!kb || !(typeof kb.k === "number" && kb.k > 0) || !(typeof kb.b === "number" && kb.b > 0)) continue;
+    for (const id2 of [b.from, b.to]) {
+      const knoop = knoopById.get(id2);
+      if (!knoop || beddingKnopen.has(id2)) continue;
+      beddingKnopen.add(id2);
+      vastgezetteRichtingen.z.push(knoop.x);
+    }
+  }
   if (supports.length === 0) {
     errors.push(
-      "Het model heeft geen opleggingen \u2014 voeg randvoorwaarden toe. Zonder opleggingen is de constructie een mechanisme."
+      beddingKnopen.size > 0 ? "Het model heeft geen opleggingen. De bedding draagt de staven verticaal en tegen draaien, maar niet horizontaal (de kleine wrijvingsstijfheid in de rekenkern is alleen een numeriek hulpmiddel). Voeg ten minste \xE9\xE9n oplegging toe die de horizontale richting vasthoudt, bijvoorbeeld een xRoller." : "Het model heeft geen opleggingen \u2014 voeg randvoorwaarden toe. Zonder opleggingen is de constructie een mechanisme."
     );
   } else {
     if (vastgezetteRichtingen.x.length === 0) {
@@ -43818,7 +43829,7 @@ function valideerModel(rauw, opties = {}) {
       })
     ];
     for (const deel of samenhangendeDelen([...actief2], verbindingen)) {
-      if (!deel.some((id2) => gesteund.has(id2))) {
+      if (!deel.some((id2) => gesteund.has(id2) || beddingKnopen.has(id2))) {
         errors.push(
           `Het constructiedeel met knopen ${deel.slice(0, 6).join(", ")}${deel.length > 6 ? ", \u2026" : ""} heeft geen enkele oplegging en kan vrij bewegen (mechanisme).`
         );

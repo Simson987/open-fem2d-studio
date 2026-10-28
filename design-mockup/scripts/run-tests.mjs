@@ -430,6 +430,7 @@ const BUNDEL_TESTS = new Set([
   "mechanisme-raam",
   "dubbele-oplegging",
   "veer-stijfheid",
+  "bedding-mechanisme",
   // Veldsgewijze plaatsing van veranderlijke vloerbelasting (#219): splitsen,
   // veldpatronen, omhullende en staalbouwer — alles in de barrel — en de
   // gebouwde MCP-server. Hoort ook tegen de bundel: de sidecar maakt de
