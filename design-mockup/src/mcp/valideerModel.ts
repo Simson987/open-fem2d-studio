@@ -4,8 +4,9 @@
  * WAAROM STRENG, EN WAAROM DIT BESTAND BESTAAT
  * De rekenketen is vergevingsgezind op precies de verkeerde plek. Een lijnlast
  * met `qq` in plaats van `q` valt in `bouwMultiInput` door alle takken heen en
- * verdwijnt zonder een woord; een onbekende profielnaam valt in
- * `resolveSection` terug op HEA 160 / S235; een puntlast op een knoop die aan
+ * verdwijnt zonder een woord; een onbekende of ontbrekende profielnaam gaf
+ * vroeger in `resolveSection` een vervangende doorsnede (nu weigert de solver
+ * zo'n staaf met DOORSNEDE_ONBEKEND, #247); een puntlast op een knoop die aan
  * geen enkele staaf hangt wordt bij het opbouwen van de krachtvector
  * overgeslagen. In alle drie de gevallen SLAAGT de berekening en komt er een
  * plausibel ogend antwoord uit dat bij een ander model hoort. Voor een
@@ -1460,15 +1461,26 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
         );
       }
     }
-    // Onbekende materiaal-/profielcombinatie: `resolveSection` valt dan terug
-    // op HEA 160 / S235 en rekent gewoon door, met de doorsnede van een ander
-    // profiel. Dat is een fout, geen waarschuwing — het antwoord hoort dan bij
-    // een model dat de gebruiker niet heeft ingevoerd.
-    if (resolveSection(b.material, b.profile).bron === "default") {
+    // Ontbrekend of onbekend materiaal/profiel: de solver WEIGERT zo'n staaf
+    // met DOORSNEDE_ONBEKEND (`doorsnedeVoorSolver`); er is geen terugval op
+    // HEA 160 / S235 meer. De droogloop meldt daarom precies dat, met de reden
+    // die `resolveSection` zelf geeft (#247), zodat validate en solve hetzelfde
+    // zeggen.
+    const doorsnede = resolveSection(b.material, b.profile);
+    if (doorsnede.bron === "default") {
+      const geenMateriaal = b.material === undefined || b.material.trim() === "";
+      const geenProfiel = b.profile === undefined || b.profile.trim() === "";
+      const kop = geenMateriaal && geenProfiel
+        ? "geen materiaal en geen profiel opgegeven"
+        : geenMateriaal
+          ? "geen materiaal opgegeven"
+          : geenProfiel
+            ? "geen profiel opgegeven"
+            : `onbekende combinatie materiaal "${b.material}" + profiel "${b.profile}"`;
       errors.push(
-        `Staaf ${b.id}: onbekende combinatie materiaal "${b.material ?? "(leeg)"}" ` +
-          `+ profiel "${b.profile ?? "(leeg)"}". De solver zou terugvallen op ` +
-          "HEA 160 / S235 en met een andere doorsnede rekenen dan opgegeven.",
+        `Staaf ${b.id}: ${kop}; de staaf wordt niet doorgerekend` +
+          (doorsnede.reden ? ` (${doorsnede.reden})` : "") +
+          ". Er wordt geen standaardmateriaal of -profiel aangenomen.",
       );
     } else {
       // Verlopend profiel: het eindprofiel moet bij het beginprofiel passen,

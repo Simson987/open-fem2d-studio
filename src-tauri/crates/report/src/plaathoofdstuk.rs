@@ -327,9 +327,9 @@ fn extend_met_invoer(
                 format!("{soort} {}", c.combination_id),
                 c.elements.len().to_string(),
                 maatgevend.map_or("—".into(), |u| u.element_id.to_string()),
-                spanning.map_or("—".into(), |e| format!("{:.3}", e.sigma_x_mpa)),
-                spanning.map_or("—".into(), |e| format!("{:.3}", e.sigma_y_mpa)),
-                spanning.map_or("—".into(), |e| format!("{:.3}", e.tau_xy_mpa)),
+                spanning.map_or("—".into(), |e| crate::getal_tekst(e.sigma_x_mpa, 3)),
+                spanning.map_or("—".into(), |e| crate::getal_tekst(e.sigma_y_mpa, 3)),
+                spanning.map_or("—".into(), |e| crate::getal_tekst(e.tau_xy_mpa, 3)),
             ]
         })
         .collect();
@@ -562,13 +562,13 @@ fn extend_met_plaat(flow: &mut Vec<Box<dyn Flowable>>, r: &PlateCheckResult) {
                 vec![
                     vec![
                         "x".into(),
-                        format!("{:.1}", w.max_x.n_td_x_kn_per_m),
+                        crate::getal_tekst(w.max_x.n_td_x_kn_per_m, 1),
                         w.max_x.element_id.to_string(),
                         w.max_x.combination_x.to_string(),
                     ],
                     vec![
                         "z".into(),
-                        format!("{:.1}", w.max_z.n_td_z_kn_per_m),
+                        crate::getal_tekst(w.max_z.n_td_z_kn_per_m, 1),
                         w.max_z.element_id.to_string(),
                         w.max_z.combination_z.to_string(),
                     ],

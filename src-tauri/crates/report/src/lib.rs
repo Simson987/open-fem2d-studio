@@ -81,6 +81,7 @@ pub mod betonzones;
 /// De rapportdatum voluit en taalafhankelijk, voor titelblad en paginakop
 /// (issue #20).
 pub mod datum;
+pub mod formuletekst;
 pub mod figuur;
 pub mod houtfiguren;
 pub mod houthoofdstuk;
@@ -962,7 +963,12 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
     } else {
         format!("Constructieve toetsing — {}", norms)
     };
-    let mut doc = DocTemplate::new(&titel, fonts.clone());
+    // De METADATA-titel in ASCII (#227): printpdf schrijft de titel als
+    // UTF-8-bytes in een PDF-tekenreeks, en lezers decoderen die als
+    // PDFDocEncoding — het streepje werd "â•ﬂ". Op het papier blijft het
+    // gedachtestreepje gewoon staan (de kop tekent met het lettertype).
+    let metatitel = titel.replace(['—', '–'], "-");
+    let mut doc = DocTemplate::new(&metatitel, fonts.clone());
 
     let margin_x: Pt = Mm(20.0).into();
     let margin_top: Pt = Mm(28.0).into(); // header band
@@ -981,6 +987,9 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
             project: input.project_name.clone(),
             norms: norms.clone(),
             datum: datum_voluit(&input.date, input.taal),
+            // Het voorblad telt mee in de paginering (#227): "pagina 2 van 3"
+            // op de eerste inhoudspagina van een rapport van drie bladen.
+            voorpaginas: 1,
         }));
     doc.add_page_template(template);
 
@@ -1022,7 +1031,7 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
         extend_with_lege_toetsing(&mut flow);
     } else {
         flow.push(Box::new(
-            Paragraph::new("Summary — Unity Checks", style_h2()).kop(),
+            Paragraph::new("Samenvatting — unity checks", style_h2()).kop(),
         ));
         flow.push(Box::new(Spacer::from_mm(2.0)));
 
@@ -1037,7 +1046,7 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
         flow.push(Box::new(
             Paragraph::new(
                 format!(
-                    "{}. Beam {} — {} ({}){}    [{}]",
+                    "{}. Staaf {} — {} ({}){}    [{}]",
                     idx + 1,
                     m.beam_id,
                     m.section_label,
@@ -1287,15 +1296,16 @@ pub(crate) fn extend_with_deelstappen(flow: &mut Vec<Box<dyn Flowable>>, stappen
             // schakel blijft hij onderaan een vel achter.
             .kop(),
         ));
+        // LaTeX als leesbare tekst (#227): de PDF heeft geen formulezetter.
         if !stap.formula_latex.is_empty() {
             flow.push(Box::new(Paragraph::new(
-                stap.formula_latex.clone(),
+                formuletekst::latex_naar_tekst(&stap.formula_latex),
                 style_body(),
             )));
         }
         if !stap.ingevuld_latex.is_empty() {
             flow.push(Box::new(Paragraph::new(
-                stap.ingevuld_latex.clone(),
+                formuletekst::latex_naar_tekst(&stap.ingevuld_latex),
                 style_body(),
             )));
         }
@@ -1303,7 +1313,7 @@ pub(crate) fn extend_with_deelstappen(flow: &mut Vec<Box<dyn Flowable>>, stappen
             let vars: String = stap
                 .variables
                 .iter()
-                .map(|v| format!("{} = {} {}", v.symbol, getal_tekst(v.value, 3), v.unit))
+                .map(|v| format!("{} = {} {}", formuletekst::latex_naar_tekst(&v.symbol), getal_tekst(v.value, 3), v.unit))
                 .collect::<Vec<_>>()
                 .join("   ");
             flow.push(Box::new(Paragraph::new(vars, style_mono())));
@@ -1312,7 +1322,7 @@ pub(crate) fn extend_with_deelstappen(flow: &mut Vec<Box<dyn Flowable>>, stappen
             let symbool = if stap.symbol.is_empty() {
                 String::new()
             } else {
-                format!("{} = ", stap.symbol)
+                format!("{} = ", formuletekst::latex_naar_tekst(&stap.symbol))
             };
             flow.push(Box::new(Paragraph::new(
                 format!("{symbool}{} {}", getal_tekst(v, 3), stap.unit),
@@ -1430,13 +1440,14 @@ fn build_cover_page(input: &ReportInput, norm_regels: &[String]) -> RawPage {
     // Dezelfde notatie als in de kop van elke pagina (issue #20).
     let datum = datum_voluit(&input.date, input.taal);
     let mut rows: Vec<(&str, &str)> = vec![
-        ("Number", input.project_number.as_str()),
-        ("Engineer", input.engineer.as_str()),
-        ("Company", input.company.as_str()),
-        ("Date", datum.as_str()),
+        // Eén taal op het papier (#227): de rapporttekst is Nederlands.
+        ("Projectnummer", input.project_number.as_str()),
+        ("Constructeur", input.engineer.as_str()),
+        ("Bedrijf", input.company.as_str()),
+        ("Datum", datum.as_str()),
     ];
     for (i, designation) in full_norm_designations(input).iter().enumerate() {
-        rows.push((if i == 0 { "Standard" } else { "" }, designation));
+        rows.push((if i == 0 { "Norm" } else { "" }, designation));
     }
 
     for (label, val) in &rows {
@@ -1457,7 +1468,7 @@ fn build_cover_page(input: &ReportInput, norm_regels: &[String]) -> RawPage {
     dl.draw_text(
         left,
         Pt(A4.height.0 - Mm(15.0).0 * 2.834_645_7),
-        "OpenAEC Foundation — open structural analysis tooling",
+        "OpenAEC Foundation — open rekensoftware voor constructies",
     );
 
     RawPage {
@@ -1474,6 +1485,10 @@ struct OpenAecHeaderFooter {
     norms: String,
     /// De datum al voluit (zie [`datum_voluit`]); leeg = geen datum in de kop.
     datum: String,
+    /// Bladen vóór de inhoud (het voorblad). De sjabloonteller telt alleen de
+    /// inhoudspagina's; zonder deze opschuiving stond er "page 1 of 2" in een
+    /// rapport van drie bladen (#227).
+    voorpaginas: usize,
 }
 
 impl PageCallback for OpenAecHeaderFooter {
@@ -1523,7 +1538,11 @@ impl PageCallback for OpenAecHeaderFooter {
         // De datum staat vóór het paginanummer, in dezelfde notatie als op het
         // titelblad (issue #20). Zonder datum alleen het paginanummer: een
         // scheidingsteken met niets ervoor leest als een weggevallen gegeven.
-        let pagina = format!("page {} of {}", page_num, total_pages);
+        let pagina = format!(
+            "pagina {} van {}",
+            page_num + self.voorpaginas,
+            total_pages + self.voorpaginas
+        );
         let rechts = if self.datum.is_empty() {
             pagina
         } else {
@@ -1541,7 +1560,7 @@ impl PageCallback for OpenAecHeaderFooter {
         dl.draw_text(
             left,
             Pt(footer_y.0 + 12.0),
-            "Generated by Open FEM Studio — OpenAEC Foundation",
+            "Gemaakt met Open FEM Studio — OpenAEC Foundation",
         );
     }
 }
@@ -1574,21 +1593,33 @@ pub fn samenvattingsrijen(members: &[ReportMember<'_>]) -> Vec<Vec<String>> {
                 } else {
                     getal_tekst(m.uc_max, 2)
                 },
-                m.governing_check_id.to_string(),
+                maatgevende_toetsnaam(m),
                 status_label(m.status).into(),
             ]
         })
         .collect()
 }
 
+/// De maatgevende toets met zijn LEESBARE naam (#227): de titel van die
+/// toets, zoals boven zijn blok verderop. Het id (`deflection_w_fin`) is voor
+/// machines; staat het niet in de toetsen, dan blijft het id staan.
+pub(crate) fn maatgevende_toetsnaam(m: &ReportMember<'_>) -> String {
+    m.checks
+        .iter()
+        .find(|nc| nc.id == m.governing_check_id)
+        .map(|nc| extract(&nc.kind).title.to_string())
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| m.governing_check_id.to_string())
+}
+
 fn build_summary_table(members: &[ReportMember<'_>]) -> Table {
     let headers: Vec<String> = vec![
-        "Beam".into(),
-        "Section".into(),
-        "Grade".into(),
-        "Standard".into(),
+        "Staaf".into(),
+        "Doorsnede".into(),
+        "Materiaal".into(),
+        "Norm".into(),
         "UC".into(),
-        "Governing".into(),
+        "Maatgevend".into(),
         "Status".into(),
     ];
 
@@ -1644,21 +1675,44 @@ pub(crate) fn extend_with_check_block_regel(
         Paragraph::new(format!("{}    [{}]", f.title, f.article), style_h3()).kop(),
     ));
 
-    // Force state line
-    flow.push(Box::new(Paragraph::new(
-        krachtregel.unwrap_or_else(|| {
-            format!(
-                "Comb {}  ·  x = {:.0} mm  ·  N_Ed = {:.2} kN  ·  V_Ed = {:.2} kN  ·  M_Ed = {:.2} kNm",
-                f.combo, f.pos_mm, f.n_ed, f.vz_ed, f.my_ed
-            )
-        }),
-        style_mono(),
-    )));
+    // Een ZAKKINGSTOETS (#227): de grens staat als `value`, de zakking als
+    // `uc.ed`, en de toets heeft geen krachtpunt (combinatie 0, x = 0, alle
+    // krachten nul). De krachtregel "Comb 0 · x = 0 mm · N_Ed = 0,00 kN …"
+    // las als een echte combinatie zonder krachten, en "= 16,000 mm" als de
+    // zakking terwijl het de grens L/250 was.
+    let zakking = f.unit.trim() == "mm"
+        && matches!((f.uc_ed, f.uc_rd), (Some(_), Some(rd)) if (rd - f.value).abs() <= 1e-9 * rd.abs().max(1.0));
+    let zonder_krachtpunt = f.combo == 0
+        && f.pos_mm == 0.0
+        && f.n_ed == 0.0
+        && f.vz_ed == 0.0
+        && f.my_ed == 0.0;
 
-    // Formula (LaTeX rendered as plain text — KaTeX rendering is a future
-    // enhancement; we already strip the dollars upstream).
+    // Force state line
+    match krachtregel {
+        Some(regel) => flow.push(Box::new(Paragraph::new(regel, style_mono()))),
+        None if zakking && zonder_krachtpunt => flow.push(Box::new(Paragraph::new(
+            "Bruikbaarheidstoets (zakking); de combinaties waaruit de zakkingen komen, staan in de toelichting hieronder."
+                .to_string(),
+            style_mono(),
+        ))),
+        None => flow.push(Box::new(Paragraph::new(
+            format!(
+                "Combinatie {}  ·  x = {:.0} mm  ·  N_Ed = {} kN  ·  V_Ed = {} kN  ·  M_Ed = {} kNm",
+                f.combo,
+                f.pos_mm,
+                getal_tekst(f.n_ed, 2),
+                getal_tekst(f.vz_ed, 2),
+                getal_tekst(f.my_ed, 2)
+            ),
+            style_mono(),
+        ))),
+    }
+
+    // De formule als leesbare tekst (#227): de PDF heeft geen formulezetter,
+    // en ruwe LaTeX (`\frac{…}{…}`) maakt het rapport niet indienbaar.
     flow.push(Box::new(Paragraph::new(
-        f.formula.to_string(),
+        formuletekst::latex_naar_tekst(f.formula),
         style_body(),
     )));
 
@@ -1667,17 +1721,22 @@ pub(crate) fn extend_with_check_block_regel(
         let vars: String = f
             .variables
             .iter()
-            .map(|v| format!("{} = {} {}", v.symbol, getal_tekst(v.value, 3), v.unit))
+            .map(|v| format!("{} = {} {}", formuletekst::latex_naar_tekst(&v.symbol), getal_tekst(v.value, 3), v.unit))
             .collect::<Vec<_>>()
             .join("   ");
         flow.push(Box::new(Paragraph::new(vars, style_mono())));
     }
 
-    // Result value
-    flow.push(Box::new(Paragraph::new(
-        format!("= {} {}", getal_tekst(f.value, 3), f.unit),
-        style_amber_value(),
-    )));
+    // Result value. Bij een zakkingstoets de zakking NAAST de grens (#227).
+    let uitkomst = match (zakking, f.uc_ed, f.uc_rd) {
+        (true, Some(ed), Some(rd)) => format!(
+            "zakking {} mm  ≤  grens {} mm",
+            getal_tekst(ed, 1),
+            getal_tekst(rd, 1)
+        ),
+        _ => format!("= {} {}", getal_tekst(f.value, 3), f.unit),
+    };
+    flow.push(Box::new(Paragraph::new(uitkomst, style_amber_value())));
 
     // UC + status
     if let (Some(ed), Some(rd), Some(uc)) = (f.uc_ed, f.uc_rd, f.uc_uc) {
@@ -1700,7 +1759,7 @@ pub(crate) fn extend_with_check_block_regel(
         let line: String = f
             .intermediates
             .iter()
-            .map(|v| format!("{} = {}", v.symbol, getal_tekst(v.value, 3)))
+            .map(|v| format!("{} = {}", formuletekst::latex_naar_tekst(&v.symbol), getal_tekst(v.value, 3)))
             .collect::<Vec<_>>()
             .join("   ");
         flow.push(Box::new(Paragraph::new(line, style_mono())));
@@ -1792,9 +1851,10 @@ pub(crate) fn getal_tekst(waarde: f64, decimalen: usize) -> String {
     } else if waarde.is_nan() {
         "ongeldig".into()
     } else if waarde.abs() >= 1e6 {
-        format!("{waarde:.decimalen$e}")
+        format!("{waarde:.decimalen$e}").replace('.', ",")
     } else {
-        format!("{waarde:.decimalen$}")
+        // Decimale komma (#227): het rapport is Nederlands.
+        format!("{waarde:.decimalen$}").replace('.', ",")
     }
 }
 

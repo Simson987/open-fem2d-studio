@@ -123,7 +123,7 @@
     },
     {
       "name": "model3d.beam.add",
-      "description": "Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap. Met profileNameEnd een verlopende staaf (begin → eind, lineair).",
+      "description": "Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap. Met profileNameEnd een verlopende staaf (begin → eind, lineair). Een onbekend profiel of materiaal, of een combinatie die niet bij elkaar past (\"IPE 300\" in C24), wordt geweigerd met de onbekende naam en bekende namen als suggestie; de staaf wordt dan niet opgeslagen.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -525,7 +525,7 @@
     },
     {
       "name": "model3d.beam.update",
-      "description": "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven. Een nieuw profiel of materiaal dat niet meer bij het eindprofiel van een verlopende staaf past, wordt geweigerd: geef dan ook profileNameEnd (of null).",
+      "description": "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven. Een nieuw profiel of materiaal dat niet meer bij het eindprofiel van een verlopende staaf past, wordt geweigerd: geef dan ook profileNameEnd (of null). Een onbekend profiel of materiaal wordt eveneens geweigerd, zoals bij model3d.beam.add.",
       "inputSchema": {
         "type": "object",
         "properties": {

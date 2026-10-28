@@ -90,6 +90,10 @@ pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
             Ok(json!({ "grades": nen_en_1992_1_1::REINFORCEMENT_GRADES }))
         }
         "check_concrete_beam" => {
+            // `detail` hoort niet bij de toetsinvoer (die is strikt); eruit
+            // halen vóór het lezen (#229).
+            let mut args = args;
+            let samenvatting = crate::samenvatting::neem_detail(&mut args).map_err(RpcError::invalid_params)?;
             let input: concrete_check::ConcreteBeamCheckInput = serde_json::from_value(args)
                 .map_err(|e| RpcError::invalid_params(format!("ConcreteBeamCheckInput: {e}")))?;
             // Blokkerend werk: het M-N-κ-diagram integreert de doorsnede in
@@ -99,8 +103,15 @@ pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
                 tokio::task::spawn_blocking(move || concrete_check::check_concrete_beam(input))
                     .await
                     .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
-            serde_json::to_value(result)
-                .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))
+            let volledig = serde_json::to_value(result)
+                .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))?;
+            Ok(if samenvatting {
+                let mut kort = crate::samenvatting::samenvat_resultaat(&volledig);
+                kort["detail"] = serde_json::json!("samenvatting");
+                kort
+            } else {
+                volledig
+            })
         }
         "concrete_mn_kappa" => {
             let req: concrete_check::MnKappaRequest = serde_json::from_value(args)
@@ -721,6 +732,14 @@ fn schema_constructievorm() -> Value {
     })
 }
 
+/// Het schema van `check_concrete_beam`: de strikte toetsinvoer plus
+/// `detail` (#229), dat de tool zelf leest en eruit haalt.
+fn schema_betonstaaf_met_detail() -> Value {
+    let mut s = schema_betonstaaf();
+    s["properties"]["detail"] = crate::samenvatting::schema_detail();
+    s
+}
+
 pub fn tool_definitions() -> Vec<Value> {
     vec![
         json!({
@@ -736,7 +755,7 @@ pub fn tool_definitions() -> Vec<Value> {
         json!({
             "name": "check_concrete_beam",
             "description": "Run the EN 1992-1-1 concrete cross-section check on a single reinforced beam or column (rectangle, T or L). Fifteen checks: bending with the rectangular stress block (3.1.7(3)); bending with axial force through the M-N-kappa relation including the minimum eccentricity of 6.1(4); shear 6.2 (V_Rd,c per (6.2.a)/(6.2.b) or the truss model (6.8)/(6.9)); minimum reinforcement for crack control 7.3.2 and the calculated crack width 7.3.4, both under the FREQUENT SLS combination that the Dutch national annex to 7.3.1(5) prescribes; the span/depth ratio of 7.4.2; and nine detailing rules from 9.2.1, 9.2.2 and 8.2. A check whose input is missing (no stirrup spacing, no sls_frequent_envelope, no exposure_class, no structural_system, no aggregate_size_mm) comes back with status NotApplicable and the reason in its notes: it is never silently dropped, never reported as passing, and nothing is assumed in its place. Returns a ConcreteBeamCheckResult with the full derivation, the M-kappa diagram at the governing axial force and both N-M interaction diagrams. Same input and output types as the Tauri command `check_concrete_beams` and the toetsbrug opdracht of that name - those take a list, this one takes a single beam, exactly like `check_steel_beam`. The reinforcement may VARY ALONG THE MEMBER through `reinforcement_zones` (curtailment of the longitudinal bars per 9.2.1.3, stirrup spacing per 9.2.2); leaving that field out means the single cage in `cage` applies over the whole member. NOT included: torsion, punching shear, fatigue, second-order effects, and the table route of 7.3.3 (the direct calculation of 7.3.4 is made instead; the two are alternatives).",
-            "inputSchema": schema_betonstaaf()
+            "inputSchema": schema_betonstaaf_met_detail()
         }),
         json!({
             "name": "concrete_mn_kappa",

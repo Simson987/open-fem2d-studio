@@ -2457,6 +2457,17 @@ export function useFemStore(opties?: {
     const snap: HistorieSnapshot = next.structuralGrid
       ? next
       : { ...next, structuralGrid: gridRef.current };
+    // Elke mutator pusht de NIEUWE modelstaat. Zet `latestRef` daarom hier
+    // meteen bij, niet pas na de render: een tweede mutator in hetzelfde
+    // synchrone event (de lus over `addLoad` in de bedieningsopdracht
+    // `model_bouwen`, of `addBeam` gevolgd door `updateBeam` en een volgende
+    // `addBeam`) las anders dezelfde verouderde snapshot, kreeg hetzelfde id en
+    // overschreef de vorige toevoeging — alleen de laatste last bleef over,
+    // met id 1 (#215). Hetzelfde als `werkBij`, maar voor alle mutators.
+    werkBij(latestRef, {
+      nodes: next.nodes, beams: next.beams, supports: next.supports,
+      plates: next.plates, loads: next.loads,
+    });
     // Uitgaan van de ref, niet van de state uit de closure: slaat één klik twee
     // stappen op (een staaf naar een nieuw eindpunt: knoop, dan staaf), dan moet
     // de tweede op de eerste volgen. Met de oude state kapten beide op dezelfde

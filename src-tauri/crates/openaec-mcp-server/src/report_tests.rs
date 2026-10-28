@@ -123,3 +123,41 @@ async fn ongeldige_plaatgegevens_worden_niet_stil_genegeerd() {
         -32602
     );
 }
+
+/// #227/#229: met `output_path` gaat de PDF naar schijf en bevat het antwoord
+/// alleen pad en grootte — geen ~2,9 miljoen base64-tekens.
+#[tokio::test]
+async fn output_path_schrijft_de_pdf_en_stuurt_geen_base64() {
+    let map = std::env::temp_dir().join(format!("rapport-pdf-{}", std::process::id()));
+    std::fs::create_dir_all(&map).unwrap();
+    let pad = map.join("rapport.pdf").to_string_lossy().into_owned();
+    let mut args = basis();
+    args["output_path"] = json!(pad);
+    let uit = dispatch_tool("generate_steel_report_pdf", args).await.unwrap();
+    assert!(uit.get("pdf_base64").is_none(), "base64 hoort niet in het antwoord");
+    assert_eq!(uit["output_path"], json!(pad));
+    let bytes = std::fs::read(&pad).expect("de PDF is geschreven");
+    assert!(bytes.starts_with(b"%PDF-"));
+    assert_eq!(bytes.len() as u64, uit["byte_count"].as_u64().unwrap());
+    assert!(serde_json::to_string(&uit).unwrap().len() < 500);
+
+    for fout in ["relatief.pdf", "/tmp/geen-pdf.txt", "/bestaat/niet/rapport.pdf"] {
+        let mut args = basis();
+        args["output_path"] = json!(fout);
+        let e = dispatch_tool("generate_steel_report_pdf", args).await.unwrap_err();
+        assert_eq!(e.code, -32602, "{fout}");
+    }
+    let _ = std::fs::remove_dir_all(&map);
+}
+
+#[test]
+fn schema_noemt_output_path() {
+    let defs = tool_definitions();
+    let schema = &defs
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "generate_steel_report_pdf")
+        .unwrap()["inputSchema"];
+    assert_eq!(schema["properties"]["output_path"]["type"], "string");
+}

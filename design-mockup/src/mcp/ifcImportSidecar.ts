@@ -48,8 +48,9 @@ import {
   leesIfcAnalyseBestand,
   type IfcAnalyseImport,
 } from "../io/ifcAnalyseImport";
+import { serializeProject } from "../io/projectFile";
 
-const IMPORTEREN_VELDEN = ["inhoud", "pad", "analysemodel", "reken"] as const;
+const IMPORTEREN_VELDEN = ["inhoud", "pad", "analysemodel", "reken", "projectbestand"] as const;
 const UITWERKEN_VELDEN = ["inhoud", "analysemodel", "reken", "resultaten"] as const;
 const REKEN_VELDEN = ["analyse", "gevolgklasse"] as const;
 
@@ -176,6 +177,9 @@ export function opIfcImporteren(payload: Record<string, unknown>) {
   if (payload.pad !== undefined && typeof payload.pad !== "string") {
     throw new IfcSidecarInvoerFout("pad", "`pad` moet tekst zijn.");
   }
+  if (payload.projectbestand !== undefined && typeof payload.projectbestand !== "boolean") {
+    throw new IfcSidecarInvoerFout("projectbestand", "`projectbestand` moet true of false zijn.");
+  }
   const bestand = leesIfcAnalyseBestand(leesInhoud(payload));
   const keuze = leesModelKeuze(payload);
   const reken = leesReken(payload.reken);
@@ -183,11 +187,18 @@ export function opIfcImporteren(payload: Record<string, unknown>) {
   const imp = importeerIfcAnalyseModel(bestand, { model: keuze });
   const gekozen = modellen.find((m) => m.naam === imp.verslag.model) ?? modellen[0];
   const opzet = reken ? rekenopzet(imp, reken) : null;
+  const project = ifcAnalyseProject(imp);
   return {
     pad: typeof payload.pad === "string" ? payload.pad : null,
     modellen,
     analysemodel: { nummer: gekozen.nummer, naam: gekozen.naam },
-    project: ifcAnalyseProject(imp),
+    project,
+    // De tekst van het .ifcfem-bestand, met `format`, `version` en `savedAt`:
+    // precies wat Opslaan in de app schrijft (`serializeProject`). Alleen op
+    // verzoek — de MCP-server schrijft hem naar `uitvoerpad` (#233).
+    ...(payload.projectbestand === true
+      ? { projectTekst: serializeProject(project as Parameters<typeof serializeProject>[0]) }
+      : {}),
     verslag: imp.verslag,
     groepen: groepen(imp),
     ...(reken && opzet ? (opzet.mogelijk ? {

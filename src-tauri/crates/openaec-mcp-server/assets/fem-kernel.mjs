@@ -25871,6 +25871,87 @@ async function losEindtoestandNativeOp(input, perCase, combinaties, uitkomst, so
 
 // src/mcp/sidecar.ts
 init_sectionResolver();
+
+// src/lib/eigenGewichtOverzicht.ts
+init_PlateLoads();
+init_plaatMateriaal();
+init_sectionResolver();
+function eigenGewichtOverzicht(model) {
+  const doel = eigenGewichtDoel(model.loadCases);
+  const geval2 = eigenGewichtGeval(model.loadCases, model.selfWeightEnabled);
+  const leeg2 = {
+    doel,
+    caseId: null,
+    g: G,
+    staven: [],
+    platen: [],
+    aantalLasten: 0,
+    gewichtStavenKN: 0,
+    overgeslagen: []
+  };
+  if (!geval2) return leeg2;
+  const staven = [];
+  const overgeslagen = [];
+  for (const b of model.beams) {
+    const sec = resolveSection(b.material, b.profile);
+    if (sec.reden) {
+      overgeslagen.push({ beamId: b.id, reden: sec.reden });
+      continue;
+    }
+    const lengteMm = staafLengteMm(b, model.nodes);
+    const lasten = eigenGewichtLasten(b, lengteMm, geval2.id);
+    const verlopend = bepaalVerloop(b.material, b.profile, b.profileEnd).status === "verlopend";
+    const rho = dichtheidVanMateriaal(b.material);
+    const delen = lasten.map((l) => ({
+      q: l.q,
+      startFrac: l.startFrac ?? 0,
+      endFrac: l.endFrac ?? 1,
+      // Prismatisch: de volle doorsnede (aBruto bij kruislaaghout), zoals
+      // `eigenGewichtPerMeter`. Verlopend: het oppervlak volgt uit de last
+      // zelf, want de segmenten dragen hun A niet mee naar buiten.
+      A_mm2: verlopend ? Math.abs(l.q) * 1e3 / (rho * G) * 1e6 : sec.aBruto ?? sec.A
+    }));
+    const gewichtKN = delen.reduce(
+      (s, d) => s + Math.abs(d.q) * (d.endFrac - d.startFrac) * (lengteMm / 1e3),
+      0
+    );
+    staven.push({
+      beamId: b.id,
+      materiaal: b.material ?? "S235",
+      profiel: b.profile ?? "",
+      ...verlopend && b.profileEnd ? { profielEind: b.profileEnd } : {},
+      rho,
+      lengteMm,
+      delen,
+      gewichtKN
+    });
+  }
+  const platen = [];
+  for (const p2 of model.plates) {
+    const invoer = plaatNaarSolverInput(p2);
+    const st = bepaalPlaatStijfheid(invoer);
+    if (!st.ok) continue;
+    platen.push({
+      plateId: p2.id,
+      materiaal: (p2.materiaal ?? "").trim(),
+      rho: st.stijfheid.rho,
+      dikteMm: invoer.thickness,
+      p: -(st.stijfheid.rho * STANDARD_GRAVITY * (invoer.thickness / 1e3)) / 1e3
+    });
+  }
+  return {
+    doel,
+    caseId: geval2.id,
+    g: G,
+    staven,
+    platen,
+    aantalLasten: staven.reduce((s, x) => s + x.delen.length, 0) + platen.length,
+    gewichtStavenKN: staven.reduce((s, x) => s + x.gewichtKN, 0),
+    overgeslagen
+  };
+}
+
+// src/mcp/sidecar.ts
 init_scheefstandNorm();
 
 // src/io/projectFile.ts
@@ -36095,7 +36176,7 @@ function ifcAnalyseProject(imp, projectInfo = {}) {
 }
 
 // src/mcp/ifcImportSidecar.ts
-var IMPORTEREN_VELDEN = ["inhoud", "pad", "analysemodel", "reken"];
+var IMPORTEREN_VELDEN = ["inhoud", "pad", "analysemodel", "reken", "projectbestand"];
 var UITWERKEN_VELDEN2 = ["inhoud", "analysemodel", "reken", "resultaten"];
 var REKEN_VELDEN2 = ["analyse", "gevolgklasse"];
 var IfcSidecarInvoerFout = class extends Error {
@@ -36194,6 +36275,9 @@ function opIfcImporteren(payload) {
   if (payload.pad !== void 0 && typeof payload.pad !== "string") {
     throw new IfcSidecarInvoerFout("pad", "`pad` moet tekst zijn.");
   }
+  if (payload.projectbestand !== void 0 && typeof payload.projectbestand !== "boolean") {
+    throw new IfcSidecarInvoerFout("projectbestand", "`projectbestand` moet true of false zijn.");
+  }
   const bestand = leesIfcAnalyseBestand(leesInhoud(payload));
   const keuze2 = leesModelKeuze(payload);
   const reken = leesReken2(payload.reken);
@@ -36201,11 +36285,16 @@ function opIfcImporteren(payload) {
   const imp = importeerIfcAnalyseModel(bestand, { model: keuze2 });
   const gekozen = modellen.find((m) => m.naam === imp.verslag.model) ?? modellen[0];
   const opzet = reken ? rekenopzet2(imp, reken) : null;
+  const project = ifcAnalyseProject(imp);
   return {
     pad: typeof payload.pad === "string" ? payload.pad : null,
     modellen,
     analysemodel: { nummer: gekozen.nummer, naam: gekozen.naam },
-    project: ifcAnalyseProject(imp),
+    project,
+    // De tekst van het .ifcfem-bestand, met `format`, `version` en `savedAt`:
+    // precies wat Opslaan in de app schrijft (`serializeProject`). Alleen op
+    // verzoek — de MCP-server schrijft hem naar `uitvoerpad` (#233).
+    ...payload.projectbestand === true ? { projectTekst: serializeProject(project) } : {},
     verslag: imp.verslag,
     groepen: groepen(imp),
     ...reken && opzet ? opzet.mogelijk ? {
@@ -37712,6 +37801,10 @@ function connectOpenFem3DNodesToBeams(model, options = {}) {
 }
 
 // src/api/commands/model3dGeometrie.ts
+init_sectionResolver();
+init_steelGrades();
+init_steelSections_generated();
+init_eigenDoorsnedenStore();
 var RAD_PER_GRAAD = Math.PI / 180;
 function vindKnoop(model, nodeId) {
   const node = model.nodes.find((item) => item.id === nodeId);
@@ -37722,6 +37815,28 @@ function vindStaaf(model, beamId) {
   const beam = model.beams.find((item) => item.id === beamId);
   if (!beam) throw nietGevonden("3D-staaf", beamId);
   return beam;
+}
+function lijkendeProfielen(profiel) {
+  const sleutel = profiel.replace(/[\s\-.]/g, "").toUpperCase();
+  const m = /^([A-Z]+)(\d+)?/.exec(sleutel);
+  if (!m) return [];
+  const [, reeks, getal5] = m;
+  const doel = getal5 ? Number(getal5) : 0;
+  return Object.keys(STEEL_SECTIONS).filter((k) => k.startsWith(reeks) && /^\d/.test(k.slice(reeks.length))).map((k) => ({ k, n: Number(/^\d+/.exec(k.slice(reeks.length))[0]) })).sort((a, b) => Math.abs(a.n - doel) - Math.abs(b.n - doel) || a.k.localeCompare(b.k)).slice(0, 5).map((x) => x.k);
+}
+function keurStaafdoorsnede(beam) {
+  const materiaal = beam.material?.trim() ?? "";
+  const profiel = beam.profileName?.trim() ?? "";
+  if (isEigenProfiel(profiel)) return;
+  const r = resolveSection(materiaal, profiel);
+  if (r.bron !== "default") return;
+  const materiaalBekend = STEEL_GRADES.includes(materiaal) || materiaal in TIMBER_E_MEAN || materiaal in CONCRETE_E_CM || /^(VRIJ|ALU)/i.test(materiaal);
+  const suggestie = !materiaalBekend ? ` Bekende materialen: ${[...STEEL_GRADES].join(", ")}; hout ${Object.keys(TIMBER_E_MEAN).slice(0, 4).join(", ")} \u2026; beton ${Object.keys(CONCRETE_E_CM).slice(0, 3).join(", ")} \u2026; of vrij materiaal "VRIJ:<naam> E=<N/mm2> rho=<kg/m3> f=<N/mm2>".` : STEEL_GRADES.includes(materiaal) && lijkendeProfielen(profiel).length > 0 ? ` Bekende profielen in deze reeks: ${lijkendeProfielen(profiel).join(", ")}.` : "";
+  throw new ApiFout(
+    "INVOER_ONGELDIG",
+    `3D-staaf ${beam.id}: ${r.reden ?? "doorsnede onbekend"}. De staaf is niet opgeslagen.${suggestie}`,
+    { beamId: beam.id, profileName: profiel || null, material: materiaal || null }
+  );
 }
 function vindPlaat(model, plateId) {
   const plate = (model.plates ?? []).find((item) => item.id === plateId);
@@ -37866,19 +37981,20 @@ var knoopVerwijderen = documentCommando({
 });
 var staafToevoegen = documentCommando({
   naam: "model3d.beam.add",
-  beschrijving: "Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap. Met profileNameEnd een verlopende staaf (begin \u2192 eind, lineair).",
+  beschrijving: 'Een 3D-staaf tussen twee bestaande knopen toevoegen. Zonder profiel en materiaal: IPE 200 in S235, net als het tekengereedschap. Met profileNameEnd een verlopende staaf (begin \u2192 eind, lineair). Een onbekend profiel of materiaal, of een combinatie die niet bij elkaar past ("IPE 300" in C24), wordt geweigerd met de onbekende naam en bekende namen als suggestie; de staaf wordt dan niet opgeslagen.',
   invoer: obj({ startNodeId: knoopId, endNodeId: knoopId, ...staafVelden }, ["startNodeId", "endNodeId"]),
   uitvoeren: ({ rollAngleDeg, ...rest }, document2) => {
     const { model, beam } = addOpenFem3DBeam(model3dVan(document2), {
       ...rest,
       ...rollAngleDeg !== void 0 ? { rollAngleRad: rollAngleDeg * RAD_PER_GRAAD } : {}
     });
+    keurStaafdoorsnede(beam);
     return { uitkomst: { beam }, document: metModel3d(document2, model) };
   }
 });
 var staafWijzigen = documentCommando({
   naam: "model3d.beam.update",
-  beschrijving: "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven. Een nieuw profiel of materiaal dat niet meer bij het eindprofiel van een verlopende staaf past, wordt geweigerd: geef dan ook profileNameEnd (of null).",
+  beschrijving: "Eigenschappen of knopen van een 3D-staaf wijzigen. null wist een optioneel veld; lasten en toetsinstellingen blijven. Een nieuw profiel of materiaal dat niet meer bij het eindprofiel van een verlopende staaf past, wordt geweigerd: geef dan ook profileNameEnd (of null). Een onbekend profiel of materiaal wordt eveneens geweigerd, zoals bij model3d.beam.add.",
   invoer: obj({
     id: id("Id van de staaf."),
     startNodeId: knoopId,
@@ -37898,6 +38014,7 @@ var staafWijzigen = documentCommando({
     const huidig = model3dVan(document2);
     vindStaaf(huidig, beamId);
     const model = updateOpenFem3DBeam(huidig, beamId, naarPatch(rest));
+    if (rest.profileName !== void 0 || rest.material !== void 0) keurStaafdoorsnede(vindStaaf(model, beamId));
     return { uitkomst: { beam: vindStaaf(model, beamId) }, document: metModel3d(document2, model) };
   }
 });
@@ -43923,9 +44040,13 @@ function valideerModel(rauw, opties = {}) {
         );
       }
     }
-    if (resolveSection(b.material, b.profile).bron === "default") {
+    const doorsnede = resolveSection(b.material, b.profile);
+    if (doorsnede.bron === "default") {
+      const geenMateriaal = b.material === void 0 || b.material.trim() === "";
+      const geenProfiel = b.profile === void 0 || b.profile.trim() === "";
+      const kop = geenMateriaal && geenProfiel ? "geen materiaal en geen profiel opgegeven" : geenMateriaal ? "geen materiaal opgegeven" : geenProfiel ? "geen profiel opgegeven" : `onbekende combinatie materiaal "${b.material}" + profiel "${b.profile}"`;
       errors.push(
-        `Staaf ${b.id}: onbekende combinatie materiaal "${b.material ?? "(leeg)"}" + profiel "${b.profile ?? "(leeg)"}". De solver zou terugvallen op HEA 160 / S235 en met een andere doorsnede rekenen dan opgegeven.`
+        `Staaf ${b.id}: ${kop}; de staaf wordt niet doorgerekend` + (doorsnede.reden ? ` (${doorsnede.reden})` : "") + ". Er wordt geen standaardmateriaal of -profiel aangenomen."
       );
     } else {
       const verloop = bepaalVerloop(b.material, b.profile, b.profileEnd);
@@ -44861,6 +44982,51 @@ function opHandshake() {
     ops: [...SIDECAR_OPS]
   };
 }
+function eigenGewichtStatus(model) {
+  const aan = model.selfWeightEnabled === true;
+  let overzicht = null;
+  try {
+    overzicht = eigenGewichtOverzicht({
+      nodes: model.nodes,
+      beams: model.beams,
+      plates: model.plates,
+      loadCases: model.loadCases,
+      selfWeightEnabled: true
+    });
+  } catch {
+    overzicht = null;
+  }
+  const doelId = overzicht?.caseId ?? null;
+  const doelNaam = doelId === null ? null : model.loadCases.find((c) => c.id === doelId)?.name ?? null;
+  const gewichtKN = overzicht?.gewichtStavenKN ?? 0;
+  const platen = (overzicht?.platen ?? []).map((pl) => ({ plate_id: pl.plateId, p: pl.p }));
+  const perGeval = {};
+  for (const c of model.loadCases) perGeval[String(c.id)] = aan && c.id === doelId;
+  let melding = null;
+  if (!aan && (gewichtKN > 0 || platen.length > 0)) {
+    const delen = [];
+    if (gewichtKN > 0) {
+      delen.push(`${gewichtKN.toFixed(1).replace(".", ",")} kN staafgewicht`);
+    }
+    if (platen.length > 0) {
+      delen.push(
+        `het plaatgewicht (\u03C1\xB7g\xB7t) van ${platen.length} plaat/platen, ` + platen.map((pl) => `plaat ${pl.plate_id}: ${Math.abs(pl.p).toFixed(2).replace(".", ",")} kN/m\xB2`).join(", ")
+      );
+    }
+    melding = `Eigen gewicht staat UIT (\`selfWeightEnabled\` ontbreekt of is false; in de MCP-modelvorm is dat de standaard): ${delen.join(" en ")} is in GEEN belastinggeval meegenomen. Zet \`selfWeightEnabled: true\` om het mee te rekenen` + (doelNaam !== null ? ` (het komt dan in belastinggeval ${doelId} "${doelNaam}").` : '; het model heeft daarvoor een blijvend geval (type "dead") nodig.');
+  }
+  return {
+    melding,
+    info: {
+      enabled: aan,
+      case_id: aan ? doelId : null,
+      case_name: aan ? doelNaam : null,
+      beams_weight_kN: gewichtKN,
+      plates_kN_per_m2: platen,
+      included_per_case: perGeval
+    }
+  };
+}
 function rekenDoor(payload) {
   const gelezen = leesModel(payload);
   const veldFouten = controleerVelden(gelezen.rauw);
@@ -45074,6 +45240,8 @@ function rekenDoor(payload) {
     bijlage
   );
   if (klasseMelding) waarschuwingen.push(klasseMelding);
+  const eigenGewicht = eigenGewichtStatus(gelezen.model);
+  if (eigenGewicht.melding) waarschuwingen.push(eigenGewicht.melding);
   waarschuwingen.push(...gelezenCombinaties.openMeldingen);
   if (veld.uitkomst) waarschuwingen.push(...veld.uitkomst.meldingen);
   for (const m of veldpatroonMeldingen({
@@ -45120,6 +45288,7 @@ function rekenDoor(payload) {
     plaat,
     onbekendeIds,
     waarschuwingen,
+    eigenGewicht: eigenGewicht.info,
     formatVersion: gelezen.formatVersion,
     stabiliteit: {
       analysis_type: analysetype,
@@ -45186,6 +45355,8 @@ function opSolve(payload) {
       beam_id: s.beamId,
       reason: s.reason
     })),
+    // Of en waar het eigen gewicht is meegerekend, en hoeveel het is (#231).
+    self_weight: d.eigenGewicht,
     warnings: d.waarschuwingen,
     solve_ms: d.solveMs
   };
@@ -45233,6 +45404,7 @@ function opCheck(payload) {
     // toetsbaar maakt.
     plate_check_inputs: d.plaat.inputs,
     skipped_plates: d.plaat.skipped.map((s) => ({ plate_id: s.plateId, reason: s.reason })),
+    self_weight: d.eigenGewicht,
     warnings: d.waarschuwingen
   };
 }
@@ -45506,87 +45678,6 @@ init_timberCheckBuilder();
 init_sectionResolver();
 init_plaatMateriaal();
 init_plaatCheckBuilder();
-
-// src/lib/eigenGewichtOverzicht.ts
-init_PlateLoads();
-init_plaatMateriaal();
-init_sectionResolver();
-function eigenGewichtOverzicht(model) {
-  const doel = eigenGewichtDoel(model.loadCases);
-  const geval2 = eigenGewichtGeval(model.loadCases, model.selfWeightEnabled);
-  const leeg2 = {
-    doel,
-    caseId: null,
-    g: G,
-    staven: [],
-    platen: [],
-    aantalLasten: 0,
-    gewichtStavenKN: 0,
-    overgeslagen: []
-  };
-  if (!geval2) return leeg2;
-  const staven = [];
-  const overgeslagen = [];
-  for (const b of model.beams) {
-    const sec = resolveSection(b.material, b.profile);
-    if (sec.reden) {
-      overgeslagen.push({ beamId: b.id, reden: sec.reden });
-      continue;
-    }
-    const lengteMm = staafLengteMm(b, model.nodes);
-    const lasten = eigenGewichtLasten(b, lengteMm, geval2.id);
-    const verlopend = bepaalVerloop(b.material, b.profile, b.profileEnd).status === "verlopend";
-    const rho = dichtheidVanMateriaal(b.material);
-    const delen = lasten.map((l) => ({
-      q: l.q,
-      startFrac: l.startFrac ?? 0,
-      endFrac: l.endFrac ?? 1,
-      // Prismatisch: de volle doorsnede (aBruto bij kruislaaghout), zoals
-      // `eigenGewichtPerMeter`. Verlopend: het oppervlak volgt uit de last
-      // zelf, want de segmenten dragen hun A niet mee naar buiten.
-      A_mm2: verlopend ? Math.abs(l.q) * 1e3 / (rho * G) * 1e6 : sec.aBruto ?? sec.A
-    }));
-    const gewichtKN = delen.reduce(
-      (s, d) => s + Math.abs(d.q) * (d.endFrac - d.startFrac) * (lengteMm / 1e3),
-      0
-    );
-    staven.push({
-      beamId: b.id,
-      materiaal: b.material ?? "S235",
-      profiel: b.profile ?? "",
-      ...verlopend && b.profileEnd ? { profielEind: b.profileEnd } : {},
-      rho,
-      lengteMm,
-      delen,
-      gewichtKN
-    });
-  }
-  const platen = [];
-  for (const p2 of model.plates) {
-    const invoer = plaatNaarSolverInput(p2);
-    const st = bepaalPlaatStijfheid(invoer);
-    if (!st.ok) continue;
-    platen.push({
-      plateId: p2.id,
-      materiaal: (p2.materiaal ?? "").trim(),
-      rho: st.stijfheid.rho,
-      dikteMm: invoer.thickness,
-      p: -(st.stijfheid.rho * STANDARD_GRAVITY * (invoer.thickness / 1e3)) / 1e3
-    });
-  }
-  return {
-    doel,
-    caseId: geval2.id,
-    g: G,
-    staven,
-    platen,
-    aantalLasten: staven.reduce((s, x) => s + x.delen.length, 0) + platen.length,
-    gewichtStavenKN: staven.reduce((s, x) => s + x.gewichtKN, 0),
-    overgeslagen
-  };
-}
-
-// src/mcp/kernel-exports.ts
 init_femTypes();
 init_PlaatMesher();
 

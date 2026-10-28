@@ -96,6 +96,8 @@ const tijdslimietVan = (naam) => naam === "open-fem3d-selectie-ui" ? SELECTIE_UI
  * ontsluit.
  */
 const BUNDEL_TESTS = new Set([
+  // #231: eigen gewicht uit in de MCP-modelvorm wordt gemeld (solve en check).
+  "eigen-gewicht-mcp",
   // De API-commando's (src/api/) en hun weg door de sidecar (`api_catalogus`,
   // `api_uitvoeren`): de MCP-server voert ze zonder app uit via de bundel, dus
   // alles hoort ook daartegen te slagen.
@@ -104,6 +106,8 @@ const BUNDEL_TESTS = new Set([
   "api-model3d-envelope-loads", "api-model3d-nbc2025-preview",
   // Plaatsen op een object (#76, #77): model3d.support.place en model3d.load.placePoint.
   "api-model3d-plaatsen",
+  // #230: onbekend profiel/materiaal geweigerd bij model3d.beam.add/update.
+  "api-model3d-doorsnede",
   // Staaf op bedding in 3D (issue #106): beam.add/update en beam.setBedding.
   "api-model3d-bedding",
   "api-model3d-panelen",
@@ -486,6 +490,7 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["model-bouwen-lasten", "#215: de React-hook useFemStore (latestRef, pushHistory) rendert via react-dom/server; de hook en de bediening (`model_bouwen`) staan buiten de headless sidecarbundel"],
   ["open-fem3d-leeg-geval", "#245: de keuze van het getoonde 3D-resultaat (lib/openFem3dResultaatKeuze) en bronscans van App.tsx en de bediening (React/app-laag), plus i18next; niets uit de sidecarbundel"],
   ["oplegging-app", "#223/#222: de modelcontrole en rekenpoort van de app (lib/modelControle, lib/rekenPoort), de vertaling via i18next en de Rust-raamwerkroute (nativeFrame2DRoute); geen van die modules staat in de barrel. De MCP-kant staat in dubbele-oplegging en veer-stijfheid, die wél tegen de bundel draaien"],
   ["max-verplaatsing-netknopen", "#228: 2D-combinatie en omhullende via de bron (engine/combinations) en de 3D-samenvatting (openFem3dDisplacement, buiten de barrel) met de 3D-kernbinary als apart proces"],

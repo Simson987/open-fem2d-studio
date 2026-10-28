@@ -77,7 +77,7 @@ fn alle_combinaties_en_maatgevende_punten_staan_in_de_pdf() {
     assert!((r.uc_max - 0.5).abs() < 1e-12);
     assert_eq!(
         plaathoofdstuk::overzichtsregel(r)[4..7],
-        ["0.50", "702", "22"]
+        ["0,50", "702", "22"]
     );
     let redenen = r.niet_getoetst.clone();
     assert_eq!(norms_line(&inp), "EN 1993-1-1");
@@ -90,10 +90,10 @@ fn alle_combinaties_en_maatgevende_punten_staan_in_de_pdf() {
         "22",
         "701",
         "702",
-        "0.20",
-        "0.50",
-        "47.000",
-        "117.500",
+        "0,20",
+        "0,50",
+        "47,000",
+        "117,500",
         "Niet getoetst:",
     ] {
         assert!(bevat(&stroom, tekst), "{tekst}");
@@ -190,7 +190,7 @@ fn wapeningstoelichting_is_resultaatgestuurd_en_noemt_beide_grenstoestanden() {
     let stroom = inhoud(&generate_report_pdf(inp));
     woorden(&stroom, "relevante UGT- en BGT-combinaties");
     woorden(&stroom, "De toetsing van aanwezige wapening en eventuele beperkingen staan bij de toetsen en niet-getoetste onderdelen.");
-    assert!(bevat(&stroom, "600.0"));
+    assert!(bevat(&stroom, "600,0")); // decimale komma (#227)
 }
 
 #[test]
@@ -226,7 +226,7 @@ fn resultaten_zonder_invoer_en_geweigerde_platen_blijven_compatibel() {
     inp.plate_results = check_all_plates(vec![staal()]);
     let stroom = inhoud(&generate_report_pdf(inp));
     woorden(&stroom, "oorspronkelijke toetsinvoer niet meegestuurd;");
-    assert!(bevat(&stroom, "0.50"));
+    assert!(bevat(&stroom, "0,50")); // decimale komma (#227)
 
     let mut inp = leeg();
     let mut clt = staal();
@@ -246,8 +246,8 @@ fn resultaten_zonder_invoer_en_geweigerde_platen_blijven_compatibel() {
 #[test]
 fn nulweerstand_met_positieve_belasting_blijft_leesbaar_in_elk_pdf_blok() {
     assert_eq!(plaathoofdstuk::uc_tekst(f64::MAX), "onbegrensd");
-    assert_eq!(plaathoofdstuk::uc_tekst(1e100), "1.00e100");
-    assert_eq!(plaathoofdstuk::uc_tekst(0.5), "0.50");
+    assert_eq!(plaathoofdstuk::uc_tekst(1e100), "1,00e100");
+    assert_eq!(plaathoofdstuk::uc_tekst(0.5), "0,50");
     // Renderingcontract, geen nieuwe betontoets: een aangeleverd resultaat
     // voor lege wapening draagt Ed > 0, Rd = 0 en MAX als eindige UC.
     let mut r = check_all_plates(vec![staal()]).remove(0);
@@ -316,7 +316,7 @@ fn frequente_bgt_invoer_met_maatgevende_spanning_staat_in_pdf() {
         .any(|c| c.combination_id == 92));
     let pdf = generate_report_pdf(inp);
     let stroom = inhoud(&pdf);
-    for tekst in ["UGT 81", "BGT freq. 92", "1.375"] {
+    for tekst in ["UGT 81", "BGT freq. 92", "1,375"] { // decimale komma (#227)
         assert!(bevat(&stroom, tekst), "Ontbrekende invoer: {tekst}");
     }
     if let Ok(pad) = std::env::var("PLAAT_WAND_PDF_PROEF") {

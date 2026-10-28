@@ -205,6 +205,9 @@ struct CheckArgumenten {
     /// — het type is `NationaleBijlage`, niet een vrije tekst.
     #[serde(default)]
     bijlage: Option<nationale_bijlage::NationaleBijlage>,
+    /// `"samenvatting"` of `"volledig"` (standaard): zie `samenvatting.rs` (#229).
+    #[serde(default)]
+    detail: Option<String>,
 }
 
 fn lees_argumenten<T: for<'de> Deserialize<'de>>(tool: &str, args: Value) -> Result<T, RpcError> {
@@ -392,6 +395,17 @@ async fn roep(op: &str, payload: Value, timeout_s: Option<u64>) -> Result<Value,
 /// [`meld_niet_getoetste_staven`].
 async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
     let a: CheckArgumenten = lees_argumenten(naam, args)?;
+    let samenvatting = match a.detail.as_deref() {
+        None | Some("volledig") => false,
+        Some("samenvatting") => true,
+        Some(ander) => {
+            return Err(fout(
+                ARGUMENT_ONGELDIG,
+                format!("`detail` moet \"samenvatting\" of \"volledig\" zijn, niet \"{ander}\"."),
+                "Laat `detail` weg voor het volledige antwoord.",
+            ))
+        }
+    };
     let timeout_s = a.timeout_s;
     let beam_ids_filter = a.beam_ids.clone();
     let mut payload = model_payload(naam, a.model, a.project_path)?;
@@ -541,6 +555,11 @@ async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
         hout_ondersteund,
     );
     meld_niet_getoetste_platen(&mut uit, model_voor_beton.as_ref(), platen_ondersteund);
+    // Pas NA de vangnetten hierboven: die lezen de toetsinvoer om elke staaf
+    // en plaat te verantwoorden.
+    if samenvatting {
+        crate::samenvatting::samenvat_check_fem_model(&mut uit);
+    }
     Ok(uit)
 }
 
@@ -934,12 +953,12 @@ fn schema_checkconfig() -> Value {
                 "description": "Vervormingsfactor k_def voor de kruip van EN 1995-1-1 §7.2 bij KRUISLAAGHOUT (w_fin = w_inst + k_def · w_qp). Weglaten = de doorbuigingstoets van die staaf wordt NIET uitgevoerd en staat met die reden als 'niet van toepassing' in het resultaat. Er is met opzet geen standaardwaarde: tabel 3.2 kent rijen voor gezaagd hout, gelijmd gelamineerd hout, LVL, multiplex, OSB, spaanplaat, vezelplaat en MDF, maar GEEN rij voor kruislaaghout, en de nationale bijlage voegt er geen toe. Neem de waarde uit de productverklaring of de ETA van de plaat, per klimaatklasse. Alleen gelezen bij een CLT-profiel; massief hout haalt k_def uit tabel 3.2." },
             "cltKdefBron": { "type": "string",
                 "description": "Waar `cltKdef` vandaan komt, bijvoorbeeld \"ETA-00/0000, tabel 8, klimaatklasse 1\". VERPLICHT zodra `cltKdef` is opgegeven: zonder herkomst is de waarde in het rapport niet te onderscheiden van een aangenomen getal, en dan blijft de toets uit." },
-            "schuineRand": { "type": "string", "enum": ["Boven", "Onder", "Beide"],
-                "description": "Welke rand van een VERLOPENDE houten ligger schuin loopt, voor de toets van afgeschuinde randen (EN 1995-1-1 6.4.2). Alleen gelezen bij een verlopende houten staaf." },
             "cltFvRolK": { "type": "number", "exclusiveMinimum": 0,
-                "description": "Gedeclareerde rolschuifsterkte f_v,rol,k in N/mm² van KRUISLAAGHOUT, uit de productverklaring of ETA. Weglaten = rolschuif NIET getoetst (met die melding). Alleen gelezen bij een CLT-profiel." },
+                "description": "Kruislaaghout: gedeclareerde karakteristieke rolschuifsterkte f_v,rol,k in N/mm2 uit de ETA of productverklaring (#232). NEN-EN 1995-1-1 en EN 338 kennen geen f_v,rol; weglaten = rolschuif NIET getoetst, met melding. Alleen gelezen bij een CLT-profiel." },
             "cltFvRolKBron": { "type": "string",
-                "description": "Waar `cltFvRolK` vandaan komt, bijvoorbeeld \"ETA-00/0000, tabel 4\". VERPLICHT zodra `cltFvRolK` is opgegeven; zonder bron wordt de rolschuif niet getoetst." },
+                "description": "Waar `cltFvRolK` vandaan komt (ETA of productverklaring). VERPLICHT zodra `cltFvRolK` is opgegeven." },
+            "schuineRand": { "type": "string", "enum": ["Boven", "Onder", "Beide"],
+                "description": "Hout, verlopende ligger: welke rand schuin loopt, voor de toets van NEN-EN 1995-1-1 6.4.2 aan die rand (#253). Weglaten = niet bekend: de kern toetst de ongunstigste aanname, de schuine rand op trek (6.39)." },
             "betonKorf": schema_betonkorf(),
             "betonMilieuklasse": crate::concrete_tools::schema_milieuklasse(),
             "betonConstructieklasse": crate::concrete_tools::schema_constructieklasse(),
@@ -1020,9 +1039,9 @@ fn schema_beams() -> Value {
                 "from": { "type": "integer", "description": "Knoop-id van het staafbegin." },
                 "to":   { "type": "integer", "description": "Knoop-id van het staafeinde." },
                 "material": { "type": "string",
-                    "description": "Staalsoort (S235, S275, S355, S420, S460) of houtsterkteklasse (C14..C35, GL24h..GL36h). Default \"S235\"." },
+                    "description": "VERPLICHT voor een doorrekening. Staalsoort (S235, S275, S355, S420, S460), houtsterkteklasse (C14..C35, GL24h..GL36h), betonklasse (C12/15..C90/105) of vrij materiaal (\"VRIJ:<naam> E=<N/mm2> rho=<kg/m3> f=<N/mm2>\"). Er is GEEN standaardmateriaal: een staaf zonder (of met een onbekend) materiaal wordt geweigerd met DOORSNEDE_ONBEKEND en niet als S235 aangenomen." },
                 "profile": { "type": "string",
-                    "description": "Profielnaam uit de catalogus ('HEA160', 'IPE300') of een houtrechthoek ('96x450'). Default \"HEA160\". Bij een verlopend profiel: het profiel aan het BEGIN (knoop `from`)." },
+                    "description": "Profielnaam uit de catalogus ('HEA160', 'IPE300'), een rechthoek ('96x450' bij hout of beton) of een eigen doorsnede ('EIGEN:...'). VERPLICHT voor een doorrekening: er is GEEN standaardprofiel; een staaf zonder profiel, of met een profiel dat niet bij het materiaal hoort, wordt geweigerd met DOORSNEDE_ONBEKEND en niet als HEA160 gerekend. Bij een verlopend profiel: het profiel aan het BEGIN (knoop `from`)." },
                 "profileEnd": { "type": "string",
                     "description": "Optioneel: profiel aan het EINDE (knoop `to`) van een verlopende staaf; de maten verlopen lineair van `profile` naar `profileEnd`. Beide moeten van dezelfde doorsnedesoort zijn: rechthoek↔rechthoek (hout, '96x450' → '96x300') of I/H↔I/H uit de staalcatalogus ('IPE300' → 'IPE200', gerekend als gelast I-profiel). Kokers, buizen, hoeklijnen, U-profielen, kruislaaghout en beton kennen geen verloop; een model met platen evenmin. Een eigen doorsnede ('EIGEN:…') mag alleen als zij een gelast, dubbelsymmetrisch I-profiel uit drie platen is — zo bewaart het splitsen van een verlopende staaf de tussendoorsnede. Weggelaten of gelijk aan `profile` = prismatisch." },
                 "releases": schema_releases(),
@@ -1253,7 +1272,7 @@ fn schema_fem_model() -> Value {
             "loadCases": schema_loadcases(),
             "loads": schema_loads(),
             "selfWeightEnabled": { "type": "boolean", "default": false,
-                "description": "Eigen gewicht van staven en platen meerekenen: in het belastinggeval met `eigenGewicht: true`, en zonder zo'n geval in het eerste \"dead\"-geval." },
+                "description": "Eigen gewicht van staven en platen meerekenen: in het belastinggeval met `eigenGewicht: true`, en zonder zo'n geval in het eerste \"dead\"-geval. LET OP: weglaten = false = GEEN eigen gewicht (anders dan een nieuw project in de app). Het antwoord van solve/check meldt dat dan altijd in `warnings`, met het niet meegenomen staafgewicht in kN, en `self_weight` zegt per belastinggeval (`included_per_case`) of het eigen gewicht is meegerekend." },
             "scheefstandEnabled": { "type": "boolean", "default": false,
                 "description": "Initiële scheefstand (imperfectie) als equivalente horizontale krachten meerekenen." },
             "scheefstandNoemer": { "type": "number", "exclusiveMinimum": 0, "default": 200,
@@ -1383,6 +1402,7 @@ pub fn tool_definitions() -> Vec<Value> {
                         "description": "Toetsinstellingen per staaf-id (sleutel = het id als tekst), samengevoegd over de `checkConfig` van die staaf. Ontbreekt een staaf, dan gelden de defaults van de app. De staalsoort staat NIET hier maar in `material` van de staaf. Gekeurd met dezelfde veldpoort als `checkConfig` in het model: een onbekend veld of een nummer dat geen staaf is, geeft een invoerfout.",
                         "patternProperties": { "^[0-9]+$": schema_checkconfig() }
                     },
+                    "detail": crate::samenvatting::schema_detail(),
                     "beam_ids": { "type": "array", "items": { "type": "integer" },
                         "description": "Beperk de toetsing tot deze staven. Leeg of afwezig = alle staven (staal, hout en kruislaaghout). Een nummer dat geen staaf in het model is, staat in `skipped_beams` met de reden \"bestaat niet in het model\"." }
                 },
@@ -1536,6 +1556,21 @@ mod tests {
     /// (september 2026: `profileEnd` voor verlopende profielen) valt hier op,
     /// zodat het schema nooit een veld belooft dat de poort weigert of
     /// andersom.
+    /// #247: de sidecar weigert een staaf zonder materiaal of profiel met
+    /// DOORSNEDE_ONBEKEND. Het schema mag dus geen standaardwaarde beloven,
+    /// en moet betonklassen en vrij materiaal noemen, die wél werken.
+    #[test]
+    fn schema_beams_belooft_geen_standaard_materiaal_of_profiel() {
+        let p = &schema_beams()["items"]["properties"];
+        let mat = p["material"]["description"].as_str().unwrap();
+        let prof = p["profile"]["description"].as_str().unwrap();
+        for d in [mat, prof] {
+            assert!(!d.contains("Default"), "{d}");
+            assert!(d.contains("VERPLICHT") && d.contains("DOORSNEDE_ONBEKEND"), "{d}");
+        }
+        assert!(mat.contains("betonklasse") && mat.contains("VRIJ:"), "{mat}");
+    }
+
     #[test]
     fn schema_beams_spiegelt_de_staafpoort_van_de_sidecar() {
         let pad = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

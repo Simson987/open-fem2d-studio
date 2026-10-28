@@ -50,7 +50,7 @@ pub(crate) fn analysemodel_schema() -> Value {
 pub(crate) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Importeer een IFC4-analysemodel (Structural Analysis View: IfcStructuralAnalysisModel met knopen, staven, vlakken, belastinggevallen en combinaties) als 3D-project van Open FEM Studio — dezelfde import als de knop \"Rekenmodel importeren\" in de app. Geeft het projectbestand (te openen in de app of met gui_load_model), de lijst analysemodellen in het bestand en een verslag: aantallen, trek-alleen staven, starre schijven, toelichting, waarschuwingen en alles wat niet is ingelezen. Eenheden uit IfcUnitAssignment worden omgerekend naar m en kN. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belast geval en elke combinatie uit het bestand (zonder combinaties in het bestand: de standaardset volgens NEN-EN 1990), met reactiesommen en evenwicht per geval; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per onderdeel. Kent de 3D-kern een onderdeel nog niet (bijvoorbeeld trek-alleen staven of starre schijven), dan is `berekening.uitgevoerd` false met de reden.",
+        "description": "Importeer een IFC4-analysemodel (Structural Analysis View: IfcStructuralAnalysisModel met knopen, staven, vlakken, belastinggevallen en combinaties) als 3D-project van Open FEM Studio — dezelfde import als de knop \"Rekenmodel importeren\" in de app. Geeft het project als JSON (`project`), de lijst analysemodellen in het bestand en een verslag: aantallen, trek-alleen staven, starre schijven, toelichting, waarschuwingen en alles wat niet is ingelezen. Een .ifcfem-projectbestand (te openen in de app of met gui_load_model) wordt ALLEEN geschreven met `uitvoerpad`; het geschreven pad staat dan in `projectbestand.pad` (zonder `uitvoerpad` is `projectbestand` null en staat er niets op schijf). Eenheden uit IfcUnitAssignment worden omgerekend naar m en kN. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belast geval en elke combinatie uit het bestand (zonder combinaties in het bestand: de standaardset volgens NEN-EN 1990), met reactiesommen en evenwicht per geval; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per onderdeel. Kent de 3D-kern een onderdeel nog niet (bijvoorbeeld trek-alleen staven of starre schijven), dan is `berekening.uitgevoerd` false met de reden.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -66,6 +66,10 @@ pub(crate) fn tool_definitions() -> Vec<Value> {
                     "description": "Gevolgklasse voor de standaardcombinaties, alleen als het bestand zelf geen combinaties heeft." },
                 "toetsen": { "type": "boolean", "default": true,
                     "description": "Met reken: ook EN 1993 toetsen (staven met een catalogusprofiel van staal)." },
+                "uitvoerpad": { "type": "string", "minLength": 1,
+                    "description": "Absoluut pad voor het .ifcfem-projectbestand dat geschreven moet worden (eindigt op .ifcfem). Dezelfde inhoud als Opslaan in de app, met format, version en savedAt. Een bestaand bestand wordt alleen vervangen met `overschrijven: true`. Weglaten = niets schrijven; alleen JSON." },
+                "overschrijven": { "type": "boolean", "default": false,
+                    "description": "Alleen met uitvoerpad: een bestaand bestand op dat pad vervangen." },
                 "detail": { "type": "string", "enum": ["samenvatting", "volledig"], "default": "samenvatting",
                     "description": "volledig: ook alle reacties en verplaatsingen per geval en de toetsuitkomst per staaf." },
                 "timeout_s": { "type": "integer", "minimum": 1, "maximum": 600,
@@ -95,6 +99,46 @@ struct Argumenten {
     detail: Option<String>,
     #[serde(default)]
     timeout_s: Option<u64>,
+    #[serde(default)]
+    uitvoerpad: Option<String>,
+    #[serde(default)]
+    overschrijven: bool,
+}
+
+/// Controleert `uitvoerpad` VOOR er iets gelezen of gerekend wordt (#233):
+/// extensie .ifcfem, een bestaande map, en geen bestaand bestand tenzij
+/// `overschrijven`. Zo wordt nooit stil een project overschreven.
+fn keur_uitvoerpad(pad: &str, overschrijven: bool) -> Result<(), RpcError> {
+    if !pad.to_lowercase().ends_with(".ifcfem") {
+        return Err(argumentfout(format!("`uitvoerpad` moet op .ifcfem eindigen, niet `{pad}`.")));
+    }
+    let p = std::path::Path::new(pad);
+    if !p.is_absolute() {
+        return Err(argumentfout(format!("`uitvoerpad` moet een absoluut pad zijn, niet `{pad}`.")));
+    }
+    if let Some(map) = p.parent() {
+        if !map.is_dir() {
+            return Err(argumentfout(format!("De map van `uitvoerpad` bestaat niet: `{}`.", map.display())));
+        }
+    }
+    if p.exists() && !overschrijven {
+        return Err(argumentfout(format!(
+            "`{pad}` bestaat al; geef `overschrijven: true` om het te vervangen, of kies een ander pad."
+        )));
+    }
+    Ok(())
+}
+
+/// Eerst naast het doel schrijven, dan in één keer vervangen: een afgebroken
+/// schrijfactie laat nooit een half projectbestand achter.
+fn schrijf_projectbestand(pad: &str, tekst: &str) -> Result<(), RpcError> {
+    let tijdelijk = format!("{pad}.tmp-{}", std::process::id());
+    std::fs::write(&tijdelijk, tekst)
+        .map_err(|e| bestandsfout(format!("`{tijdelijk}` is niet te schrijven ({e}).")))?;
+    std::fs::rename(&tijdelijk, pad).map_err(|e| {
+        let _ = std::fs::remove_file(&tijdelijk);
+        bestandsfout(format!("`{pad}` is niet te schrijven ({e})."))
+    })
 }
 
 fn argumentfout(melding: impl Into<String>) -> RpcError {
@@ -171,6 +215,12 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
             return Err(argumentfout("`analysemodel` is de naam van het analysemodel of zijn volgnummer (vanaf 1)."));
         }
     }
+    if a.overschrijven && a.uitvoerpad.is_none() {
+        return Err(argumentfout("`overschrijven` hoort bij `uitvoerpad`."));
+    }
+    if let Some(uitvoer) = &a.uitvoerpad {
+        keur_uitvoerpad(uitvoer, a.overschrijven)?;
+    }
     let volledig = detail == "volledig";
     let pad = a.pad.clone();
     let bytes = std::fs::read(&pad)
@@ -188,11 +238,27 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     if a.reken {
         importeren["reken"] = reken.clone();
     }
+    if a.uitvoerpad.is_some() {
+        importeren["projectbestand"] = json!(true);
+    }
     let gelezen = roep("ifc_importeren", importeren, a.timeout_s).await?;
     let mut uit = Map::new();
     for sleutel in ["pad", "modellen", "analysemodel", "project", "verslag"] {
         uit.insert(sleutel.to_owned(), gelezen.get(sleutel).cloned().unwrap_or(Value::Null));
     }
+    // Het .ifcfem-bestand (#233): alleen met `uitvoerpad`, met de tekst die
+    // de sidecar met `serializeProject` maakte — dezelfde als Opslaan.
+    let projectbestand = match &a.uitvoerpad {
+        Some(uitvoer) => {
+            let tekst = gelezen["projectTekst"].as_str().ok_or_else(|| {
+                RpcError::tool_exec("de sidecar leverde geen projecttekst; is de bundel ouder dan deze server?")
+            })?;
+            schrijf_projectbestand(uitvoer, tekst)?;
+            json!({ "pad": uitvoer, "geschreven": true, "bytes": tekst.len() })
+        }
+        None => Value::Null,
+    };
+    uit.insert("projectbestand".to_owned(), projectbestand);
     if !a.reken {
         return Ok(Value::Object(uit));
     }
@@ -309,5 +375,26 @@ mod tests {
         assert_eq!(keuze[1]["type"], json!("integer"));
         assert_eq!(keuze[1]["minimum"], json!(1));
         assert_eq!(s["properties"]["analyse"]["enum"], json!(["linear", "p-delta"]));
+        assert_eq!(s["properties"]["uitvoerpad"]["type"], json!("string"));
+        assert_eq!(s["properties"]["overschrijven"]["type"], json!("boolean"));
+    }
+
+    /// #233: het uitvoerpad wordt vooraf gekeurd — extensie, absoluut, map
+    /// bestaat, en een bestaand bestand alleen met `overschrijven`.
+    #[test]
+    fn uitvoerpad_wordt_vooraf_gekeurd() {
+        let map = std::env::temp_dir().join(format!("ifc-uitvoer-{}", std::process::id()));
+        std::fs::create_dir_all(&map).unwrap();
+        let nieuw = map.join("hal.ifcfem").to_string_lossy().into_owned();
+        assert!(keur_uitvoerpad(&nieuw, false).is_ok());
+        assert!(keur_uitvoerpad(&map.join("hal.json").to_string_lossy(), false).is_err());
+        assert!(keur_uitvoerpad("relatief/hal.ifcfem", false).is_err());
+        assert!(keur_uitvoerpad(&map.join("bestaat-niet/hal.ifcfem").to_string_lossy(), false).is_err());
+        schrijf_projectbestand(&nieuw, "{}").unwrap();
+        assert_eq!(std::fs::read_to_string(&nieuw).unwrap(), "{}");
+        let fout = keur_uitvoerpad(&nieuw, false).unwrap_err();
+        assert!(fout.message.contains("overschrijven"), "{}", fout.message);
+        assert!(keur_uitvoerpad(&nieuw, true).is_ok());
+        let _ = std::fs::remove_dir_all(&map);
     }
 }

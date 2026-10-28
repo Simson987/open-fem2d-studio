@@ -218,8 +218,11 @@ const EI = 210000 * resolveSection("S235", "IPE300").I; // N·mm²
   const w = (5 * 10 * 6000 ** 4) / (384 * EI) + (5000 * 6000 ** 3) / (48 * EI);
   check(`051 zakking midden = 5qL⁴/384EI + FL³/48EI = ${w.toFixed(3)} mm (hand met I van de catalogus: 10,89)`,
     -c?.displacements?.["3"]?.uz, w);
-  // In-proces zonder profieldatabase: alleen die ene melding mag er staan.
-  const overig = (a.result?.warnings ?? []).filter((m) => !m.startsWith("Geen profieldatabase meegegeven"));
+  // In-proces zonder profieldatabase: alleen die melding mag er staan, plus
+  // (#231) de melding dat het eigen gewicht uitstaat — dit model rekent bewust
+  // zonder, de handwaarden hierboven ook.
+  const overig = (a.result?.warnings ?? []).filter((m) => !m.startsWith("Geen profieldatabase meegegeven")
+    && !m.startsWith("Eigen gewicht staat UIT"));
   ok("051 bedoeld: geen waarschuwing over het model", overig.length === 0, JSON.stringify(overig));
 }
 {
