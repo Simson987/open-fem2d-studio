@@ -9,6 +9,8 @@
 //!   S  0,8 kN/m per ware lengte over √9,25 m               = 2,4331 kN
 //!   Q  5 kN op de tip + 3 kN midden op de ligger           = 8 kN
 //!   W  0,5 kN/m lokaal op de kolom van 3 m                  = 1,5 kN in +X
+//! De UGT-toets rekent altijd P-Δ met scheefstand φ = 1/200 in +X, −X, +Y en
+//! −Y (issue #199, B9); de handcontrole daarvan staat bij de luifel.
 //!
 //! LET OP: dit meet de INGEBAKKEN solverbundel. Na een wijziging in
 //! `design-mockup/src` eerst `npm run build:sidecar`. Node ≥ 20 is een harde eis.
@@ -136,6 +138,28 @@ async fn luifel_ingelezen_gerekend_en_getoetst() {
         assert_eq!(g["evenwicht"]["kern"], json!(true), "{}", g["naam"]);
         assert_eq!(g["evenwicht"]["onafhankelijk"], json!(true), "{}", g["naam"]);
     }
+    // De toets (issue #199): "Luifel UGT" P-Δ met φ = 1/200 in +X, −X, +Y en −Y.
+    // Hand: ΣR_z = 1,35·6 + 1,5·0,8·√9,25 = 11,7497 kN en in de scheefstandas
+    // ΣR = −richting·φ·ΣR_z = ∓0,05875 kN (geen andere horizontale last).
+    let ta = &b["toetsanalyse"];
+    assert_eq!(ta["analysis_type"], json!("tweedeOrdeGeometrisch"), "{ta}");
+    assert_eq!(ta["model_analysis_type"], json!("linear"));
+    assert_eq!(
+        ta["scheefstand"],
+        // Issue #194: φ per richting (phi_x voor ±X, phi_y voor ±Y); met de vaste noemer gelijk.
+        json!({ "phi": 0.005, "noemer": 200, "phi_x": 0.005, "phi_y": 0.005, "noemer_x": 200, "noemer_y": 200,
+                "bron": "vast", "model_scheefstand_aan": false, "afgedwongen": true })
+    );
+    assert_eq!(ta["aantal_berekeningen"], json!(4));
+    assert_eq!(ta["geweigerd"], json!(false));
+    let z = 1.35 * 6.0 + 1.5 * 0.8 * 9.25f64.sqrt();
+    for (id, [fx, fy]) in [(1, [-0.005 * z, 0.0]), (1_000_001, [0.005 * z, 0.0]), (2_000_001, [0.0, -0.005 * z]), (3_000_001, [0.0, 0.005 * z])] {
+        let r = ta["berekeningen"].as_array().unwrap().iter().find(|x| x["id"] == id).unwrap_or_else(|| panic!("toets {id}"));
+        dichtbij(&r["reactiesomKn"]["fx"], fx, &format!("toets {id} ΣRx"), 1e-6);
+        dichtbij(&r["reactiesomKn"]["fy"], fy, &format!("toets {id} ΣRy"), 1e-6);
+        dichtbij(&r["reactiesomKn"]["fz"], z, &format!("toets {id} ΣRz"), 1e-6);
+    }
+    assert!(ta["alpha_cr"][0]["alpha_cr"].as_f64().is_some_and(|x| x > 1.0), "{}", ta["alpha_cr"]);
     let t = &b["toetsing"];
     for groep in ["Kolom", "Luifelligger"] {
         assert!(t["per_groep"][groep]["uc_max"].as_f64().is_some_and(|x| x.is_finite() && x > 0.0), "{groep}: {t}");

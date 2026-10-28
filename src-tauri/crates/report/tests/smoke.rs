@@ -106,6 +106,7 @@ fn produces_valid_pdf_header() {
         scheefstand_toelichting: None,
         analyse_toelichting: None,
         wind_toelichting: None,
+        toetskrachten: None,
         plate_results: Vec::new(),
         plate_inputs: Vec::new(),
         plate_skipped: Vec::new(),

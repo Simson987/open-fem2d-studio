@@ -22,6 +22,7 @@ import { buildOpenFem3DUtilizations } from "./openFem3dUtilization";
 import { openFem3DMeldingen } from "./openFem3dMeldingen";
 import { openFem3DHorizontaleVerplaatsingen, openFem3DUcPerGroep } from "./openFem3dRapportSamenvatting";
 import { openFem3DDoorlopendeOmhullenden, openFem3DRapportOmhullenden, type OmhullendeGroep, type OmhullendeSoort } from "./openFem3dRapportOmhullenden";
+import { openFem3DPlaatOmhullenden, openFem3DPlaatRandreactieOmhullenden } from "./openFem3dPlaatOmhullenden";
 import { openFem3DStabilityRow, openFem3DTensionOnlySummary } from "./openFem3dTrekSchijf";
 import type { OpenFem3DStandaardViewId, OpenFem3DViewSet } from "./openFem3dViewSets";
 import { formatOpenFem3DPlateValue, openFem3DPlateExtremes } from "./openFem3dPlateResults";
@@ -36,6 +37,11 @@ import { resolveOpenFem3DAnalysisMaterial } from "./openFem3dAnalysisMaterial";
 import { openFem3DExplodedModel } from "./openFem3dExplode";
 import type { OpenFem3DLevel } from "./openFem3dLevels";
 import { DEFAULT_OPEN_FEM_3D_SECTION_BOX } from "./openFem3dSectionBox";
+import type { ToetsKrachten3D } from "./openFem3dToetsKrachten";
+import { weigeringTekst } from "../../lib/toetsKrachten";
+import type { StabiliteitsMelding } from "../fem/solver/alphaCr";
+import { toetsPhiTekst3D } from "./openFem3dScheefstand";
+import { SCHEEFSTAND_BRON_LABEL } from "../../lib/scheefstandNorm";
 
 interface OpenFem3DReportProps {
   model: OpenFem3DModel;
@@ -61,9 +67,22 @@ interface OpenFem3DReportProps {
   standaardViewsUitRapport?: readonly OpenFem3DStandaardViewId[];
   /**
    * De afleiding van de initiële scheefstand (φ, h, m, α_h, α_m), één regel per
-   * zin. Leeg = er is zonder scheefstand gerekend; dan zwijgt het rapport erover.
+   * zin. In de app nooit leeg: de UGT-toets rekent altijd met deze scheefstand
+   * (issue #199). Leeg (een andere aanroeper) laat het rapport erover zwijgen.
    */
   scheefstandTekst?: string;
+  /**
+   * De toets van de laatste rekengang (issue #199): de toetsanalyse (altijd
+   * P-Δ met scheefstand), α_cr per basiscombinatie, de meldingen en een
+   * eventuele weigering. Leeg = nog geen toets.
+   */
+  toets?: ToetsKrachten3D | null;
+  /**
+   * De stabiliteitspoort (issue #194), zoals 2D: `stabiliteitsMeldingen` op α_cr
+   * van de toets, bij het analysetype en de scheefstandschakelaar van de
+   * resultaten. Leeg = niets te melden.
+   */
+  stabiliteitsMeldingen?: readonly StabiliteitsMelding[];
 }
 
 const number = (value: number, digits = 3) =>
@@ -88,9 +107,17 @@ export default function OpenFem3DReport({
   activeLoadCaseId = 1, activeLoadCaseName, activeCombinationName, activeCombinationFactors,
   combinations = [], combinationResults,
   caseResults, activeCombinationId = null, viewSets = [], standaardViewsUitRapport = [],
-  scheefstandTekst = "",
+  scheefstandTekst = "", stabiliteitsMeldingen = [],
+  toets = null,
 }: OpenFem3DReportProps) {
   const { t } = useTranslation("ribbon");
+  // De bron van de toets-φ in de taal van de interface; een normnummer is in
+  // elke taal hetzelfde.
+  const toetsBron = toets
+    ? toets.analyse.bron === "vast" || toets.analyse.bron === "ongunstigste"
+      ? t(`loadCases.swaySource.${toets.analyse.bron}`, { ns: "common" })
+      : SCHEEFSTAND_BRON_LABEL[toets.analyse.bron]
+    : "";
   const concreteMaterials = [...new Set([
     ...model.beams.map((beam) => beam.material?.trim()),
     ...(model.plates ?? []).map((plate) => plate.material?.trim()),
@@ -102,6 +129,9 @@ export default function OpenFem3DReport({
   const horizontaal = combinationResults ? openFem3DHorizontaleVerplaatsingen(model, combinations, combinationResults) : [];
   const omhullenden = combinationResults ? openFem3DRapportOmhullenden(combinations, combinationResults) : [];
   const doorlopendeRijen = openFem3DDoorlopendeOmhullenden(model, omhullenden);
+  // Platen over alle combinaties (issue #197).
+  const plaatOmhullenden = combinationResults ? openFem3DPlaatOmhullenden(combinations, combinationResults) : [];
+  const plaatRandreacties = combinationResults ? openFem3DPlaatRandreactieOmhullenden(model, combinations, combinationResults) : [];
   const ucPerGroep = checks ? openFem3DUcPerGroep(model, checks.results) : [];
   const rapportViews = openFem3DRapportViews({
     model, viewSets, standaardUitRapport: standaardViewsUitRapport, result, caseResults, combinationResults,
@@ -156,7 +186,6 @@ export default function OpenFem3DReport({
   const firstMode = result?.buckling.status === "available" ? result.buckling.modes[0] : undefined;
   const equilibrium = result?.equilibrium;
   const tensionOnly = result ? openFem3DTensionOnlySummary(model, result) : null;
-  const stability = result ? openFem3DStabilityRow(model, result) : null;
   const factor = (caseId: number) => activeCombinationFactors
     ? activeCombinationFactors.get(caseId) ?? 0
     : caseId === activeLoadCaseId ? 1 : 0;
@@ -465,11 +494,15 @@ export default function OpenFem3DReport({
             <h2>{t("openFem3d.report.summary")}</h2>
             <div className="open-fem3d-report-cards">
               <div><span>{t("openFem3d.analysis")}</span><strong>{result.analysis === "p-delta" ? t("openFem3d.report.secondOrder") : t("openFem3d.report.firstOrder")}</strong></div>
+              {toets && <div data-open-fem3d-report-check-forces><span>{t("openFem3d.report.checkForces")}</span><strong>{t("openFem3d.report.checkForcesValue", { phi: toetsPhiTekst3D(toets.analyse) })}</strong></div>}
               <div><span>{t("openFem3d.report.state")}</span><strong>{activeCombinationName || activeLoadCaseName || t("openFem3d.report.caseN", { id: activeLoadCaseId })}</strong></div>
               <div><span>{t("openFem3d.maxDisplacement")}</span><strong>{number(maxDisplacement * 1000)} mm</strong></div>
               <div><span>{t("openFem3d.report.convergence")}</span><strong>{result.secondOrder ? t("openFem3d.report.iterations", { count: result.secondOrder.iterations }) : t("openFem3d.report.direct")}</strong></div>
-              <div><span>{t("openFem3d.report.firstBucklingFactor")}</span><strong
-                className={result.analysis === "linear" && stability?.firstOrderSufficient === false ? "open-fem3d-report-bad" : undefined}>
+              {/* Informatief (issue #199, B14): de toetskrachten zijn altijd
+                  tweede orde met scheefstand, dus een αcr < 10 bij eerste-
+                  orderesultaten is geen fout meer; de noot bij de combinaties
+                  zegt wat hij nog betekent. */}
+              <div><span>{t("openFem3d.report.firstBucklingFactor")}</span><strong>
                 {firstMode ? number(firstMode.loadFactor) : t("openFem3d.check.notApplicable")}</strong></div>
               {tensionOnly && <div data-open-fem3d-report-tension-only><span>{t("openFem3d.report.tensionOnlyInactive")}</span><strong>{t("openFem3d.report.tensionOnlyValue", { inactive: tensionOnly.inactive, total: tensionOnly.total })}</strong></div>}
               <div><span>{t("openFem3d.equilibrium")}</span><strong className={equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? "open-fem3d-report-good" : "open-fem3d-report-bad"}>{equilibrium?.equilibriumOk === true && result.forceBalance?.ok !== false ? t("openFem3d.report.agreed") : equilibrium?.equilibriumOk === false || result.forceBalance?.ok === false ? t("openFem3d.report.deviation") : t("openFem3d.report.notVerified")}</strong></div>
@@ -527,8 +560,7 @@ export default function OpenFem3DReport({
                   <td>{combination.id}</td><td>{combination.name}</td><td>{combination.type === "uls" ? t("openFem3d.report.uls") : t("openFem3d.report.sls")}</td>
                   <td>{number(displacement)}</td>
                   <td>{combinationResult.secondOrder?.converged === false ? t("openFem3d.report.notConverged") : t("openFem3d.report.iterShort", { n: combinationResult.secondOrder?.iterations ?? 0 })}</td>
-                  <td className={combinationResult.analysis === "linear" && row.firstOrderSufficient === false ? "open-fem3d-report-bad" : undefined}>
-                    {row.alphaCr === null ? "—" : number(row.alphaCr)}</td>
+                  <td>{row.alphaCr === null ? "—" : number(row.alphaCr)}</td>
                   {tensionOnly && <td>{row.inactiveTensionOnly === null ? "—" : t("openFem3d.report.tensionOnlyValue", { inactive: row.inactiveTensionOnly, total: tensionOnly.total })}</td>}
                 </tr>;
               })}
@@ -561,6 +593,53 @@ export default function OpenFem3DReport({
                 </tr>)}
               </tbody></table>
             </div>}
+          </section>}
+
+          {/* Platen over alle combinaties (issue #197): omhullende per grootheid en randreacties. */}
+          {(plaatOmhullenden.length > 0 || plaatRandreacties.length > 0) && <section className="open-fem3d-report-envelope" data-open-fem3d-report-plate-envelopes>
+            <h2>{t("openFem3d.report.plateEnvelopeTitle")}</h2>
+            <p className="open-fem3d-report-note">{t("openFem3d.report.plateEnvelopeNote")}</p>
+            {(["uls", "sls"] as const).map((soort) => {
+              const rijen = plaatOmhullenden.filter((rij) => rij.soort === soort);
+              if (rijen.length === 0) return null;
+              return <div key={`plaat-${soort}`} className="open-fem3d-report-envelope-table">
+                <h3>{t("openFem3d.report.plateEnvelopeGroup")} · {t(soort === "uls" ? "openFem3d.report.uls" : "openFem3d.report.sls")}</h3>
+                <table className="open-fem3d-report-wide"><thead><tr>
+                  <th>{t("openFem3d.report.plate")}</th><th>{t("openFem3d.report.quantity")}</th>
+                  <th>{t("openFem3d.report.envelopeMin")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                  <th>{t("openFem3d.report.envelopeMax")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                </tr></thead><tbody>
+                  {rijen.map((rij) => <tr key={`${rij.plateId}-${rij.grootheid}`} data-open-fem3d-report-plate-envelope-row={`${soort}-${rij.plateId}-${rij.grootheid}`}>
+                    <td>{rij.plateId}</td><td>{rij.symbool} [{rij.eenheid}]</td>
+                    <td>{formatOpenFem3DPlateValue(rij.min.waarde)} · {t("openFem3d.report.node")} {rij.min.knoopId}</td>
+                    <td>#{rij.min.combinatieId} {rij.min.combinatie}</td>
+                    <td>{formatOpenFem3DPlateValue(rij.max.waarde)} · {t("openFem3d.report.node")} {rij.max.knoopId}</td>
+                    <td>#{rij.max.combinatieId} {rij.max.combinatie}</td>
+                  </tr>)}
+                </tbody></table>
+              </div>;
+            })}
+            {(["uls", "sls"] as const).map((soort) => {
+              const rijen = plaatRandreacties.filter((rij) => rij.soort === soort);
+              if (rijen.length === 0) return null;
+              return <div key={`rand-${soort}`} className="open-fem3d-report-envelope-table">
+                <h3>{t("openFem3d.report.plateEdgeReactionsTitle")} · {t(soort === "uls" ? "openFem3d.report.uls" : "openFem3d.report.sls")}</h3>
+                <table className="open-fem3d-report-wide"><thead><tr>
+                  <th>{t("openFem3d.report.plate")}</th><th>{t("openFem3d.report.edge")}</th><th>{t("openFem3d.report.quantity")}</th>
+                  <th>{t("openFem3d.report.envelopeMin")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                  <th>{t("openFem3d.report.envelopeMax")}</th><th>{t("openFem3d.report.envelopeCombination")}</th>
+                </tr></thead><tbody>
+                  {rijen.map((rij) => <tr key={`${rij.plateId}-${rij.rand ?? "plaat"}-${rij.grootheid}`} data-open-fem3d-report-plate-edge-row={`${soort}-${rij.plateId}-${rij.rand ?? "plaat"}-${rij.grootheid}`}>
+                    <td>{rij.plateId}</td>
+                    <td>{rij.rand === null ? t("openFem3d.report.plateEdgeTotal") : rij.rand + 1}</td>
+                    <td>{rij.grootheid} [kN]</td>
+                    <td>{signed(rij.min.waarde)}</td><td>#{rij.min.combinatieId} {rij.min.combinatie}</td>
+                    <td>{signed(rij.max.waarde)}</td><td>#{rij.max.combinatieId} {rij.max.combinatie}</td>
+                  </tr>)}
+                </tbody></table>
+              </div>;
+            })}
+            {plaatRandreacties.length > 0 && <p className="open-fem3d-report-note">{t("openFem3d.report.plateEdgeReactionsNote")}</p>}
           </section>}
 
           {horizontaal.length > 0 && <section data-open-fem3d-horizontaal>
@@ -767,6 +846,36 @@ export default function OpenFem3DReport({
             {scheefstandTekst.split("\n").map((regel, index) => <p key={index}>{regel}</p>)}
           </section>}
 
+          {/* De toetskrachten (issue #199): altijd P-Δ met scheefstand, los van
+              de instellingen van de resultaten. Met α_cr van de toets
+              (informatief), de meldingen en een eventuele weigering. */}
+          {toets && <section data-open-fem3d-toetskrachten>
+            <h2>{t("openFem3d.report.checkForcesTitle")}</h2>
+            <p>{t("openFem3d.report.checkForcesBasis", { phi: toetsPhiTekst3D(toets.analyse), bron: toetsBron })}
+              {toets.analyse.hergebruikt && <> {t("openFem3d.report.checkForcesReused")}</>}</p>
+            {toets.weigering && <p className="open-fem3d-report-bad" data-open-fem3d-toets-geweigerd>
+              {t("openFem3d.report.checkForcesRefused", { reden: weigeringTekst(toets.weigering) })}</p>}
+            {toets.alphaCr.length > 0 && <>
+              <p className="open-fem3d-report-note">{t("openFem3d.report.checkForcesAlphaCr")}</p>
+              <table><thead><tr><th>{t("openFem3d.report.combination")}</th><th>αcr</th></tr></thead><tbody>
+                {toets.alphaCr.map((u) => <tr key={u.combinatieId}>
+                  <td>{u.naam}</td><td>{u.alphaCr === null ? (u.status === "boven_grens" ? `> ${u.grens ?? 100}` : "—") : number(u.alphaCr)}</td>
+                </tr>)}
+              </tbody></table>
+            </>}
+            {stabiliteitsMeldingen.length > 0 && <div data-open-fem3d-stabiliteit>
+              <h3>{t("openFem3d.report.stabilityTitle")}</h3>
+              {stabiliteitsMeldingen.map((melding, index) => <p key={index} data-niveau={melding.niveau}
+                className={melding.niveau === "fout" ? "open-fem3d-report-bad" : melding.niveau === "waarschuwing" ? "open-fem3d-report-note" : undefined}>
+                {melding.niveau === "info" ? melding.tekst : `! ${melding.tekst}`}
+              </p>)}
+            </div>}
+            {toets.meldingen.length > 0 && <>
+              <h3>{t("openFem3d.report.checkForcesNotes")}</h3>
+              <ul>{toets.meldingen.map((m, i) => <li key={i}>{m}</li>)}</ul>
+            </>}
+          </section>}
+
           <section>
             <h2>{t("openFem3d.report.bucklingAnalysis")}</h2>
             {result.buckling.status === "available" ? <>
@@ -899,10 +1008,13 @@ export default function OpenFem3DReport({
                   const uc = openFem3DTimberUlsUc(check);
                   const governing = openFem3DTimberGoverningUlsCheck(check);
                   const hasUls = governing !== undefined;
-                  return <tr key={check.beam_id}>
+                  // Niet (volledig) getoetst (issue #205, een doorlopend
+                  // staafeind): de reden van de kern, nooit "voldoet".
+                  const nietGetoetst = check.status === "NotApplicable" && uc <= 1;
+                  return <tr key={check.beam_id} data-open-fem3d-niet-getoetst={nietGetoetst ? check.beam_id : undefined}>
                     <td>{check.beam_id}</td><td>{check.section_name}</td><td>{check.strength_class}</td>
-                    <td>{hasUls ? number(uc) : "—"}</td><td>{governing?.kind.data.title ?? "—"}</td>
-                    <td className={hasUls ? uc > 1 ? "open-fem3d-report-bad" : "open-fem3d-report-good" : "open-fem3d-report-note"}>{hasUls ? uc > 1 ? t("openFem3d.check.fail") : t("openFem3d.check.pass") : t("openFem3d.check.notApplicable")}</td>
+                    <td>{hasUls ? number(uc) : "—"}</td><td>{nietGetoetst ? check.governing_check_id : governing?.kind.data.title ?? "—"}</td>
+                    <td className={nietGetoetst ? "open-fem3d-report-note" : hasUls ? uc > 1 ? "open-fem3d-report-bad" : "open-fem3d-report-good" : "open-fem3d-report-note"}>{nietGetoetst ? t("openFem3d.check.notChecked") : hasUls ? uc > 1 ? t("openFem3d.check.fail") : t("openFem3d.check.pass") : t("openFem3d.check.notApplicable")}</td>
                   </tr>;
                 })}
               </tbody></table>

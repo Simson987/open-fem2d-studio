@@ -471,7 +471,7 @@ fn tool_definitions() -> Value {
                         "type": "object",
                         "additionalProperties": false,
                         "required": ["y", "z"],
-                        "description": "Om welke doorsnedeassen de globale berekening tweede orde (P-Δ) MET scheefstand (NEN-EN 1993-1-1 5.3.2) is en de staaf kan laten uitbuigen. Alleen van belang bij een 'Vrij' staafeind in 'staafeinden' zonder opgegeven kniklengte: om een gedekte as geldt dan de staaflengte (5.2.2(7)b: de zijdelingse knik zit al in de krachten), om een niet-gedekte as 2*L. In een vlak model is hooguit 'y' waar. Zet het alleen voor een staaf waarvan de scheefstand de zijdelingse knikvorm aanstoot: een overwegend verticale staaf (kolom); de scheefstand is een horizontale kracht bij de verticale last, en een liggende uitkraging met druk krijgt er geen imperfectie in haar knikvorm door. Bij een hoekprofiel telt alleen y EN z samen. Zet het bovendien alleen als de scheefstand φ in de berekening minstens de eigen φ van die kolom is: EN 1993-1-1 (5.5) met h = haar lengte en m = 1 (een kolom met een vrije kop hangt nergens aan; de φ van een heel model middelt over al zijn kolommen). Bij L houdt de kern C_m = 0,9 als ondergrens (tabel B.3, knikvorm met verplaatsbare knopen). Weglaten = geen as gedekt (2*L). `check_fem_model` en de app vullen dit uit het analysetype, de scheefstand en φ.",
+                        "description": "Om welke doorsnedeassen de globale berekening tweede orde (P-Δ) MET scheefstand (NEN-EN 1993-1-1 5.3.2) is en de staaf kan laten uitbuigen. Alleen van belang bij een 'Vrij' staafeind in 'staafeinden' zonder opgegeven kniklengte: om een gedekte as geldt dan de staaflengte (5.2.2(7)b: de zijdelingse knik zit al in de krachten), om een niet-gedekte as 2*L. In een vlak model is hooguit 'y' waar. Zet het alleen voor een staaf waarvan de scheefstand de zijdelingse knikvorm aanstoot: een overwegend verticale staaf (kolom); de scheefstand is een horizontale kracht bij de verticale last, en een liggende uitkraging met druk krijgt er geen imperfectie in haar knikvorm door. Bij een hoekprofiel telt alleen y EN z samen. Zet het bovendien alleen als de scheefstand φ in de berekening minstens de eigen φ van die kolom is: EN 1993-1-1 (5.5) met h = haar lengte en m = 1 (een kolom met een vrije kop hangt nergens aan; de φ van een heel model middelt over al zijn kolommen). Bij L houdt de kern C_m = 0,9 als ondergrens (tabel B.3, knikvorm met verplaatsbare knopen). Weglaten = geen as gedekt (2*L). `check_fem_model` en de app vullen dit uit hun toetsanalyse: hun UGT-toetskrachten zijn altijd tweede orde (P-Δ) met scheefstand, met φ uit de projectinstelling, dus een staande staaf met een vrije kop krijgt 'y' zodra die φ minstens haar eigen φ is.",
                         "properties": {
                             "y": { "type": "boolean" },
                             "z": { "type": "boolean" }
@@ -527,6 +527,20 @@ fn tool_definitions() -> Value {
                     }, "description": "Plates not sent to the check kernel, with their literal reason. Printed as not checked." },
                     "concrete_stiffness_trace": { "type": "object" },
                     "output_path": { "type": "string", "minLength": 1, "description": "Absolute path ending in .pdf. When given, the PDF is written there (replacing an existing file) and the answer is only { output_path, byte_count } — no base64. Recommended: base64 of a three-page report is ~2.9 million characters." },
+                    "toetskrachten": {
+                        "type": "object", "additionalProperties": false,
+                        "required": ["noemer", "tweede_orde_combinaties"],
+                        "properties": {
+                            "noemer": { "type": "number", "exclusiveMinimum": 0 },
+                            "tweede_orde_combinaties": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+                            "combinaties": { "type": "array", "items": {
+                                "type": "object", "additionalProperties": false,
+                                "required": ["id", "naam"],
+                                "properties": { "id": { "type": "integer", "minimum": 0 }, "naam": { "type": "string" } }
+                            }, "description": "Optioneel: de naam per toetscombinatie. Het rapport noemt de combinatie dan bij haar naam, ook de varianten in −x (id + 1000000) die in geen combinatielijst staan." }
+                        },
+                        "description": "Where the forces of each check come from: pass `toetskrachten` from check_fem_model unchanged. The force line of every check block then states '2e orde + scheefstand φ = 1/noemer' for a ULS check combination (second order P-Delta with sway imperfection) and 'resultaten' for any other combination (the results, SLS), and names the combination by its name from `combinaties` (also the −x variants under id + 1000000). Absent = the force line names only the combination."
+                    },
                     "wind_toelichting": { "type": "string", "description": "Optional text block (one line per load case) describing generated wind loads: NEN-EN 1991-1-4 paragraph and table, roof pitch alpha, blockage phi and the coefficient used. Printed verbatim under 'Uitgangspunten' → 'Windbelasting'; empty or absent = the PDF says nothing about wind." }
                 },
                 "required": [

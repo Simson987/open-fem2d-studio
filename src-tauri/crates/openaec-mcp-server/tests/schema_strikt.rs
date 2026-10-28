@@ -936,15 +936,29 @@ async fn schema_van_de_houttools_is_strikt_op_elk_niveau() {
     );
     assert_eq!(
         staaf["properties"].as_object().unwrap().len(),
-        38,
-        "het schema van de houten staaf hoort precies deze 38 velden van TimberBeamCheckInput te kennen 
+        39,
+        "het schema van de houten staaf hoort precies deze 39 velden van TimberBeamCheckInput te kennen
          (25 + load_duration_per_combination + staaf_notities + width_end_mm + height_end_mm + bijlage
          + deflection_quasi_perm_fin_mm + is_cantilever + zijdelingse_knik_in_analyse + schuine_rand
-         + ruimtelijk + deflection_not_applicable_reason + deflection_add_mm + pre_camber_mm); de spiegeltest in timber_tools.rs leest
-         de velden uit het type zelf (issue #210)"
+         + ruimtelijk + deflection_not_applicable_reason + deflection_add_mm + pre_camber_mm + staafeinden);
+         de spiegeltest in timber_tools.rs leest de velden uit het type zelf (issue #210)"
+    );
+    // Issue #206: zonder deze twee kon een client een staaf niet als deel van
+    // een 3D-raamwerk toetsen.
+    assert!(staaf["properties"]["ruimtelijk"].is_object(), "ruimtelijk ontbreekt");
+    assert!(
+        staaf["properties"]["deflection_not_applicable_reason"].is_object(),
+        "deflection_not_applicable_reason ontbreekt"
+    );
+    // Issue #205: de staafeinden, met het doorlopende eind.
+    assert_eq!(
+        staaf["properties"]["staafeinden"]["properties"]["eind"]["enum"],
+        json!(["Gaffel", "Vrij", "Doorlopend"])
     );
     // Issue #253: de schuine rand voor 6.4.2 is voor een client op te geven.
     assert_eq!(staaf["properties"]["schuine_rand"]["enum"], json!(["Boven", "Onder", "Beide"]));
+    // Issue #200: w₃ per BGT-combinatie is voor een client op te geven.
+    assert!(staaf["properties"]["deflection_add_mm"].is_object(), "deflection_add_mm ontbreekt");
     // Issue #23: de langeduurzakking van 2.2.3(4) is voor een client op te geven.
     assert!(
         staaf["properties"]["deflection_quasi_perm_fin_mm"].is_object(),
@@ -1004,6 +1018,40 @@ async fn geldige_hout_en_cltinvoer_wordt_gewoon_getoetst() {
             "{tool}: er is geen enkele toets uitgevoerd"
         );
     }
+
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// Issue #206: `ruimtelijk` en `deflection_not_applicable_reason` zijn langs
+/// de MCP-weg op te geven en doen wat het schema belooft: de staaf rekent als
+/// deel van een 3D-raamwerk, en de doorbuiging wordt met de reden niet
+/// getoetst terwijl de sterktetoetsen doorlopen.
+#[tokio::test]
+async fn ruimtelijk_en_bgt_reden_gaan_door_check_timber_beams() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+
+    let mut invoer = geldige_houtinvoer();
+    invoer["ruimtelijk"] = json!(true);
+    invoer["deflection_not_applicable_reason"] = json!("quasi-blijvende BGT-combinatie ontbreekt (testreden)");
+    let result =
+        roep_tool_aan(&mut stdin, &mut reader, 60, "check_timber_beams", json!({ "inputs": [invoer] })).await;
+    assert_eq!(result["isError"], false, "geldige invoer moet rekenen, kreeg: {}", foutmelding(&result));
+    let checks = result["structuredContent"]["results"][0]["checks"].as_array().expect("checks");
+    let toets = |id: &str| checks.iter().find(|c| c["id"] == id).unwrap_or_else(|| panic!("{id} ontbreekt"));
+    for id in ["deflection_w_fin", "deflection_w_add"] {
+        let data = &toets(id)["kind"]["data"];
+        assert_eq!(data["status"], "NotApplicable", "{id}");
+        assert!(data["uc"].is_null(), "{id}: geen UC zonder toets");
+        assert!(
+            data["notes"].as_array().unwrap().iter().any(|n| n.as_str().unwrap().contains("testreden")),
+            "{id}: de reden staat in de notities"
+        );
+    }
+    assert!(toets("6.1.6_bending")["kind"]["data"]["uc"].is_object(), "de sterktetoets loopt door");
+    // Ruimtelijk: knik om z is uitbuigen in het rekenvlak van een 3D-berekening.
+    let kolom = serde_json::to_string(&toets("6.3.2_column_stability")["kind"]["data"]).unwrap();
+    assert!(!kolom.contains("UIT het vlak van het model"), "ruimtelijk telt: {kolom}");
 
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
@@ -1111,6 +1159,26 @@ async fn rapportschema_noemt_de_windomschrijving() {
     assert_eq!(
         rapport["inputSchema"]["properties"]["wind_toelichting"]["type"], "string",
         "wind_toelichting ontbreekt in het schema van generate_steel_report_pdf"
+    );
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// Het rapportschema noemt de herkomst van de toetskrachten (issue #199):
+/// `toetskrachten` uit `check_fem_model`, streng (`additionalProperties:
+/// false`, net als `report::ToetskrachtenRapport` met `deny_unknown_fields`).
+#[tokio::test]
+async fn rapportschema_noemt_de_toetskrachten() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let rapport = tooldefinitie(&mut stdin, &mut reader, 43, "generate_steel_report_pdf").await;
+    let veld = &rapport["inputSchema"]["properties"]["toetskrachten"];
+    assert_eq!(veld["type"], "object", "toetskrachten ontbreekt in het schema van generate_steel_report_pdf");
+    assert_eq!(veld["additionalProperties"], json!(false));
+    assert_eq!(veld["required"], json!(["noemer", "tweede_orde_combinaties"]));
+    let check = tooldefinitie(&mut stdin, &mut reader, 44, "check_fem_model").await;
+    assert!(
+        check["description"].as_str().unwrap_or("").contains("`toetskrachten`"),
+        "check_fem_model noemt het veld toetskrachten in zijn beschrijving"
     );
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
@@ -1251,6 +1319,14 @@ async fn schema_van_de_belastingvlakken_in_het_3d_model_is_strikt() {
     for grens in ["min_m", "max_m"] {
         assert_eq!(doos["properties"][grens]["$ref"], json!("#/$defs/pointM"), "{grens}");
     }
+    // De explode (issue #198): strikt. Een tikfout als `amount` (in plaats van
+    // `amount_mm`) of een andere modus mag niet stil een standaardwaarde geven.
+    let explode = &weergave["inputSchema"]["properties"]["explode"];
+    assert_eq!(explode["additionalProperties"], json!(false), "{explode}");
+    assert_eq!(explode["properties"]["mode"]["enum"], json!(["levels", "elementTypes"]));
+    assert_eq!(explode["properties"]["amount_mm"]["type"], json!("number"));
+    assert_eq!(explode["properties"]["amount_mm"]["minimum"], json!(0));
+    assert_eq!(explode["properties"]["amount_mm"]["maximum"], json!(10000));
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
@@ -1613,6 +1689,51 @@ async fn schema_van_de_staalhal_is_strikt_op_elk_niveau() {
     assert_eq!(p["fundering"]["properties"]["type"]["enum"], json!(["opleggingen", "balkrooster"]));
     assert_eq!(p["lasten"]["properties"]["wind"]["properties"]["bron"]["enum"], json!(["handmatig", "stuwdruk"]));
     assert_eq!(tool["inputSchema"]["properties"]["analyse"]["enum"], json!(["linear", "p-delta"]));
+    // Issue #199: `analyse` geldt alleen voor de resultaten; de toets rekent
+    // altijd P-Delta met scheefstand, en de beschrijvingen zeggen dat.
+    eis_toetsbeschrijving(&tool);
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// De beschrijvingen van een 3D-tool met toets (staalhal, IFC-import): de
+/// toets rekent altijd tweede orde met scheefstand in vier richtingen, los van
+/// `analyse`, en weigert bij divergentie zonder terugval op eerste orde.
+fn eis_toetsbeschrijving(tool: &Value) {
+    let tekst = tool["description"].as_str().unwrap_or("");
+    for woord in [
+        "ALTIJD zelf tweede orde (P-Delta) met scheefstand",
+        "+X, −X, +Y en −Y",
+        "toetsanalyse",
+        "geweigerd",
+        "nooit teruggevallen op eerste orde",
+    ] {
+        assert!(tekst.contains(woord), "de toolbeschrijving noemt \"{woord}\" niet: {tekst}");
+    }
+    let analyse = tool["inputSchema"]["properties"]["analyse"]["description"].as_str().unwrap_or("");
+    assert!(analyse.contains("RESULTATEN") && analyse.contains("P-Delta met scheefstand"), "{analyse}");
+    let toetsen = tool["inputSchema"]["properties"]["toetsen"]["description"].as_str().unwrap_or("");
+    assert!(toetsen.contains("P-Delta") && toetsen.contains("scheefstand"), "{toetsen}");
+}
+
+/// De gui-tools voor rekenen en toetsen zeggen dat de toetskrachten ook in 3D
+/// altijd tweede orde met scheefstand zijn (issue #199), dat de resultaten in
+/// 3D het analysetype volgen, en welke velden de toets beschrijven.
+#[tokio::test]
+async fn gui_toolbeschrijvingen_noemen_de_toets_in_2d_en_3d() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let analyse = tooldefinitie(&mut stdin, &mut reader, 160, "gui_set_analysis").await;
+    let a = analyse["description"].as_str().unwrap_or("");
+    assert!(a.contains("in 2D and in 3D alike") && a.contains("+X, −X, +Y and −Y"), "{a}");
+    for (id, naam) in [(161, "gui_solve"), (162, "gui_run_checks")] {
+        let t = tooldefinitie(&mut stdin, &mut reader, id, naam).await;
+        let d = t["description"].as_str().unwrap_or("");
+        for woord in ["+X, −X, +Y and −Y", "`toetsanalyse`", "`toetsAlphaCr`", "`toetsmeldingen`", "TOETSING_ONMOGELIJK"] {
+            assert!(d.contains(woord), "{naam} noemt {woord:?} niet: {d}");
+        }
+        assert!(d.contains("linear"), "{naam}: de 3D-resultaten volgen het analysetype: {d}");
+        assert!(!d.contains("For 3D it runs the P-Delta frame analysis"), "{naam}: {d}");
+    }
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
@@ -1797,6 +1918,7 @@ async fn schema_van_de_ifc_import_is_strikt_op_elk_niveau() {
     assert_eq!(keuze[1]["minimum"], json!(1));
     assert_eq!(tool["inputSchema"]["properties"]["analyse"]["enum"], json!(["linear", "p-delta"]));
     assert_eq!(tool["inputSchema"]["properties"]["gevolgklasse"]["enum"], json!(["CC1", "CC2", "CC3"]));
+    eis_toetsbeschrijving(&tool);
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;
 }
@@ -1918,6 +2040,80 @@ async fn aluminiuminvoer_rekent_en_een_tikfout_wordt_geweigerd() {
             json!({ "inputs": [invoer] })).await;
         assert_eq!(result["isError"], true, "{pad}: `{tikfout}` gaf een resultaat: {result}");
         assert!(foutmelding(&result).contains(tikfout), "{pad}: {}", foutmelding(&result));
+    }
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+/// `check_fem_model` kent geen `nonlinear` meer (issue #199): de UGT-toets
+/// rekent altijd tweede orde (P-Δ) met scheefstand. Het schema biedt het
+/// veld niet aan, en een client die het toch stuurt krijgt ARGUMENT_ONGELDIG in
+/// plaats van een stil genegeerde vlag — wie hem stuurt, verwacht er iets van.
+/// `solve_fem_model` houdt `nonlinear`: daar gaat het om de resultaten. De
+/// beschrijving van `check_fem_model` noemt de toetsanalyse en de nieuwe
+/// uitvoervelden, zodat een client weet waar hij ze leest.
+#[tokio::test]
+async fn check_fem_model_kent_geen_nonlinear_en_noemt_de_toetsanalyse() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    let check = tooldefinitie(&mut stdin, &mut reader, 120, "check_fem_model").await;
+    let s = &check["inputSchema"];
+    assert_eq!(s["additionalProperties"], json!(false));
+    assert!(s["properties"].get("nonlinear").is_none(), "check_fem_model biedt `nonlinear` aan: {s}");
+    let beschrijving = check["description"].as_str().unwrap_or("");
+    for woord in [
+        "TOETSKRACHTEN", "P-Delta", "scheefstand", "model_analysis_type", "afgedwongen",
+        "analyse_toelichting", "scheefstand_toelichting", "TOETSING_GEWEIGERD", "detail.toets_geweigerd",
+    ] {
+        assert!(beschrijving.contains(woord), "de beschrijving van check_fem_model noemt {woord:?} niet");
+    }
+    let solve = tooldefinitie(&mut stdin, &mut reader, 121, "solve_fem_model").await;
+    assert!(
+        solve["inputSchema"]["properties"]["nonlinear"].is_object(),
+        "solve_fem_model hoort `nonlinear` te houden (de resultaten)"
+    );
+    assert!(
+        !solve["description"].as_str().unwrap_or("").contains("Sluitstuk is `steel_check_inputs`"),
+        "solve_fem_model levert geen toetsinvoer meer"
+    );
+
+    // De argumenten worden vóór de sidecar gelezen: hier is geen Node nodig.
+    let uit = roep_tool_aan(
+        &mut stdin,
+        &mut reader,
+        122,
+        "check_fem_model",
+        json!({ "model": { "nodes": [], "beams": [], "supports": [], "loadCases": [] }, "nonlinear": true }),
+    )
+    .await;
+    assert_eq!(uit["isError"], json!(true), "{uit}");
+    assert_eq!(uit["structuredContent"]["error_code"], json!("ARGUMENT_ONGELDIG"), "{uit}");
+    assert!(foutmelding(&uit).contains("nonlinear"), "{}", foutmelding(&uit));
+    drop(stdin);
+    let _ = timeout(Duration::from_secs(5), child.wait()).await;
+}
+
+// ── Eigen factoren, bewust gekozen (issue #196) ──────────────────────────────
+
+/// De combinaties van `solve_fem_model` en `check_fem_model` kennen
+/// `bevestigdeFactoren` (bewust gekozen eigen factoren, zoals `load_fem_project`
+/// ze teruggeeft), en blijven verder strikt: geen ander veld erbij. Zonder het
+/// veld in het schema kon een cliënt die combinaties niet ongewijzigd
+/// teruggeven, en kwam de FOUT terug. Wat de server ermee doet, staat in
+/// `eigen_factoren_mcp.rs` (die vraagt Node; deze test niet).
+#[tokio::test]
+async fn combinaties_kennen_de_bevestigde_eigen_factoren_strikt() {
+    let (mut child, mut stdin, mut reader) = start_server().await;
+    for (i, naam) in ["solve_fem_model", "check_fem_model"].iter().enumerate() {
+        let tool = tooldefinitie(&mut stdin, &mut reader, 200 + i as u32, naam).await;
+        let item = &tool["inputSchema"]["properties"]["combinations"]["items"];
+        assert_eq!(item["additionalProperties"], json!(false), "{naam}: {item}");
+        let mut velden: Vec<&str> = item["properties"].as_object().unwrap().keys().map(String::as_str).collect();
+        velden.sort_unstable();
+        assert_eq!(velden, ["bevestigdeFactoren", "factors", "formula", "id", "name", "type"], "{naam}");
+        let veld = &item["properties"]["bevestigdeFactoren"];
+        assert_eq!(veld["type"], json!("object"), "{naam}: {veld}");
+        assert_eq!(veld["additionalProperties"], json!({ "type": "number" }), "{naam}: {veld}");
+        assert!(veld["description"].as_str().unwrap_or("").contains("PRECIES"), "{naam}: {veld}");
     }
     drop(stdin);
     let _ = timeout(Duration::from_secs(5), child.wait()).await;

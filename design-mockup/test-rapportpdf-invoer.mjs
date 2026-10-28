@@ -766,5 +766,38 @@ log("\n[8] De gedeelde terugval krijgt aan beide kanten dezelfde invoer");
   }
 }
 
+// De herkomst van de toetskrachten (issue #199, taak 7): de krachtregel van de
+// PDF noemt bij een UGT-toetscombinatie "2e orde + scheefstand φ = 1/…" en bij
+// een BGT-combinatie "resultaten". Daarvoor gaan de φ en de id's van de
+// tweede-ordecombinaties mee — alleen als de toetsing een toetsanalyse had.
+{
+  const toets = {
+    analyse: { soort: "tweedeOrdeGeometrisch", phi: 1 / 200, noemer: 200, bron: "vast", scheefstandModelAan: false, hergebruikt: false },
+    meldingen: [], alphaCr: [], weigering: null,
+  };
+  const toetsCombinaties = [
+    { id: 7, name: "UGT (scheefstand +x)", tweedeOrde: true },
+    { id: 1_000_007, name: "UGT (scheefstand −x)", tweedeOrde: true },
+    { id: 17, name: "BGT", tweedeOrde: false },
+  ];
+  const met = bouwRapportInvoer({ project, checkResults: [beton(1)], toets, toetsCombinaties });
+  // Met de namen van alle toetscombinaties: de PDF noemt dan "UGT (scheefstand
+  // −x)" in plaats van het id + 1 000 000 dat in geen combinatielijst staat.
+  checkGelijk("de toetskrachten: φ = 1/200, de UGT-toetscombinaties (ook −x, niet de BGT) en de namen",
+    met.toetskrachten, {
+      noemer: 200, tweede_orde_combinaties: [7, 1_000_007],
+      combinaties: [
+        { id: 7, naam: "UGT (scheefstand +x)" },
+        { id: 1_000_007, naam: "UGT (scheefstand −x)" },
+        { id: 17, naam: "BGT" },
+      ],
+    });
+  const zonder = bouwRapportInvoer({ project, checkResults: [beton(1)], toetsCombinaties });
+  checkWaar("zonder toetsanalyse staat het veld er niet (de krachtregel blijft zoals hij was)", !("toetskrachten" in zonder));
+  const oudVenster = bouwRapportInvoer({ project, checkResults: [beton(1)], toets,
+    toetsCombinaties: toetsCombinaties.map(({ id, name }) => ({ id, name })) });
+  checkWaar("zonder tweedeOrde-vlaggen (een ouder snapshot) staat het veld er niet", !("toetskrachten" in oudVenster));
+}
+
 log(`\n${failed === 0 ? "✅" : "❌"} ${passed} geslaagd, ${failed} gefaald`);
 process.exit(failed === 0 ? 0 : 1);

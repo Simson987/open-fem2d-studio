@@ -3,7 +3,7 @@ import { blijvendeZakking } from "../../lib/blijvendeZakking";
 import { kipsteunenVanStaaf } from "../../lib/kipsteunen";
 import { bepaalVerloop } from "../../lib/sectionResolver";
 import {
-  kCrUitConfig, mapLoadDuration, mapLtbLoadPosition, mapServiceClass,
+  HOUT_TOETS_STAAFNOTITIE, kCrUitConfig, mapLoadDuration, mapLtbLoadPosition, mapServiceClass,
   matchSupportedTimberGrade, parseTimberRectMm, timberDeflectionNumerators,
 } from "../../lib/timberCheckBuilder";
 import type { TimberBeamCheckInput } from "../../lib/types/timber/TimberBeamCheckInput";
@@ -12,10 +12,14 @@ import type { LtbLoadCase } from "../../lib/types/timber/LtbLoadCase";
 import { combinatiesVanSoort, zonderBgtEindtoestand } from "../fem/solver/combinations";
 import type { OpenFem3DModel } from "./openFem3dModel";
 import type { OpenFem3DSolveResult } from "./openFem3dSolver";
-import { openFem3DMemberFieldDeflectionMm } from "./openFem3dDisplacement";
+import { openFem3DMemberFieldChangeMm, openFem3DMemberFieldDeflectionMm } from "./openFem3dDisplacement";
 import { openFem3DEinden, openFem3DUitkragingNotitie, type OpenFem3DEinden } from "./openFem3dUitkraging";
 import { openFem3DForceStations } from "./openFem3dForceStations";
 import type { OpenFem3DCheckSkip, OpenFem3DCombinationSet } from "./openFem3dSteelCheck";
+import {
+  openFem3DDoorgaandeLijnenSamen, openFem3DDoorlopendeEinden, openFem3DDoorlopendNotitie,
+  openFem3DLijnDelenOvergeslagen, openFem3DSamengevoegdeSet,
+} from "./openFem3dDoorgaandeLijn";
 import {
   eigenNaamVan, isEigenProfiel, naarCustomSection, zoekEigenDoorsnede,
 } from "../../lib/profieleditor/eigenDoorsnedenStore";
@@ -24,6 +28,8 @@ export interface OpenFem3DTimberChecks {
   results: TimberBeamCheckResult[];
   skipped: OpenFem3DCheckSkip[];
   notes: string[];
+  /** Doorgaande lijnen (issue #207): per getoetste staaf haar delen, voor de weergave. */
+  lijnDelen?: Record<number, number[]>;
 }
 
 export function openFem3DTimberUlsUc(result: TimberBeamCheckResult): number {
@@ -95,10 +101,17 @@ function ltbLoadCase(
 }
 
 export function buildOpenFem3DTimberCheckInputs(
-  model: OpenFem3DModel,
-  result: OpenFem3DSolveResult,
-  combinationSet?: OpenFem3DCombinationSet,
-): { inputs: TimberBeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[] } {
+  origineel: OpenFem3DModel,
+  origineelResultaat: OpenFem3DSolveResult,
+  origineleSet?: OpenFem3DCombinationSet,
+): { inputs: TimberBeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[]; lijnDelen: Record<number, number[]> } {
+  // Doorgaande lijnen (issue #207): dezelfde samenvoeging als de staaltoets.
+  // Een doorlopend eind gaat als staafeind naar de houtkern (issue #205).
+  const samen = openFem3DDoorgaandeLijnenSamen(origineel);
+  const model = samen.model;
+  const result = samen.resultaat(origineelResultaat);
+  const combinationSet = openFem3DSamengevoegdeSet(origineleSet, samen);
+  const doorlopend = openFem3DDoorlopendeEinden(model);
   const inputs: TimberBeamCheckInput[] = [];
   const skipped: OpenFem3DCheckSkip[] = [];
   const notes = [
@@ -211,16 +224,56 @@ export function buildOpenFem3DTimberCheckInputs(
         const solved = combinationSet.results.get(c.id);
         return solved ? -openFem3DMemberFieldDeflectionMm(model, beam, solved, inklemming) : null;
       },
-    }) : { mm: 0, notes: ["Geen combinatieset: w₁ is als nul genomen."] };
+    }) : { mm: 0, combo: null, notes: ["Geen combinatieset: w₁ is als nul genomen."] };
+    // w₃ = w_c − w₁ per BGT-combinatie (issue #200), zoals de 3D-staaltoets: de
+    // grootste VERANDERING van het vervormingsveld ten opzichte van de blijvende
+    // combinatie, niet |w| − |w₁|. De 3D-maat is een grootte zonder teken; bij
+    // een uitkraging die onder de blijvende last omhoog en onder de veranderlijke
+    // omlaag gaat, viel de verandering daarin weg. Over dezelfde combinaties als
+    // w_inst. De kern rekent dan w_add = w₂ + w₃; het kruipdeel w₂ = k_def·w_qp
+    // heeft hier hetzelfde teken (omlaag), dus de grootste verandering geeft ook
+    // de grootste |w₂ + w₃|. Alleen apart naar de kern als het verschilt van wat
+    // de kern uit w_inst − w₁ zou halen.
+    const instCombinaties = characteristic.length ? characteristic : sls;
+    const blijvendResultaat = permanent.combo ? combinationSet?.results.get(permanent.combo.id) : undefined;
+    const w3Verandering = blijvendResultaat && instCombinaties.length > 0
+      ? instCombinaties.reduce((maximum, c) => {
+        const solved = combinationSet?.results.get(c.id);
+        return solved
+          ? Math.max(maximum, openFem3DMemberFieldChangeMm(model, beam, solved, blijvendResultaat, inklemming))
+          : maximum;
+      }, 0)
+      : null;
+    const w3Kern = Math.abs(-inst - permanent.mm);
+    const w3Apart = w3Verandering !== null && Math.abs(w3Verandering - w3Kern) > 1e-6 ? -w3Verandering : undefined;
+    const lijnNotities = samen.notities.get(beam.id) ?? [];
+    const doorlopendeEinden = doorlopend(beam);
+    const doorlopendNotitie = openFem3DDoorlopendNotitie(doorlopendeEinden, "hout");
     const deflectionNotes = [
-      ...notes, ...permanent.notes,
+      ...notes, ...lijnNotities, ...permanent.notes,
       ...(inklemming ? [
         openFem3DUitkragingNotitie(inklemming) +
           (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${String(Math.round(limits.fin * 1000) / 1000).replace(".", ",")} en w_add tegen L/${String(Math.round(limits.add * 1000) / 1000).replace(".", ",")} op de staaflengte.` : ""),
       ] : []),
       ...(characteristic.length ? [] : ["Karakteristieke BGT-combinatie ontbreekt: w_inst is uit de beschikbare BGT-omhullende genomen."]),
       ...(quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."]),
+      ...(w3Apart !== undefined
+        ? [`w₃ = w_c − w₁ = ${Math.abs(w3Apart).toFixed(2).replace(".", ",")} mm (omlaag) is de grootste verandering van het vervormingsveld ten opzichte van de blijvende combinatie "${permanent.combo?.name ?? "—"}" (w₂ + w₃ = w_tot − w₁, figuur NB.1), niet |w_inst| − |w₁| = ${w3Kern.toFixed(2).replace(".", ",")} mm; de kern rekent w_add = w₂ + w₃.`]
+        : []),
     ];
+    // De staafeinden zoals bij staal (issue #205): vrij, doorlopend of een
+    // gaffel. Doorlopend volgt uit de lijnherkenning van issue #207 op het
+    // samengevoegde model: staven met dezelfde doorsnede zijn dan al één lijn,
+    // dus alleen een voortzetting in een andere doorsnede, een ander materiaal,
+    // een andere stand of over een scharnier blijft over. Bij een doorlopend
+    // eind weigert de kern art. 6.3.2 en 6.3.3 zonder opgegeven kniklengtes
+    // in plaats van de lengte van één deel te nemen.
+    const eindSoort = (nodeId: number, isDoorlopend: boolean) => einden.vrijEind(beam, nodeId) ? "Vrij" as const
+      : isDoorlopend ? "Doorlopend" as const : "Gaffel" as const;
+    const staafeinden = {
+      begin: eindSoort(beam.startNodeId, doorlopendeEinden.begin),
+      eind: eindSoort(beam.endNodeId, doorlopendeEinden.eind),
+    };
     inputs.push({
       bijlage: "NL", beam_id: beam.id, width_mm: b, height_mm: h,
       ...(custom ? { custom_section: custom } : {}),
@@ -238,10 +291,13 @@ export function buildOpenFem3DTimberCheckInputs(
       buckling_length_z_m: cfg.bucklingLengthZ_m ?? 0,
       ruimtelijk: true,
       is_cantilever: einden.vrijEind(beam, beam.startNodeId) || einden.vrijEind(beam, beam.endNodeId),
+      staafeinden,
       // `zijdelingse_knik_in_analyse` (L in plaats van 2·L bij P-Δ met
       // scheefstand) gaat bij hout bewust NIET mee: NEN-EN 1995-1-1 eist bij
       // tweede orde E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van
       // 5.4.4(2), en de 3D-P-Δ rekent met E_mean en zonder boogimperfectie.
+      // Ook in de toetsset (altijd P-Δ met scheefstand, issue #199) niet; dat
+      // zegt `HOUT_TOETS_STAAFNOTITIE` hieronder bij de staaf.
       lateral_bracing: kip.lateral_bracing,
       ltb_segment_length_m: kip.ltb_segment_length_m,
       ltb_load_case: ltb.loadCase,
@@ -253,6 +309,7 @@ export function buildOpenFem3DTimberCheckInputs(
       deflection_inst_mm: -inst,
       deflection_quasi_perm_mm: -qp,
       deflection_permanent_mm: permanent.mm,
+      ...(w3Apart !== undefined ? { deflection_add_mm: w3Apart } : {}),
       ...(deflectionReason ? { deflection_not_applicable_reason: deflectionReason } : {}),
       deflection_limit_fin: limits.fin,
       deflection_limit_add: limits.add,
@@ -260,10 +317,16 @@ export function buildOpenFem3DTimberCheckInputs(
       staaf_notities: [
         `3D-raamwerk: knik om y en z wordt ruimtelijk getoetst; vrije einden: ${einden.vrijEind(beam, beam.startNodeId) || einden.vrijEind(beam, beam.endNodeId) ? "ja" : "nee"}.`,
         ltb.note,
+        ...lijnNotities,
+        ...(doorlopendNotitie ? [doorlopendNotitie] : []),
+        // De toetsset (`toetsSet3D`, issue #199, B10): de vaste houtmelding bij
+        // elke houtstaaf. Een aanroeper met een eigen combinatieset (zonder
+        // `toetsAnalyse`) krijgt haar niet.
+        ...(combinationSet?.toetsAnalyse ? [HOUT_TOETS_STAAFNOTITIE] : []),
       ],
     });
   }
-  return { inputs, skipped, notes };
+  return { inputs, skipped: [...skipped, ...openFem3DLijnDelenOvergeslagen(samen, skipped, inputs.map((i) => i.beam_id))], notes, lijnDelen: samen.lijnDelen };
 }
 
 export async function runOpenFem3DTimberChecks(
@@ -276,5 +339,5 @@ export async function runOpenFem3DTimberChecks(
   const results = built.inputs.length
     ? await roepKern<TimberBeamCheckResult[]>("check_timber_beams", built.inputs)
     : [];
-  return { results, skipped: built.skipped, notes: built.notes };
+  return { results, skipped: built.skipped, notes: built.notes, lijnDelen: built.lijnDelen };
 }

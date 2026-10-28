@@ -67,7 +67,9 @@ pub fn is_fem_tool(naam: &str) -> bool {
 const ARGUMENT_ONGELDIG: &str = "ARGUMENT_ONGELDIG";
 /// Het projectbestand kon niet van schijf worden gelezen.
 const BESTAND_ONLEESBAAR: &str = "BESTAND_ONLEESBAAR";
-/// De solve slaagde, maar de teruggekomen toetsingsinvoer was niet te lezen.
+/// De solve slaagde, maar de teruggekomen toetsingsinvoer was niet te lezen,
+/// of de bundel meldt niet dat de toetskrachten tweede orde met scheefstand
+/// zijn (een bundel van vóór die regel; zie [`eis_toetsanalyse`]).
 const TOETSING_ONMOGELIJK: &str = "TOETSING_ONMOGELIJK";
 
 /// Bouwt een `RpcError` die de foutcode en de Nederlandse remedie MEEDRAAGT in
@@ -178,6 +180,12 @@ fn schema_bijlage_verzoek() -> Value {
     s
 }
 
+/// GEEN `nonlinear`. De UGT-toets rekent altijd tweede orde (P-Δ) met
+/// scheefstand, los van het analysetype van het model (NEN-EN 1993-1-1
+/// 5.2.2(3)b en (7)b); een vlag die dat zou kunnen omzetten bestaat hier niet.
+/// Door `deny_unknown_fields` wordt een meegestuurde `nonlinear` GEWEIGERD in
+/// plaats van stil genegeerd: wie hem stuurt, verwacht er iets van. Bij
+/// `solve_fem_model` blijft hij bestaan; daar gaat het om de resultaten.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CheckArgumenten {
@@ -189,8 +197,6 @@ struct CheckArgumenten {
     combinations: Option<Value>,
     #[serde(default)]
     gevolgklasse: Option<String>,
-    #[serde(default)]
-    nonlinear: Option<bool>,
     #[serde(default)]
     timeout_s: Option<u64>,
     #[serde(default)]
@@ -334,8 +340,10 @@ pub async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError> {
         "solve_fem_model" => {
             let a: SolveArgumenten = lees_argumenten(naam, args)?;
             let timeout_s = a.timeout_s;
+            // Zonder profielcatalogus: de solve levert geen toetsinvoer meer.
+            // Die rustte op de resultaatkrachten, terwijl de toets altijd
+            // tweede orde met scheefstand rekent; `check_fem_model` is de weg.
             let mut payload = model_payload(naam, a.model, a.project_path)?;
-            payload.insert("profiles".to_owned(), profielen().clone());
             if let Some(c) = a.combinations {
                 payload.insert("combinations".to_owned(), c);
             }
@@ -393,6 +401,16 @@ async fn roep(op: &str, payload: Value, timeout_s: Option<u64>) -> Result<Value,
 /// Wat niet getoetst is, hoort zichtbaar te zijn: beton, vrij materiaal, of een
 /// staaf die niet herkend is, komt met reden in `skipped_beams` via
 /// [`meld_niet_getoetste_staven`].
+///
+/// DE TOETSKRACHTEN. De bundel rekent de UGT-toetskrachten altijd tweede orde
+/// (P-Δ) met scheefstand, in +x en −x, met de φ van de projectinstelling —
+/// dezelfde functie als de app (`bepaalToetsKrachten2D`). Het analysetype en
+/// de scheefstandschakelaar van het model gelden alleen voor de resultaten en
+/// de BGT-toetsen. `stability` zegt welke analyse de toets had; meldt een
+/// bundel dat niet, dan weigert [`eis_toetsanalyse`] de toetsing. Divergeert de
+/// tweede orde van de toets in een UGT-combinatie, dan komt er geen toetsing
+/// maar `TOETSING_GEWEIGERD` met de reden en α_cr per combinatie; nooit een
+/// terugval op eerste orde.
 async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
     let a: CheckArgumenten = lees_argumenten(naam, args)?;
     let samenvatting = match a.detail.as_deref() {
@@ -439,9 +457,17 @@ async fn check_fem_model(naam: &str, args: Value) -> Result<Value, RpcError> {
     if let Some(b) = a.bijlage {
         payload.insert("bijlage".to_owned(), json!(b.code()));
     }
-    payload.insert("nonlinear".to_owned(), json!(a.nonlinear.unwrap_or(false)));
+    // Geen `nonlinear`: de bundel rekent de toetskrachten zelf, altijd tweede
+    // orde met scheefstand. De resultaten in `solve_summary` volgen het
+    // analysetype uit het projectbestand (een los model: eerste orde).
 
     let mut uit = roep("check", Value::Object(payload), timeout_s).await?;
+
+    // Eerst de toetsanalyse: meldt de bundel niet dat zijn toetskrachten
+    // tweede orde met scheefstand zijn, dan is het een bundel van vóór die
+    // regel, en die toetst met de krachten van de resultaatberekening —
+    // standaard eerste orde zonder scheefstand. Dat wordt geen toetsing.
+    eis_toetsanalyse(&uit)?;
 
     // De toetsing zelf: dezelfde functies die `src-tauri/src/lib.rs` voor de app
     // aanroept. Wordt een invoer hier niet geaccepteerd, dan zijn bundel en
@@ -632,6 +658,50 @@ fn lees_toetsinvoer<T: for<'de> Deserialize<'de>>(
              OPENAEC_FEM_KERNEL weg.",
         )
     })
+}
+
+/// De bewaking op de toetsanalyse van `check_fem_model`.
+///
+/// De UGT-toets rekent altijd tweede orde (P-Δ) met scheefstand, ongeacht het
+/// analysetype en de scheefstandschakelaar van het model (NEN-EN 1993-1-1
+/// 5.2.2(3)b en (7)b, 5.3.2). De bundel zegt dat in `stability`:
+/// `analysis_type` is een tweede-ordeanalyse en `scheefstand.afgedwongen` is
+/// `true`, met een eindige φ > 0. Een bundel van vóór die regel kent die
+/// velden niet en toetst met de krachten van de resultaatberekening — bij een
+/// los model eerste orde zonder scheefstand. Zijn uitkomst ziet er net zo
+/// geloofwaardig uit, en daarom is dit een fout en geen waarschuwing: er
+/// wordt niets getoetst.
+fn eis_toetsanalyse(uit: &Value) -> Result<(), RpcError> {
+    eis_afgedwongen_toetsanalyse(&uit["stability"], "stability", "bij een los model eerste orde zonder scheefstand")
+}
+
+/// Dezelfde bewaking voor elk blok dat de toetsanalyse beschrijft: `stability`
+/// van `check_fem_model`, en `toetsanalyse` van de staalhal en de IFC-import
+/// (`staalhal_tools.rs`, `ifc_import_tools.rs`). `veld` is de naam van dat blok
+/// in de melding, `resultaten` zegt wat een oude bundel dan wél toetst.
+pub(crate) fn eis_afgedwongen_toetsanalyse(stabiliteit: &Value, veld: &str, resultaten: &str) -> Result<(), RpcError> {
+    let soort = stabiliteit["analysis_type"].as_str();
+    let scheefstand = &stabiliteit["scheefstand"];
+    let tweede_orde = matches!(soort, Some("tweedeOrdeGeometrisch" | "tweedeOrdeFysisch"));
+    let afgedwongen = scheefstand["afgedwongen"].as_bool() == Some(true);
+    let phi = scheefstand["phi"].as_f64().filter(|p| p.is_finite() && *p > 0.0);
+    if tweede_orde && afgedwongen && phi.is_some() {
+        return Ok(());
+    }
+    Err(fout(
+        TOETSING_ONMOGELIJK,
+        format!(
+            "De solverbundel meldt niet dat de toetskrachten tweede orde (P-Δ) met scheefstand \
+             zijn (`{veld}.analysis_type` = {}, `{veld}.scheefstand` = {}). Zo'n bundel \
+             toetst met de krachten van de resultaatberekening, {resultaten}, terwijl \
+             NEN-EN 1993-1-1 5.2.2(7)b de staaftoets met de systeemlengte aan krachten uit \
+             een tweede-ordeberekening met imperfecties bindt. Er is niet getoetst.",
+            soort.map_or_else(|| "ontbreekt".to_owned(), |s| format!("\"{s}\"")),
+            if scheefstand.is_null() { "ontbreekt".to_owned() } else { scheefstand.to_string() },
+        ),
+        "Server en solverbundel zijn uit elkaar gelopen. Herbouw de MCP-server \
+         (`npm run build:sidecar` en daarna `cargo build`), of haal OPENAEC_FEM_KERNEL weg.",
+    ))
 }
 
 /// Het model als JSON, uit de payload die naar de sidecar gaat.
@@ -1197,6 +1267,8 @@ fn schema_loadcases() -> Value {
                 "categorie": { "type": "string",
                     "enum": ["A", "B", "C", "C-menigte", "D", "E", "F", "G", "H", "industrie-kort", "industrie-lang"],
                     "description": "Gebruikscategorie van een \"live\"-geval volgens NB tabel NB.2–A1.1; bepaalt ψ₀/ψ₁/ψ₂. Ontbreekt = A (woon- en verblijfsruimtes: 0,4/0,5/0,3). \"C\" = bijeenkomstruimte, overige delen (ψ₀ = 0,4); \"C-menigte\" = delen die bij een calamiteit zwaar door een mensenmenigte belast kunnen worden (ψ₀ = 0,6)." },
+                "imperfectie": { "type": "boolean", "enum": [true],
+                    "description": "Dit geval draagt de initiële scheefstand al als knooplasten (een imperfectiegeval, in IFC SYSTEM_IMPERFECTION). De UGT-toets rekent altijd met de scheefstand van de projectinstelling en telt zo'n geval daarom met factor 0 (met een melding); de resultaten en de BGT rekenen het zoals het in de combinatie staat. Alleen `true`." },
                 "eigenGewicht": { "type": "boolean", "enum": [true],
                     "description": "Dit geval draagt het AUTOMATISCHE eigen gewicht: met `selfWeightEnabled: true` krijgt het per staaf q = ρ·A·g en per plaat ρ·g·t (g = 9,81 m/s²), afgeleid uit profiel, materiaal en geometrie. Alleen `true`, alleen op een geval van type \"dead\", op hoogstens één geval, en er mag geen last (`loads[].caseId`) naar dit geval verwijzen — elk van die vier wordt geweigerd met een reden. Ontbreekt het kenmerk in het hele model, dan geldt de oude regel: het eerste \"dead\"-geval. Het geval telt als blijvende belasting (γ_G, ψ = 1,0) in de standaardcombinaties." },
                 "gegenereerd": {
@@ -1296,7 +1368,7 @@ fn schema_fem_model() -> Value {
 fn schema_combinations() -> Value {
     json!({
         "type": "array",
-        "description": "Belastingcombinaties. Ontbreekt dit veld, dan gelden de combinaties uit het projectbestand, en anders de standaardset die de app afleidt uit `loadCases` (type en categorie) en de gevolgklasse: 6.10a, 6.10b per leidende veranderlijke last (ook met gunstig werkende blijvende last), 6.14b en 6.15b per leidende last, en 6.16b — met γ uit NEN-EN 1990 NB tabel NB.4/NB.5 en ψ uit tabel NB.2–A1.1. Elke uitdrukking komt in elke opstelling van de veranderlijke gevallen: ieder veranderlijk geval aan- of afwezig (naam \"… zonder <geval>\"), want een veranderlijke belasting telt alleen waar ze ongunstig werkt (NEN-EN 1991-1-1 6.2.1(1)P). Boven 4 gebruiksbelastinggevallen gaan de gevallen van één categorie samen aan of uit, en dat staat in `warnings`. Wind- en sneeuwgevallen zijn alternatieven en staan nooit samen in één combinatie. Combinaties uit een projectbestand gaan door dezelfde functie als het openen in de app: de standaardset van versie 0.3.11 en ouder (herkend op naam en factoren), standaardcombinaties van een andere gevolgklasse en verouderde combinaties van de windgenerator worden vervangen door de huidige afleiding, en `warnings` zegt wat er vervangen is; eigen combinaties blijven staan en worden gecontroleerd. Een set is nooit stil een deel van de standaardset: ontbreekt er in een set met (ook hernoemde) standaardcombinaties een die geen andere combinatie met dezelfde factoren vervangt, dan staat er `FOUT: … standaardcombinatie(s) ontbreken` in `warnings`. Voor elke set geeft ook een FOUT: een blijvend belastinggeval met factoren die niet bij een blijvende belasting passen (in de BGT anders dan 1,0), twee veranderlijke gevallen van dezelfde gebruikscategorie met verschillende factoren in één combinatie, een veranderlijke belasting die in geen UGT-combinatie overheerst (factor ten minste 1,35), en windgeneratorcombinaties die niet bij de gevallen en de gevolgklasse passen.",
+        "description": "Belastingcombinaties. Ontbreekt dit veld, dan gelden de combinaties uit het projectbestand, en anders de standaardset die de app afleidt uit `loadCases` (type en categorie) en de gevolgklasse: 6.10a, 6.10b per leidende veranderlijke last (ook met gunstig werkende blijvende last), 6.14b en 6.15b per leidende last, en 6.16b — met γ uit NEN-EN 1990 NB tabel NB.4/NB.5 en ψ uit tabel NB.2–A1.1. Elke uitdrukking komt in elke opstelling van de veranderlijke gevallen: ieder veranderlijk geval aan- of afwezig (naam \"… zonder <geval>\"), want een veranderlijke belasting telt alleen waar ze ongunstig werkt (NEN-EN 1991-1-1 6.2.1(1)P). Boven 4 gebruiksbelastinggevallen gaan de gevallen van één categorie samen aan of uit, en dat staat in `warnings`. Wind- en sneeuwgevallen zijn alternatieven en staan nooit samen in één combinatie. Combinaties uit een projectbestand gaan door dezelfde functie als het openen in de app: de standaardset van versie 0.3.11 en ouder (herkend op naam en factoren), standaardcombinaties van een andere gevolgklasse en verouderde combinaties van de windgenerator worden vervangen door de huidige afleiding, en `warnings` zegt wat er vervangen is; eigen combinaties blijven staan en worden gecontroleerd. Een set is nooit stil een deel van de standaardset: ontbreekt er in een set met (ook hernoemde) standaardcombinaties een die geen andere combinatie met dezelfde factoren vervangt, dan staat er `FOUT: … standaardcombinatie(s) ontbreken` in `warnings`. Voor elke set geeft ook een FOUT: een blijvend belastinggeval met factoren die niet bij een blijvende belasting passen (in de BGT anders dan 1,0), twee veranderlijke gevallen van dezelfde gebruikscategorie met verschillende factoren in één combinatie, een veranderlijke belasting die in geen UGT-combinatie overheerst (factor ten minste 1,35), en windgeneratorcombinaties die niet bij de gevallen en de gevolgklasse passen. Per afwijkende blijvende factor staat erbij wat de NB geeft, en of de set een schaal K_FI maal NB.4 volgt (1,22 ≈ 0,9 × 1,35). Bewust gekozen eigen factoren staan in `bevestigdeFactoren` (in de app: \"Behoud eigen factoren\", of het commando `project_combinations_confirmOwnFactors`): zo'n factor geeft geen FOUT meer maar een vermelding in `warnings`, en een eigen combinatie met dezelfde gevallen die alleen in bevestigde factoren afwijkt, vervangt de standaardcombinatie.",
         "items": {
             "type": "object",
             "additionalProperties": false,
@@ -1308,7 +1380,9 @@ fn schema_combinations() -> Value {
                     "description": "uls = uiterste grenstoestand (sterkte), sls = bruikbaarheidsgrenstoestand (doorbuiging)." },
                 "formula": { "type": "string", "description": "Leesbare formule voor het rapport." },
                 "factors": { "type": "object", "additionalProperties": { "type": "number" },
-                    "description": "Sleutel = belastinggeval-id als tekst, waarde = factor." }
+                    "description": "Sleutel = belastinggeval-id als tekst, waarde = factor." },
+                "bevestigdeFactoren": { "type": "object", "additionalProperties": { "type": "number" },
+                    "description": "Bewust gekozen eigen factoren (optioneel): sleutel = belastinggeval-id als tekst, waarde = de bevestigde factor. Een bevestiging geldt alleen zolang `factors` voor dat geval PRECIES deze waarde heeft; een andere factor is niet bevestigd en geeft de FOUT terug. Geen rekenwaarde: de berekening gebruikt alleen `factors`. `load_fem_project` geeft het veld mee; geef het ongewijzigd terug." }
             }
         }
     })
@@ -1318,7 +1392,7 @@ fn schema_gevolgklasse() -> Value {
     json!({
         "type": "string",
         "enum": ["CC1", "CC2", "CC3"],
-        "description": "Gevolgklasse volgens NEN-EN 1990 bijlage B. Bepaalt de partiële factoren van de STANDAARDcombinaties (NB tabel NB.4 voor CC2: 6.10b γ_G = 1,2 / γ_Q = 1,5; NB.5 voor CC1: 1,1 / 1,35 en CC3: 1,3 / 1,65) en gaat ter vermelding mee in `steel_check_inputs`. Geen invloed op meegegeven `combinations`. Uit een projectbestand telt de klasse uit de projectgegevens; staat die er niet in, dan deze `gevolgklasse`, en anders de klasse uit het kenmerk van de standaardcombinaties in het bestand. Ontbreekt alles: CC2, met een waarschuwing. K_FI wordt nergens nog eens op een uitkomst toegepast."
+        "description": "Gevolgklasse volgens NEN-EN 1990 bijlage B. Bepaalt de partiële factoren van de STANDAARDcombinaties (NB tabel NB.4 voor CC2: 6.10b γ_G = 1,2 / γ_Q = 1,5; NB.5 voor CC1: 1,1 / 1,35 en CC3: 1,3 / 1,65) en gaat bij `check_fem_model` ter vermelding mee in `steel_check_inputs`. Geen invloed op meegegeven `combinations`. Uit een projectbestand telt de klasse uit de projectgegevens; staat die er niet in, dan deze `gevolgklasse`, en anders de klasse uit het kenmerk van de standaardcombinaties in het bestand. Ontbreekt alles: CC2, met een waarschuwing. K_FI wordt nergens nog eens op een uitkomst toegepast."
     })
 }
 
@@ -1363,7 +1437,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "solve_fem_model",
-            "description": "Rekent het model door met dezelfde solver die de app gebruikt en levert reacties, verplaatsingen en staafkrachten per belastinggeval, per combinatie en als omhullende. Vooraf draait dezelfde modelcontrole als validate_fem_model en de app: een model met een fout daarin (een last naar een staaf, knoop of belastinggeval dat niet bestaat, een last zonder waarde of met de waarde in een veld dat het lasttype niet leest) wordt geweigerd met de bevindingen, nooit stil zonder die last doorgerekend. Eenheden kN, kNm, mm en rad; N positief = trek, z positief omhoog; knoop- en reactiemomenten en rotaties positief tegen de klok in (x naar rechts, z omhoog), staafmoment M positief = trek aan de -y-zijde van de lokale staafas (ligger links→rechts: trek onder), V = dM/dx — zie `units.teken_momenten`. solve_open_fem_3d volgt de rechterhandregel om de globale assen; M_y van hetzelfde model in het XZ-vlak heeft daar het tegengestelde teken. Sluitstuk is `steel_check_inputs`: een lijst die ongewijzigd aan `check_steel_beam` kan worden gevoerd. Let op `cases_skipped_empty` — een belastinggeval zonder werkzame last wordt overgeslagen en zou anders als 'nul' lezen. Let ook op `combinations_skipped`: bij een zuivere staalconstructie waarin elke staaf overwegend verticaal staat zonder gekozen doorbuigingsklasse worden de ongewijzigde standaardcombinaties 6.15 (frequent) en 6.16 (quasi-blijvend) niet doorgerekend — de zijdelingse eis van NEN-EN 1990 A1.4.3(7) leest ze niet — en dat staat daar met reden vermeld. Krijgt een staaf de vloer- of dakeis (A1.4.3(3)/(4)), dan worden ze wel doorgerekend. Herkomst: `bundle_hash` is de sha256 van de SOLVERBUNDEL (gelijk voor elk model dat met dezelfde bundel gerekend wordt, samen met `solver_version`); `model_hash` is de sha256 van de invoer van dit verzoek (JSON met gesorteerde sleutels) en dus modelspecifiek.",
+            "description": "Rekent het model door met dezelfde solver die de app gebruikt en levert reacties, verplaatsingen en staafkrachten per belastinggeval, per combinatie en als omhullende. Vooraf draait dezelfde modelcontrole als validate_fem_model en de app: een model met een fout daarin (een last naar een staaf, knoop of belastinggeval dat niet bestaat, een last zonder waarde of met de waarde in een veld dat het lasttype niet leest) wordt geweigerd met de bevindingen, nooit stil zonder die last doorgerekend. Eenheden kN, kNm, mm en rad; N positief = trek, z positief omhoog; knoop- en reactiemomenten en rotaties positief tegen de klok in (x naar rechts, z omhoog), staafmoment M positief = trek aan de -y-zijde van de lokale staafas (ligger links→rechts: trek onder), V = dM/dx — zie `units.teken_momenten`. solve_open_fem_3d volgt de rechterhandregel om de globale assen; M_y van hetzelfde model in het XZ-vlak heeft daar het tegengestelde teken. Dit zijn de RESULTATEN: ze volgen het analysetype (uit het projectbestand, anders `nonlinear`, anders eerste orde) en de scheefstandschakelaar van het model, en `stability` noemt dat analysetype met α_cr per UGT-combinatie. Er komt GEEN toetsinvoer mee: de normtoetsing rekent haar UGT-krachten altijd zelf tweede orde (P-Delta) met scheefstand en loopt via `check_fem_model`. Let op `cases_skipped_empty` — een belastinggeval zonder werkzame last wordt overgeslagen en zou anders als 'nul' lezen. Let ook op `combinations_skipped`: bij een zuivere staalconstructie waarin elke staaf overwegend verticaal staat zonder gekozen doorbuigingsklasse worden de ongewijzigde standaardcombinaties 6.15 (frequent) en 6.16 (quasi-blijvend) niet doorgerekend — de zijdelingse eis van NEN-EN 1990 A1.4.3(7) leest ze niet — en dat staat daar met reden vermeld. Krijgt een staaf de vloer- of dakeis (A1.4.3(3)/(4)), dan worden ze wel doorgerekend. Herkomst: `bundle_hash` is de sha256 van de SOLVERBUNDEL (gelijk voor elk model dat met dezelfde bundel gerekend wordt, samen met `solver_version`); `model_hash` is de sha256 van de invoer van dit verzoek (JSON met gesorteerde sleutels) en dus modelspecifiek.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1374,7 +1448,7 @@ pub fn tool_definitions() -> Vec<Value> {
                     "combinations": schema_combinations(),
                     "gevolgklasse": schema_gevolgklasse(),
                     "nonlinear": { "type": "boolean", "default": false,
-                        "description": "Tweede orde (P-Delta). Komt het model uit een projectbestand, dan telt de keuze uit dat bestand en overschrijft deze vlag hem NIET." },
+                        "description": "Tweede orde (P-Delta) voor de resultaten. Komt het model uit een projectbestand, dan telt de keuze uit dat bestand en overschrijft deze vlag hem NIET. Geen invloed op een toetsing: `check_fem_model` rekent de toetskrachten altijd tweede orde met scheefstand en kent dit argument niet." },
                     "detail": { "type": "string", "enum": ["samenvatting", "stations"], "default": "samenvatting",
                         "description": "\"stations\" geeft alle 21 stations per staaf terug (N, V, M, zakking) en is fors groter." },
                     "timeout_s": { "type": "integer", "minimum": 1, "maximum": 600, "default": 60,
@@ -1385,7 +1459,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "check_fem_model",
-            "description": "Doorrekenen EN toetsen in één aanroep: de solve loopt in dezelfde solver als de app, de toetsing in dezelfde Rust-kernen als de app. Net als solve_fem_model weigert deze tool een model waarin de modelcontrole van validate_fem_model een fout vindt. STAAL (EN 1993) staat in `results`, HOUT (EN 1995, EN 338 / EN 14080 zoals \"C24\" of \"GL28h\") in `timber_results` en KRUISLAAGHOUT (profiel \"CLT …\") in `clt_results`. Gebruik deze tool in plaats van solve_fem_model gevolgd door check_steel_beam / check_timber_beams — zo kan er geen veld tussenuit vallen. De toetsinvoer komt zichtbaar mee terug (`steel_check_inputs`, `timber_check_inputs`, `clt_check_inputs`) en kan ongewijzigd aan de losse toetstools worden gevoerd. Hout: k_mod volgt PER UGT-COMBINATIE uit de kortstdurende belasting erin (EN 1995-1-1 3.1.3(2), NB tabel 2.2: eigen gewicht blijvend, opslag lang, vloerbelasting middellang, sneeuw, wind en daken (categorie H) kort); `timber_check_inputs[].load_duration_per_combination` noemt per combinatie de klasse en de basis, en elk houtresultaat draagt `k_mod_per_load_duration` en `governing_combination_id`. Een opgegeven `checkConfig.loadDuration` werkt als ondergrens. BGT-combinaties die niet als 6.14b/6.15b/6.16b herkend worden, tellen bij staal en hout veilig-zijdig mee in de doorbuiging (melding in `warnings`). Beton wordt hier NIET getoetst en krijgt een verwijzing naar `check_concrete_beam`. Elke (gevraagde) staaf staat in precies één van `results`, `timber_results`, `clt_results` of `skipped_beams` (met reden) — nooit geen van beide en nooit dubbel. `governing` is de hoogste unity check over alle getoetste staven, met `material`; lees `skipped_beams` en de FOUT-regels in `warnings` altijd. PLATEN (wandschijven, altijd alle platen, `beam_ids` beperkt ze niet): de toetsinvoer staat in `plate_check_inputs` (zelfde vorm als `check_plates`), het resultaat per plaat in `plate_results` en de hoogste UC over de getoetste platen in `governing_plate`. Staal wordt getoetst met het vloeicriterium van NEN-EN 1993-1-1 6.2.1(5) per element (optionele plooi-invoer: begrensde EN 1993-1-5 §10(5a), met weigering voor trek, niet-uniforme velden en kolominteractie; zonder invoer blijft plooi niet getoetst); hout (massief en gelijmd gelamineerd) volgens NEN-EN 1995-1-1 6.1.2, 6.1.4, 6.1.5, 6.1.7 en 6.2.2 in de materiaalassen met k_mod per combinatie en de klimaatklasse van de plaat (`klimaatklasse`, ontbreekt = 1 met notitie); trek loodrecht op de vezel (6.1.3) is NIET toetsbaar en maakt de status NotApplicable waar hij optreedt. beton volgens NEN-EN 1992-1-1 bijlage F: benodigde wapening per richting (`wapening`, kN/m) en de betondrukdiagonaal (6.55)/(6.56), aanwezige wapening NIET getoetst (status NotApplicable waar wapening nodig is). Kruislaaghout en vrij materiaal komen terug met `geweigerd` en een reden, een plaat zonder (bruikbaar) materiaal staat met reden in `skipped_plates`. Elke plaat staat in `plate_check_inputs` of in `skipped_plates`.",
+            "description": "Doorrekenen EN toetsen in één aanroep: de solve loopt in dezelfde solver als de app, de toetsing in dezelfde Rust-kernen als de app. Net als solve_fem_model weigert deze tool een model waarin de modelcontrole van validate_fem_model een fout vindt. TOETSKRACHTEN: de UGT-toetsing rekent ALTIJD tweede orde (P-Delta) met scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en (7)b, 5.3.2), elke UGT-combinatie in +x en −x (de tegengestelde richting onder id + 1000000), met phi uit de projectinstelling (`scheefstandBron`, `scheefstandNoemer`, h en m; standaard 1/200), ook als `scheefstandEnabled` uit staat; met hout in het model minstens phi volgens NEN-EN 1995-1-1 (5.1). Er is geen argument `nonlinear` (meegestuurd = geweigerd): het analysetype en de scheefstandschakelaar van het model gelden alleen voor de resultaten (`solve_summary`) en voor de BGT-toetsen (doorbuiging, h/300), die de resultaatberekening lezen. De staaftoets gebruikt de systeemlengte (5.2.2(7)b); een staande staaf met een vrije kop krijgt L als phi minstens haar eigen phi is, hout houdt 2·L. `stability` beschrijft de toets: `analysis_type` (de toetsanalyse), `model_analysis_type` (de resultaten), `scheefstand` {phi, noemer, bron, model_scheefstand_aan, afgedwongen}, `hergebruikt` (de resultaten waren al P-Delta met dezelfde phi) en `alpha_cr` per UGT-basiscombinatie van de toets (informatief: de grens 10 van 5.2.1(3) geldt alleen voor eerste orde). `analyse_toelichting` en `scheefstand_toelichting` zijn de tekstblokken voor het rapport (`generate_steel_report_pdf`), dezelfde teksten als in de app; `toetskrachten` {noemer, tweede_orde_combinaties} gaat ongewijzigd naar dat rapport, waarvan de krachtregel dan per toets \"2e orde + scheefstand φ = 1/…\" of \"resultaten\" noemt. De meldingen over alpha_cr in `warnings` zijn informatief (geen FOUT): zij gaan over de resultaten. UGT-eindtoestandvarianten van hout (E_mean,fin) vallen in de toets weg, met een melding in `warnings`. Divergeert de tweede orde van de toets in een UGT-combinatie (alpha_cr ≤ 1), dan komt er GEEN toetsing maar de fout TOETSING_GEWEIGERD (anders dan MODEL_ONOPLOSBAAR: het model zelf rekent wel, solve_fem_model geeft de resultaten; `detail.toets_geweigerd` is true), met per combinatie in `detail.per_combinatie` de reden (`reason`) en `alpha_cr` als getal (null als hij niet bepaald is) en de toetsanalyse in `detail.stability`; er wordt nooit teruggevallen op eerste orde. Een projectbestand met analysetype tweedeOrdeFysisch wordt geweigerd: de fysisch niet-lineaire betonronde draait alleen in de app. STAAL (EN 1993) staat in `results`, HOUT (EN 1995, EN 338 / EN 14080 zoals \"C24\" of \"GL28h\") in `timber_results` en KRUISLAAGHOUT (profiel \"CLT …\") in `clt_results`. Gebruik deze tool in plaats van solve_fem_model gevolgd door check_steel_beam / check_timber_beams — zo kan er geen veld tussenuit vallen. De toetsinvoer komt zichtbaar mee terug (`steel_check_inputs`, `timber_check_inputs`, `clt_check_inputs`) en kan ongewijzigd aan de losse toetstools worden gevoerd. Hout: k_mod volgt PER UGT-COMBINATIE uit de kortstdurende belasting erin (EN 1995-1-1 3.1.3(2), NB tabel 2.2: eigen gewicht blijvend, opslag lang, vloerbelasting middellang, sneeuw, wind en daken (categorie H) kort); `timber_check_inputs[].load_duration_per_combination` noemt per combinatie de klasse en de basis, en elk houtresultaat draagt `k_mod_per_load_duration` en `governing_combination_id`. Een opgegeven `checkConfig.loadDuration` werkt als ondergrens. BGT-combinaties die niet als 6.14b/6.15b/6.16b herkend worden, tellen bij staal en hout veilig-zijdig mee in de doorbuiging (melding in `warnings`). Beton wordt hier NIET getoetst en krijgt een verwijzing naar `check_concrete_beam`. Elke (gevraagde) staaf staat in precies één van `results`, `timber_results`, `clt_results` of `skipped_beams` (met reden) — nooit geen van beide en nooit dubbel. `governing` is de hoogste unity check over alle getoetste staven, met `material`; lees `skipped_beams` en de FOUT-regels in `warnings` altijd. PLATEN (wandschijven, altijd alle platen, `beam_ids` beperkt ze niet): de toetsinvoer staat in `plate_check_inputs` (zelfde vorm als `check_plates`), het resultaat per plaat in `plate_results` en de hoogste UC over de getoetste platen in `governing_plate`. Staal wordt getoetst met het vloeicriterium van NEN-EN 1993-1-1 6.2.1(5) per element (optionele plooi-invoer: begrensde EN 1993-1-5 §10(5a), met weigering voor trek, niet-uniforme velden en kolominteractie; zonder invoer blijft plooi niet getoetst); hout (massief en gelijmd gelamineerd) volgens NEN-EN 1995-1-1 6.1.2, 6.1.4, 6.1.5, 6.1.7 en 6.2.2 in de materiaalassen met k_mod per combinatie en de klimaatklasse van de plaat (`klimaatklasse`, ontbreekt = 1 met notitie); trek loodrecht op de vezel (6.1.3) is NIET toetsbaar en maakt de status NotApplicable waar hij optreedt. beton volgens NEN-EN 1992-1-1 bijlage F: benodigde wapening per richting (`wapening`, kN/m) en de betondrukdiagonaal (6.55)/(6.56), aanwezige wapening NIET getoetst (status NotApplicable waar wapening nodig is). Kruislaaghout en vrij materiaal komen terug met `geweigerd` en een reden, een plaat zonder (bruikbaar) materiaal staat met reden in `skipped_plates`. Elke plaat staat in `plate_check_inputs` of in `skipped_plates`.",
             "inputSchema": {
                 "type": "object",
                 "additionalProperties": false,
@@ -1396,8 +1470,6 @@ pub fn tool_definitions() -> Vec<Value> {
                     "combinations": schema_combinations(),
                     "gevolgklasse": schema_gevolgklasse(),
                     "bijlage": schema_bijlage_verzoek(),
-                    "nonlinear": { "type": "boolean", "default": false,
-                        "description": "Tweede orde (P-Delta). Uit een projectbestand telt de keuze uit dat bestand." },
                     "timeout_s": { "type": "integer", "minimum": 1, "maximum": 600, "default": 60,
                         "description": "Klok voor deze aanroep; bij overschrijding komt er geen gedeeltelijk resultaat terug." },
                     "check_config": {
@@ -1746,6 +1818,79 @@ mod tests {
                 !velden.contains_key(verboden),
                 "`{verboden}` hoort niet los op een staaf te kunnen"
             );
+        }
+    }
+
+    /// `check_fem_model` kent geen `nonlinear`: de toets rekent altijd tweede
+    /// orde met scheefstand. Het schema biedt het veld niet aan, en de
+    /// argumenten weigeren het (geen stille terugval). `solve_fem_model` houdt
+    /// het: daar gaat het om de resultaten.
+    #[test]
+    fn check_fem_model_kent_geen_nonlinear_en_solve_wel() {
+        let definities = tool_definitions();
+        let schema = |naam: &str| {
+            definities
+                .iter()
+                .find(|d| d["name"] == naam)
+                .unwrap_or_else(|| panic!("{naam} ontbreekt"))["inputSchema"]["properties"]
+                .clone()
+        };
+        assert!(schema("check_fem_model").get("nonlinear").is_none(), "check_fem_model biedt `nonlinear` aan");
+        assert!(schema("solve_fem_model").get("nonlinear").is_some(), "solve_fem_model hoort `nonlinear` te houden");
+
+        let fout = lees_argumenten::<CheckArgumenten>(
+            "check_fem_model",
+            json!({ "model": {}, "nonlinear": true }),
+        )
+        .expect_err("`nonlinear` hoort geweigerd te worden");
+        assert_eq!(fout.code, -32602);
+        let data = fout.data.expect("data");
+        assert_eq!(data["error_code"], ARGUMENT_ONGELDIG);
+        assert!(data["melding"].as_str().unwrap_or("").contains("nonlinear"), "{data}");
+        lees_argumenten::<SolveArgumenten>("solve_fem_model", json!({ "model": {}, "nonlinear": true }))
+            .expect("solve_fem_model aanvaardt `nonlinear`");
+    }
+
+    /// De bewaking op de toetsanalyse: alleen een antwoord dat zegt dat de
+    /// toetskrachten tweede orde met scheefstand zijn, mag getoetst worden.
+    /// Een bundel van vóór die regel (zonder `stability.scheefstand`, met
+    /// `analysis_type` van het model) geeft TOETSING_ONMOGELIJK.
+    #[test]
+    fn een_bundel_zonder_afgedwongen_toetsanalyse_geeft_toetsing_onmogelijk() {
+        let goed = json!({ "stability": {
+            "analysis_type": "tweedeOrdeGeometrisch",
+            "model_analysis_type": "eersteOrde",
+            "scheefstand": { "phi": 0.005, "noemer": 200, "bron": "vast",
+                "model_scheefstand_aan": false, "afgedwongen": true }
+        } });
+        assert!(eis_toetsanalyse(&goed).is_ok());
+
+        let mut fysisch = goed.clone();
+        fysisch["stability"]["analysis_type"] = json!("tweedeOrdeFysisch");
+        assert!(eis_toetsanalyse(&fysisch).is_ok());
+
+        let oud = json!({ "stability": { "analysis_type": "eersteOrde", "alpha_cr": [] } });
+        let mut eerste_orde = goed.clone();
+        eerste_orde["stability"]["analysis_type"] = json!("eersteOrde");
+        let mut niet_afgedwongen = goed.clone();
+        niet_afgedwongen["stability"]["scheefstand"]["afgedwongen"] = json!(false);
+        let mut zonder_phi = goed.clone();
+        zonder_phi["stability"]["scheefstand"]["phi"] = json!(0.0);
+        let mut phi_null = goed.clone();
+        phi_null["stability"]["scheefstand"]["phi"] = Value::Null;
+        for (naam, uit) in [
+            ("oude bundel", oud),
+            ("eerste orde", eerste_orde),
+            ("niet afgedwongen", niet_afgedwongen),
+            ("φ = 0", zonder_phi),
+            ("φ ontbreekt", phi_null),
+            ("geen stability", json!({})),
+        ] {
+            let f = eis_toetsanalyse(&uit).expect_err(naam);
+            let data = f.data.expect("data");
+            assert_eq!(data["error_code"], TOETSING_ONMOGELIJK, "{naam}: {data}");
+            assert!(data["melding"].as_str().unwrap_or("").contains("Er is niet getoetst"), "{naam}: {data}");
+            assert!(data["remedie"].as_str().unwrap_or("").contains("build:sidecar"), "{naam}: {data}");
         }
     }
 

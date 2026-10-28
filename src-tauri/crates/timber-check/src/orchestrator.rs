@@ -14,7 +14,9 @@ use nen_en_1995_1_1::{
     bending, beta_c, compression, deflection, design_strength, k_def, k_h, k_m, k_mod, k_sys,
     shear, strength_class_by_name, torsion, LoadDurationClass, StrengthClass, TimberSection,
 };
-use steel_check::{CheckKind, CustomSection, NamedCheck};
+use steel_check::{
+    CheckKind, CustomSection, NamedCheck, Staafeind, Staafeinden, NIET_VOLLEDIG_GETOETST,
+};
 
 use crate::belastingduur::{self, kmod_notitie, Groep, KlasseUc, KmodPerLoadDuration};
 use crate::input::TimberBeamCheckInput;
@@ -179,6 +181,108 @@ pub(crate) struct Afschuining {
     pub rand: Option<nen_en_1995_1_1::afgeschuind::SchuineRand>,
 }
 
+/// Rekenruis in N (kN) en M (kNm) telt niet als druk of buiging — dezelfde
+/// drempels als de staalkern.
+const N_NUL_KN: f64 = 1e-6;
+const M_NUL_KNM: f64 = 1e-6;
+
+/// Wat een DOORLOPEND staafeind (issue #205) aan de stabiliteitstoetsen doet.
+///
+/// Een staafeind dat zonder oplegging in het verlengde doorloopt in een staaf
+/// met een andere doorsnede of een ander materiaal, is geen gaffel en niet
+/// zijdelings gesteund. De terugval van de kniklengte op de staaflengte (en de
+/// afleiding uit de zijdelingse steunen, die gesteunde einden veronderstelt)
+/// en de terugval van de kipsteunafstand op de staaflengte nemen het wél zo
+/// aan: bij een getrapte kolom wordt de lengte van één deel de kniklengte. De
+/// staalkern weigert hier al (`Staafeind::Doorlopend`); de houtkern nu ook.
+struct DoorlopendEind {
+    /// Waar de staaf doorloopt, leesbaar ("het eind van de staaf (x = L)").
+    plaatsen: Vec<&'static str>,
+    /// Reden om art. 6.3.2 te weigeren: niet beide kniklengtes opgegeven.
+    knik: Option<String>,
+    /// Reden om art. 6.3.3 te weigeren: geen kniklengtes (k_c,z in (6.35)) of
+    /// geen kipsteunafstand / l_ef opgegeven.
+    kip: Option<String>,
+}
+
+fn doorlopend_eind(input: &TimberBeamCheckInput) -> DoorlopendEind {
+    let einden = input.staafeinden.unwrap_or(Staafeinden { begin: Staafeind::Gaffel, eind: Staafeind::Gaffel });
+    let plaatsen: Vec<&'static str> = [
+        (einden.begin, "het begin van de staaf (x = 0)"),
+        (einden.eind, "het eind van de staaf (x = L)"),
+    ]
+    .iter()
+    .filter(|(e, _)| *e == Staafeind::Doorlopend)
+    .map(|(_, plaats)| *plaats)
+    .collect();
+    if plaatsen.is_empty() {
+        return DoorlopendEind { plaatsen, knik: None, kip: None };
+    }
+    let opgegeven = |m: f64| m.is_finite() && m > 0.0;
+    let waar = plaatsen.join(" en ");
+    let kniklengtes = opgegeven(input.buckling_length_y_m) && opgegeven(input.buckling_length_z_m);
+    let knik = (!kniklengtes).then(|| {
+        format!(
+            "de staaf loopt aan {waar} zonder oplegging in het verlengde door in een andere staaf \
+             (met een andere doorsnede of een ander materiaal; in 3D elke voortzetting, want daar \
+             worden staven niet samengevoegd). De terugval van de kniklengte op de \
+             staaflengte zou dat staafeind als zijdelings gesteund aannemen, en dat is het niet: \
+             bij een getrapte kolom wordt zo de lengte van één deel de kniklengte. Geef L_cr,y én \
+             L_cr,z op voor de doorgaande lijn als geheel; dan wordt art. 6.3.2 uitgevoerd"
+        )
+    });
+    let kipsteun = opgegeven(input.ltb_segment_length_m) || opgegeven(input.ltb_effective_length_override_m);
+    let kip = (input.perform_ltb_check && !(kniklengtes && kipsteun)).then(|| {
+        let mist: Vec<&str> = [
+            (!kniklengtes, "L_cr,y en L_cr,z (k_c,z in de drukterm van (6.35))"),
+            (!kipsteun, "de kipsteunafstand of l_ef (tabel 6.1)"),
+        ]
+        .iter()
+        .filter(|(ja, _)| *ja)
+        .map(|(_, wat)| *wat)
+        .collect();
+        format!(
+            "de staaf loopt aan {waar} zonder oplegging in het verlengde door in een andere staaf \
+             (met een andere doorsnede of een ander materiaal; in 3D elke voortzetting, want daar \
+             worden staven niet samengevoegd). Dat staafeind is geen gaffel; de terugval op \
+             de staaflengte zou het als zijdelings gesteund en torsievast aannemen. Kip is daarom \
+             niet getoetst: geef {} op voor de doorgaande lijn als geheel, of zet op die \
+             tussenknoop een steun",
+            mist.join(" en ")
+        )
+    });
+    DoorlopendEind { plaatsen, knik, kip }
+}
+
+/// Een geweigerde stabiliteitstoets: NotApplicable, géén UC, de reden in de
+/// notities. Nooit een UC van 0 die als "voldoet" leest.
+fn stabiliteit_geweigerd(
+    id: &str,
+    titel: &str,
+    artikel: &str,
+    reden: &str,
+    staaf_notities: &[String],
+    force_state: ForceStateSnapshot,
+) -> NamedCheck {
+    let mut notes = vec![format!("Niet getoetst: {reden}.")];
+    notes.extend(staaf_notities.iter().cloned());
+    make_stability(StabilityCalc {
+        id: id.to_string(),
+        title: titel.to_string(),
+        article: artikel.to_string(),
+        force_state,
+        formula_latex: String::new(),
+        variables: vec![],
+        intermediate_values: vec![],
+        deelstappen: vec![],
+        value: 0.0,
+        unit: "-".to_string(),
+        uc: None,
+        status: CheckStatus::NotApplicable,
+        notes,
+    })
+}
+
 /// Wat de toetsketen nodig heeft en NIET van de belastingduurklasse afhangt.
 struct Keten<'a> {
     input: &'a TimberBeamCheckInput,
@@ -315,12 +419,14 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
     // een as waarvan de zijdelingse uitbuiging al in de globale tweede-orde-
     // berekening met scheefstand zit (zie `ZijdelingseKnikInAnalyse`).
     let zijdelings = input.zijdelingse_knik_in_analyse.unwrap_or_default();
-    let kniklengte_of_vrij = |as_naam: &str,
-                              in_vlak: bool,
-                              opgegeven_m: f64,
-                              steunen: Option<Steunen<'_>>,
-                              gedekt: bool| {
-        if input.is_cantilever && !(opgegeven_m.is_finite() && opgegeven_m > 0.0) {
+    // Een vrij eind: de vlag, of een `Vrij` eind in `staafeinden`.
+    let vrij_eind = input.is_cantilever
+        || input
+            .staafeinden
+            .is_some_and(|e| e.begin == Staafeind::Vrij || e.eind == Staafeind::Vrij);
+    let doorlopend = doorlopend_eind(input);
+    let kniklengte_of_vrij = |as_naam: &str, in_vlak: bool, opgegeven_m: f64, steunen: Option<Steunen<'_>>, gedekt: bool| {
+        if vrij_eind && !(opgegeven_m.is_finite() && opgegeven_m > 0.0) {
             Kniklengte::vrij_eind_volgens_analyse(
                 as_naam,
                 l_staaf_mm,
@@ -348,26 +454,46 @@ fn toetsketen_punt(k: &Keten, punt: ForcePoint, duur: LoadDurationClass) -> Vec<
     let l_cr_z_mm = kniklengte_z.l_cr_mm;
     let kniklengte_z_samenvatting = kniklengte_z.samenvatting();
     let staaf_notities: Vec<String> = input.staaf_notities.iter().flatten().cloned().collect();
-    let mut kolom = check_column_stability(
-        section,
-        &ColumnStabilityInput {
-            kniklengte_y,
-            kniklengte_z,
-            f_c0k_mpa: mat.f_c0k,
-            e0_05_mpa: mat.e0_05,
-            beta_c: bc,
-            f_c0d_mpa: f_c0d,
-            f_myd_mpa: f_myd,
-            f_mzd_mpa: f_mzd,
-            k_m: km,
-        },
-        state,
-    );
-    kolom.notes.extend(staaf_notities.iter().cloned());
-    checks.push(make_stability(kolom));
+    if let Some(reden) = &doorlopend.knik {
+        checks.push(stabiliteit_geweigerd(
+            "6.3.2_column_stability",
+            "Kolomknik (druk en buiging)",
+            "art. 6.3.2",
+            reden,
+            &staaf_notities,
+            state,
+        ));
+    } else {
+        let mut kolom = check_column_stability(
+            section,
+            &ColumnStabilityInput {
+                kniklengte_y,
+                kniklengte_z,
+                f_c0k_mpa: mat.f_c0k,
+                e0_05_mpa: mat.e0_05,
+                beta_c: bc,
+                f_c0d_mpa: f_c0d,
+                f_myd_mpa: f_myd,
+                f_mzd_mpa: f_mzd,
+                k_m: km,
+            },
+            state,
+        );
+        kolom.notes.extend(staaf_notities.iter().cloned());
+        checks.push(make_stability(kolom));
+    }
 
     // Kipstabiliteit §6.3.3.
-    if input.perform_ltb_check {
+    if let Some(reden) = &doorlopend.kip {
+        checks.push(stabiliteit_geweigerd(
+            "6.3.3_beam_stability",
+            "Kipstabiliteit (buiging en druk)",
+            "art. 6.3.3",
+            reden,
+            &staaf_notities,
+            state,
+        ));
+    } else if input.perform_ltb_check {
         let (segment_mm, segment_herkomst) = if input.ltb_segment_length_m > 0.0 {
             (input.ltb_segment_length_m * 1e3, "kipsteunafstand")
         } else {
@@ -773,10 +899,37 @@ pub(crate) fn check_timber_beam_intern(
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 {
-        CheckStatus::Ok
-    } else {
+    // Een DOORLOPEND staafeind (issue #205) laat art. 6.3.2 en/of 6.3.3
+    // weigeren, en een geweigerde toets telt als 0. Zonder deze regel stond de
+    // staaf dan op Ok terwijl de kolomtoets bij druk of de kiptoets bij buiging
+    // niet was uitgevoerd. De status is dan NotApplicable: niet volledig
+    // getoetst, met de reden achter NIET_VOLLEDIG_GETOETST in
+    // `governing_check_id` — dezelfde vorm als de staalkern. NotOk blijft NotOk.
+    let doorlopend = doorlopend_eind(&input);
+    let knik_ontbreekt = doorlopend.knik.is_some()
+        && input.forces_envelope.iter().any(|p| p.forces.n_ed < -N_NUL_KN);
+    let kip_ontbreekt = doorlopend.kip.is_some()
+        && input.forces_envelope.iter().any(|p| p.forces.my_ed.abs() > M_NUL_KNM);
+    let status = if uc_max > 1.0 {
         CheckStatus::NotOk
+    } else if knik_ontbreekt || kip_ontbreekt {
+        let ontbreekt: Vec<&str> = [
+            (knik_ontbreekt, "de kolomknik (art. 6.3.2) bij druk"),
+            (kip_ontbreekt, "de kip (art. 6.3.3) bij buiging"),
+        ]
+        .iter()
+        .filter(|(ja, _)| *ja)
+        .map(|(_, wat)| *wat)
+        .collect();
+        governing_check_id = format!(
+            "{NIET_VOLLEDIG_GETOETST}: {} niet getoetst: de staaf loopt aan {} zonder oplegging door \
+             in het verlengde in een andere staaf (de reden staat bij de toets)",
+            ontbreekt.join(" en "),
+            doorlopend.plaatsen.join(" en ")
+        );
+        CheckStatus::NotApplicable
+    } else {
+        CheckStatus::Ok
     };
 
     TimberBeamCheckResult {

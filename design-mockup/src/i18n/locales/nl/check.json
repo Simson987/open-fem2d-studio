@@ -693,11 +693,15 @@
     "derivation_one": "Afleiding ({{count}} stap)",
     "derivation_other": "Afleiding ({{count}} stappen)",
     "combination": "Combinatie",
+    "forcesSecondOrder": "2e orde + scheefstand",
+    "forcesResults": "resultaten",
+    "forcesTitle": "Waar de krachten van deze toets vandaan komen. UGT: altijd een tweede-ordeberekening (P-Δ) met scheefstand, los van de instellingen Analyse en Scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en (7)b). BGT: de resultaten, zoals ingesteld.",
     "intermediates": "Tussenwaarden ({{aantal}})"
   },
   "panel": {
     "stressAt": "Spanningsverloop bij de maatgevende snede: x = {{x}} mm, combinatie {{combinatie}}",
-    "tensionPositive": "Trek positief"
+    "tensionPositive": "Trek positief",
+    "forcesNotes": "Meldingen bij de toetskrachten"
   },
   "variants": {
     "stepBars": "{{stap}} st",

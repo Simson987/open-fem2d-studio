@@ -43,6 +43,15 @@ export function buildOpenFem3DUtilizations(
       standard: "EN 1995",
     });
   }
+  // Doorgaande lijnen (issue #207): de lijn is als één staaf getoetst; elk
+  // deel toont haar UC.
+  for (const delen of [steel?.lijnDelen, timber?.lijnDelen]) {
+    for (const [id, leden] of Object.entries(delen ?? {})) {
+      const waarde = values.get(Number(id));
+      if (!waarde) continue;
+      for (const deel of leden) if (!values.has(deel)) values.set(deel, { ...waarde, beamId: deel });
+    }
+  }
   return [...values.values()].sort((a, b) => a.beamId - b.beamId);
 }
 

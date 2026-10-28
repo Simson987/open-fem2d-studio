@@ -54,6 +54,7 @@ import {
 import { normalizeOpenFem3DSymbolPercent } from "../components/openFem3d/openFem3dSymbolScale";
 import { isOpenFem3DPlateDisplay } from "../components/openFem3d/openFem3dPlateDisplay";
 import { DEFAULT_OPEN_FEM_3D_SECTION_BOX, openFem3DSectionBoxUitOpdracht } from "../components/openFem3d/openFem3dSectionBox";
+import { DEFAULT_OPEN_FEM_3D_EXPLODE, openFem3DExplodeFromCommand } from "../components/openFem3d/openFem3dExplode";
 import { analyseOpenFem3DLoadPanels } from "../components/openFem3d/openFem3dLoadPanels";
 import {
   applyOpenFem3DLevels,
@@ -65,12 +66,14 @@ import type { OpenFem3DSolveResult } from "../components/openFem3d/openFem3dSolv
 import type { OpenFem3DSteelChecks } from "../components/openFem3d/openFem3dSteelCheck";
 import type { OpenFem3DConcreteChecks } from "../components/openFem3d/openFem3dConcreteCheck";
 import type { OpenFem3DTimberChecks } from "../components/openFem3d/openFem3dTimberCheck";
+import type { ToetsKrachten3D } from "../components/openFem3d/openFem3dToetsKrachten";
 import type { OpenFem3DSelection } from "../components/openFem3d/openFem3dSelection";
 import { openFem3DEnvelopePanelGeometry } from "../components/openFem3d/openFem3dEnvelopePanels";
 import { openFem3DMaximumDisplacementM } from "../components/openFem3d/openFem3dDisplacement";
 import { maakStaalhal, type StaalhalResultaat } from "../components/openFem3d/wizards/staalhal";
 import { importeerIfcAnalyseModel, type IfcAnalyseImport } from "../io/ifcAnalyseImport";
 import type { SolverResult } from "../components/fem/solver/types";
+import { combinatieSamenvatting } from "./samenvatting";
 import type { ReinforcementCage } from "../lib/types/concrete/ReinforcementCage";
 import { isEigenGewichtGeval } from "../lib/eigenGewicht";
 import {
@@ -175,6 +178,12 @@ export interface BedieningActies {
     solving: boolean;
     checksRunning: boolean;
     checksError: string | null;
+    /**
+     * De toets van de laatste rekengang (issue #199): altijd P-Δ met
+     * scheefstand in ±X/±Y, met φ, α_cr per basiscombinatie, meldingen en een
+     * eventuele weigering. Ontbreekt of `null` = geen toets.
+     */
+    toets?: ToetsKrachten3D | null;
   };
   activeView: string;
   selection: Selection;
@@ -954,6 +963,9 @@ export async function voerUit(
       const sectionBox = args.section_box === undefined ? undefined
         : openFem3DSectionBoxUitOpdracht(args.section_box, a().openFem3d.visibility.sectionBox ?? DEFAULT_OPEN_FEM_3D_SECTION_BOX,
           a().openFem3d.model, a().openFem3d.selection ?? null);
+      // De explode (issue #198), alleen weergave: ook eerst keuren.
+      const explode = args.explode === undefined ? undefined
+        : openFem3DExplodeFromCommand(args.explode, a().openFem3d.visibility.explode ?? DEFAULT_OPEN_FEM_3D_EXPLODE);
       if (args.visibility !== undefined) {
         if (!args.visibility || typeof args.visibility !== "object" || Array.isArray(args.visibility)) {
           throw new Error("`visibility` moet een object zijn");
@@ -992,9 +1004,12 @@ export async function voerUit(
           next[key as OpenFem3DVisibilityFlag] = value;
         }
         if (sectionBox) next.sectionBox = sectionBox;
+        if (explode) next.explode = explode;
         a().openFem3d.setVisibility(next);
-      } else if (sectionBox) {
-        a().openFem3d.setVisibility({ ...a().openFem3d.visibility, sectionBox });
+      } else if (sectionBox || explode) {
+        a().openFem3d.setVisibility({
+          ...a().openFem3d.visibility, ...(sectionBox ? { sectionBox } : {}), ...(explode ? { explode } : {}),
+        });
       }
       if (args.structural_grid !== undefined) {
         if (!args.structural_grid || typeof args.structural_grid !== "object" || Array.isArray(args.structural_grid)) {
@@ -1165,7 +1180,8 @@ export async function voerUit(
       }
       const t = useCheckStore.getState();
       return {
-        ...samenvatting(cr, a().fem.rekenCombinaties ?? a().fem.combinations),
+        ...combinatieSamenvatting(cr, a().fem.rekenCombinaties ?? a().fem.combinations),
+        // Het analysetype van de RESULTATEN; de toets rekent zelf (`toetsing`).
         analysetype: a().fem.analysetype,
         fysischeRonde: uitkomst.fysisch,
         // De toetsing liep mee; wat ze opleverde staat hier samengevat, de
@@ -1175,6 +1191,11 @@ export async function voerUit(
           getoetst: t.results.length,
           overgeslagen: t.skipped.length,
           uitgevoerdOp: t.lastRunAt,
+          // De analyse van de UGT-toetskrachten (issue #199): altijd tweede
+          // orde met scheefstand, met φ, bron en of de resultaten hergebruikt
+          // zijn. `null` zonder toetsronde (of bij een geweigerde toets: dan
+          // staat de reden in `fout`).
+          toetsanalyse: t.lastRunData?.toets?.analyse ?? null,
         },
       };
     }
@@ -1299,6 +1320,12 @@ function toetsenUitlezen() {
     error: s.error,
     lastRunAt: s.lastRunAt,
     inputs: s.lastRunInputs,
+    // De analyse van de UGT-toetskrachten (issue #199) en wat de toets daarover
+    // meldde (hout met E_mean, een verhoogde of te kleine φ, vervallen
+    // eindtoestandvarianten) — dezelfde gegevens die `check_fem_model` in
+    // `stability` en `warnings` geeft.
+    toetsanalyse: s.lastRunData?.toets?.analyse ?? null,
+    toetsmeldingen: s.lastRunData?.toets?.meldingen ?? [],
   };
 }
 
@@ -1347,36 +1374,11 @@ function openFem3dUitlezen(a: BedieningActies) {
     checksRunning: a.openFem3d.checksRunning,
     solveError: a.openFem3d.solveError,
     checksError: a.openFem3d.checksError,
+    // De analyse van de UGT-toetskrachten (issue #199): altijd P-Δ met
+    // scheefstand in ±X/±Y, met φ, bron en of de resultaten hergebruikt zijn;
+    // α_cr per basiscombinatie en wat de toets meldde. `null` zonder toets.
+    toetsanalyse: a.openFem3d.toets?.analyse ?? null,
+    toetsAlphaCr: a.openFem3d.toets?.alphaCr ?? [],
+    toetsmeldingen: a.openFem3d.toets?.meldingen ?? [],
   };
-}
-
-/** Per combinatie de uitersten — genoeg om te zien dát er gerekend is, en wat. */
-function samenvatting(
-  cr: Map<number, SolverResult>,
-  combos: readonly { id: number; name: string }[],
-) {
-  const uit: Record<string, unknown>[] = [];
-  for (const [id, r] of cr) {
-    let mMax = 0, vMax = 0, nMax = 0, wMax = 0;
-    // Alleen de reeksen die hier tellen; via `unknown` omdat ElementForces
-    // geen indexsignatuur heeft en de veldnamen per pad kunnen verschillen.
-    const els = (r as unknown as { elements?: Map<number, Record<string, number[] | undefined>> }).elements;
-    if (els) {
-      for (const e of els.values()) {
-        for (const x of e.bendingMoment ?? []) mMax = Math.max(mMax, Math.abs(x));
-        for (const x of e.shearForce ?? []) vMax = Math.max(vMax, Math.abs(x));
-        for (const x of e.axialForce ?? e.normalForce ?? []) nMax = Math.max(nMax, Math.abs(x));
-        for (const x of e.deflection ?? []) wMax = Math.max(wMax, Math.abs(x));
-      }
-    }
-    uit.push({
-      combinatie: id,
-      naam: combos.find((c) => c.id === id)?.name ?? String(id),
-      M_max_kNm: mMax / 1e6,
-      V_max_kN: vMax / 1e3,
-      N_max_kN: nMax / 1e3,
-      w_max_mm: wMax,
-    });
-  }
-  return { combinaties: uit };
 }

@@ -22,6 +22,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import "katex/dist/katex.min.css";
 import { useCheckStore } from "../../../stores/checkStore";
+import { useToetsCombinatieNamen } from "../useToetsCombinatieNamen";
 import { isToetsStaafZichtbaar, useReportStore } from "../../../stores/reportStore";
 import type { CltBeamCheckResult } from "../../../lib/types/timber/CltBeamCheckResult";
 import type { CltLayerResult } from "../../../lib/types/timber/CltLayerResult";
@@ -247,6 +248,7 @@ function OpbouwVanIy({ r, mech }: { r: CltBeamCheckResult; mech: CltMechanica })
 function CltStaafBlok({ r }: { r: CltBeamCheckResult }) {
   const { t } = useTranslation("ribbon");
   const { t: tCheck } = useTranslation("check");
+  const combinatieLabel = useToetsCombinatieNamen();
   const krachten = toetskrachten(r);
   const { m, v } = krachten;
   const fout = r.checks.length === 0;
@@ -256,7 +258,7 @@ function CltStaafBlok({ r }: { r: CltBeamCheckResult }) {
 
   const meta =
     `EN 1995 · ${t("report.serviceClass", "klimaatklasse")} ${serviceClassLabel(r.service_class)}` +
-    ` · ${belastingduurTekst(r, t, tCheck)}` +
+    ` · ${belastingduurTekst(r, t, tCheck, combinatieLabel)}` +
     (fout
       ? ""
       : ` · (EI)ef = ${fmtValue(r.layup.ei_ef_knm2, 0)} kNm² · Ief,net = ${fmtValue(

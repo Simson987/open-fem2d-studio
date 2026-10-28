@@ -483,7 +483,9 @@ export interface BetonBuildData {
    * `first_order_envelope` en de quasi-blijvende combinatie uit DEZE oplossing
    * mee; `forces_envelope` — N_Ed en alle doorsnedetoetsen — blijft uit
    * `combinationResults`. Ontbreekt = de rekengang was eerste orde, en dan is
-   * de invoer bit voor bit die van vóór dit veld.
+   * de invoer bit voor bit die van vóór dit veld. De toets in de app rekent
+   * altijd tweede orde (issue #199) en geeft dit veld dus altijd mee
+   * (`eersteOrdeResultatenVoorToets`).
    */
   eersteOrdeResultaten?: Map<number, SolverResult>;
 }
@@ -624,9 +626,12 @@ export function buildBetonCheckInputs(ruweData: BetonBuildData): BetonBuildResul
       continue;
     }
 
-    // DE EERSTE ORDE VOOR §5.8 (issue #35). Alleen bij een kolomblok en alleen
-    // na een tweede-orde-rekengang; anders is `combinationResults` zelf al
-    // eerste orde en blijft alles zoals het was.
+    // DE EERSTE ORDE VOOR §5.8 (issue #35). Alleen bij een kolomblok: zonder
+    // §5.8-toets leest de kern haar niet. In de app gaat zij altijd mee, want
+    // de toetsset is altijd tweede orde met scheefstand (issue #199,
+    // `toetsSet2D`); de UGT komt dan uit de toetsrekengang en de
+    // quasi-blijvende uit de resultaten. Een aanroeper zonder dit veld heeft
+    // eerste-ordekrachten, en dan blijft alles zoals het was.
     const eersteOrde = cfg.kolom ? data.eersteOrdeResultaten : undefined;
     const quasiBron = eersteOrde ?? data.combinationResults;
     const eersteOrdeUgt = eersteOrde ? metResultaat(ulsCombos, beam.id, eersteOrde) : [];

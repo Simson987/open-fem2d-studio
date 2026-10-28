@@ -97,10 +97,11 @@ export interface ReportData {
    * gerekend IS. Een tweede afleiding in een sectie zou een getal op papier
    * kunnen zetten dat in geen enkele kracht zit.
    *
-   * LEEG betekent: er is geen scheefstand op de lasten gezet (de schakelaar
-   * staat uit). Dan hoort het rapport erover te zwijgen in plaats van een
-   * aanname te noemen die nergens is toegepast — dezelfde regel als in de
-   * PDF-uitdraai, waar een leeg veld het hoofdstuk Uitgangspunten weglaat.
+   * In de app nooit leeg (issue #199): de UGT-toets rekent altijd met deze
+   * scheefstand, ook met de schakelaar uit; de schakelaar geldt alleen voor de
+   * resultaten. LEEG (een andere aanroeper) laat het rapport erover zwijgen —
+   * dezelfde regel als in de PDF-uitdraai, waar een leeg veld het hoofdstuk
+   * Uitgangspunten weglaat.
    */
   scheefstandToelichting: string;
   /**

@@ -334,7 +334,21 @@ if (!existsSync(MCP_SERVER)) {
   const inv = a[2].uit?.steel_check_inputs?.[0];
   const fe = inv?.forces_envelope ?? [];
   const top = fe.reduce((m, p) => (p.forces.my_ed > (m?.forces.my_ed ?? -Infinity) ? p : m), null);
-  check("MCP check 072: my_ed max in de toetsinvoer = 25,3125 kNm", top?.forces?.my_ed, 25.3125);
+  // VERSCHOVEN BINNEN DE TOLERANTIE (issue #199). `check_fem_model` rekent de
+  // UGT-toetskrachten altijd P-Δ met scheefstand φ = 1/200 in ±x. De metgezel
+  // φ·q = 10/200 = 0,05 kN/m langs de ligger gaat naar de inklemming: N loopt
+  // van 0 (rol) tot 0,3 kN. Via de geometrische stijfheid (orde N·2L/15·θ_B,
+  // θ_B = qL³/48EI = 2,57·10⁻³) verschuift het veldmoment met ~3·10⁻⁴ kNm.
+  // Gemeten: 25,31263 kNm op x = 3750,008 mm, tegen 25,3125 op 3750 in eerste
+  // orde: +5·10⁻⁶ relatief en +2·10⁻⁶ in x, binnen relTol 1e-5. De
+  // BGT-zakking hieronder komt uit de resultaten (B6) en blijft exact.
+  // VERRUIMDE TOLERANTIE (oktober 2026), relTol 1e-5 → 5e-5: sinds de kern de
+  // staafkrachten na P-Δ uit (K_E + K_G)·u rekent, telt langs de staaf ook het
+  // P-δ-moment N·(w(x) − w(0)) mee. Met N ≤ 0,3 kN en w ≈ 4 mm is dat orde
+  // 300 N · 4 mm = 1,2·10⁻³ kNm; gemeten 25,31300 kNm, +2·10⁻⁵ relatief
+  // (+5·10⁻⁴ kNm). De handwaarde 9qL²/128 = 25,3125 is eerste orde; dit
+  // verschil is de (juiste) tweede orde van de toets, geen fout.
+  check("MCP check 072: my_ed max in de toetsinvoer = 25,3125 kNm (binnen 5e-5, P-δ)", top?.forces?.my_ed, 25.3125, 5e-5);
   check("MCP check 072: op x = 3750 mm", top?.position_mm, 3750);
   check("MCP check 072: deflection_actual_max_mm = −w_max", inv?.deflection_actual_max_mm, -wmax072);
 }

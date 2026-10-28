@@ -356,6 +356,11 @@ fn portal_beam1_governing_ok() {
 /// ongewijzigd. Wat verandert is de weergave: formule M_y,V,Rd = (1 − ρ)·
 /// M_y,c,Rd, de variabelen ρ en M_y,Ed erbij, de afleidingsstappen ρ en
 /// M_y,V,Rd, en Nederlandse kanttekeningen met de plaats.
+/// Oktober 2026, issue #199 — de vlaknotitie bij de kniklengte om y. Zij zegt
+/// nu dat de UGT-krachten bij de toetsing van een model in deze app altijd uit
+/// een tweede-ordeberekening (P-Δ) met scheefstand komen, en dat de
+/// staafimperfecties daar niet in zitten. Alleen die ene notitie verandert;
+/// geen getal, geen status en geen andere tekst.
 #[test]
 fn portal_beam1_snapshot() {
     insta::assert_json_snapshot!("portal_beam1", run());

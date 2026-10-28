@@ -74,7 +74,7 @@ export function PlaatToetsKaart({ result, focusToken, namen, onToon }: {
               {result.governing_element_id != null && result.governing_combination_id != null && (
                 <> — {t("plaat.elementInCombinatie", {
                   element: result.governing_element_id,
-                  combinatie: result.governing_combination_id,
+                  combinatie: namen?.get(result.governing_combination_id) ?? result.governing_combination_id,
                 })}</>
               )}
             </div>
@@ -138,7 +138,7 @@ export function PlaatToetsKaart({ result, focusToken, namen, onToon }: {
                 check={named.kind.data}
                 maatgevend={regel.maatgevend}
                 krachtregel={t("plaat.krachtregel", {
-                  combinatie: named.kind.data.force_state.combination_id,
+                  combinatie: namen?.get(named.kind.data.force_state.combination_id) ?? named.kind.data.force_state.combination_id,
                 })}
               />
             ) : null;

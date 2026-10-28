@@ -19,6 +19,11 @@
 // Tot oktober 2026 zette de 2D-houtbouwer `is_cantilever` hard op false: een
 // vrijstaande houten kolom kreeg L_cr = L bij eerste orde.
 //
+// Sinds issue #199 zijn de UGT-toetskrachten altijd tweede orde met
+// scheefstand. Daarom is de α_cr-kanttekening bij eerste orde weg (B14), en
+// krijgt elke houtstaaf in de toets een vaste melding: E_mean, niet de volledige
+// EN 1995-route, dus 2·L bij een vrij eind (B10).
+//
 // Handwaarden (zie ook de Rust-tests `vrij_eind_tweede_orde` in steel-check en
 // timber-check):
 //   HEA200 S235, L = 3 m, N_Ed = 200 kN: A = 5383 mm², i_y = 82,8 mm,
@@ -103,6 +108,15 @@ const stap = (data, id) => data?.deelstappen?.find((d) => d.id === id);
 const lcr = (data, as) => stap(data, `l_cr_${as}`)?.value;
 
 // ── 2D-model en bouwer zoals de toetsstore ──────────────────────────────────
+// De blokken [1]–[4] voeden de bouwers zelf, met eerste-ordekrachten en een
+// GEKOZEN stabiliteit: ze toetsen de regel van de bouwer (de bewaking in
+// `zijdelingseKnikInVlakModel` en `openFem3DZijdelingseKnik`), niet de route
+// van de app. Sinds issue #199 geeft die route de bouwers altijd de toetsset:
+// tweede orde met scheefstand en de φ van de projectinstelling (in deze tests
+// TWEEDE_MET of TWEEDE_KLEIN). De gevallen met EERSTE_ORDE, TWEEDE_ZONDER of
+// TWEEDE_ONBEKEND komen in de app dus niet meer voor; ze bewaken dat een
+// aanroeper met zulke gegevens 2·L houdt. De app-route zelf staat in
+// test-toets-app-route en [5] hieronder (MCP).
 const PROFIELEN = JSON.parse(
   readFileSync(join(REPO, "src-tauri", "crates", "steel-profiles", "data", "profiles.json"), "utf8"),
 );
@@ -155,6 +169,13 @@ function bouw(m, soort, stabiliteit) {
 }
 const notities = (i) => i?.staaf_notities ?? [];
 const phiNotitie = (i) => notities(i).some((n) => /^VRIJ STAAFEIND, TWEEDE ORDE/.test(n) && /m = 1/.test(n));
+/** De vaste houtmelding van de toets (B10): E_mean, de ontbrekende EN 1995-route, 2·L. */
+const houtMelding = (i) => notities(i).filter((n) => /^HOUT IN DE TOETS/.test(n));
+const houtMeldingOk = (i) => {
+  const m = houtMelding(i);
+  return m.length === 1 && /tweede-ordeberekening \(P-Δ\) met scheefstand/.test(m[0]) && /E_mean/.test(m[0])
+    && /E_d = E_mean\/γ_M/.test(m[0]) && /boogimperfectie/.test(m[0]) && /2·L/.test(m[0]);
+};
 const JSONg = (x) => JSON.stringify(x);
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -209,21 +230,35 @@ for (const [naam, stab, lcrY, metNotitie] of [
   }
 }
 {
-  // Eerste orde met α_cr < 10 en een vrij eind: niet "valt terug op de
-  // systeemlengte" (de kern neemt 2·L), maar de eigen kanttekening: 2·L
-  // veronderstelt een ingeklemde voet, anders L_cr,y uit α_cr.
+  // Geen α_cr-kanttekening meer bij een gedrukte staaf (issue #199, B14). Tot
+  // 2026.42 zette de bouwer bij eerste orde met α_cr < 10 een kanttekening
+  // "EERSTE ORDE MET α_cr = …" in `staaf_notities` (bij een vrij eind: 2·L
+  // veronderstelt een ingeklemde voet; anders: de terugval op de
+  // systeemlengte is niet normconform). De UGT-toetskrachten zijn nu altijd
+  // tweede orde met scheefstand, dus die situatie bestaat in de toets niet
+  // meer; de functie `alphaCrStaafNotitie` en haar aanroepen zijn weg. Ook een
+  // aanroeper die eerste-ordegegevens meegeeft, krijgt haar niet meer.
+  const alphaCrModule = await import("./src/components/fem/solver/alphaCr.ts");
+  ok("alphaCrStaafNotitie bestaat niet meer (B14)", !("alphaCrStaafNotitie" in alphaCrModule));
   const laag = { ...EERSTE_ORDE, alphaCr: [{ naam: "UGT", status: "bepaald", alphaCr: 4 }] };
-  const r = bouw(kolom(3000, "S235", "HEA200", 200), "staal", laag);
-  const n = notities(r.inputs[0]).filter((x) => /^EERSTE ORDE MET α_cr/.test(x));
-  ok("eerste orde met α_cr = 4, vrij eind: de kanttekening voor een vrij eind (2·L, ingeklemde voet, L_cr,y uit α_cr)",
-    n.length === 1 && /heeft een vrij eind/.test(n[0]) && /volledig ingeklemde voet/.test(n[0])
-      && /π·√\(EI\/\(α_cr·N_Ed\)\)/.test(n[0]) && !/valt terug op de systeemlengte/.test(n[0]), JSON.stringify(n));
-  // Met een opgegeven L_cr,y geen kanttekening over α_cr en geen over φ.
+  /** Pendelkolom: scharnier aan de voet, horizontaal gesteunde kop; beide einden gaffel. */
+  const pendel = (lMm, materiaal, profiel, fKn) => ({
+    ...kolom(lMm, materiaal, profiel, fKn),
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "xRoller" }],
+  });
+  for (const [naam, model, soort] of [
+    ["staal, vrij eind", kolom(3000, "S235", "HEA200", 200), "staal"],
+    ["staal, pendelkolom (terugval op L)", pendel(3000, "S235", "HEA200", 200), "staal"],
+    ["hout, vrij eind", kolom(2000, "C24", "100x160", 20), "hout"],
+    ["hout, pendelkolom (terugval op L)", pendel(2000, "C24", "100x160", 20), "hout"],
+  ]) {
+    const i = bouw(model, soort, laag).inputs[0];
+    ok(`${naam}, eerste orde met α_cr = 4 < 10: geen α_cr-kanttekening`,
+      i !== undefined && !notities(i).some((x) => /α_cr|EERSTE ORDE/.test(x)), JSON.stringify(notities(i)));
+  }
+  // Met een opgegeven L_cr,y geen kanttekening over φ.
   const opgegeven = kolom(3000, "S235", "HEA200", 200);
   opgegeven.beams[0].checkConfig = { bucklingLengthY_m: 4.5 };
-  const o = bouw(opgegeven, "staal", laag).inputs[0];
-  ok("eerste orde met α_cr = 4 en L_cr,y opgegeven: geen α_cr-kanttekening",
-    !notities(o).some((x) => /^EERSTE ORDE MET α_cr/.test(x)));
   const ok2 = bouw(opgegeven, "staal", TWEEDE_KLEIN).inputs[0];
   ok("tweede orde, φ te klein maar L_cr,y opgegeven: geen φ-kanttekening (de kern neemt de opgave)",
     !phiNotitie(ok2), JSON.stringify(notities(ok2)));
@@ -251,6 +286,12 @@ for (const [naam, stab] of [
   ok(`${naam}: is_cantilever = true (was hard false)`, i?.is_cantilever === true);
   ok(`${naam}: geen zijdelingse_knik_in_analyse (hout: E_d en boogimperfectie ontbreken)`,
     i?.zijdelingse_knik_in_analyse === undefined);
+  // De vaste houtmelding (issue #199, B10) bij elke houtstaaf in de toets: de
+  // toetsset is altijd tweede orde met scheefstand. Een aanroeper met eerste-
+  // ordegegevens is niet de toets en krijgt haar niet.
+  const tweede = stab.analysetype !== "eersteOrde" && stab.scheefstandAan;
+  ok(`${naam}: houtmelding over E_mean en 2·L ${tweede ? "precies één keer" : "afwezig"}`,
+    tweede ? houtMeldingOk(i) : houtMelding(i).length === 0, JSON.stringify(notities(i)));
   if (heeftKern) {
     const k = toets(kern(r.inputs, "check_timber_beams")[0], "6.3.2_column_stability");
     dicht(`${naam}: kern L_cr,y = 4000 mm`, lcr(k, "y"), 4000, 1e-9);
@@ -267,6 +308,21 @@ for (const [naam, stab] of [
     loads: [{ id: 1, type: "lineLoad", caseId: 1, beamId: 1, q: -1 }],
   }, "hout", EERSTE_ORDE);
   ok("hout, ligger op twee steunpunten: is_cantilever = false", r.inputs[0]?.is_cantilever === false);
+  // De houtmelding staat bij ELKE houtstaaf in de toets, ook zonder vrij eind.
+  const t = bouw({
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 2000, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, material: "C24", profile: "100x160" }],
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zRoller" }],
+    loads: [{ id: 1, type: "lineLoad", caseId: 1, beamId: 1, q: -1 }],
+  }, "hout", TWEEDE_MET);
+  ok("hout, ligger op twee steunpunten in de toets (tweede orde met scheefstand): de houtmelding",
+    houtMeldingOk(t.inputs[0]), JSON.stringify(notities(t.inputs[0])));
+  if (heeftKern) {
+    // De melding landt bij de kolomtoets (6.3.2): `staaf_notities`.
+    const k = toets(kern(t.inputs, "check_timber_beams")[0], "6.3.2_column_stability");
+    ok("hout, ligger: de kern zet de houtmelding bij de kolomtoets 6.3.2",
+      (k?.notes ?? []).some((n) => /^HOUT IN DE TOETS/.test(n)), JSON.stringify(k?.notes));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -297,6 +353,22 @@ ok("P-Δ, scheefstand X en Y, φ = 1/200, staande staaf: beide assen gedekt",
     JSONg(knik3D(XY, pDelta, 1 / 140, gedraaid)) === JSONg({ veld: { y: true, z: true } }));
   ok("90° gedraaid, φ = 1/200: veld (de assen vallen weer samen met X en Y)",
     JSONg(knik3D(XY, pDelta, 1 / 200, { ...staand3D, rollAngleRad: Math.PI / 2 })) === JSONg({ veld: { y: true, z: true } }));
+  // Issue #194: φ_X en φ_Y apart. Een staande kolom zonder rol heeft haar
+  // lokale z langs X en haar lokale y langs Y (openFem3DMemberAxes). Uitbuigen
+  // om de sterke as y gaat langs z, dus langs X: φ_X telt; om de zwakke as z
+  // langs Y: φ_Y. De eigen φ van deze kolom (h = 3 m, m = 1) is 1/200.
+  const px = knik3D(XY, pDelta, { x: 1 / 200, y: 1 / 346 }, staand3D);
+  ok("φ_X = 1/200, φ_Y = 1/346: as y gedekt (L), as z niet (2·L), met een kanttekening over z",
+    JSONg(px.veld) === JSONg({ y: true, z: false }) && /om de as z 2·L/.test(px.notitie ?? "") && /1\/346/.test(px.notitie ?? "")
+    && /Om de as y is zij gedekt/.test(px.notitie ?? ""), JSONg(px));
+  const py = knik3D(XY, pDelta, { x: 1 / 346, y: 1 / 200 }, staand3D);
+  ok("φ_X = 1/346, φ_Y = 1/200: as z gedekt, as y niet",
+    JSONg(py.veld) === JSONg({ y: false, z: true }) && /om de as y 2·L/.test(py.notitie ?? ""), JSONg(py));
+  ok("φ_X = φ_Y = 1/200 als object: zelfde als één getal",
+    JSONg(knik3D(XY, pDelta, { x: 1 / 200, y: 1 / 200 }, staand3D)) === JSONg({ veld: { y: true, z: true } }));
+  // 90° gedraaid wisselen de assen: lokale z langs Y, lokale y langs X.
+  const p90 = knik3D(XY, pDelta, { x: 1 / 200, y: 1 / 346 }, { ...staand3D, rollAngleRad: Math.PI / 2 });
+  ok("90° gedraaid met φ_X = 1/200, φ_Y = 1/346: nu as z gedekt en as y niet", JSONg(p90.veld) === JSONg({ y: false, z: true }), JSONg(p90));
 }
 ok("liggende staaf: niets", JSONg(knik3D(XY, pDelta, 1 / 200, liggend3D)) === "{}");
 ok("lineair gerekend: niets", JSONg(knik3D(XY, () => "linear", 1 / 200, staand3D)) === "{}");
@@ -356,6 +428,69 @@ for (const [naam, analysis, combinaties, phi, gedekt] of [
     dicht(`3D hout, ${naam}: kern L_cr,z = 4000 mm`, lcr(k, "z"), 4000, 1e-9);
     dicht(`3D hout, ${naam}: kern (6.24) = 0,7754`, k?.uc?.uc, VGL_2L, 2e-4);
   }
+  // Een eigen combinatieset (zonder `toetsAnalyse`) is niet de toetsset: geen houtmelding.
+  ok(`3D hout, ${naam}, eigen combinatieset: geen houtmelding`, houtMelding(j).length === 0, JSON.stringify(notities(j)));
+}
+{
+  // De toetsset in 3D (`toetsSet3D`) draagt `toetsAnalyse`: dan krijgt elke
+  // houtstaaf de vaste houtmelding (issue #199, B10), en blijft 2·L.
+  const toetsAnalyse = {
+    soort: "tweedeOrdeGeometrisch", phi: 1 / 200, noemer: 200, bron: "vast", scheefstandModelAan: false, hergebruikt: false,
+  };
+  const h = buildOpenFem3DTimberCheckInputs(kolom3D("C24", "100x160"), resultaat3D("p-delta", 20, 2),
+    { ...set3D("p-delta", 20, 2, XY, 1 / 200), toetsAnalyse });
+  const j = h.inputs[0];
+  ok("3D hout in de toetsset: de houtmelding over E_mean en 2·L, precies één keer", houtMeldingOk(j), JSON.stringify(notities(j)));
+  ok("3D hout in de toetsset: is_cantilever, geen veld (2·L blijft)",
+    j?.is_cantilever === true && j?.zijdelingse_knik_in_analyse === undefined);
+  if (heeftKern && j) {
+    const k = toets(kern(h.inputs, "check_timber_beams")[0], "6.3.2_column_stability");
+    dicht("3D hout in de toetsset: kern L_cr,z = 4000 mm (de melding verandert niets aan de rekening)", lcr(k, "z"), 4000, 1e-9);
+    dicht("3D hout in de toetsset: kern (6.24) = 0,7754", k?.uc?.uc, VGL_2L, 2e-4);
+  }
+}
+
+// ── De uitleg in het 3D-eigenschappenpaneel (openFem3d.normBasis) ────────────
+// Die zei tot oktober 2026 "kniklengtes vallen terug op L" en "expliciete
+// 3D-kipsteunen ontbreken nog". Beide klopten niet: een vrij staafeind krijgt
+// 2·L, en L alleen bij P-Δ met scheefstand van minstens de eigen φ (hierboven,
+// met de kern); kipsteunen komen uit de toetsinstellingen, en een ligger onder
+// een vloer- of dakvlak krijgt ze om de L/10 op de bovenflens. α_cr bestaat
+// alleen bij P-Δ (lineair rekent de 3D-kern zonder knikfactor).
+log("\n[4b] 3D: de uitleg in het eigenschappenpaneel zegt hetzelfde, in vier talen");
+{
+  const ribbon = (taal) => JSON.parse(readFileSync(join(HIER, "src", "i18n", "locales", taal, "ribbon.json"), "utf8"));
+  const tekst = (taal) => ribbon(taal).openFem3d?.normBasis ?? "";
+  const ALTIJD = {
+    nl: /altijd tweede orde \(P-Δ\) met scheefstand/,
+    en: /always second order \(P-Δ\) with sway imperfection/,
+    de: /immer Theorie II\. Ordnung \(P-Δ\) mit Schiefstellung/,
+    fr: /toujours au second ordre \(P-Δ\) avec défaut d'aplomb/,
+  };
+  const ONJUIST = {
+    nl: [/vallen terug op L\b/, /kipsteunen ontbreken/],
+    en: [/fall back to L\b/, /restraints are not yet available/],
+    de: [/fallen auf L zurück/, /Kipphalterungen fehlen/],
+    fr: [/se replient sur L\b/, /latéraux 3D explicites manquent/],
+  };
+  // De tekst zelf alleen bij een fout in de uitvoer: `ok` toont de toelichting altijd.
+  const controle = (naam, voorwaarde, t) => ok(naam, voorwaarde, voorwaarde ? "" : t);
+  for (const taal of ["nl", "en", "de", "fr"]) {
+    const t = tekst(taal);
+    controle(`${taal}: noemt 2·L bij een vrij staafeind en L alleen bij P-Δ met scheefstand en de eigen φ`,
+      t.includes("2·L") && t.includes("P-Δ") && t.includes("φ"), t);
+    controle(`${taal}: noemt de kipsteunen om de L/10 onder een vloer- of dakvlak, en α_cr alleen bij P-Δ`,
+      t.includes("L/10") && t.includes("α_cr"), t);
+    controle(`${taal}: niet meer "kniklengtes vallen terug op L" of "3D-kipsteunen ontbreken"`,
+      ONJUIST[taal].every((r) => !r.test(t)), t);
+    // Taak 7 (issue #199): de toetskrachten zijn altijd tweede orde met
+    // scheefstand, los van de instellingen; α_cr hoort bij de resultaten.
+    controle(`${taal}: zegt dat de toetskrachten altijd tweede orde (P-Δ) met scheefstand zijn`,
+      ALTIJD[taal].test(t), t);
+    const hout = ribbon(taal).openFem3d?.props?.timberNormBasis ?? "";
+    controle(`${taal}: een houten staaf heeft een eigen grondslag: P-Δ met E_mean, 2·L bij een vrij eind`,
+      ALTIJD[taal].test(hout) && hout.includes("E_mean") && hout.includes("2·L"), hout);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -402,20 +537,34 @@ if (!existsSync(MCP_SERVER)) {
   const staal = kolom(3000, "S235", "HEA200", 200);
   const hout = kolom(2000, "C24", "100x160", 20);
   const tool = "check_fem_model";
-  const [eerste, tweede, zonder, kleinePhi, houtEerste, houtTweede] = await mcp([
+  // Sinds issue #199 rekent `check_fem_model` de UGT-toetskrachten ALTIJD
+  // tweede orde (P-Δ) met de scheefstand van de projectinstelling, ook met de
+  // schakelaar uit; het argument `nonlinear` bestaat er niet meer (meegestuurd:
+  // ARGUMENT_ONGELDIG). Wat de aanroep nog kiest is φ (via de noemer).
+  const [eerste, zonder, kleinePhi, houtEerste, houtZonder, metNonlinear] = await mcp([
     { tool, arguments: { model: model(staal, true) } },
-    { tool, arguments: { model: model(staal, true), nonlinear: true } },
-    { tool, arguments: { model: model(staal, false), nonlinear: true } },
-    { tool, arguments: { model: model(staal, true, 346), nonlinear: true } },
+    { tool, arguments: { model: model(staal, false) } },
+    { tool, arguments: { model: model(staal, true, 346) } },
     { tool, arguments: { model: model(hout, true) } },
-    { tool, arguments: { model: model(hout, true), nonlinear: true } },
+    { tool, arguments: { model: model(hout, false) } },
+    { tool, arguments: { model: model(staal, true), nonlinear: true } },
   ]);
   const inhoud = (x) => x?.result?.structuredContent ?? JSON.parse(x?.result?.content?.[0]?.text ?? "null");
+  ok("MCP: `nonlinear` bij check_fem_model wordt geweigerd (ARGUMENT_ONGELDIG)",
+    metNonlinear?.result?.isError === true && metNonlinear.result.structuredContent?.error_code === "ARGUMENT_ONGELDIG",
+    JSON.stringify(metNonlinear?.result?.structuredContent ?? metNonlinear?.error ?? "").slice(0, 200));
+  // L_cr,y = 3000 mm waar het tot issue #199 6000 mm was ("eerste orde met
+  // scheefstand" en "zonder scheefstand"): de toets rekent nu altijd P-Δ met
+  // φ = 1/200, en die φ is minstens de eigen φ van deze kolom (EN 1993-1-1
+  // (5.5) met h = 3 m en m = 1: α_h = 2/√3 = 1,155 → 1,0, φ_eigen = 1/200),
+  // dus de systeemlengte L (5.2.2(7)b) in plaats van 2·L. Handcontrole: de UC
+  // van 6.3.1 verandert niet, want die volgt uit knik om z met 2·L = 6 m
+  // (χ_z = 0,3960, N_b,Rd = 501,0 kN, zie de kop); om y wordt alleen de
+  // kniklengte gehalveerd. Bij φ = 1/346 blijft 2·L: kleiner dan de eigen φ.
   for (const [naam, antwoord, lcrY] of [
-    ["staal, eerste orde met scheefstand", eerste, 6000],
-    ["staal, P-Δ met scheefstand φ = 1/200", tweede, 3000],
-    ["staal, P-Δ zonder scheefstand", zonder, 6000],
-    ["staal, P-Δ met scheefstand φ = 1/346 (kleiner dan de eigen 1/200)", kleinePhi, 6000],
+    ["staal, scheefstand aan (φ = 1/200)", eerste, 3000],
+    ["staal, scheefstand uit (de toets rekent toch φ = 1/200)", zonder, 3000],
+    ["staal, scheefstand φ = 1/346 (kleiner dan de eigen 1/200)", kleinePhi, 6000],
   ]) {
     const d = inhoud(antwoord);
     ok(`MCP ${naam}: slaagt`, d && !antwoord?.result?.isError, JSON.stringify(antwoord?.error ?? antwoord?.result?.content?.[0]?.text ?? "").slice(0, 200));
@@ -427,16 +576,34 @@ if (!existsSync(MCP_SERVER)) {
   ok("MCP staal, φ = 1/346: de kanttekening over φ staat bij de kniktoets",
     (toets(inhoud(kleinePhi)?.results?.find((r) => r.beam_id === 1), "6.3.1_buckling")?.notes ?? [])
       .some((n) => /^VRIJ STAAFEIND, TWEEDE ORDE/.test(n) && /1\/346/.test(n)));
+  // De vaste noemer 346 ligt onder de normafleiding van dit model (EN 1993-1-1
+  // (5.5) met h = 3 m en m = 1: φ = 1/200). De toets rekent met de ingestelde
+  // 1/346 en waarschuwt (B5) — ook langs MCP, in `warnings`.
+  ok("MCP staal, φ = 1/346: de waarschuwing 'onder de normafleiding' (1/200) in `warnings`",
+    (inhoud(kleinePhi)?.warnings ?? []).some((w) =>
+      /De scheefstand van de toets, φ = 1\/346, ligt onder de normafleiding van dit model: φ = 1\/200/.test(w)),
+    JSON.stringify((inhoud(kleinePhi)?.warnings ?? []).filter((w) => /normafleiding/.test(w))));
+  // Hout houdt 2·L, ook nu de toets altijd P-Δ met scheefstand rekent: die
+  // rekent hout met E_mean en zonder boogimperfectie (NEN-EN 1995-1-1 2.2.2(1)P,
+  // 5.4.4), en de houtbouwer zet `zijdelingse_knik_in_analyse` dus niet.
   for (const [naam, antwoord] of [
-    ["hout, eerste orde", houtEerste],
-    ["hout, P-Δ met scheefstand", houtTweede],
+    ["hout, scheefstand aan", houtEerste],
+    ["hout, scheefstand uit", houtZonder],
   ]) {
     const d = inhoud(antwoord);
     ok(`MCP ${naam}: slaagt`, d && !antwoord?.result?.isError);
     const k = toets(d?.timber_results?.find((r) => r.beam_id === 1), "6.3.2_column_stability");
     dicht(`MCP ${naam}: L_cr,y = 4000 mm (hout houdt 2·L)`, lcr(k, "y"), 4000, 1e-9);
     dicht(`MCP ${naam}: L_cr,z = 4000 mm (was 2000 mm vóór deze wijziging)`, lcr(k, "z"), 4000, 1e-9);
+    // De vaste houtmelding (B10) komt via MCP net zo bij de kolomtoets: de
+    // sidecar geeft de houtbouwer de stabiliteit van de toets mee.
+    ok(`MCP ${naam}: de houtmelding over E_mean en 2·L staat bij de kolomtoets 6.3.2`,
+      (k?.notes ?? []).filter((n) => /^HOUT IN DE TOETS/.test(n) && /E_mean/.test(n) && /2·L/.test(n)).length === 1,
+      JSON.stringify(k?.notes));
   }
+  // En de α_cr-kanttekening (B14) komt via MCP nergens meer voor.
+  ok("MCP: geen α_cr-kanttekening bij een staaf (alle vijf antwoorden doorzocht)",
+    [eerste, zonder, kleinePhi, houtEerste, houtZonder].every((a) => !/EERSTE ORDE MET α_cr/.test(JSON.stringify(inhoud(a) ?? {}))));
 }
 
 log(`\n${passed} geslaagd, ${failed} mislukt`);

@@ -693,11 +693,15 @@
     "derivation_one": "Derivation ({{count}} step)",
     "derivation_other": "Derivation ({{count}} steps)",
     "combination": "Combination",
+    "forcesSecondOrder": "2nd order + sway",
+    "forcesResults": "results",
+    "forcesTitle": "Where the forces of this check come from. ULS: always a second-order analysis (P-Δ) with sway imperfection, independent of the Analysis and Sway imperfection settings (EN 1993-1-1 5.2.2(3)b and (7)b). SLS: the results, as set.",
     "intermediates": "Intermediate values ({{aantal}})"
   },
   "panel": {
     "stressAt": "Stress distribution at the governing section: x = {{x}} mm, combination {{combinatie}}",
-    "tensionPositive": "Tension positive"
+    "tensionPositive": "Tension positive",
+    "forcesNotes": "Notes on the check forces"
   },
   "variants": {
     "stepBars": "{{stap}} bars",

@@ -86,6 +86,10 @@ export type SidecarOp = (typeof SIDECAR_OPS)[number];
  *                       dat niet bij het materiaal hoort. Een INVOERfout van de
  *                       gebruiker, geen storing; `detail.staven` noemt elke
  *                       staaf met zijn reden
+ *  - TOETSING_GEWEIGERD het model rekent, maar de UGT-toets heeft geen krachten:
+ *                       de tweede orde (P-Δ) met scheefstand divergeert
+ *                       (α_cr ≤ 1, issue #199). `detail.per_combinatie` noemt
+ *                       per combinatie de reden en `alpha_cr`
  *  - TIJD_OVERSCHREDEN  gereserveerd voor de Rust-kant, die de klok bewaakt
  *  - INTERN             onverwachte fout; originele tekst gaat mee in `detail`
  *
@@ -107,6 +111,7 @@ export const FOUTCODES = [
   "BESTAND_ONLEESBAAR",
   "MODEL_ONOPLOSBAAR",
   "DOORSNEDE_ONBEKEND",
+  "TOETSING_GEWEIGERD",
   "TIJD_OVERSCHREDEN",
   "INTERN",
   "ONBEKEND_COMMANDO",

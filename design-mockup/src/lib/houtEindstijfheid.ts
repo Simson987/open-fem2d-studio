@@ -72,8 +72,17 @@
  * belastinggevallen nog eens met E_mean,fin per houtstaaf, en daarna dezelfde
  * superpositie. Elke UGT-combinatie krijgt daarom naast zichzelf een
  * EINDTOESTANDVARIANT met dezelfde factoren en de stijfheid volgens (2.10).
- * De toetsing, de omhullende en het rapport nemen per staaf de ongunstigste —
- * precies zoals bij de twee scheefstandrichtingen.
+ * De omhullende en de resultaten nemen per staaf de ongunstigste — precies
+ * zoals bij de twee scheefstandrichtingen.
+ *
+ * DE UGT-TOETSING (issue #199, besluit B10). Die rekent altijd tweede orde
+ * (P-Δ) met scheefstand, los van de analyse-instelling. 2.2.2(1)P, derde
+ * streepje, schrijft bij tweede orde rekenwaarden voor die niet zijn aangepast
+ * aan de belastingsduur; de UGT-eindtoestandvarianten horen daar niet bij en
+ * vallen in de toets weg, met een melding (`lib/toetsKrachten.ts`). De
+ * BGT-eindtoestand hieronder blijft: de BGT-toetsen komen uit de resultaten.
+ * De status hier hangt daarom aan het analysetype van de RESULTATEN, nooit aan
+ * dat van de toets — anders viel de BGT-eindtoestand stil weg.
  *
  * WELKE ψ₂. De norm vraagt ψ₂ van "de belasting die de grootste spanning in
  * verhouding tot de sterkte veroorzaakt". Welke belasting dat is, verschilt per
@@ -505,8 +514,10 @@ export function bepaalEindstijfheidHout(model: EindstijfheidModel): Eindstijfhei
           "niet vaststaat welke belasting de grootste spanning geeft, is elke ψ₂ van de " +
           "combinatie doorgerekend (1 voor blijvend en overig, ψ₂ van de categorie voor " +
           "veranderlijk; sneeuw en wind hebben ψ₂ = 0 en veranderen niets). De varianten " +
-          "heten \"… (eindtoestand ψ₂ = …)\"; de toetsing en de omhullende nemen de " +
-          "ongunstigste, ook de combinatie met E_mean zelf." +
+          "heten \"… (eindtoestand ψ₂ = …)\"; de omhullende van de resultaten neemt de " +
+          "ongunstigste, ook de combinatie met E_mean zelf. De UGT-toetsing rekent altijd " +
+          "tweede orde (P-Δ) met scheefstand, en daar horen deze varianten niet bij " +
+          "(2.2.2(1)P, derde streepje): in de toetsing vallen ze weg, met een melding." +
           (bijzonder.length > 0 ? ` ${bijzonder.join(" ")}` : ""),
       },
       {

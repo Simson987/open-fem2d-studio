@@ -90,6 +90,7 @@ import type { PlaatSkip } from "./plaatCheckBuilder";
 import type { SpanningBeamCheckResult } from "./types/spanning/SpanningBeamCheckResult";
 import type { TimberBeamCheckResult } from "./types/timber/TimberBeamCheckResult";
 import { bijlageUitBestand } from "./normAanduidingen";
+import type { ToetsCombinatieNaam, ToetsVanRonde } from "../stores/checkStore";
 import { rapportTaal } from "./rapportDatum";
 import type {
   BetonStaafDoorsnedeInvoer,
@@ -215,6 +216,17 @@ export interface RapportPdfBronnen {
    * of afwezig = niet gerekend; het rapport zwijgt dan.
    */
   analyseToelichting?: string;
+  /**
+   * De toetsanalyse van de laatste ronde (`checkStore.toets`) en de
+   * combinaties waarop getoetst is (`checkStore.toetsCombinaties`). Daaruit
+   * komt `toetskrachten`: de krachtregel van de PDF noemt dan bij elke
+   * UGT-toetscombinatie "2e orde + scheefstand φ = 1/…" en bij een BGT-
+   * combinatie "resultaten" (issue #199). Ontbreekt een van beide, of dragen de
+   * combinaties geen `tweedeOrde` (een ouder snapshot), dan gaat het veld niet
+   * mee en blijft de krachtregel zoals hij was.
+   */
+  toets?: ToetsVanRonde | null;
+  toetsCombinaties?: readonly ToetsCombinatieNaam[];
   /**
    * De omschrijving van de gegenereerde windlasten als tekstblok, woordelijk
    * zoals `lib/wind/windGenerator.vrijstaandDakUitgangspunten` het opstelt:
@@ -448,6 +460,19 @@ export function bouwRapportInvoer(bron: RapportPdfBronnen): ReportInput {
   }
   if (bron.analyseToelichting && bron.analyseToelichting.trim() !== "") {
     invoer.analyse_toelichting = bron.analyseToelichting;
+  }
+  // De herkomst van de toetskrachten per combinatie (issue #199). Alleen met
+  // een toetsanalyse en combinaties die zeggen of ze tweede orde zijn.
+  const tweedeOrde = (bron.toetsCombinaties ?? []).filter((c) => c.tweedeOrde === true).map((c) => c.id);
+  if (bron.toets && tweedeOrde.length > 0) {
+    invoer.toetskrachten = {
+      noemer: bron.toets.analyse.noemer,
+      tweede_orde_combinaties: tweedeOrde,
+      // De namen: de toets rekent elke UGT-combinatie ook in −x onder id +
+      // 1 000 000, en dat id staat in geen combinatielijst. Met de naam zegt de
+      // PDF "UGT 6.10b (scheefstand −x)" in plaats van "Comb 1000003".
+      combinaties: (bron.toetsCombinaties ?? []).map((c) => ({ id: c.id, naam: c.name })),
+    };
   }
   if (bron.windToelichting && bron.windToelichting.trim() !== "") {
     invoer.wind_toelichting = bron.windToelichting;

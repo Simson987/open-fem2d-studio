@@ -166,6 +166,7 @@ import {
   type OpenFem3DSectionBoxBounds,
   type OpenFem3DSectionBoxVlak,
 } from "./openFem3dSectionBox";
+import { openFem3DExplodeSourceNodeId, toggleOpenFem3DExplode } from "./openFem3dExplode";
 import {
   createOpenFem3DSectionBoxBeeld, openFem3DSectionBoxKnipMaterialen, openFem3DSectionBoxNietKnippen,
   type OpenFem3DSectionBoxBeeld,
@@ -2945,7 +2946,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       {
         id: "explode", tekst: teksten.explode, rol: "menuitemcheckbox", scheiding: true,
         aan: visibilityRef.current.explode.amountM > 0,
-        kies: () => explodeChangeRef.current?.(visibilityRef.current.explode.amountM > 0 ? 0 : 2),
+        kies: () => explodeChangeRef.current?.(toggleOpenFem3DExplode(visibilityRef.current.explode).amountM),
       },
       {
         id: "sectionBox", tekst: teksten.sectionBox, rol: "menuitemcheckbox", scheiding: true,
@@ -5474,7 +5475,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         model.nodes.forEach((node, index) => {
           if (index % stride !== 0) return;
           const parts = [
-            visibility.nodeNumbers ? String(node.id) : "",
+            visibility.nodeNumbers ? String(openFem3DExplodeSourceNodeId(node.id)) : "",
             visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
           ].filter(Boolean);
           geometry.add(makeLabel(parts.join(" · "), "open-fem3d-node-label",
@@ -6503,7 +6504,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
             if (!node) return;
             object.position.set(node.x, node.y, node.z);
             object.element.textContent = [
-              visibility.nodeNumbers ? String(node.id) : "",
+              visibility.nodeNumbers ? String(openFem3DExplodeSourceNodeId(node.id)) : "",
               visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
             ].filter(Boolean).join(" · ");
           } else if (follow?.type === "beam" && affectedBeamIds.has(follow.id)
@@ -6665,7 +6666,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           const nodeIndex = model.nodes.indexOf(node);
           if ((visibility.nodeNumbers || visibility.nodeCoordinates) && nodeIndex % nextNodeLabelStride === 0) {
             const parts = [
-              visibility.nodeNumbers ? String(node.id) : "",
+              visibility.nodeNumbers ? String(openFem3DExplodeSourceNodeId(node.id)) : "",
               visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
             ].filter(Boolean);
             geometry.add(makeLabel(
@@ -6935,7 +6936,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
           for (let index = 0; index < model.nodes.length; index += nodeLabelStride) {
             const labeledNode = model.nodes[index];
             const parts = [
-              visibility.nodeNumbers ? String(labeledNode.id) : "",
+              visibility.nodeNumbers ? String(openFem3DExplodeSourceNodeId(labeledNode.id)) : "",
               visibility.nodeCoordinates
                 ? `(${labeledNode.x}, ${labeledNode.y}, ${labeledNode.z}) m` : "",
             ].filter(Boolean);
@@ -6949,7 +6950,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
         } else if (node && (visibility.nodeNumbers || visibility.nodeCoordinates)
           && (model.nodes.length - 1) % nodeLabelStride === 0) {
           const parts = [
-            visibility.nodeNumbers ? String(node.id) : "",
+            visibility.nodeNumbers ? String(openFem3DExplodeSourceNodeId(node.id)) : "",
             visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
           ].filter(Boolean);
           geometry.add(makeLabel(
@@ -7512,7 +7513,7 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
       }
       if ((visibility.nodeNumbers || visibility.nodeCoordinates) && nodeIndex % nodeLabelStride === 0) {
         const parts = [
-          visibility.nodeNumbers ? String(node.id) : "",
+          visibility.nodeNumbers ? String(openFem3DExplodeSourceNodeId(node.id)) : "",
           visibility.nodeCoordinates ? `(${node.x}, ${node.y}, ${node.z}) m` : "",
         ].filter(Boolean);
         geometry.add(makeLabel(

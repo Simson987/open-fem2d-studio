@@ -125,6 +125,7 @@ fn invoer(wind: Option<String>) -> ReportInput {
         scheefstand_toelichting: None,
         analyse_toelichting: None,
         wind_toelichting: wind,
+        toetskrachten: None,
         plate_results: Vec::new(),
         plate_inputs: Vec::new(),
         plate_skipped: Vec::new(),

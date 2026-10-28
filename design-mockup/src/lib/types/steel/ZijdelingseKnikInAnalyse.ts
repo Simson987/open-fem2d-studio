@@ -17,6 +17,13 @@
  * uitkraging met druk; en de φ van een heel model middelt over al zijn
  * kolommen, terwijl een kolom met een vrije kop nergens aan hangt.
  *
+ * Sinds oktober 2026 zijn de UGT-toetskrachten van deze app altijd tweede
+ * orde (P-Δ) met scheefstand, met de φ van de projectinstelling (2D, 3D en
+ * `check_fem_model`), los van de analyse-instelling van de resultaten. De
+ * voorwaarden op de berekening zijn bij de toets dus altijd vervuld; of het
+ * veld gezet wordt, hangt alleen nog af van het vlak van het model, de stand
+ * van de staaf en de φ-eis.
+ *
  * Hout zetten de bouwers het niet: NEN-EN 1995-1-1 eist bij tweede orde
  * E_d = E_mean/γ_M (2.2.2(1)P) en de boogimperfectie van 5.4.4(2), en de
  * tweede-orde-berekening van deze app rekent met E_mean.

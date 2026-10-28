@@ -1817,8 +1817,11 @@ class Importeur {
       const bron = enumVan(arg(g, 7));
       const type = gevalType(enumVan(arg(g, 6)), bron);
       const geval: LoadCase = { id, name: naam, type };
-      if (bron === "SYSTEM_IMPERFECTION") this.imperfectieGevallen += 1;
-      else if (type === "other") {
+      if (bron === "SYSTEM_IMPERFECTION") {
+        this.imperfectieGevallen += 1;
+        // Het kenmerk: de UGT-toets zet zo'n geval op factor 0 (zie LoadCase).
+        geval.imperfectie = true;
+      } else if (type === "other") {
         this.meldingen.voeg("waarschuwing",
           "Belastinggeval zonder herkenbaar type (ActionType/ActionSource); als \"overig\" ingelezen, kies het type zelf", label);
       }
@@ -1853,7 +1856,8 @@ class Importeur {
     if (this.imperfectieGevallen > 0) {
       this.meldingen.voeg("waarschuwing",
         `${aantal(this.imperfectieGevallen, "imperfectiegeval", "imperfectiegevallen")} (SYSTEM_IMPERFECTION) ingelezen; ` +
-        "zet de scheefstand van de app uit om dubbeltelling te voorkomen (in het geïmporteerde project staat hij uit)");
+        "zet de scheefstand van de app uit om dubbeltelling te voorkomen (in het geïmporteerde project staat hij uit). " +
+        "De UGT-toets rekent altijd met de scheefstand van de projectinstelling en telt deze gevallen daarom met factor 0")
     }
     if (this.selfWeightCaseId !== undefined) {
       this.meldingen.voeg("toelichting",

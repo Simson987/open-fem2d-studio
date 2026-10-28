@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCheckStore } from "../../stores/checkStore";
+import { SCHEEFSTAND_BRON_LABEL, noemerTekst } from "../../lib/scheefstandNorm";
 import {
   gradeLabel,
   isSteelCheckResult,
@@ -80,7 +81,7 @@ function ucClass(uc: number): string {
  * De doorsnede met het spanningsverloop, boven de afleidingen. Alleen de
  * vrije spanningstoets levert dit; bij de normkernen valt het weg.
  */
-function SpanningFiguur({ r }: { r: SpanningBeamCheckResult }) {
+function SpanningFiguur({ r, namen }: { r: SpanningBeamCheckResult; namen?: CombinatieNamen }) {
   const { t } = useTranslation("check");
   const v = r.verloop;
   if (!v) {
@@ -107,7 +108,7 @@ function SpanningFiguur({ r }: { r: SpanningBeamCheckResult }) {
           fDMpa={r.f_d_mpa}
         />
         <div className="cp-spanning-bijschrift">
-          {t("panel.stressAt", { x: g(v.position_mm, 0), combinatie: v.combination_id })} — N = {g(v.n_ed_kn)} kN, V<sub>z</sub> ={" "}
+          {t("panel.stressAt", { x: g(v.position_mm, 0), combinatie: namen?.get(v.combination_id) ?? v.combination_id })} — N = {g(v.n_ed_kn)} kN, V<sub>z</sub> ={" "}
           {g(v.vz_ed_kn)} kN, M<sub>y</sub> = {g(v.my_ed_knm)} kNm
           {v.sigma_z_mpa !== 0 && <>, σ<sub>z</sub> = {g(v.sigma_z_mpa)} N/mm²</>}. {t("panel.tensionPositive")}; f<sub>d</sub> = {g(r.f_d_mpa)} N/mm².
         </div>
@@ -216,7 +217,7 @@ function MemberCard({ result, focusToken, namen, onToon }: {
 
       {open && (
         <div className="cp-card-body">
-          {isStressCheckResult(result) && <SpanningFiguur r={result} />}
+          {isStressCheckResult(result) && <SpanningFiguur r={result} namen={namen} />}
           {/* Naburige doorsneden — staat vóór de afleidingen omdat de vraag
               "kan het een maatje kleiner?" bij het OPENVOUWEN gesteld wordt,
               niet na twintig KaTeX-blokken. Rekent pas op verzoek. */}
@@ -264,6 +265,8 @@ export default function CheckPanel({
   const plateSkipped = useCheckStore((s) => s.plateSkipped);
   const heeftPlaten = plateResults.length > 0 || plateSkipped.length > 0;
   const combinaties = useCheckStore((s) => s.lastRunData?.combinations);
+  // De toetsanalyse van de ronde (issue #199): welke krachten de UGT-toets had.
+  const toets = useCheckStore((s) => s.toets);
   const namen = useMemo<CombinatieNamen>(
     () => new Map((combinaties ?? []).map((c) => [c.id, c.name])),
     [combinaties],
@@ -314,6 +317,32 @@ export default function CheckPanel({
           disabled={isRunning || results.length === 0}>{tCommon("checkPanelControls.export")}</button>}
       </div>
       <div className="cp-provenance">{tCommon("resultView.ucCombinations")}</div>
+      {/* Waar de UGT-toetskrachten vandaan komen (issue #199, B4): altijd
+          tweede orde met scheefstand, met de φ en haar bron. De BGT leest de
+          resultaten. Met de meldingen van de toets (hout, de toets-φ,
+          vervallen eindtoestandvarianten) eronder. */}
+      {toets && (
+        <div className="cp-provenance cp-toetskrachten" data-toetskrachten>
+          {tCommon("resultView.checkForces", {
+            analyse: tCommon(`loadCases.analysisType.${toets.analyse.soort}`),
+            noemer: noemerTekst(toets.analyse.noemer),
+            bron: toets.analyse.bron === "vast" || toets.analyse.bron === "ongunstigste"
+              ? tCommon(`loadCases.swaySource.${toets.analyse.bron}`)
+              : SCHEEFSTAND_BRON_LABEL[toets.analyse.bron],
+          })}
+          {toets.analyse.hergebruikt && <> {tCommon("resultView.checkForcesReused")}</>}
+          {toets.meldingen.length > 0 && (
+            <details className="cp-toets-meldingen">
+              <summary>{t("panel.forcesNotes")} ({toets.meldingen.length})</summary>
+              <ul>
+                {toets.meldingen.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
 
       <div className="cp-body">
         {error && <div className="cp-error">{error}</div>}

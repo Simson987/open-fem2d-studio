@@ -12,10 +12,23 @@
 //
 // Handberekening (knopenmethode, EN 1993-1-1 6.3.1, knikkromme a):
 //   N_G bovenrand = −(45·6 − 30·3)/2 = −90 kN;  N_Ed = 1,35·N_G = −121,5 kN
-//   L_cr,y = L_cr,z = knoopafstand 3000 mm, i = 38,62 mm, A = 1873 mm²
-//   λ̄ = 3000/38,62/76,41 = 1,017, χ = 0,654, N_b,Rd = 434,8 kN
-//   UC 6.3.1 = 121,1/434,9 = 0,278 (met de N_Ed van het raamwerk, 0,3 % onder
-//   de knopenmethode omdat de randen doorgaand zijn)
+//   i = 38,62 mm (SHS: om y en z gelijk), A = 1873 mm²
+//   L_cr = knoopafstand 3000 mm: λ̄ = 3000/38,62/76,41 = 1,017, χ = 0,654,
+//   N_b,Rd = 434,8 kN, UC = 121,1/434,9 = 0,278 (met de N_Ed van het
+//   raamwerk, 0,3 % onder de knopenmethode omdat de randen doorgaand zijn)
+//   L_cr = hele lijn 6000 mm: λ̄ = 2,033, N_b,Rd = 143,8 kN, UC = 0,842
+//
+// ISSUE #201: OM z IS EEN AANSLUITING IN HET VLAK GEEN VAKGRENS. Tot #201
+// kreeg de bovenrand ook om z de knoopafstand (3000 mm), als AANNAME in het
+// rapport: dat de wandstaven op knoop 7 de rand ook loodrecht op het vlak
+// vasthouden. Dat doen ze niet; een gording of een windverband wel, en dat
+// moet de gebruiker opgeven (kipsteun aan beide flenzen, of L_cr,z). Zonder
+// opgave rekent de kern nu om z met de hele lijn: L_cr,y = 3000 mm (vak),
+// L_cr,z = 6000 mm, UC 6.3.1 = 0,278 → 0,842 (om z maatgevend). De kolom met
+// een ligger aan één kant: 0,498 → 1,162 NotOk, gelijk aan de opgave
+// L_cr,z = 6 m die de oude notitie voorstelde. Met een verband dat als
+// zijdelingse steun is opgegeven (kipsteun aan beide flenzen op de knoop)
+// blijft het vak om z gelden: 0,498.
 //
 // Een eerste oplossing knipte de lijn op elke knoop met een aansluiting. De
 // review vond dat daarmee de knoop stil een gaffel werd voor de kip, de
@@ -25,9 +38,9 @@
 //   - de lijn blijft één staaf voor de kip en de doorbuiging, ook over een
 //     aansluiting, een scharnier of een veer; alleen een oplegging of een
 //     plaat knipt haar;
-//   - de knik krijgt zonder opgave de grootste knoopafstand tussen knopen met
-//     een aansluiting die ergens aan vastzit: in het vlak als systeemlengte,
-//     loodrecht op het vlak als AANNAME die per knoop in het rapport staat;
+//   - de knik IN HET VLAK krijgt zonder opgave de grootste knoopafstand
+//     tussen knopen met een aansluiting die ergens aan vastzit (de
+//     systeemlengte); loodrecht op het vlak niet (#201, zie hierboven);
 //   - een aansluiting met een vrij ander eind (een paal met vrije kop) is geen
 //     vakgrens;
 //   - alleen tussen twee gaffels: bij een VRIJ of DOORLOPEND lijneind geen
@@ -39,8 +52,9 @@
 //     "als opgegeven" en omzeilde zo de weigering van de kern.
 //
 // Regressie op de UC van de kern (toetsbrug), met de gevallen van de review:
-//   kolom HEA160 6 m, N_Ed = 300 kN, ligger op 3 m: per vak 0,498 (aanname
-//     om z), met L_cr,z = 6 m opgegeven 1,162 NotOk;
+//   kolom HEA160 6 m, N_Ed = 300 kN, ligger op 3 m: om z de hele lijn,
+//     1,162 NotOk (tot #201 per vak 0,498, als aanname om z); met een verband
+//     op 3 m dat als zijdelingse steun is opgegeven 0,498;
 //   ligger IPE300 6 m met een paal met vrije kop op 3 m: kip over 6 m
 //     UC 2,235 NotOk; w_fin over 6 m 22,43 mm tegen ℓ_rep/250 = 24,0 mm
 //     (vloer, NEN-EN 1990/NB A1.4.3(4), #192) UC 0,935;
@@ -51,7 +65,10 @@
 // Drie wegen: de bouwer zoals de toetsstore hem aanroept, de kern via de
 // toetsbrug, en `check_fem_model` via de MCP-server met de exacte aanroep van
 // de controle (`testdata/controle-2026-10/k6/invoer-006-*.json`) en de
-// gevallen van de review.
+// gevallen van de review. Sinds issue #199 rekent `check_fem_model` de
+// UGT-toetskrachten altijd P-Δ met scheefstand φ = 1/200; de bouwerroute
+// hierboven voedt de kern nog met eerste-ordekrachten. Waar de MCP-getallen
+// daardoor verschuiven, staat de verantwoording in [10].
 //
 // Uitvoeren: npx tsx test-vakwerk-kniklengte.mjs
 
@@ -150,7 +167,7 @@ const heeftKern = existsSync(TOETSBRUG);
 if (!heeftKern) ok("toetsbrug gevonden — bouw hem met `cargo build --release -p toetsbrug`", false, TOETSBRUG);
 
 // ─────────────────────────────────────────────────────────────────────────
-log("\n[1] Vakwerk 006: elke rand één lijn, de knik per vak (L_cr = knoopafstand)");
+log("\n[1] Vakwerk 006: elke rand één lijn, de knik in het vlak per vak, om z de hele lijn (#201)");
 // ─────────────────────────────────────────────────────────────────────────
 const vakwerk = project("model-006-vakwerk.ifcfem");
 {
@@ -161,15 +178,16 @@ const vakwerk = project("model-006-vakwerk.ifcfem");
     r.skipped.some((s) => s.beamId === 7 && /doorgaande lijn.*staaf 6/.test(s.reason)), JSON.stringify(r.skipped));
   ok("onderrand: staven 2, 3 en 4 overgeslagen als deel van de lijn 1",
     [2, 3, 4].every((id) => r.skipped.some((s) => s.beamId === id && /doorgaande lijn.*staaf 1/.test(s.reason))));
-  ok("bovenrand staaf 6: L = 6,000 m, L_cr,y = L_cr,z = 3,000 m (de knoopafstand)",
-    boven?.length_m === 6 && boven.buckling_length_y_m === 3 && boven.buckling_length_z_m === 3,
+  ok("bovenrand staaf 6: L = 6,000 m, L_cr,y = 3,000 m (de knoopafstand), L_cr,z niet gezet (de kern: de hele lijn)",
+    boven?.length_m === 6 && boven.buckling_length_y_m === 3 && boven.buckling_length_z_m === 0,
     boven ? `L ${boven.length_m}, L_cr ${boven.buckling_length_y_m}/${boven.buckling_length_z_m}` : "ontbreekt");
-  ok("onderrand staaf 1: L = 12,000 m, L_cr,y = L_cr,z = 3,000 m",
-    onder?.length_m === 12 && onder.buckling_length_y_m === 3 && onder.buckling_length_z_m === 3);
-  ok("bovenrand: de notitie noemt de lijn, KNIK PER VAK op knoop 7, en de aanname om z",
+  ok("onderrand staaf 1: L = 12,000 m, L_cr,y = 3,000 m, L_cr,z niet gezet",
+    onder?.length_m === 12 && onder.buckling_length_y_m === 3 && onder.buckling_length_z_m === 0);
+  ok("bovenrand: de notitie noemt de lijn, KNIK PER VAK op knoop 7, en om z GEEN vakgrens met de hele lijn",
     notities(boven).some((n) => /^DOORGAANDE LIJN/.test(n) && /6,000 m/.test(n))
     && notities(boven).some((n) => /^KNIK PER VAK\. Op knoop 7 /.test(n) && /vakken van 3,000 · 3,000 m/.test(n)
-      && /AANNAME/.test(n) && /over de hele lijn is dat 6,000 m/.test(n)),
+      && /L_cr,y = 3,000 m/.test(n) && /knoop 7 GEEN vakgrens/.test(n) && /L_cr,z = 6,000 m, de hele lijn/.test(n)
+      && /kipsteun aan beide flenzen op, of geef L_cr,z op/.test(n) && !/AANNAME/.test(n)),
     JSON.stringify(notities(boven)));
   ok("bovenrand: de aansluiting op knoop 7 telt NIET als steun of gaffel voor kip en doorbuiging",
     notities(boven).some((n) => /Op tussenknoop 7 sluit staaf 10 aan\. Die aansluiting is NIET als steun of gaffel/.test(n)));
@@ -180,12 +198,12 @@ const vakwerk = project("model-006-vakwerk.ifcfem");
   ok("N_Ed bovenrand binnen 0,5 % van de knopenmethode (−121,5 kN)", Math.abs(n6 / N_HAND - 1) < 5e-3, `${n6.toFixed(2)} kN`);
   if (heeftKern) {
     const uit = kern(r.inputs);
-    const hand = knik(3000, n6);
+    const hand = knik(6000, n6);
     const k = knikToets(uit.find((b) => b.beam_id === 6));
-    dicht("kern bovenrand: L_cr,y = 3000 mm", variabele(k, "L_{cr,y}"), 3000, 1e-9);
-    dicht("kern bovenrand: L_cr,z = 3000 mm", variabele(k, "L_{cr,z}"), 3000, 1e-9);
-    dicht(`kern bovenrand: N_b,Rd = 434,9 kN (hand ${hand.nbRd.toFixed(1)})`, k?.uc?.rd, hand.nbRd, 0.5);
-    dicht("kern bovenrand: UC 6.3.1 = 0,278", k?.uc?.uc, 0.278, 0.0015);
+    dicht("kern bovenrand: L_cr,y = 3000 mm (vak)", variabele(k, "L_{cr,y}"), 3000, 1e-9);
+    dicht("kern bovenrand: L_cr,z = 6000 mm (de hele lijn; was 3000 als aanname)", variabele(k, "L_{cr,z}"), 6000, 1e-9);
+    dicht(`kern bovenrand: N_b,Rd = 143,8 kN om z (hand ${hand.nbRd.toFixed(1)})`, k?.uc?.rd, hand.nbRd, 0.5);
+    dicht(`kern bovenrand: UC 6.3.1 = ${hand.uc.toFixed(4)} (hand, om z; was 0,278)`, k?.uc?.uc, hand.uc, 0.0015);
     ok("kern bovenrand: de KNIK PER VAK-notitie staat bij de kniktoets", (k?.notes ?? []).some((n) => /^KNIK PER VAK/.test(n)));
   }
 }
@@ -270,10 +288,11 @@ log("\n[4] Hout in het vakwerk: zelfde regel");
   };
   const r = bouw(hout, "hout");
   const boven = r.inputs.find((i) => i.beam_id === 6);
-  ok("hout: bovenrand één lijn van 6 m met L_cr,y = L_cr,z = 3 m", boven?.length_m === 6
-    && boven.buckling_length_y_m === 3 && boven.buckling_length_z_m === 3,
+  ok("hout: bovenrand één lijn van 6 m met L_cr,y = 3 m en L_cr,z niet gezet (#201)", boven?.length_m === 6
+    && boven.buckling_length_y_m === 3 && boven.buckling_length_z_m === 0,
     boven ? `L ${boven.length_m}, L_cr ${boven.buckling_length_y_m}/${boven.buckling_length_z_m}` : "ontbreekt");
-  ok("hout: de KNIK PER VAK-notitie met de aanname", notities(boven).some((n) => /^KNIK PER VAK/.test(n) && /AANNAME/.test(n)));
+  ok("hout: de KNIK PER VAK-notitie, om z de hele lijn",
+    notities(boven).some((n) => /^KNIK PER VAK/.test(n) && /GEEN vakgrens/.test(n) && /L_cr,z = 6,000 m, de hele lijn/.test(n)));
   ok("hout: staaf 7 overgeslagen", r.skipped.some((s) => s.beamId === 7 && /doorgaande lijn/.test(s.reason)));
 }
 
@@ -281,6 +300,11 @@ log("\n[4] Hout in het vakwerk: zelfde regel");
 log("\n[5] Kolom HEA160 6 m, N_Ed = 300 kN, met een ligger op 3 m (review K6, geval 1a)");
 // ─────────────────────────────────────────────────────────────────────────
 const P = 300 / 1.35;
+// HEA160 S235 (profieltabel): A = 3880 mm², I_y = 16,73·10⁶, I_z = 6,156·10⁶
+// mm⁴. Om z, L_cr = 6000 mm: λ̄_z = 1,604, χ_z = 0,283, N_b,Rd = 258,2 kN,
+// UC = 1,162; L_cr = 3000 mm: λ̄_z = 0,802, χ_z = 0,661, N_b,Rd = 602,6 kN,
+// UC = 0,498. Om y (kromme b) met 3000 mm niet maatgevend (χ_y = 0,89).
+const HEA160 = { A: 3880, Iy: 16.73e6, Iz: 6.156e6 };
 const kolomMetLigger = (cfg) => ({
   nodes: [{ id: 1, x: 0, z: 0 }, { id: 3, x: 0, z: 3000 }, { id: 2, x: 0, z: 6000 }, { id: 4, x: 3000, z: 3000 }],
   beams: [
@@ -294,20 +318,82 @@ const kolomMetLigger = (cfg) => ({
 {
   const r = bouw(kolomMetLigger(null));
   const i = r.inputs.find((x) => x.beam_id === 1);
-  ok("één lijn van 6 m; kniklengte per vak 3 m om beide assen", i?.length_m === 6
-    && i.buckling_length_y_m === 3 && i.buckling_length_z_m === 3);
-  ok("de aanname om z staat erbij, met knoop 3 en de lengte van de hele lijn",
-    notities(i).some((n) => /^KNIK PER VAK\. Op knoop 3 /.test(n) && /L_cr,z = 3,000 m\. Dat laatste is een AANNAME/.test(n)
-      && /over de hele lijn is dat 6,000 m/.test(n)));
-  const metZ = bouw(kolomMetLigger({ bucklingLengthZ_m: 6 }));
+  ok("één lijn van 6 m; in het vlak per vak 3 m, om z niet gezet (#201)", i?.length_m === 6
+    && i.buckling_length_y_m === 3 && i.buckling_length_z_m === 0, `${i?.buckling_length_y_m}/${i?.buckling_length_z_m}`);
+  ok("de notitie: knoop 3 is om z GEEN vakgrens, L_cr,z = de hele lijn van 6 m, met de vraag om een opgave",
+    notities(i).some((n) => /^KNIK PER VAK\. Op knoop 3 /.test(n) && /knoop 3 GEEN vakgrens/.test(n)
+      && /L_cr,z = 6,000 m, de hele lijn/.test(n) && /geef L_cr,z op/.test(n)),
+    JSON.stringify(notities(i)));
+  ok("de knoopnotitie zegt: vakgrens in het vlak, loodrecht op het vlak niet",
+    notities(i).some((n) => /^Op tussenknoop 3 sluit staaf 3 aan\./.test(n) && /in het vlak is de knoop een vakgrens; loodrecht op het vlak niet/.test(n)));
+  const metZ = bouw(kolomMetLigger({ bucklingLengthZ_m: 3 }));
   const iz = metZ.inputs.find((x) => x.beam_id === 1);
-  ok("met L_cr,z = 6 m opgegeven: om y blijft het vak (3 m), om z de opgave", iz?.buckling_length_y_m === 3 && iz.buckling_length_z_m === 6);
+  ok("met L_cr,z = 3 m opgegeven: om y het vak (3 m), om z de opgave", iz?.buckling_length_y_m === 3 && iz.buckling_length_z_m === 3);
+  ok("met L_cr,z opgegeven: de notitie zegt dat de opgave om z voorgaat",
+    notities(iz).some((n) => /^KNIK PER VAK/.test(n) && /gaat de opgegeven L_cr,z voor/.test(n)));
+  dicht("hand: HEA160 om z, L_cr = 6000 mm: UC = 300/258,2 = 1,162", knikS235(6000, -300, HEA160).uc, 1.162, 1e-3);
   if (heeftKern) {
-    const k = knikToets(kern(r.inputs).find((b) => b.beam_id === 1));
-    dicht("kern: per vak UC 6.3.1 = 0,498 (aanname om z)", k?.uc?.uc, 0.498, 1e-3);
-    const uitZ = kern(metZ.inputs).find((b) => b.beam_id === 1);
-    dicht("kern: met L_cr,z = 6 m UC 6.3.1 = 1,162", knikToets(uitZ)?.uc?.uc, 1.162, 1e-3);
-    ok("kern: met L_cr,z = 6 m status NotOk", uitZ?.status === "NotOk");
+    const uit = kern(r.inputs).find((b) => b.beam_id === 1);
+    const k = knikToets(uit);
+    dicht("kern: L_cr,y = 3000 mm (vak)", variabele(k, "L_{cr,y}"), 3000, 1e-9);
+    dicht("kern: L_cr,z = 6000 mm (de hele lijn)", variabele(k, "L_{cr,z}"), 6000, 1e-9);
+    dicht("kern: UC 6.3.1 = 1,162 (was per vak 0,498, als aanname om z)", k?.uc?.uc, knikS235(6000, -300, HEA160).uc, 1e-3);
+    ok("kern: status NotOk", uit?.status === "NotOk", uit?.status);
+    const kz = knikToets(kern(metZ.inputs).find((b) => b.beam_id === 1));
+    dicht("kern: met L_cr,z = 3 m opgegeven UC 6.3.1 = 0,498", kz?.uc?.uc, knikS235(3000, -300, HEA160).uc, 1e-3);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+log("\n[5b] Kolom HEA160 6 m met een verband op 3 m (#201)");
+// ─────────────────────────────────────────────────────────────────────────
+// Een pendelstaaf (scharnierend) van knoop 3 naar een oplegging houdt de
+// kolom in het vlak vast. Loodrecht op het vlak alleen als het verband als
+// zijdelingse steun is opgegeven: een kipsteun aan beide flenzen op knoop 3
+// (fractie 1 van staaf 1, op de lijn 0,5). Dan L_cr,z = 3 m (de kern, uit de
+// kipsteunen) en UC 0,498; zonder die opgave de hele lijn, 1,162.
+const kolomMetVerband = (zijdelings, materiaal = "S235", kolom = "HEA160", verband = "L80x80x8") => ({
+  nodes: [{ id: 1, x: 0, z: 0 }, { id: 3, x: 0, z: 3000 }, { id: 2, x: 0, z: 6000 }, { id: 4, x: 3000, z: 0 }],
+  beams: [
+    { id: 1, from: 1, to: 3, profile: kolom, material: materiaal,
+      ...(zijdelings ? { checkConfig: { lateralRestraints: [1], lateralRestraintsBottom: [1] } } : {}) },
+    { id: 2, from: 3, to: 2, profile: kolom, material: materiaal },
+    { id: 3, from: 3, to: 4, profile: verband, material: materiaal, releases: { startRy: true, endRy: true } },
+  ],
+  supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "xRoller" }, { nodeId: 4, type: "pinned" }],
+  loads: [{ id: 1, type: "pointForce", nodeId: 2, caseId: 1, fz: -P }],
+});
+{
+  dicht("hand: HEA160 om z, L_cr = 3000 mm: UC = 300/602,6 = 0,498", knikS235(3000, -300, HEA160).uc, 0.498, 1e-3);
+  const zonder = bouw(kolomMetVerband(false));
+  const i0 = zonder.inputs.find((x) => x.beam_id === 1);
+  ok("verband zonder opgave: één lijn van 6 m, L_cr,y per vak 3 m, L_cr,z niet gezet",
+    i0?.length_m === 6 && i0.buckling_length_y_m === 3 && i0.buckling_length_z_m === 0,
+    `${i0?.length_m} ${i0?.buckling_length_y_m}/${i0?.buckling_length_z_m}`);
+  ok("verband zonder opgave: de notitie geeft om z de hele lijn",
+    notities(i0).some((n) => /^KNIK PER VAK/.test(n) && /L_cr,z = 6,000 m, de hele lijn/.test(n)));
+  const met = bouw(kolomMetVerband(true));
+  const i1 = met.inputs.find((x) => x.beam_id === 1);
+  ok("verband als zijdelingse steun: L_cr,z niet gezet (de kern leidt hem af uit de kipsteunen)",
+    i1?.buckling_length_y_m === 3 && i1.buckling_length_z_m === 0, `${i1?.buckling_length_y_m}/${i1?.buckling_length_z_m}`);
+  ok("verband als zijdelingse steun: de notitie geeft L_cr,z = 3 m uit de kipsteunen",
+    notities(i1).some((n) => /^KNIK PER VAK/.test(n) && /L_cr,z = 3,000 m, de grootste afstand tussen de kipsteunen aan beide flenzen/.test(n)
+      && /Op knoop 3 staat een kipsteun aan beide flenzen/.test(n) && !/GEEN vakgrens/.test(n)),
+    JSON.stringify(notities(i1)));
+  const h0 = bouw(kolomMetVerband(false, "C24", "120x120", "75x75"), "hout").inputs.find((x) => x.beam_id === 1);
+  const h1 = bouw(kolomMetVerband(true, "C24", "120x120", "75x75"), "hout").inputs.find((x) => x.beam_id === 1);
+  ok("hout: dezelfde regel (L_cr,y 3 m, L_cr,z niet gezet; de notitie volgt de opgave)",
+    h0?.buckling_length_y_m === 3 && h0.buckling_length_z_m === 0 && h1?.buckling_length_z_m === 0
+    && notities(h0).some((n) => /L_cr,z = 6,000 m, de hele lijn/.test(n))
+    && notities(h1).some((n) => /L_cr,z = 3,000 m, de grootste afstand/.test(n)),
+    `${h0?.buckling_length_y_m}/${h0?.buckling_length_z_m} ${h1?.buckling_length_z_m}`);
+  if (heeftKern) {
+    const k0 = knikToets(kern(zonder.inputs).find((b) => b.beam_id === 1));
+    dicht("kern zonder opgave: L_cr,z = 6000 mm", variabele(k0, "L_{cr,z}"), 6000, 1e-9);
+    dicht("kern zonder opgave: UC 6.3.1 = 1,162", k0?.uc?.uc, knikS235(6000, -300, HEA160).uc, 1e-3);
+    const k1 = knikToets(kern(met.inputs).find((b) => b.beam_id === 1));
+    dicht("kern met zijdelingse steun: L_cr,z = 3000 mm (uit de kipsteunen)", variabele(k1, "L_{cr,z}"), 3000, 1e-9);
+    dicht("kern met zijdelingse steun: UC 6.3.1 = 0,498", k1?.uc?.uc, knikS235(3000, -300, HEA160).uc, 1e-3);
   }
 }
 
@@ -568,12 +654,12 @@ if (!existsSync(MCP_SERVER)) {
     ...["invoer-006-a.json", "invoer-006-b.json"].map((n) => JSON.parse(readFileSync(join(DATA, n), "utf8"))),
     { tool, arguments: { model: model(kolomMetLigger(null)), beam_ids: [1, 2] } },
     { tool, arguments: { model: model(liggerMetPaal()), beam_ids: [1, 2] } },
-    { tool, arguments: { model: model(houtKolom(20)), nonlinear: true } },
+    { tool, arguments: { model: model(houtKolom(20)) } },
     { tool, arguments: { model: model(kolomVrijeTop()), beam_ids: [1, 2] } },
   ];
   const [a, b, kolom, paal, hout, vrijeTop] = await mcp(aanroepen);
   const inhoud = (x) => x?.result?.structuredContent ?? JSON.parse(x?.result?.content?.[0]?.text ?? "null");
-  for (const [naam, antwoord] of [["006-a (zonder opgave)", a], ["006-b (L_cr 3 m opgegeven)", b]]) {
+  for (const [naam, antwoord, lcrZ] of [["006-a (zonder opgave)", a, 6000], ["006-b (L_cr 3 m opgegeven)", b, 3000]]) {
     const d = inhoud(antwoord);
     ok(`MCP ${naam}: slaagt`, d && !antwoord?.result?.isError, JSON.stringify(antwoord?.error ?? "").slice(0, 200));
     if (!d) continue;
@@ -581,28 +667,58 @@ if (!existsSync(MCP_SERVER)) {
       (d.skipped_beams ?? []).some((s) => s.beam_id === 7 && /doorgaande lijn/.test(s.reason)), JSON.stringify(d.skipped_beams));
     const k = knikToets(d.results.find((r) => r.beam_id === 6) ?? { checks: [] });
     dicht(`MCP ${naam}: bovenrand L_cr,y = 3000 mm`, variabele(k, "L_{cr,y}"), 3000, 1e-9);
-    dicht(`MCP ${naam}: bovenrand L_cr,z = 3000 mm`, variabele(k, "L_{cr,z}"), 3000, 1e-9);
-    dicht(`MCP ${naam}: bovenrand UC 6.3.1 = 0,278`, k?.uc?.uc, 0.278, 0.0015);
+    dicht(`MCP ${naam}: bovenrand L_cr,z = ${lcrZ} mm`, variabele(k, "L_{cr,z}"), lcrZ, 1e-9);
+    // Issue #199: de toets rekent P-Δ met scheefstand φ = 1/200. H = φ·V op de
+    // drie bovenrandknopen is samen 1,35·90/200 = 0,6075 kN, dus |ΔN| in de
+    // bovenrand ≤ 0,61 kN: |ΔUC| ≤ 0,61/434,8 = 0,0014 bij L_cr,z = 3000 mm
+    // (gemeten 0,2788 tegen 0,2784 in eerste orde) en ≤ 0,61/143,8 = 0,0042
+    // bij L_cr,z = 6000 mm (issue #201: om z de hele lijn). Hand met de N van
+    // de knopenmethode 0,8452; het raamwerk geeft 0,3 % minder N (−0,0025) en
+    // P-Δ hooguit +0,0042. Gemeten 0,8434.
+    if (lcrZ === 3000) dicht(`MCP ${naam}: bovenrand UC 6.3.1 = 0,278`, k?.uc?.uc, 0.278, 0.0015);
+    else dicht(`MCP ${naam}: bovenrand UC 6.3.1 = 0,842 (om z de hele lijn, #201; was 0,278)`, k?.uc?.uc, knik(6000, N_HAND).uc, 0.0045);
   }
   const dk = inhoud(kolom);
   const rk = dk?.results?.find((r) => r.beam_id === 1);
-  dicht("MCP kolom met ligger: UC 6.3.1 = 0,498 per vak", knikToets(rk)?.uc?.uc, 0.498, 1e-3);
-  ok("MCP kolom met ligger: de aanname om z staat bij de kniktoets",
-    (knikToets(rk)?.notes ?? []).some((n) => /^KNIK PER VAK/.test(n) && /AANNAME/.test(n)));
+  // Issue #201: om z de hele lijn (was per vak 0,498, als aanname). De kop
+  // hangt aan een rol: H = φ·V gaat rechtstreeks naar de oplegging en buigt
+  // de kolom niet; de UC blijft die van de eerste orde, 1,162.
+  dicht("MCP kolom met ligger: UC 6.3.1 = 1,162 (om z de hele lijn, #201)", knikToets(rk)?.uc?.uc, knikS235(6000, -300, HEA160).uc, 1e-3);
+  ok("MCP kolom met ligger: de notitie om z staat bij de kniktoets",
+    (knikToets(rk)?.notes ?? []).some((n) => /^KNIK PER VAK/.test(n) && /GEEN vakgrens/.test(n)));
   const dp = inhoud(paal);
   const rp = dp?.results?.find((r) => r.beam_id === 1);
-  dicht("MCP ligger met paal: kip UC 2,235", toets(rp, "6.3.2_ltb")?.uc?.uc, 2.235, 2e-3);
+  // Issue #199: de toets rekent altijd P-Δ met scheefstand φ = 1/200. De
+  // paallast 1,35·50 = 67,5 kN krijgt H = 0,3375 kN op de vrije paalkop
+  // (h = 3 m): M_I = 1,0125 kNm, vergroot met 1/(1 − 67,5/963,2) = 1,0754
+  // (N_cr van de ingeklemd-vrije HEA 160, I_y = 16,73·10⁶ mm⁴, L_cr = 6 m) tot
+  // 1,089 kNm. Dat moment grijpt midden op de ligger aan en tilt het
+  // veldmoment aan één kant op met 1,089/2 = 0,544 kNm: 162,0 → 162,544 kNm
+  // (+0,34 %), dus kip 2,235 · 162,544/162,0 = 2,2425 (de bouwerroute hierboven,
+  // eerste orde, houdt 2,2354). Gemeten 2,2431; de tolerantie 2e-3 blijft.
+  dicht("MCP ligger met paal: kip UC 2,2425 (P-Δ met scheefstand; eerste orde 2,235)",
+    toets(rp, "6.3.2_ltb")?.uc?.uc, 2.235 * 162.544 / 162.0, 2e-3);
   dicht("MCP ligger met paal: w_fin UC 22,43/24,0 = 0,935 (ℓ_rep/250, #192)", toets(rp, "deflection_w_fin")?.uc?.uc, 22.43 / 24.0, 2e-3);
   ok("MCP ligger met paal: status NotOk", rp?.status === "NotOk");
   const dh = inhoud(hout);
   const rh = dh?.timber_results?.find((r) => r.beam_id === 1);
   ok("MCP hout met veer (P-Δ): één lijn, staaf 2 overgeslagen",
     (dh?.skipped_beams ?? []).some((s) => s.beam_id === 2 && /doorgaande lijn/.test(s.reason)));
+  // De aanroep stuurde tot issue #199 `nonlinear: true` mee (P-Δ zonder
+  // scheefstand); dat argument bestaat niet meer, de toets rekent altijd P-Δ
+  // met φ = 1/200. De kop hangt aan een rol, dus H = φ·V gaat rechtstreeks
+  // naar de oplegging en buigt de kolom niet: de UC blijft 1,321 (gemeten 1,3209).
   dicht("MCP hout met veer (P-Δ, N_d = 20 kN): UC 1,321 (L_cr = 6000 mm)", rh?.uc_max, 1.321, 2e-3);
   ok("MCP hout met veer: status NotOk", rh?.status === "NotOk");
   const rv = inhoud(vrijeTop)?.results?.find((r) => r.beam_id === 1);
-  dicht("MCP kolom met vrije top: L_cr,y = 14 000 mm (2·L, geen kniklengte per vak)",
-    variabele(knikToets(rv), "L_{cr,y}"), 14000, 1e-9);
+  // Issue #199: L_cr,y = 7000 mm waar het 14 000 mm (2·L) was. De toets rekent
+  // altijd P-Δ met scheefstand φ = 1/200, en die is minstens de eigen φ van
+  // deze vrijstaande lijn (EN 1993-1-1 (5.5), h = 7 m, m = 1: α_h = 2/√7 =
+  // 0,756, φ_eigen = 1/265), dus de systeemlengte L van de hele lijn
+  // (5.2.2(7)b) — nog steeds niet per vak (dat was 4000 mm). De UC verandert
+  // niet: knik om z met 2·L = 14 m blijft maatgevend (1,671, hieronder).
+  dicht("MCP kolom met vrije top: L_cr,y = 7 000 mm (L met P-Δ en scheefstand, geen kniklengte per vak)",
+    variabele(knikToets(rv), "L_{cr,y}"), 7000, 1e-9);
   dicht("MCP kolom met vrije top: UC 6.3.1 = 1,671", knikToets(rv)?.uc?.uc, knikS235(14000, -202.5, HEA200).uc, 2e-3);
   ok("MCP kolom met vrije top: status NotOk", rv?.status === "NotOk", rv?.status);
 }

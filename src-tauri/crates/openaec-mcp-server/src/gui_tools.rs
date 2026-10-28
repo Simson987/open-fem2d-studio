@@ -325,6 +325,38 @@ fn app_bestandsnaam() -> String {
     format!("open-fem-studio{}", std::env::consts::EXE_SUFFIX)
 }
 
+/// Bewaakt dat de draaiende app de toetsanalyse meldt (issue #199).
+///
+/// Sinds de toetskrachten altijd tweede orde (P-Δ) met scheefstand zijn, geeft
+/// de app bij `rekenen` (2D: `toetsing.toetsanalyse`; 3D: `toetsanalyse`) en
+/// bij `toetsen` (`toetsanalyse`) de analyse van de toetskrachten mee. De
+/// waarde mag `null` zijn (geen toetsronde, of een geweigerde toets met de
+/// reden in `fout`), maar de SLEUTEL hoort er te staan. Ontbreekt hij, dan
+/// draait er een oudere app die toetst op de krachten van de resultaten
+/// (eerste orde, zonder scheefstand), terwijl de toolbeschrijving tweede orde
+/// belooft. Dan geen antwoord maar `TOETSING_ONMOGELIJK`, net als
+/// `check_fem_model`, de staalhal en de IFC-import bij een oude bundel.
+fn eis_toetsanalyse_van_app(naam: &str, uitkomst: &Value) -> Result<(), RpcError> {
+    let gemeld = uitkomst.get("toetsanalyse").is_some()
+        || uitkomst.get("toetsing").and_then(|t| t.get("toetsanalyse")).is_some();
+    if gemeld {
+        return Ok(());
+    }
+    Err(startfout(
+        "TOETSING_ONMOGELIJK",
+        format!(
+            "{naam}: de draaiende app meldt niet met welke analyse de toetskrachten zijn \
+             bepaald (geen `toetsanalyse`). Zo'n app (van vóór 2026.43) toetst met de krachten \
+             van de resultaatberekening, eerste orde zonder scheefstand, terwijl NEN-EN 1993-1-1 \
+             5.2.2(7)b de staaftoets met de systeemlengte aan krachten uit een \
+             tweede-ordeberekening met imperfecties bindt. Het antwoord van de app is niet \
+             doorgegeven."
+        ),
+        "App en MCP-server hebben verschillende versies. Start de app die bij deze server hoort \
+         (gui_start_app start de app naast de server), of werk de app bij.",
+    ))
+}
+
 /// Een fout met een eigen foutcode en remedie (in `structuredContent`).
 fn startfout(code: &str, melding: String, remedie: &str) -> RpcError {
     RpcError {
@@ -1018,6 +1050,7 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
                 .map_err(|e| RpcError::invalid_params(format!("{naam}: {e}")))?;
             let _: Leeg = lees(naam, args)?;
             let mut uit = roep("rekenen", json!({}), 120)?;
+            eis_toetsanalyse_van_app(naam, &uit)?;
             if samenvatting {
                 crate::samenvatting::samenvat_gui_solve(&mut uit);
             }
@@ -1025,7 +1058,9 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
         }
         "gui_run_checks" => {
             let _: Leeg = lees(naam, args)?;
-            roep("toetsen", json!({}), 300)
+            let uit = roep("toetsen", json!({}), 300)?;
+            eis_toetsanalyse_van_app(naam, &uit)?;
+            Ok(uit)
         }
         "gui_open_curtailment" => {
             let a: MetBeamId = lees(naam, args)?;
@@ -1214,7 +1249,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_configure_3d_view",
-            "description": format!("{vooraf}Configures the current 3D workspace: camera, visible objects, how plates are drawn (plateDisplay: volume, surface or mesh), the size of nodes and supports (in % of their automatic size), profile volumes, structural grid (grid axes and levels) and the section box. Structural-grid positions are metres. z_levels are the levels: a level whose label already exists keeps its identity, so nodes and plates linked to it move to its new height; the app refuses a change that would leave a member without length or a plate out of plane, and then nothing changes. The section box is an axis-aligned box in global X/Y/Z (metres) that cuts the model: only what lies inside is drawn, selectable and snappable; it belongs to the view (saved with the visibility and in saved views)."),
+            "description": format!("{vooraf}Configures the current 3D workspace: camera, visible objects, how plates are drawn (plateDisplay: volume, surface or mesh), the size of nodes and supports (in % of their automatic size), profile volumes, structural grid (grid axes and levels), the section box and the exploded view. Structural-grid positions are metres. z_levels are the levels: a level whose label already exists keeps its identity, so nodes and plates linked to it move to its new height; the app refuses a change that would leave a member without length or a plate out of plane, and then nothing changes. The section box is an axis-aligned box in global X/Y/Z (metres) that cuts the model: only what lies inside is drawn, selectable and snappable; it belongs to the view (saved with the visibility and in saved views). The exploded view pulls the drawn model apart along global Z, display only: the model, the calculation and the results do not change; it also belongs to the view."),
             "inputSchema": { "type": "object", "additionalProperties": false,
                 "properties": {
                     "view": { "type": "string", "enum": ["iso","top","front","side"] },
@@ -1247,6 +1282,12 @@ pub fn tool_definitions() -> Vec<Value> {
                             "min_m":{"$ref":"#/$defs/pointM"},
                             "max_m":{"$ref":"#/$defs/pointM"},
                             "fit":{"type":"string","enum":["model","selection"]}
+                        } },
+                    "explode": { "type": "object", "additionalProperties": false,
+                        "description": "Exploded view, display only. mode levels: each level moves up amount_mm times its index (lowest level 0; members between levels stretch). mode elementTypes: supports stay, columns move up 1x, beams 2x and plates 3x amount_mm (a column is a mostly vertical member); every element moves as a whole. amount_mm is the distance per step, 0 to 10000 mm; 0 switches the exploded view off. A missing field keeps its value. While it is on, editing in the app is blocked.",
+                        "properties": {
+                            "mode":{"type":"string","enum":["levels","elementTypes"]},
+                            "amount_mm":{"type":"number","minimum":0,"maximum":10000}
                         } }
                 },
                 "$defs": { "axisList": { "type":"array", "items": { "type":"object", "additionalProperties":false,
@@ -1291,19 +1332,19 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_set_analysis",
-            "description": format!("{vooraf}Sets the analysis type: eersteOrde, tweedeOrdeGeometrisch (P-Delta) or tweedeOrdeFysisch (P-Delta + physically non-linear concrete)."),
+            "description": format!("{vooraf}Sets the analysis type of the RESULTS (internal forces, deflections, reactions): eersteOrde, tweedeOrdeGeometrisch (P-Delta) or tweedeOrdeFysisch (P-Delta + physically non-linear concrete). The ULS code checks do not follow it, in 2D and in 3D alike: their forces are always second order (P-Delta) with the sway imperfection φ of the project settings, in 2D in +x and −x, in 3D in +X, −X, +Y and −Y (NEN-EN 1993-1-1 5.2.2(3)b and 5.3.2). In 2D tweedeOrdeFysisch also runs the non-linear concrete round on those check forces; in 3D the results run linear for eersteOrde and P-Delta otherwise. Serviceability checks read the results."),
             "inputSchema": { "type": "object", "additionalProperties": false, "required": ["analysis_type"],
                 "properties": { "analysis_type": { "type": "string", "enum": ["eersteOrde", "tweedeOrdeGeometrisch", "tweedeOrdeFysisch"] } } }
         }),
         json!({
             "name": "gui_solve",
-            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so. With detail \"samenvatting\" a 3D answer stays a few kB: per-node, per-member and per-shell-element lists become counts (`result.weggelaten`) plus their extremes (`result.uitersten`, `reactieSomKn`), checks keep only id, title, article, UC, status and combination; the 2D answer is already compact and unchanged."),
+            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations, the physically non-linear concrete round when selected, and the ULS check forces, which are always second order (P-Delta) with sway imperfection in +x and −x, whatever the analysis type; `toetsing.toetsanalyse` names that analysis, φ and whether the results were reused, and `toetsing.fout` the reason when the check forces could not be determined (the results stay). For 3D the RESULTS follow the analysis type (eersteOrde: linear; otherwise P-Delta with eigenvalue buckling), with all six local member-force components and reactions; the ULS check forces of the EN 1992/EN 1993/EN 1995 checks are always second order (P-Delta) with sway imperfection in +X, −X, +Y and −Y, whatever the analysis type, and `toetsanalyse`, `toetsAlphaCr` and `toetsmeldingen` describe them. A 3D answer contains the complete result plus steel/concrete/timber results and explicit skipped reasons. An app that does not report the check analysis (an older version) gives TOETSING_ONMOGELIJK instead of an answer. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so. With detail \"samenvatting\" a 3D answer stays a few kB: per-node, per-member and per-shell-element lists become counts (`result.weggelaten`) plus their extremes (`result.uitersten`, `reactieSomKn`), checks keep only id, title, article, UC, status and combination; the 2D answer is already compact and unchanged."),
             "inputSchema": { "type": "object", "additionalProperties": false,
                 "properties": { "detail": crate::samenvatting::schema_detail() } }
         }),
         json!({
             "name": "gui_run_checks",
-            "description": format!("{vooraf}Runs the current model and its code checks as the Toetsing button does, waits until everything is done, and returns the results per member — or the app's error text. In 3D this returns the P-Delta/buckling result together with EN 1993 steel and EN 1992 concrete checks."),
+            "description": format!("{vooraf}Runs the current model and its code checks as the Toetsing button does, waits until everything is done, and returns the results per member — or the app's error text. In 2D the ULS check forces are always second order (P-Delta) with sway imperfection in +x and −x; `toetsanalyse` names that analysis and φ, `toetsmeldingen` what the check reports about it. In 3D this returns the result of the calculation (linear for eersteOrde, otherwise P-Delta with buckling) together with the EN 1993 steel, EN 1992 concrete and EN 1995 timber checks; their ULS check forces are always second order (P-Delta) with sway imperfection in +X, −X, +Y and −Y, described by `toetsanalyse` (analysis, φ, source, reuse), `toetsAlphaCr` (α_cr per ULS base combination, for information) and `toetsmeldingen`. An app that does not report `toetsanalyse` (an older version) gives TOETSING_ONMOGELIJK instead of an answer."),
             "inputSchema": leeg_schema()
         }),
         json!({
@@ -1369,6 +1410,30 @@ pub fn tool_definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Een app van vóór 2026.43 meldt de toetsanalyse niet: dan geen
+    /// doorgegeven antwoord maar TOETSING_ONMOGELIJK (issue #199). `null` mag:
+    /// dan was er geen toetsronde of is de toets geweigerd (reden in `fout`).
+    #[test]
+    fn een_app_zonder_toetsanalyse_geeft_toetsing_onmogelijk() {
+        // 2D gui_run_checks en 3D: de sleutel staat bovenaan.
+        assert!(eis_toetsanalyse_van_app("gui_run_checks", &json!({ "toetsanalyse": null, "results": [] })).is_ok());
+        assert!(eis_toetsanalyse_van_app("gui_run_checks", &json!({ "toetsanalyse": { "soort": "tweedeOrdeGeometrisch" } })).is_ok());
+        // 2D gui_solve: onder `toetsing`.
+        assert!(eis_toetsanalyse_van_app("gui_solve", &json!({ "toetsing": { "fout": "x", "toetsanalyse": null } })).is_ok());
+        // Een oudere app: de sleutel ontbreekt.
+        for (naam, oud) in [
+            ("gui_run_checks", json!({ "results": [], "error": null })),
+            ("gui_solve", json!({ "toetsing": { "fout": null, "getoetst": 3 } })),
+            ("gui_solve", json!({ "steel": [], "concrete": [] })),
+        ] {
+            let fout = eis_toetsanalyse_van_app(naam, &oud).expect_err("een oude app hoort geweigerd te worden");
+            let data = fout.data.expect("data");
+            assert_eq!(data["error_code"], "TOETSING_ONMOGELIJK", "{naam}: {data}");
+            assert!(data["remedie"].as_str().unwrap_or("").contains("verschillende versies"), "{data}");
+            assert!(data["melding"].as_str().unwrap_or("").contains(naam), "{data}");
+        }
+    }
 
     /// Een lege werkmap voor de vindbestandtest.
     fn lege_map(naam: &str) -> std::path::PathBuf {
@@ -1615,6 +1680,12 @@ mod tests {
         for grens in ["min_m", "max_m"] {
             assert_eq!(doos["properties"][grens]["$ref"], json!("#/$defs/pointM"), "{grens}");
         }
+        // De explode (issue #198): strikt, per level of per elementsoort, afstand in mm (0–10 000).
+        let explode = &view["inputSchema"]["properties"]["explode"];
+        assert_eq!(explode["additionalProperties"], json!(false));
+        assert_eq!(explode["properties"]["mode"]["enum"], json!(["levels", "elementTypes"]));
+        assert_eq!(explode["properties"]["amount_mm"]["minimum"], json!(0));
+        assert_eq!(explode["properties"]["amount_mm"]["maximum"], json!(10000));
         let punt = &view["inputSchema"]["$defs"]["pointM"];
         assert_eq!(punt["additionalProperties"], json!(false));
         assert_eq!(punt["required"], json!(["x", "y", "z"]));

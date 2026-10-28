@@ -120,15 +120,33 @@ interface Props {
   /** Handmatige m voor α_m; `null` = de afgeleide waarde tonen. */
   scheefstandAantalElementen?: number | null;
   setScheefstandAantalElementen?: (v: number | null) => void;
+  /** Alleen 3D (issue #212): handmatige m_X en m_Y; `null` = de gedeelde m of de afgeleide. */
+  scheefstandAantalX?: number | null;
+  setScheefstandAantalX?: (v: number | null) => void;
+  scheefstandAantalY?: number | null;
+  setScheefstandAantalY?: (v: number | null) => void;
+  /** Alleen 3D (issue #212): de torsievarianten van EN 1993-1-1 5.3.2(10). */
+  scheefstandTorsie?: boolean;
+  setScheefstandTorsie?: (v: boolean) => void;
+  /** Alleen 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de toets. */
+  scheefstandEigenKolom?: boolean;
+  setScheefstandEigenKolom?: (v: boolean) => void;
   /**
    * 1/φ zoals er is GEREKEND. De balk rekent zelf niets uit — App.tsx bepaalt
    * φ op één plek, zodat het scherm nooit iets anders kan tonen dan de motor
    * heeft gekregen.
    */
   scheefstandPhiNoemer?: number;
+  /**
+   * Alleen 3D (issue #194): 1/φ_Y. Dan is `scheefstandPhiNoemer` 1/φ_X en toont
+   * de balk beide richtingen.
+   */
+  scheefstandPhiNoemerY?: number;
   /** De uit het model afgeleide h en m — de plaatshouder in de invoervelden. */
   scheefstandAfgeleideHoogteM?: number;
   scheefstandAfgeleidAantal?: number;
+  /** Alleen 3D: de afgeleide m_Y; dan is `scheefstandAfgeleidAantal` m_X. */
+  scheefstandAfgeleidAantalY?: number;
   /** De volledige afleiding met alle tussenwaarden, voor de tooltip. */
   scheefstandToelichting?: string;
   /** Wat er mis kan zijn met de afleiding; leeg = niets. */
@@ -191,8 +209,12 @@ export default function LoadCaseTabBar({
   scheefstandBron = "vast", setScheefstandBron,
   scheefstandHoogteM = null, setScheefstandHoogteM,
   scheefstandAantalElementen = null, setScheefstandAantalElementen,
-  scheefstandPhiNoemer, scheefstandAfgeleideHoogteM = 0,
-  scheefstandAfgeleidAantal = 1, scheefstandToelichting = "",
+  scheefstandAantalX = null, setScheefstandAantalX,
+  scheefstandAantalY = null, setScheefstandAantalY,
+  scheefstandTorsie = false, setScheefstandTorsie,
+  scheefstandEigenKolom = false, setScheefstandEigenKolom,
+  scheefstandPhiNoemer, scheefstandPhiNoemerY, scheefstandAfgeleideHoogteM = 0,
+  scheefstandAfgeleidAantal = 1, scheefstandAfgeleidAantalY, scheefstandToelichting = "",
   scheefstandWaarschuwingen = [],
   showLoads = true, setShowLoads,
   hasResults = false, resultsActive = false, onShowResults,
@@ -618,15 +640,17 @@ export default function LoadCaseTabBar({
       )}
 
       {/* Analysetype — drie standen, want de derde (fysisch niet-lineair) past
-          niet in de booleaan die hier eerst stond. Zie femTypes.Analysetype. */}
+          niet in de booleaan die hier eerst stond. Zie femTypes.Analysetype.
+          Het geldt voor de RESULTATEN (issue #199): de UGT-toets rekent altijd
+          zelf tweede orde met scheefstand, en de tooltip zegt dat. */}
       {setAnalysetype && (
         <span
           className={`lc-tab-phi${analysetype !== "eersteOrde" ? " active" : ""}`}
-          title={analysetype === "tweedeOrdeGeometrisch" && geometricAnalysisLabel
+          title={`${analysetype === "tweedeOrdeGeometrisch" && geometricAnalysisLabel
             ? t("loadCases.analysisDescriptionVolume.geometric")
             : analysetype === "tweedeOrdeFysisch" && materialAnalysisLabel
               ? materialAnalysisDescription ?? t("loadCases.analysisDescriptionVolume.material")
-            : t(`loadCases.analysisDescription.${analysetype}`)}
+            : t(`loadCases.analysisDescription.${analysetype}`)}\n\n${t("loadCases.analysisResultsNote")}`}
         >
           <span className="lc-tab-phi-label">{t("loadCases.analysis")}</span>
           <select
@@ -810,8 +834,10 @@ export default function LoadCaseTabBar({
         </span>
       )}
 
-      {/* Scheefstand — zelfde toggle-patroon; bij aan verschijnen φ (1/x) en
-          de richtingskeuze inline. */}
+      {/* Scheefstand — zelfde toggle-patroon. Het vinkje geldt voor de
+          RESULTATEN; de UGT-toets rekent altijd met deze φ (issue #199, B4).
+          Daarom staan φ (bron, 1/x of h en m) en de richting er ALTIJD, ook
+          met het vinkje uit: het zijn gegevens van de toets. */}
       {setScheefstandEnabled && (
         <label
           className={`lc-tab-toggle${scheefstandEnabled ? " active" : ""}`}
@@ -830,7 +856,7 @@ export default function LoadCaseTabBar({
           reductiefactoren van de norm. Kiest de gebruiker een norm, dan
           verdwijnt het noemerveld en verschijnen h en m — de twee grootheden
           die (5.5)/(5.1) nodig hebben. */}
-      {setScheefstandEnabled && scheefstandEnabled && setScheefstandBron && (
+      {setScheefstandEnabled && setScheefstandBron && (
         <span
           className="lc-tab-phi"
           title={t("loadCases.swaySourceTitle")}
@@ -852,7 +878,7 @@ export default function LoadCaseTabBar({
         </span>
       )}
 
-      {setScheefstandEnabled && scheefstandEnabled && scheefstandBron === "vast" && (
+      {setScheefstandEnabled && scheefstandBron === "vast" && (
         <span className="lc-tab-phi" title={t("loadCases.swayDenominatorTitle")}>
           <span className="lc-tab-phi-label">φ = 1/</span>
           <input
@@ -873,7 +899,7 @@ export default function LoadCaseTabBar({
           de uitkomst van (5.5)/(5.1) ernaast, en de hele afleiding met alle
           tussenwaarden in de tooltip. Leeg laten = de afleiding gebruiken;
           een getal invullen overschrijft haar. */}
-      {setScheefstandEnabled && scheefstandEnabled && scheefstandBron !== "vast" && (
+      {setScheefstandEnabled && scheefstandBron !== undefined && scheefstandBron !== "vast" && (
         <span className="lc-tab-phi" title={scheefstandToelichting}>
           <span className="lc-tab-phi-label">h =</span>
           <LengthInput className="lc-tab-phi-input" positive storedUnit="m"
@@ -888,7 +914,9 @@ export default function LoadCaseTabBar({
             className="lc-tab-phi-input"
             min={1}
             step={1}
-            placeholder={String(scheefstandAfgeleidAantal)}
+            placeholder={scheefstandAfgeleidAantalY !== undefined
+              ? `${scheefstandAfgeleidAantal}/${scheefstandAfgeleidAantalY}`
+              : String(scheefstandAfgeleidAantal)}
             value={scheefstandAantalElementen ?? ""}
             onChange={(e) => {
               const t = e.target.value.trim();
@@ -896,18 +924,20 @@ export default function LoadCaseTabBar({
               const v = Number(t);
               if (Number.isFinite(v) && v >= 1) setScheefstandAantalElementen?.(Math.floor(v));
             }}
-            title={t("loadCases.swayMembersTitle", { aantal: scheefstandAfgeleidAantal })}
+            title={scheefstandAfgeleidAantalY !== undefined
+              ? t("loadCases.swayMembersTitle3d", { x: scheefstandAfgeleidAantal, y: scheefstandAfgeleidAantalY })
+              : t("loadCases.swayMembersTitle", { aantal: scheefstandAfgeleidAantal })}
           />
           <span className="lc-tab-phi-label">
             {scheefstandWaarschuwingen.length > 0 ? "⚠ " : ""}
-            φ = 1/{scheefstandPhiNoemer !== undefined
-              ? scheefstandPhiNoemer.toFixed(0)
-              : "—"}
+            {scheefstandPhiNoemerY !== undefined && scheefstandPhiNoemer !== undefined
+              ? `φ_X = 1/${scheefstandPhiNoemer.toFixed(0)} · φ_Y = 1/${scheefstandPhiNoemerY.toFixed(0)}`
+              : `φ = 1/${scheefstandPhiNoemer !== undefined ? scheefstandPhiNoemer.toFixed(0) : "—"}`}
           </span>
         </span>
       )}
 
-      {setScheefstandEnabled && scheefstandEnabled && (
+      {setScheefstandEnabled && (
         <span
           className="lc-tab-phi"
           title={scheefstandIn3D
@@ -916,6 +946,63 @@ export default function LoadCaseTabBar({
         >
           <span className="lc-tab-phi-label">{scheefstandIn3D ? "±X ±Y" : "±x"}</span>
         </span>
+      )}
+
+      {/* 3D (issue #212): m per richting. Leeg = de gedeelde m hierboven, of
+          de afgeleide m van die richting (de plaatshouder). */}
+      {setScheefstandEnabled && scheefstandIn3D && scheefstandBron !== "vast" && setScheefstandAantalX && setScheefstandAantalY && (
+        <span className="lc-tab-phi" title={t("loadCases.swayMembersPerAxisTitle")} data-scheefstand-m-per-as>
+          {([["X", scheefstandAantalX, setScheefstandAantalX, scheefstandAfgeleidAantal],
+            ["Y", scheefstandAantalY, setScheefstandAantalY, scheefstandAfgeleidAantalY ?? scheefstandAfgeleidAantal]] as const)
+            .map(([as, waarde, zet, afgeleid]) => (
+              <span key={as} className="lc-tab-phi">
+                <span className="lc-tab-phi-label">m_{as} =</span>
+                <input
+                  type="number"
+                  className="lc-tab-phi-input"
+                  min={1}
+                  step={1}
+                  placeholder={String(scheefstandAantalElementen ?? afgeleid)}
+                  value={waarde ?? ""}
+                  aria-label={t("loadCases.swayMembersAxisLabel", { richting: as })}
+                  onChange={(e) => {
+                    const tekst = e.target.value.trim();
+                    if (tekst === "") { zet(null); return; }
+                    const v = Number(tekst);
+                    if (Number.isFinite(v) && v >= 1) zet(Math.floor(v));
+                  }}
+                />
+              </span>
+            ))}
+        </span>
+      )}
+      {setScheefstandEnabled && scheefstandIn3D && setScheefstandTorsie && (
+        <label
+          className={`lc-tab-toggle${scheefstandTorsie ? " active" : ""}`}
+          title={t("loadCases.swayTorsionTitle")}
+          data-scheefstand-torsie
+        >
+          <input
+            type="checkbox"
+            checked={scheefstandTorsie}
+            onChange={(e) => setScheefstandTorsie(e.target.checked)}
+          />
+          <span>{t("loadCases.swayTorsion")}</span>
+        </label>
+      )}
+      {setScheefstandEnabled && scheefstandIn3D && setScheefstandEigenKolom && (
+        <label
+          className={`lc-tab-toggle${scheefstandEigenKolom ? " active" : ""}`}
+          title={t("loadCases.swayOwnColumnTitle")}
+          data-scheefstand-eigen-kolom
+        >
+          <input
+            type="checkbox"
+            checked={scheefstandEigenKolom}
+            onChange={(e) => setScheefstandEigenKolom(e.target.checked)}
+          />
+          <span>{t("loadCases.swayOwnColumn")}</span>
+        </label>
       )}
 
       {/* 3D, trek-alleen staven: montage na de permanente belasting en de

@@ -12,6 +12,7 @@ import type { RapportPlaatOvergeslagen } from "./RapportPlaatOvergeslagen";
 import type { RapportTaal } from "./RapportTaal";
 import type { SpanningBeamCheckResult } from "../spanning/SpanningBeamCheckResult";
 import type { TimberBeamCheckResult } from "../timber/TimberBeamCheckResult";
+import type { ToetskrachtenRapport } from "./ToetskrachtenRapport";
 
 export type ReportInput = { 
 /**
@@ -163,9 +164,28 @@ scheefstand_toelichting?: string,
  * tweede-orde-berekening met imperfecties bindt. Een regel die met "!"
  * begint is een waarschuwing of fout en wordt rood gezet.
  *
+ * Sinds issue #199 noemt het blok twee berekeningen, elk op een eigen
+ * regel: de resultaten (het gekozen analysetype, met of zonder
+ * scheefstand) en de UGT-toetskrachten (altijd tweede orde P-Δ met
+ * scheefstand). α_cr is daarin informatief.
+ *
  * Leeg of afwezig = niet meegestuurd; het rapport zwijgt dan.
  */
 analyse_toelichting?: string, 
+/**
+ * Waar de krachten van elke toets vandaan komen (issue #199): de
+ * UGT-toetscombinaties rekenen tweede orde (P-Δ) met scheefstand, de
+ * BGT-combinaties komen uit de resultaten. Met dit veld zegt de
+ * krachtregel van elk toetsblok dat ("2e orde + scheefstand φ = 1/200").
+ *
+ * Een veld en geen afleiding uit de getallen: de kern ziet aan een
+ * `force_state` niet of hij uit een tweede-ordeberekening komt. De app en
+ * `check_fem_model` weten het wel.
+ *
+ * Leeg of afwezig = niet meegestuurd (een eigen aanroep met zelf
+ * aangeleverde krachten); de krachtregel blijft dan zoals hij was.
+ */
+toetskrachten?: ToetskrachtenRapport, 
 /**
  * De windbelasting zoals de windgenerator haar in het model zette, als
  * tekstblok — woordelijk uit `lib/wind/windGenerator.ts`

@@ -102,10 +102,13 @@ import {
   basisSleutel,
   genereerStandaardCombinaties,
   GEVOLGKLASSEN,
+  kFi,
   MAX_VRIJE_GEVALLEN,
   PARTIELE_FACTOREN,
   partieleFactoren,
   PSI_BRON,
+  psiGebruik,
+  psiKlimaat,
   STANDAARD_CATEGORIE,
   STANDAARD_GEVOLGKLASSE,
   type GevalInvoer,
@@ -179,7 +182,22 @@ export function gelijkeInhoud(
   );
 }
 
-/** Zelfde inhoud én zelfde kenmerk. Het id telt niet. */
+/** Dezelfde bevestigde eigen factoren (issue #196); beide zonder = gelijk. */
+function gelijkeBevestiging(
+  a: LoadCombination["bevestigdeFactoren"],
+  b: LoadCombination["bevestigdeFactoren"],
+): boolean {
+  const ka = Object.keys(a ?? {});
+  const kb = Object.keys(b ?? {});
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => (b as Record<string, number>)[k] === (a as Record<string, number>)[k]);
+}
+
+/**
+ * Zelfde inhoud, zelfde kenmerk en dezelfde bevestiging. Het id telt niet. De
+ * bevestiging is geen rekeninhoud (`gelijkeInhoud` kijkt er niet naar), maar
+ * een combinatie die alleen haar bevestiging verloor is wel een andere.
+ */
 export function gelijkeCombinatie(
   a: Omit<LoadCombination, "id">,
   b: Omit<LoadCombination, "id">,
@@ -189,7 +207,8 @@ export function gelijkeCombinatie(
     a.standaard?.sleutel === b.standaard?.sleutel &&
     a.standaard?.soort === b.standaard?.soort &&
     a.standaard?.gevolgklasse === b.standaard?.gevolgklasse &&
-    a.standaard?.bijlage === b.standaard?.bijlage
+    a.standaard?.bijlage === b.standaard?.bijlage &&
+    gelijkeBevestiging(a.bevestigdeFactoren, b.bevestigdeFactoren)
   );
 }
 
@@ -197,10 +216,22 @@ function gelijkeLijst(a: readonly LoadCombination[], b: readonly LoadCombination
   return a.length === b.length && a.every((c, i) => c.id === b[i].id && gelijkeCombinatie(c, b[i]));
 }
 
-/** De combinatie zonder factoren voor gevallen die niet (meer) bestaan. */
+/**
+ * De combinatie zonder factoren voor gevallen die niet (meer) bestaan — en
+ * zonder hun bevestiging (issue #196): die hoort bij de factor.
+ */
 function zonderOnbekendeGevallen(c: LoadCombination, ids: ReadonlySet<number>): LoadCombination {
-  if ([...c.factors.keys()].every((id) => ids.has(id))) return c;
-  return { ...c, factors: new Map([...c.factors].filter(([id]) => ids.has(id))) };
+  const bevestigd = Object.keys(c.bevestigdeFactoren ?? {}).map(Number);
+  if ([...c.factors.keys()].every((id) => ids.has(id)) && bevestigd.every((id) => ids.has(id))) return c;
+  const { bevestigdeFactoren: _weg, ...rest } = c;
+  const over = bevestigd.filter((id) => ids.has(id));
+  return {
+    ...rest,
+    factors: new Map([...c.factors].filter(([id]) => ids.has(id))),
+    ...(over.length > 0
+      ? { bevestigdeFactoren: Object.fromEntries(over.map((id) => [id, c.bevestigdeFactoren![id]])) }
+      : {}),
+  };
 }
 
 function perSleutel(set: readonly StandaardCombinatie[]): Map<string, StandaardCombinatie> {
@@ -743,6 +774,7 @@ export function openCombinatieStaat(p: {
       loadCases: p.loadCases,
       weesFactoren: wees,
       loads: p.loads,
+      bijlage,
     }),
   };
 }
@@ -930,7 +962,11 @@ export function verplaatsEigenGewichtNaarEigenGeval(
       if (f === 0) return c;
       const factors = new Map(c.factors);
       factors.set(id, f);
-      return { ...c, factors };
+      // Een bevestigde factor blijft bevestigd: het is dezelfde factor, nu
+      // over twee gevallen (issue #196). Anders kwam de FOUT stil terug.
+      return isBevestigdeFactor(c, vanId)
+        ? { ...c, factors, bevestigdeFactoren: { ...c.bevestigdeFactoren, [id]: f } }
+        : { ...c, factors };
     }),
     volgendGevalId: id + 1,
   };
@@ -1029,6 +1065,12 @@ export function voegCombinatieToe(
  * Anders zou de volgende wijziging aan een belastinggeval de aanpassing van
  * de gebruiker stil terugdraaien. De formule blijft staan; daaraan herkent
  * `isAfgeleidVanStandaard` dat de set uit de standaardset komt.
+ *
+ * De bevestiging van eigen factoren (issue #196) hoort bij de exacte waarde:
+ * een factor die verandert verliest haar, de andere houden haar. Ook terug
+ * naar de oude waarde brengt haar niet stil terug — bevestigen is een
+ * handeling, geen eigenschap van een getal. Een ander type (UGT ↔ BGT) laat
+ * de hele bevestiging vallen: dezelfde factor betekent dan iets anders.
  */
 export function wijzigCombinatie(
   staat: CombinatieStaat,
@@ -1040,8 +1082,15 @@ export function wijzigCombinatie(
     ...staat,
     combinations: staat.combinations.map((c) => {
       if (c.id !== id) return c;
-      const { standaard: _weg, ...rest } = { ...c, ...patch };
-      return { ...rest, id };
+      const { standaard: _weg, bevestigdeFactoren: _bevestigd, ...rest } = { ...c, ...patch };
+      const typeAnders = patch.type !== undefined && patch.type !== c.type;
+      const over = typeAnders
+        ? []
+        : Object.entries(c.bevestigdeFactoren ?? {}).filter(([caseId, b]) => {
+            const f = rest.factors.get(Number(caseId)) ?? 0;
+            return f !== 0 && gelijk(f, b);
+          });
+      return { ...rest, id, ...(over.length > 0 ? { bevestigdeFactoren: Object.fromEntries(over) } : {}) };
     }),
   };
 }
@@ -1053,6 +1102,309 @@ export function verwijderCombinatie(staat: CombinatieStaat, id: number): Combina
     combinations: staat.combinations.filter((c) => c.id !== id),
     volgendCombinatieId: Math.max(staat.volgendCombinatieId, id + 1),
   };
+}
+
+// ── Eigen factoren, bewust gekozen (issue #196) ────────────────────────────
+//
+// HET PROBLEEM
+// Een project met bewust gekozen factoren — de referentieprojecten P01, P03
+// en P04 rekenen met K_FI = 0,9 maal NB tabel NB.4: 1,22 / 1,08 voor G,
+// 1,35 / 0,54 voor Q — kreeg bij het openen te horen dat het patroon "ontstaat
+// in een projectbestand van vóór september 2026" en dat de last "met de
+// verkeerde factoren" telt. Er was geen manier om de factoren te houden: een
+// blijvende FOUT in de projectboom, het venster en het rapport, en MCP
+// validate gaf ok:false.
+//
+// DE KEUZE
+//  - Bevestigen legt per combinatie de huidige factoren vast
+//    (`LoadCombination.bevestigdeFactoren`). Een bevestiging geldt per factor
+//    en alleen voor PRECIES die waarde (`isBevestigdeFactor`); een gewijzigde
+//    factor verliest haar (`wijzigCombinatie`). Het idTellers-spoor van de
+//    vorige versie ("tellers = bewust eigen") verdween juist omdat het aan
+//    niets gebonden was; dit is aan de waarde gebonden.
+//  - Een bevestigde factor geeft geen FOUT meer in `blijvendeFactorAfwijkingen`;
+//    het rapport en de MCP-weg vermelden hem als bewust gekozen
+//    (`bevestigdeEigenFactoren`).
+//  - Een eigen combinatie met bevestigde factoren VERVANGT de
+//    standaardcombinatie waarvan ze is afgeleid (zelfde formule, zelfde
+//    gevallen, zelfde type, in de BGT dezelfde soort) als ze alleen in
+//    bevestigde factoren afwijkt (`ontbrekendeStandaardcombinaties`); na een
+//    andere gevolgklasse niet meer. Waarom: die controle bewaakt dat er
+//    geen OPSTELLING ontbreekt (de set is nooit stil een deel van de juiste
+//    set), niet welke waarde een factor heeft. Een op K_FI gezette afgeleide set
+//    heeft elke opstelling; alleen de waarden wijken af, en die zijn per
+//    waarde bevestigd. Een opstelling die er niet is — een verwijderde
+//    combinatie, of een nieuw geval dat nieuwe opstellingen vraagt — blijft een
+//    FOUT. De klasse op CC1 zetten is geen uitweg: NB.5 geeft voor CC1 1,2 / 1,1
+//    en niet 0,9 × 1,35 / 0,9 × 1,2.
+//  - Niet bevestigd worden: standaardcombinaties en combinaties van de
+//    windgenerator (die houdt de app zelf bij), en de ongewijzigde
+//    standaardset van versie 0.3.11 en ouder (die wordt vervangen, niet
+//    gehouden; daar hoort "Vervang door standaardcombinaties" bij).
+//  - De berekening verandert niet: de bevestiging is geen factor.
+
+/**
+ * Is de factor van geval `caseId` in combinatie `c` bevestigd? Alleen als de
+ * bevestiging precies de huidige factor noemt (tot op 1e-9) en die niet 0 is.
+ */
+export function isBevestigdeFactor(
+  c: Pick<LoadCombination, "factors" | "bevestigdeFactoren">,
+  caseId: number,
+): boolean {
+  const f = c.factors.get(caseId) ?? 0;
+  const b = c.bevestigdeFactoren?.[caseId];
+  return f !== 0 && typeof b === "number" && gelijk(b, f);
+}
+
+/** Heeft deze combinatie minstens één geldig bevestigde factor? */
+export function heeftBevestigdeFactoren(c: Pick<LoadCombination, "factors" | "bevestigdeFactoren">): boolean {
+  return Object.keys(c.bevestigdeFactoren ?? {}).some((id) => isBevestigdeFactor(c, Number(id)));
+}
+
+/** Waarom deze combinatie niet bevestigd kan worden; null = het kan. */
+/**
+ * Kan "Behoud eigen factoren" deze afwijking oplossen? Ja als minstens één
+ * combinatie met een afwijkende factor bevestigd kan worden. Een ongewijzigde
+ * combinatie van de oude standaardset kan dat niet (`redenNietBevestigbaar`):
+ * daar zou de knop niets doen, dus wordt hij niet aangeboden.
+ */
+function afwijkingBevestigbaar(
+  a: BlijvendeAfwijking,
+  combinations: readonly LoadCombination[],
+  gevalIds: ReadonlySet<number>,
+): boolean {
+  return a.regels.some((r) => {
+    const c = combinations.find((x) => x.id === r.combinatieId);
+    return c !== undefined && redenNietBevestigbaar(c, gevalIds) === null;
+  });
+}
+
+function redenNietBevestigbaar(c: LoadCombination, gevalIds: ReadonlySet<number>): string | null {
+  if (c.standaard) {
+    return "een standaardcombinatie: de app houdt haar factoren bij volgens de NB-tabellen. Wijzig haar " +
+      "eerst; dan is het een eigen combinatie";
+  }
+  if (isWindgeneratorCombinatie(c)) {
+    return "een combinatie van de windgenerator: die volgt de gegenereerde windgevallen";
+  }
+  if (isOudeStandaardcombinatie(c, gevalIds)) {
+    return 'een ongewijzigde combinatie van de standaardset van versie 0.3.11 en ouder: kies "Vervang door ' +
+      'standaardcombinaties" in plaats van haar te houden';
+  }
+  return null;
+}
+
+/**
+ * "Behoud eigen factoren": leg de huidige factoren (≠ 0) van deze combinaties
+ * vast als bewust gekozen. Zonder `ids`: elke combinatie die bevestigd kan
+ * worden (zie `redenNietBevestigbaar`); een combinatie die dat niet kan, komt
+ * in `overgeslagen` met de reden. Verandert er niets, dan komt dezelfde staat
+ * terug.
+ */
+export function bevestigEigenFactoren(
+  staat: CombinatieStaat,
+  ids?: readonly number[],
+): {
+  staat: CombinatieStaat;
+  bevestigd: number[];
+  overgeslagen: { id: number; naam: string; reden: string }[];
+} {
+  const gevalIds = new Set(staat.loadCases.map((c) => c.id));
+  const gevraagd = ids ? new Set(ids) : null;
+  const bevestigd: number[] = [];
+  const overgeslagen: { id: number; naam: string; reden: string }[] = [];
+  let veranderd = false;
+  const combinations = staat.combinations.map((c) => {
+    if (gevraagd && !gevraagd.has(c.id)) return c;
+    const reden = redenNietBevestigbaar(c, gevalIds);
+    if (reden) {
+      overgeslagen.push({ id: c.id, naam: c.name, reden });
+      return c;
+    }
+    const bevestigdeFactoren = Object.fromEntries(
+      [...c.factors].filter(([id, f]) => f !== 0 && gevalIds.has(id)),
+    ) as Record<number, number>;
+    if (Object.keys(bevestigdeFactoren).length === 0) return c;
+    bevestigd.push(c.id);
+    if (gelijkeBevestiging(c.bevestigdeFactoren, bevestigdeFactoren)) return c;
+    veranderd = true;
+    return { ...c, bevestigdeFactoren };
+  });
+  return { staat: veranderd ? { ...staat, combinations } : staat, bevestigd, overgeslagen };
+}
+
+/**
+ * De bevestiging intrekken (zonder `ids`: van alle combinaties). Daarna meldt
+ * de app de afwijkende factoren weer als FOUT.
+ */
+export function trekBevestigingIn(
+  staat: CombinatieStaat,
+  ids?: readonly number[],
+): { staat: CombinatieStaat; ingetrokken: number[] } {
+  const gevraagd = ids ? new Set(ids) : null;
+  const ingetrokken: number[] = [];
+  const combinations = staat.combinations.map((c) => {
+    if ((gevraagd && !gevraagd.has(c.id)) || c.bevestigdeFactoren === undefined) return c;
+    ingetrokken.push(c.id);
+    const { bevestigdeFactoren: _weg, ...rest } = c;
+    return rest;
+  });
+  return { staat: ingetrokken.length > 0 ? { ...staat, combinations } : staat, ingetrokken };
+}
+
+// ── Wat de NB geeft, en een schaal K_FI op NB.4 ───────────────────────────
+
+/**
+ * Afrondingstolerantie bij het herkennen van een schaal K_FI maal NB.4: een
+ * constructeur schrijft 0,9 × 1,35 = 1,215 als 1,22. Twee decimalen, dus een
+ * halve eenheid in de tweede decimaal. De kandidaten liggen ver genoeg uiteen
+ * (1,08 / 1,215 / 1,32 / 1,485) om elkaar binnen die tolerantie niet te raken.
+ */
+const AFRONDING = 0.005 + 1e-9;
+
+/** De klasse waarvoor K_FI = 1: tabel NB.4, de basis van de schaal. */
+function nb4Klasse(bijlage: NationaleBijlageCode): Gevolgklasse {
+  return GEVOLGKLASSEN.find((k) => gelijk(kFi(k, bijlage), 1)) ?? STANDAARD_GEVOLGKLASSE;
+}
+
+/** "NB.4" of "NB.5": de tabel waar de factoren van deze klasse staan. */
+function tabelVan(klasse: Gevolgklasse, bijlage: NationaleBijlageCode): string {
+  const bron = partieleFactoren(klasse, bijlage).bron;
+  return /NB\.\d+/.exec(bron)?.[0] ?? bron;
+}
+
+/** De klasse bij een K_FI, of null. */
+function klasseVanK(k: number, bijlage: NationaleBijlageCode): Gevolgklasse | null {
+  return GEVOLGKLASSEN.find((x) => gelijk(kFi(x, bijlage), k)) ?? null;
+}
+
+type UgtUitdrukking = "6.10a" | "6.10b";
+
+/** Uitdrukking 6.10a of 6.10b, uit het kenmerk, de naam of de formule; anders null. */
+function uitdrukkingVan(c: Pick<LoadCombination, "name" | "formula" | "standaard">): UgtUitdrukking | null {
+  if (c.standaard?.soort === "6.10a" || c.standaard?.soort === "6.10b") return c.standaard.soort;
+  const tekst = `${c.name} ${c.formula}`;
+  if (/6\.10a/.test(tekst)) return "6.10a";
+  if (/6\.10b/.test(tekst)) return "6.10b";
+  return null;
+}
+
+const gSup = (u: UgtUitdrukking, klasse: Gevolgklasse, bijlage: NationaleBijlageCode): number =>
+  u === "6.10a" ? partieleFactoren(klasse, bijlage).gGsup610a : partieleFactoren(klasse, bijlage).gGsup610b;
+
+/**
+ * Wat een blijvende UGT-factor `f` is, gezien vanuit de NB: een schaal K_FI
+ * (CC1 of CC3) maal γ_G,sup van NB.4, met wat NB.5 voor die klasse geeft; of
+ * een eigen factor, met de NB-waarden ernaast. Hangt NIET van de klasse van
+ * het project af: die is bij het openen van een bestand zonder klasse een
+ * terugval naar het vorige project.
+ */
+function duidingBlijvend(f: number, u: UgtUitdrukking | null, bijlage: NationaleBijlageCode): string {
+  const basisKlasse = nb4Klasse(bijlage);
+  const nb4 = tabelVan(basisKlasse, bijlage);
+  const kandidaten: { klasse: Gevolgklasse; k: number; u: UgtUitdrukking; basis: number }[] = [];
+  for (const klasse of GEVOLGKLASSEN) {
+    const k = kFi(klasse, bijlage);
+    if (gelijk(k, 1)) continue;
+    for (const x of ["6.10a", "6.10b"] as const) {
+      const basis = gSup(x, basisKlasse, bijlage);
+      if (Math.abs(f - k * basis) <= AFRONDING) kandidaten.push({ klasse, k, u: x, basis });
+    }
+  }
+  const kfi = kandidaten.find((x) => x.u === u) ?? kandidaten[0];
+  if (kfi) {
+    const exact = gelijk(f, Math.round(kfi.k * kfi.basis * 1e9) / 1e9);
+    return (
+      `${nl(f)} ${exact ? "=" : "≈"} ${nl(kfi.k)} × ${nl(kfi.basis)} (K_FI ${kfi.klasse} op ${nb4} ${kfi.u}; ` +
+      `${tabelVan(kfi.klasse, bijlage)} ${kfi.klasse} geeft ${nl(gSup(kfi.u, kfi.klasse, bijlage))})`
+    );
+  }
+  const reeks = (x: UgtUitdrukking) =>
+    `γ_G,sup in ${x}: ${GEVOLGKLASSEN.map((k) => `${nl(gSup(x, k, bijlage))} (${k})`).join(", ")}`;
+  const nbs = [...new Set(GEVOLGKLASSEN.map((k) => tabelVan(k, bijlage)))].sort().join("/");
+  return (
+    `${nl(f)} (eigen factor, niet uit ${nbs}; ` +
+    (u ? reeks(u) : `${reeks("6.10a")}; ${reeks("6.10b")}`) +
+    (f < 1 ? `; gunstig γ_G,inf ${nl(partieleFactoren(basisKlasse, bijlage).gGinf)}` : "") +
+    ")"
+  );
+}
+
+/** De schaal K_FI op NB.4 die de G- en de Q-factoren van de UGT-combinaties volgen. */
+export interface SchaalOpNB4 {
+  /** Eén K_FI voor elke blijvende factor (γ_G,inf en 1,0 tellen niet mee), anders null. */
+  g: number | null;
+  /** Eén K_FI voor elke veranderlijke factor (γ_Q of γ_Q·ψ₀), anders null. */
+  q: number | null;
+}
+
+/**
+ * Volgen de UGT-factoren een vaste schaal K_FI (0,9 / 1,0 / 1,1) maal NB tabel
+ * NB.4, met de afrondingstolerantie hierboven? Per soort apart: G (γ_G,sup in
+ * 6.10a en 6.10b; γ_G,inf en 1,0 zijn gunstig of buitengewoon en zeggen niets
+ * over de schaal) en Q (γ_Q als overheersende, γ_Q·ψ₀ als samengaande
+ * belasting, met ψ₀ uit NB.2–A1.1 voor de gebruikscategorie of de soort).
+ * P01: G 1,22 / 1,08 en Q 1,35 / 0,54 → beide 0,9.
+ */
+export function schaalOpNB4(p: {
+  loadCases: readonly (Pick<LoadCase, "id" | "type"> & Partial<Pick<LoadCase, "categorie">>)[];
+  combinations: readonly LoadCombination[];
+  bijlage?: NationaleBijlageCode;
+}): SchaalOpNB4 {
+  const bijlage = p.bijlage ?? STANDAARD_BIJLAGE;
+  const nb4 = partieleFactoren(nb4Klasse(bijlage), bijlage);
+  const alleK = [...new Set(GEVOLGKLASSEN.map((k) => kFi(k, bijlage)))];
+  let g = alleK;
+  let q = alleK;
+  let gGezien = false;
+  let qGezien = false;
+  const past = (f: number, waarden: number[]) => (k: number) => waarden.some((w) => Math.abs(f - k * w) <= AFRONDING);
+  for (const c of p.combinations) {
+    if (c.type !== "uls") continue;
+    for (const [id, f] of c.factors) {
+      if (f === 0) continue;
+      const geval = p.loadCases.find((x) => x.id === id);
+      if (!geval) continue;
+      if (geval.type === "dead") {
+        if (gelijk(f, nb4.gGinf) || gelijk(f, 1)) continue;
+        gGezien = true;
+        g = g.filter(past(f, [nb4.gGsup610a, nb4.gGsup610b]));
+      } else if (geval.type === "live" || geval.type === "snow" || geval.type === "wind") {
+        const psi0 = geval.type === "live"
+          ? psiGebruik(geval.categorie ?? STANDAARD_CATEGORIE, bijlage).psi0
+          : psiKlimaat(geval.type === "wind" ? "wind" : "sneeuw", bijlage).psi0;
+        qGezien = true;
+        q = q.filter(past(f, psi0 > 0 ? [nb4.gQ, nb4.gQ * psi0] : [nb4.gQ]));
+      }
+    }
+  }
+  return {
+    g: gGezien && g.length === 1 ? g[0] : null,
+    q: qGezien && q.length === 1 ? q[0] : null,
+  };
+}
+
+/** Eén zin over de schaal, of "" als er geen schaal anders dan NB.4 zelf is. */
+function tekstSchaal(s: SchaalOpNB4, bijlage: NationaleBijlageCode): string {
+  if (s.g === null || gelijk(s.g, 1)) return "";
+  const klasse = klasseVanK(s.g, bijlage);
+  const nb4 = tabelVan(nb4Klasse(bijlage), bijlage);
+  const kTekst = (k: number) => `K_FI = ${nl(k)}${klasseVanK(k, bijlage) ? ` (${klasseVanK(k, bijlage)})` : ""}`;
+  if (s.q !== null && gelijk(s.q, s.g)) {
+    const eigen = klasse ? partieleFactoren(klasse, bijlage) : null;
+    return (
+      `De UGT-factoren zijn consequent ${kTekst(s.g)} maal ${nb4}, voor G én Q.` +
+      (eigen && klasse
+        ? ` ${tabelVan(klasse, bijlage)} geeft voor ${klasse} eigen waarden: γ_G,sup ${nl(eigen.gGsup610a)} (6.10a) ` +
+          `en ${nl(eigen.gGsup610b)} (6.10b), γ_Q ${nl(eigen.gQ)}.`
+        : "")
+    );
+  }
+  const qTekst = s.q === null
+    ? `volgen geen vaste schaal van ${nb4}`
+    : gelijk(s.q, 1) ? `zijn ${nb4} zelf (K_FI = 1${klasseVanK(1, bijlage) ? `, ${klasseVanK(1, bijlage)}` : ""})`
+    : `zijn ${kTekst(s.q)} maal ${nb4}`;
+  return `De G-factoren zijn ${kTekst(s.g)} maal ${nb4}, de Q-factoren ${qTekst}: G en Q zijn niet met dezelfde factor geschaald.`;
 }
 
 // ── Meldingen ─────────────────────────────────────────────────────────────
@@ -1082,6 +1434,13 @@ export interface GevalMelding {
    * de interface toont de actie om de windbelasting opnieuw te genereren.
    */
   windOpnieuwAdvies?: true;
+  /**
+   * De melding gaat over eigen factoren die bewust gekozen kunnen zijn, en
+   * "Behoud eigen factoren" (`bevestigEigenFactoren`) lost haar op (issue #196).
+   * De interface toont die actie dan ook. Nooit bij een echt spoor van een
+   * oud bestand (de kolom van de oude standaardset).
+   */
+  bevestigAdvies?: true;
 }
 
 const TYPE_TEKST: Record<string, string> = {
@@ -1128,6 +1487,22 @@ export function isAfgeleidVanStandaard(
  * Een ontbrekende combinatie is een opstelling die de omhullende niet ziet.
  * Zonder deze controle werd een combinatieset stil een DEELVERZAMELING van de
  * juiste set — zie de kop van dit bestand.
+ *
+ * Bevestigde eigen factoren (issue #196): een combinatie met dezelfde gevallen
+ * (met last), van hetzelfde type en in de BGT van dezelfde soort, die alleen in
+ * BEVESTIGDE factoren afwijkt, vervangt de standaardcombinatie ook — één op
+ * één, alleen als ze niet al exact een andere standaardcombinatie vervangt, en
+ * alleen als ze nog de FORMULE van die standaardcombinatie draagt: ze is er
+ * dan van afgeleid (`wijzigCombinatie` laat de formule staan). De opstelling
+ * is er dan; alleen de waarde is anders, en die is bewust gekozen. Zie "Eigen
+ * factoren, bewust gekozen" hierboven.
+ * Waarom de formule: de formule van een standaardcombinatie draagt de factoren
+ * van haar klasse ("1,35·G + 1,5·0,4·Q"). Gaat het project daarna naar een
+ * andere gevolgklasse, dan verschillen de formules, en meldt deze controle de
+ * ontbrekende combinaties weer — een set die onder CC2 bewust op K_FI = 0,9 is
+ * gezet, dekt een CC3-project niet stil. De formule wijst ook aan WELKE
+ * standaardcombinatie een afgeleide vervangt (6.10a en 6.10b met Q leidend
+ * hebben dezelfde gevallen).
  */
 export function ontbrekendeStandaardcombinaties(p: {
   combinations: readonly LoadCombination[];
@@ -1139,21 +1514,39 @@ export function ontbrekendeStandaardcombinaties(p: {
   gevuld?: (caseId: number) => boolean;
 }): StandaardCombinatie[] {
   const gevuld = p.gevuld ?? (() => true);
+  const werkzaam = (factors: ReadonlyMap<number, number>): [number, number][] =>
+    [...factors].filter(([id, f]) => f !== 0 && gevuld(id)).sort((a, b) => a[0] - b[0]);
   const inhoud = (factors: ReadonlyMap<number, number>): string =>
-    [...factors]
-      .filter(([id, f]) => f !== 0 && gevuld(id))
-      .sort((a, b) => a[0] - b[0])
-      .map(([id, f]) => `${id}:${Math.round(f * 1e9) / 1e9}`)
-      .join(",");
+    werkzaam(factors).map(([id, f]) => `${id}:${Math.round(f * 1e9) / 1e9}`).join(",");
   const soortDeel = (type: string, soort: string | null): string =>
     type === "sls" ? soort ?? "?" : "";
-  const aanwezig = new Set(
-    p.combinations.map((c) => `${c.type}|${soortDeel(c.type, soortVanCombinatie(c))}|${inhoud(c.factors)}`),
-  );
-  return genereerStandaardCombinaties(p.loadCases, p.gevolgklasse, p.bijlage).filter((n) => {
-    const eigen = inhoud(n.factors);
-    if (eigen === "") return false;
-    return !aanwezig.has(`${n.type}|${soortDeel(n.type, n.standaard.soort)}|${eigen}`);
+  const sleutel = (c: LoadCombination): string =>
+    `${c.type}|${soortDeel(c.type, soortVanCombinatie(c))}|${inhoud(c.factors)}`;
+  const nSleutel = (n: StandaardCombinatie): string =>
+    `${n.type}|${soortDeel(n.type, n.standaard.soort)}|${inhoud(n.factors)}`;
+  const aanwezig = new Set(p.combinations.map(sleutel));
+  const set = genereerStandaardCombinaties(p.loadCases, p.gevolgklasse, p.bijlage).filter((n) => inhoud(n.factors) !== "");
+  const ontbrekend = set.filter((n) => !aanwezig.has(nSleutel(n)));
+  if (ontbrekend.length === 0) return ontbrekend;
+
+  // Vervangers met bevestigde factoren: niet al exact een standaardcombinatie.
+  const exact = new Set(set.map(nSleutel));
+  const vrij = p.combinations.filter((c) => heeftBevestigdeFactoren(c) && !exact.has(sleutel(c)));
+  const formuleBasis = (f: string) => f.split("   [")[0];
+  return ontbrekend.filter((n) => {
+    const nWerkzaam = werkzaam(n.factors);
+    const past = (c: LoadCombination): boolean => {
+      if (c.type !== n.type) return false;
+      if (n.type === "sls" && soortVanCombinatie(c) !== n.standaard.soort) return false;
+      const cWerkzaam = werkzaam(c.factors);
+      if (cWerkzaam.length !== nWerkzaam.length) return false;
+      return nWerkzaam.every(([id, f], i) =>
+        cWerkzaam[i][0] === id && (gelijk(cWerkzaam[i][1], f) || isBevestigdeFactor(c, id)));
+    };
+    const keuze = vrij.find((c) => formuleBasis(c.formula) === formuleBasis(n.formula) && past(c));
+    if (!keuze) return true;
+    vrij.splice(vrij.indexOf(keuze), 1);
+    return false;
   });
 }
 
@@ -1421,6 +1814,21 @@ const UGT_FACTOREN_BLIJVEND: readonly number[] = [
   ]),
 ];
 
+/** Eén combinatie waarin een blijvend geval afwijkt. */
+export interface BlijvendeRegel {
+  combinatieId: number;
+  combinatie: string;
+  factor: number;
+  /** De factor past bij geen blijvende belasting (UGT: geen γ_G uit NB.4/NB.5 en geen 1,0; BGT: niet 1,0). */
+  pastNiet: boolean;
+  /** De factor is bewust gekozen en bevestigd (`isBevestigdeFactor`, issue #196). */
+  bevestigd: boolean;
+  /** Een ander blijvend geval met een andere factor in dezelfde combinatie, anders null. */
+  ander: { caseId: number; factor: number } | null;
+  /** De regel voor in een melding, met wat de NB geeft. */
+  tekst: string;
+}
+
 /** Een blijvend geval met factoren die bij geen blijvende belasting passen. */
 export interface BlijvendeAfwijking {
   caseId: number;
@@ -1428,14 +1836,17 @@ export interface BlijvendeAfwijking {
   /**
    * Elke combinatie waarin dit geval afwijkt: een factor die niet past
    * (`pastNiet`), of een andere factor dan een ander blijvend geval in
-   * dezelfde combinatie.
+   * dezelfde combinatie. In `blijvendeFactorAfwijkingen` zonder de bevestigde
+   * factoren, in `bevestigdeEigenFactoren` alleen die.
    */
-  regels: { combinatieId: number; combinatie: string; factor: number; pastNiet: boolean; tekst: string }[];
+  regels: BlijvendeRegel[];
   /**
    * Draagt dit geval in de oude standaardcombinaties precies de kolom van het
    * oude geval met dit id (2 = Q, 3 = S, 4 = W)? Dan dat id, anders null.
    */
   oudeKolom: number | null;
+  /** De schaal K_FI op NB.4 die de UGT-factoren van de set volgen (voor de hele set gelijk). */
+  schaal: SchaalOpNB4;
 }
 
 function oudeKolomVan(caseId: number, combinations: readonly LoadCombination[]): number | null {
@@ -1445,6 +1856,61 @@ function oudeKolomVan(caseId: number, combinations: readonly LoadCombination[]):
     .filter((x): x is { c: LoadCombination; o: (typeof OUDE_STANDAARDSET)[number] } => x.o !== undefined);
   if (oud.length < 3) return null;
   return oud.every(({ c, o }) => gelijk(c.factors.get(caseId) ?? 0, o.factoren[caseId] ?? 0)) ? caseId : null;
+}
+
+/** De invoer van de controles op blijvende factoren. */
+interface BlijvendInvoer {
+  loadCases: readonly (Pick<LoadCase, "id" | "name" | "type"> & Partial<Pick<LoadCase, "categorie">>)[];
+  combinations: readonly LoadCombination[];
+  /** De bijlage van het project, voor de NB-waarden in de tekst; weglaten = de enige gevulde. */
+  bijlage?: NationaleBijlageCode;
+}
+
+/**
+ * Elk blijvend geval met minstens één factor die niet past — bevestigd of
+ * niet — met al zijn regels. De twee openbare functies hieronder kiezen eruit.
+ */
+function alleBlijvendeAfwijkingen(p: BlijvendInvoer): BlijvendeAfwijking[] {
+  const bijlage = p.bijlage ?? STANDAARD_BIJLAGE;
+  const blijvend = p.loadCases.filter((c) => c.type === "dead");
+  const uit: BlijvendeAfwijking[] = [];
+  let schaal: SchaalOpNB4 | null = null;
+  for (const g of blijvend) {
+    const regels: BlijvendeRegel[] = [];
+    for (const c of p.combinations) {
+      const f = c.factors.get(g.id) ?? 0;
+      const anderGeval = blijvend.find((o) => {
+        const fo = c.factors.get(o.id) ?? 0;
+        return o.id !== g.id && fo !== 0 && !gelijk(fo, f);
+      });
+      const ander = anderGeval ? { caseId: anderGeval.id, factor: c.factors.get(anderGeval.id) ?? 0 } : null;
+      const pastNiet = f !== 0 && (c.type === "sls"
+        ? !gelijk(f, 1)
+        : !UGT_FACTOREN_BLIJVEND.some((x) => gelijk(x, f)));
+      if (!pastNiet && !ander) continue;
+      const anderTekst = ander ? `blijvend geval ${ander.caseId} heeft daar ${nl(ander.factor)}` : "";
+      let tekst: string;
+      if (pastNiet && c.type === "uls") {
+        // Wat de NB geeft, en een schaal K_FI op NB.4 (issue #196).
+        tekst = `"${c.name}" ${duidingBlijvend(f, uitdrukkingVan(c), bijlage)}${ander ? ` — ${anderTekst}` : ""}`;
+      } else {
+        const waarom = [
+          ...(pastNiet ? ["in de BGT telt een blijvende belasting met 1,0"] : []),
+          ...(ander ? [anderTekst] : []),
+        ];
+        tekst = `"${c.name}" ${f === 0 ? "geen factor" : nl(f)} (${waarom.join("; ")})`;
+      }
+      regels.push({
+        combinatieId: c.id, combinatie: c.name, factor: f, pastNiet,
+        bevestigd: isBevestigdeFactor(c, g.id), ander, tekst,
+      });
+    }
+    if (regels.some((r) => r.pastNiet)) {
+      schaal ??= schaalOpNB4({ loadCases: p.loadCases, combinations: p.combinations, bijlage });
+      uit.push({ caseId: g.id, naam: g.name, regels, oudeKolom: oudeKolomVan(g.id, p.combinations), schaal });
+    }
+  }
+  return uit;
 }
 
 /**
@@ -1462,71 +1928,105 @@ function oudeKolomVan(caseId: number, combinations: readonly LoadCombination[]):
  * 8·36/8 = 36,00 horen. Bij het openen vervangt `vervangVerouderdeCombinaties`
  * zo'n ongewijzigde oude set; deze controle vangt het in een eigen set (en na
  * "Ongedaan maken").
- * Alleen gevallen met minstens één factor die niet past komen in de lijst.
+ *
+ * Alleen gevallen met minstens één factor die niet past en NIET bevestigd is
+ * komen in de lijst (issue #196), met hun regels zonder de bevestigde factoren.
+ * Een bevestigde factor staat in `bevestigdeEigenFactoren`.
  */
-export function blijvendeFactorAfwijkingen(p: {
-  loadCases: readonly Pick<LoadCase, "id" | "name" | "type">[];
-  combinations: readonly LoadCombination[];
-}): BlijvendeAfwijking[] {
-  const blijvend = p.loadCases.filter((c) => c.type === "dead");
-  const uit: BlijvendeAfwijking[] = [];
-  for (const g of blijvend) {
-    const regels: BlijvendeAfwijking["regels"] = [];
-    for (const c of p.combinations) {
-      const f = c.factors.get(g.id) ?? 0;
-      const ander = blijvend.find((o) => {
-        const fo = c.factors.get(o.id) ?? 0;
-        return o.id !== g.id && fo !== 0 && !gelijk(fo, f);
-      });
-      const pastNiet = f !== 0 && (c.type === "sls"
-        ? !gelijk(f, 1)
-        : !UGT_FACTOREN_BLIJVEND.some((x) => gelijk(x, f)));
-      if (!pastNiet && !ander) continue;
-      const waarom: string[] = [];
-      if (pastNiet) {
-        waarom.push(c.type === "sls"
-          ? "in de BGT telt een blijvende belasting met 1,0"
-          : "geen γ_G uit NB tabel NB.4/NB.5 en geen 1,0");
-      }
-      if (ander) waarom.push(`blijvend geval ${ander.id} heeft daar ${nl(c.factors.get(ander.id) ?? 0)}`);
-      regels.push({
-        combinatieId: c.id, combinatie: c.name, factor: f, pastNiet,
-        tekst: `"${c.name}" ${f === 0 ? "geen factor" : nl(f)} (${waarom.join("; ")})`,
-      });
-    }
-    if (regels.some((r) => r.pastNiet)) {
-      uit.push({ caseId: g.id, naam: g.name, regels, oudeKolom: oudeKolomVan(g.id, p.combinations) });
-    }
-  }
-  return uit;
+export function blijvendeFactorAfwijkingen(p: BlijvendInvoer): BlijvendeAfwijking[] {
+  return alleBlijvendeAfwijkingen(p)
+    .filter((a) => a.regels.some((r) => r.pastNiet && !r.bevestigd))
+    .map((a) => ({ ...a, regels: a.regels.filter((r) => !r.bevestigd) }));
 }
 
-/** De regels en de herkomst van een afwijking, voor in een melding. */
-function regelsEnHerkomst(a: BlijvendeAfwijking): { lijst: string; herkomst: string } {
+/**
+ * De blijvende factoren die niet uit NB.4/NB.5 komen maar bewust gekozen en
+ * bevestigd zijn (issue #196). Geen fout: het rapport en de MCP-weg vermelden
+ * ze (`tekstBevestigdeEigenFactoren`), zodat een lezer ziet dat er met eigen
+ * factoren is gerekend.
+ */
+export function bevestigdeEigenFactoren(p: BlijvendInvoer): BlijvendeAfwijking[] {
+  return alleBlijvendeAfwijkingen(p)
+    .map((a) => ({ ...a, regels: a.regels.filter((r) => r.pastNiet && r.bevestigd) }))
+    .filter((a) => a.regels.length > 0);
+}
+
+/** De vermelding van bevestigde eigen factoren, of "" als er geen zijn. */
+export function tekstBevestigdeEigenFactoren(
+  lijst: readonly BlijvendeAfwijking[],
+  bijlage: NationaleBijlageCode = STANDAARD_BIJLAGE,
+): string {
+  if (lijst.length === 0) return "";
+  const delen = lijst.map((a) => `belastinggeval ${a.caseId} ("${a.naam}") ${lijstVan(a)}`);
+  const schaal = tekstSchaal(lijst[0].schaal, bijlage);
+  return (
+    `Eigen factoren, bewust gekozen ("Behoud eigen factoren"): ${delen.join("; ")}.` +
+    (schaal ? ` ${schaal}` : "") +
+    " Ze wijken af van NB tabel NB.4/NB.5, zijn bevestigd en worden niet als fout gemeld zolang ze niet " +
+    "veranderen; er wordt gewoon mee gerekend."
+  );
+}
+
+/** De regels van een afwijking, hoogstens acht, voor in een melding. */
+function lijstVan(a: BlijvendeAfwijking): string {
   const MAX = 8;
-  const lijst =
+  return (
     a.regels.slice(0, MAX).map((r) => r.tekst).join("; ") +
-    (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "");
-  const herkomst = a.oudeKolom !== null
-    ? `Deze factoren komen overeen met de oude standaardkolom voor belastinggeval ` +
+    (a.regels.length > MAX ? `; en nog ${a.regels.length - MAX}` : "")
+  );
+}
+
+/**
+ * De herkomst van een afwijking. Uit de factoren alleen is de leeftijd of
+ * herkomst van het project niet af te leiden (PR #126): een bewust gekozen
+ * eigen factor ziet er net zo uit. Alleen bij een echt spoor staat er meer:
+ *  - de kolom van de oude standaardset (`oudeKolom`): welke kolom, met de
+ *    vraag of dit bewust is;
+ *  - wees-factoren in hetzelfde bestand (alleen bij het openen bekend).
+ * Een andere factor dan een ander blijvend geval in dezelfde combinatie zegt
+ * waar zo'n verschil vandaan kan komen, zonder datum.
+ */
+function herkomstVan(a: BlijvendeAfwijking, spoor: { wees: boolean }): string {
+  if (a.oudeKolom !== null) {
+    return (
+      `Deze factoren komen overeen met de oude standaardkolom voor belastinggeval ` +
       `${a.oudeKolom}, ${OUDE_GEVALLEN[a.oudeKolom]}. Controleer of dit een bewust gekozen ` +
       "eigen combinatie is; uit de factoren alleen is de leeftijd of herkomst van het project niet af te leiden."
-    : "De factoren kunnen bewust gekozen zijn. Uit deze afwijking is de leeftijd of herkomst van " +
-      "het project niet af te leiden.";
-  return { lijst, herkomst };
+    );
+  }
+  if (spoor.wees) {
+    return (
+      "In hetzelfde bestand stonden ook factoren voor belastinggevallen die niet (meer) bestaan (zie " +
+      "hieronder): een spoor van een eerdere versie, waarin een nieuw geval het id én de factoren van een " +
+      "verwijderd geval kon erven. Ga na of dat bij dit geval is gebeurd."
+    );
+  }
+  return (
+    (a.regels.some((r) => r.ander !== null)
+      ? "Een blijvend geval met een andere factor dan een ander blijvend geval in dezelfde combinatie " +
+        "ontstaat als zijn type later is gewijzigd zonder dat de factoren meegingen, of als een factor met " +
+        "de hand is aangepast. "
+      : "") +
+    "De factoren kunnen bewust gekozen zijn. Uit deze afwijking is de leeftijd of herkomst van " +
+    "het project niet af te leiden."
+  );
 }
 
-function tekstBlijvendeAfwijking(a: BlijvendeAfwijking): string {
-  const { lijst, herkomst } = regelsEnHerkomst(a);
-  return (
-    `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet ` +
-    `bij een blijvende belasting passen: ${lijst}. Alle blijvende gevallen samen zijn één blijvende ` +
-    "belasting G, met in elke combinatie dezelfde factor: γ_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in " +
-    "de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT (6.14b–6.16b). " +
-    `${herkomst} De berekening gebruikt de getoonde factoren. Controleer of ze voor dit project ` +
-    'bedoeld zijn; behoud ze als eigen factoren of kies "Vervang door standaardcombinaties" in ' +
-    "Belastinggevallen & combinaties."
-  );
+/** Wat de gebruiker kan doen met eigen factoren (issue #196). */
+const ADVIES_EIGEN =
+  "De berekening gebruikt de getoonde factoren. Zijn ze bewust gekozen, kies dan \"Behoud eigen factoren\" " +
+  "in Belastinggevallen & combinaties: de bevestiging wordt opgeslagen, de melding vervalt zolang de " +
+  "factoren niet veranderen, en het rapport noemt ze als bewust gekozen. Anders: kies \"Vervang door " +
+  "standaardcombinaties\", of corrigeer de factoren.";
+
+function tekstBlijvendeAfwijking(a: BlijvendeAfwijking, bijlage: NationaleBijlageCode): string {
+  const kop = `Belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren die niet ` +
+    `bij een blijvende belasting passen: ${lijstVan(a)}.`;
+  const regel = "Alle blijvende gevallen samen zijn één blijvende belasting G, met in elke combinatie dezelfde " +
+    "factor: γ_G uit NEN-EN 1990 NB tabel NB.4/NB.5 in de UGT (0,9 waar zij gunstig werkt), 1,0 in de BGT " +
+    "(6.14b–6.16b).";
+  return [kop, regel, tekstSchaal(a.schaal, bijlage), herkomstVan(a, { wees: false }), ADVIES_EIGEN]
+    .filter((x) => x !== "").join(" ");
 }
 
 /**
@@ -1657,9 +2157,26 @@ export function meldingenBelastinggevallen(p: {
       combinations: alle, loadCases: p.loadCases, gevolgklasse: klasse, bijlage, gevuld,
     });
     if (ontbrekend.length > 0) {
+      // Een afgeleide set met bewust gekozen factoren (bijvoorbeeld K_FI op
+      // NB.4, issue #196): heeft elke ontbrekende combinatie een eigen
+      // combinatie met dezelfde gevallen, dan lost "Behoud eigen factoren"
+      // dit op — dat zeggen we dan ook. Nooit bij de oude standaardset.
+      const naHouden = oud.length > 0 ? ontbrekend : ontbrekendeStandaardcombinaties({
+        combinations: bevestigEigenFactoren({
+          loadCases: p.loadCases as LoadCase[], combinations: [...alle], gevolgklasse: klasse, bijlage,
+          volgendGevalId: 1, volgendCombinatieId: 1,
+        }).staat.combinations,
+        loadCases: p.loadCases, gevolgklasse: klasse, bijlage, gevuld,
+      });
+      const houden = naHouden.length === 0;
       meldingen.push({
-        niveau: "fout", caseId: null, vervangAdvies: true,
-        tekst: (oud.length > 0 ? `${tekstOudeSetInProject(oud, klasse)} ` : "") + tekstOntbrekend(ontbrekend, klasse),
+        niveau: "fout", caseId: null, vervangAdvies: true, ...(houden ? { bevestigAdvies: true as const } : {}),
+        tekst: (oud.length > 0 ? `${tekstOudeSetInProject(oud, klasse)} ` : "") + tekstOntbrekend(ontbrekend, klasse) +
+          (houden
+            ? " De eigen combinaties van dit project hebben wel dezelfde gevallen als de ontbrekende, maar " +
+              "andere factoren. Zijn die bewust gekozen (bijvoorbeeld K_FI maal NB.4), kies dan \"Behoud " +
+              "eigen factoren\": een eigen combinatie met bevestigde factoren telt dan als vervanger."
+            : ""),
       });
     }
   }
@@ -1726,7 +2243,7 @@ export function meldingenBelastinggevallen(p: {
     }
   }
   const blijvendAfwijkend = new Map(
-    blijvendeFactorAfwijkingen({ loadCases: p.loadCases, combinations: p.combinations })
+    blijvendeFactorAfwijkingen({ loadCases: p.loadCases, combinations: p.combinations, bijlage })
       .map((a) => [a.caseId, a] as const),
   );
 
@@ -1802,7 +2319,13 @@ export function meldingenBelastinggevallen(p: {
         niveau: metLast ? "fout" : "waarschuwing",
         caseId: c.id,
         vervangAdvies: true,
-        tekst: tekstBlijvendeAfwijking(afwijking),
+        // Eigen factoren behouden mag (PR #126, issue #196), ook bij de kolom
+        // van de oude standaardset: uit de factoren alleen is niet af te
+        // leiden of ze bewust zijn. Alleen niet als geen enkele betrokken
+        // combinatie bevestigd kan worden (de ongewijzigde oude standaardset).
+        ...(afwijkingBevestigbaar(afwijking, p.combinations, new Set(p.loadCases.map((x) => x.id)))
+          ? { bevestigAdvies: true as const } : {}),
+        tekst: tekstBlijvendeAfwijking(afwijking, bijlage),
       });
     }
     if (metLast && heeftBgt && !heeftFactor(c.id, "sls")) {
@@ -1827,9 +2350,15 @@ export interface CombinatieAfwijking {
    * Blijvende gevallen met factoren die bij geen blijvende belasting passen —
    * in een EIGEN combinatie (een oude standaardset is bij het openen al
    * vervangen). NIET weggehaald: die factoren vermenigvuldigen wél een last;
-   * alleen de gebruiker kan kiezen.
+   * alleen de gebruiker kan kiezen. Bevestigde factoren staan er niet in.
    */
   blijvend: BlijvendeAfwijking[];
+  /**
+   * Kan "Behoud eigen factoren" (`bevestigEigenFactoren`) deze melding
+   * oplossen? Ja als er een blijvend geval is zonder de kolom van de oude
+   * standaardset (issue #196); de melding bij het openen toont dan die knop.
+   */
+  bevestigbaar: boolean;
   /** Eén alinea voor de melding bij het openen. */
   samenvatting: string;
 }
@@ -1868,6 +2397,12 @@ function weesLastenTekst(
  * Afwijkende EIGEN combinaties op zich worden hier niet gemeld: die zijn van
  * de gebruiker, en `meldingenBelastinggevallen` controleert ze na elke
  * wijziging.
+ *
+ * De herkomst "projectbestand van vóór september 2026" staat er alleen bij een
+ * echt spoor: de kolom van de oude standaardset, of wees-factoren in hetzelfde
+ * bestand (issue #196). Per factor staat erbij wat de NB geeft, en of de set
+ * een schaal K_FI maal NB.4 volgt — onafhankelijk van de klasse, want die is
+ * bij een bestand zonder klasse een terugval naar het vorige project.
  */
 export function beoordeelCombinatiesBijOpenen(p: {
   combinations: readonly LoadCombination[];
@@ -1875,26 +2410,32 @@ export function beoordeelCombinatiesBijOpenen(p: {
   weesFactoren?: readonly WeesFactor[];
   /** De lasten, zie `openCombinatieStaat`. Weglaten = onbekend. */
   loads?: readonly Pick<Load, "id" | "caseId">[];
+  /** De bijlage van het project, voor de NB-waarden; weglaten = de enige gevulde. */
+  bijlage?: NationaleBijlageCode;
 }): CombinatieAfwijking | null {
+  const bijlage = p.bijlage ?? STANDAARD_BIJLAGE;
   const weesFactoren = [...(p.weesFactoren ?? [])];
-  const blijvend = blijvendeFactorAfwijkingen({ loadCases: p.loadCases, combinations: p.combinations });
+  const blijvend = blijvendeFactorAfwijkingen({ loadCases: p.loadCases, combinations: p.combinations, bijlage });
   if (weesFactoren.length === 0 && blijvend.length === 0) return null;
 
+  const spoor = { wees: weesFactoren.length > 0 };
   const weesIds = [...new Set(weesFactoren.flatMap((w) => w.caseIds))].sort((a, b) => a - b);
-  const samenvatting =
-    blijvend.map((a) => {
-      const { lijst, herkomst } = regelsEnHerkomst(a);
-      return (
-        `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren ` +
-        `die niet bij een blijvende belasting passen: ${lijst}. Een blijvende belasting telt in de ` +
-        "BGT met 1,0 en heeft in elke combinatie dezelfde factor als de andere blijvende gevallen. " +
-        `${herkomst} De berekening gebruikt de getoonde factoren. De app laat deze eigen ` +
-        'combinaties staan: kies "Behoud eigen factoren" als dit uw bedoeling is, corrigeer de ' +
-        'factoren, of kies "Vervang door standaardcombinaties" in Belastinggevallen & combinaties. '
-      );
-    }).join("") +
-    (weesFactoren.length > 0
-      ? `In ${weesFactoren.length} belastingcombinatie(s) ` +
+  const delen: string[] = [];
+  for (const a of blijvend) {
+    const kop = `LET OP: belastinggeval ${a.caseId} ("${a.naam}") is van type blijvend, maar draagt factoren ` +
+      `die niet bij een blijvende belasting passen: ${lijstVan(a)}.`;
+    const regel = "Een blijvende belasting telt in de BGT met 1,0 en heeft in elke combinatie dezelfde factor " +
+      "als de andere blijvende gevallen.";
+    delen.push([kop, regel, herkomstVan(a, spoor)].filter((x) => x !== "").join(" "));
+  }
+  if (blijvend.length > 0) {
+    // Eén keer voor de hele set: de schaal geldt voor alle gevallen samen.
+    delen.push([tekstSchaal(blijvend[0].schaal, bijlage), "De app laat deze eigen combinaties staan.", ADVIES_EIGEN]
+      .filter((x) => x !== "").join(" "));
+  }
+  if (weesFactoren.length > 0) {
+    delen.push(
+      `In ${weesFactoren.length} belastingcombinatie(s) ` +
         `(${weesFactoren.map((w) => `"${w.naam}"`).join(", ")}) stonden factoren voor ` +
         (weesIds.length === 1
           ? `belastinggeval ${weesIds[0]}, dat in dit project niet (meer) bestaat`
@@ -1902,10 +2443,16 @@ export function beoordeelCombinatiesBijOpenen(p: {
         ": een rest van een verwijderd geval. Die factoren zijn bij het openen weggehaald. " +
         weesLastenTekst(weesIds, p.loads) +
         `Een nieuw belastinggeval krijgt een id boven ${weesIds[weesIds.length - 1]} en kan ze niet ` +
-        "meer erven."
-      : "");
-
-  return { weesFactoren, blijvend, samenvatting: samenvatting.trim() };
+        "meer erven.",
+    );
+  }
+  const gevalIds = new Set(p.loadCases.map((x) => x.id));
+  return {
+    weesFactoren,
+    blijvend,
+    bevestigbaar: blijvend.some((a) => afwijkingBevestigbaar(a, p.combinations, gevalIds)),
+    samenvatting: delen.join(" ").trim(),
+  };
 }
 
 /**

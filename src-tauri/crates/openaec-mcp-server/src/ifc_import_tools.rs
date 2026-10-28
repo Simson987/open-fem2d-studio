@@ -20,13 +20,21 @@
 //! een staaf zonder profiel), dan komt het model terug met
 //! `berekening.uitgevoerd = false` en de reden — er wordt niets weggelaten om
 //! toch te rekenen.
+//!
+//! DE TOETSKRACHTEN (issue #199, B9): zoals bij de stalen hal
+//! (`staalhal_tools.rs`). `analyse` geldt alleen voor de resultaten; met
+//! `toetsen` rekent de UGT-toets elke UGT-combinatie P-Δ met scheefstand in
+//! +X, −X, +Y en −Y (de `toetsverzoeken` van de sidecar, dezelfde functies als
+//! de app), met de φ van het projectbestand van de import. Een mislukte
+//! toetsberekening maakt de toets een weigering met de reden per combinatie;
+//! de resultaten blijven staan.
 
 use openaec_mcp_server::sidecar::{self, SidecarOpties};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
-use crate::fem_tools::van_sidecar;
-use crate::staalhal_tools::groepeer_toetsing;
+use crate::fem_tools::{eis_afgedwongen_toetsanalyse, van_sidecar};
+use crate::staalhal_tools::{groepeer_toetsing, lees_rekenverzoeken, reken_alle, toetsuitkomsten, toetsweigering};
 use crate::RpcError;
 
 pub(crate) const TOOL: &str = "open_fem_3d_ifc_importeren";
@@ -50,7 +58,7 @@ pub(crate) fn analysemodel_schema() -> Value {
 pub(crate) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Importeer een IFC4-analysemodel (Structural Analysis View: IfcStructuralAnalysisModel met knopen, staven, vlakken, belastinggevallen en combinaties) als 3D-project van Open FEM Studio — dezelfde import als de knop \"Rekenmodel importeren\" in de app. Geeft het project als JSON (`project`), de lijst analysemodellen in het bestand en een verslag: aantallen, trek-alleen staven, starre schijven, toelichting, waarschuwingen en alles wat niet is ingelezen. Een .ifcfem-projectbestand (te openen in de app of met gui_load_model) wordt ALLEEN geschreven met `uitvoerpad`; het geschreven pad staat dan in `projectbestand.pad` (zonder `uitvoerpad` is `projectbestand` null en staat er niets op schijf). Eenheden uit IfcUnitAssignment worden omgerekend naar m en kN. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belast geval en elke combinatie uit het bestand (zonder combinaties in het bestand: de standaardset volgens NEN-EN 1990), met reactiesommen en evenwicht per geval; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per onderdeel. Kent de 3D-kern een onderdeel nog niet (bijvoorbeeld trek-alleen staven of starre schijven), dan is `berekening.uitgevoerd` false met de reden.",
+        "description": "Importeer een IFC4-analysemodel (Structural Analysis View: IfcStructuralAnalysisModel met knopen, staven, vlakken, belastinggevallen en combinaties) als 3D-project van Open FEM Studio — dezelfde import als de knop \"Rekenmodel importeren\" in de app. Geeft het project als JSON (`project`), de lijst analysemodellen in het bestand en een verslag: aantallen, trek-alleen staven, starre schijven, toelichting, waarschuwingen en alles wat niet is ingelezen. Een .ifcfem-projectbestand (te openen in de app of met gui_load_model) wordt ALLEEN geschreven met `uitvoerpad`; het geschreven pad staat dan in `projectbestand.pad` (zonder `uitvoerpad` is `projectbestand` null en staat er niets op schijf). Eenheden uit IfcUnitAssignment worden omgerekend naar m en kN. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belast geval en elke combinatie uit het bestand (zonder combinaties in het bestand: de standaardset volgens NEN-EN 1990), de RESULTATEN volgens `analyse` en zonder scheefstand, met reactiesommen en evenwicht per geval; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per onderdeel. TOETSKRACHTEN: de UGT-toets rekent ALTIJD zelf tweede orde (P-Delta) met scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en (7)b, 5.3.2), elke UGT-combinatie in +X, −X, +Y en −Y (id + k·1000000), met phi uit de projectinstelling van het projectbestand (vast 1/200), los van `analyse`; de BGT-toetsen lezen de resultaten. Dezelfde functies als de app. `berekening.toetsanalyse` beschrijft de toets (`analysis_type`, `model_analysis_type`, `scheefstand` {phi, noemer, phi_x, phi_y, noemer_x, noemer_y, bron, model_scheefstand_aan, afgedwongen}: phi_x geldt voor ±X en phi_y voor ±Y, elk met m per rij kolommen in die richting (EN 1993-1-1 5.3.2(3)), phi is de grootste, `alpha_cr` per UGT-basiscombinatie met `stabiliteitsmeldingen` ({niveau, tekst}: dezelfde meldingen als de app, informatief over de resultaten; alleen een geweigerde toets is een fout), `meldingen`, per toetsberekening ΣR en evenwicht); draagt het bestand de scheefstand al als imperfectiegeval, dan zegt een melding dat die in de toets dubbel telt. Divergeert de tweede orde van de toets in een UGT-combinatie (alpha_cr ≤ 1), dan is `berekening.toetsing.geweigerd` true met de reden per combinatie en een `suggestie`, zonder UC; de resultaten blijven staan en er wordt nooit teruggevallen op eerste orde. Kent de 3D-kern een onderdeel nog niet (bijvoorbeeld trek-alleen staven of starre schijven), dan is `berekening.uitgevoerd` false met de reden.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -61,11 +69,11 @@ pub(crate) fn tool_definitions() -> Vec<Value> {
                 "reken": { "type": "boolean", "default": false,
                     "description": "Meteen doorrekenen met de 3D-kern (per belast geval en per combinatie)." },
                 "analyse": { "type": "string", "enum": ["linear", "p-delta"], "default": "linear",
-                    "description": "Eerste orde (linear, zoals het projectbestand) of tweede orde (p-delta)." },
+                    "description": "De RESULTATEN: eerste orde (linear, zoals het projectbestand) of tweede orde (p-delta), zonder scheefstand. De toets rekent hoe dan ook P-Delta met scheefstand." },
                 "gevolgklasse": { "type": "string", "enum": ["CC1", "CC2", "CC3"], "default": "CC2",
                     "description": "Gevolgklasse voor de standaardcombinaties, alleen als het bestand zelf geen combinaties heeft." },
                 "toetsen": { "type": "boolean", "default": true,
-                    "description": "Met reken: ook EN 1993 toetsen (staven met een catalogusprofiel van staal)." },
+                    "description": "Met reken: ook EN 1993 toetsen (staven met een catalogusprofiel van staal), met UGT-krachten uit een eigen tweede-ordeberekening (P-Delta) met scheefstand in +X, −X, +Y en −Y (4 berekeningen per UGT-combinatie extra)." },
                 "uitvoerpad": { "type": "string", "minLength": 1,
                     "description": "Absoluut pad voor het .ifcfem-projectbestand dat geschreven moet worden (eindigt op .ifcfem). Dezelfde inhoud als Opslaan in de app, met format, version en savedAt. Een bestaand bestand wordt alleen vervangen met `overschrijven: true`. Weglaten = niets schrijven; alleen JSON." },
                 "overschrijven": { "type": "boolean", "default": false,
@@ -226,6 +234,7 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     let bytes = std::fs::read(&pad)
         .map_err(|e| bestandsfout(format!("Het IFC-bestand `{pad}` kon niet worden gelezen ({e}).")))?;
     let inhoud = stap_tekst(bytes);
+    let toetsen = a.toetsen.unwrap_or(true);
     let reken = json!({
         "analyse": a.analyse.as_deref().unwrap_or("linear"),
         "gevolgklasse": a.gevolgklasse.as_deref().unwrap_or("CC2"),
@@ -237,6 +246,10 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     }
     if a.reken {
         importeren["reken"] = reken.clone();
+        // Alleen het afwijkende `false` gaat mee; zie `staalhal_tools.rs`.
+        if !toetsen {
+            importeren["toetsen"] = json!(false);
+        }
     }
     if a.uitvoerpad.is_some() {
         importeren["projectbestand"] = json!(true);
@@ -269,33 +282,25 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
         }));
         return Ok(Value::Object(uit));
     }
+    if toetsen {
+        eis_afgedwongen_toetsanalyse(&gelezen["toetsanalyse"], "toetsanalyse", "eerste orde zonder scheefstand")?;
+    }
 
     // ── Rekenen: elk verzoek door dezelfde 3D-kern als solve_open_fem_3d ──
-    let verzoeken: Vec<(String, String, open_fem_3d::SolveRequest3D)> = gelezen["rekenverzoeken"]
-        .as_array()
-        .ok_or_else(|| RpcError::tool_exec("de sidecar leverde geen rekenverzoeken"))?
-        .iter()
-        .map(|v| {
-            let sleutel = v["sleutel"].as_str().unwrap_or_default().to_owned();
-            let naam = v["naam"].as_str().unwrap_or_default().to_owned();
-            serde_json::from_value(v["verzoek"].clone())
-                .map(|verzoek| (sleutel.clone(), naam, verzoek))
-                .map_err(|e| RpcError::tool_exec(format!("rekenverzoek {sleutel} past niet op het 3D-contract: {e}")))
-        })
-        .collect::<Result<_, _>>()?;
+    let verzoeken = lees_rekenverzoeken(&gelezen["rekenverzoeken"], "rekenverzoeken")?;
     let aantal_verzoeken = verzoeken.len();
-    let resultaten = tokio::task::spawn_blocking(move || {
-        let mut resultaten = Map::new();
-        for (sleutel, naam, verzoek) in verzoeken {
-            let r = open_fem_3d::solve(verzoek).map_err(|e| format!("{naam} ({sleutel}): {e}"))?;
-            let waarde = serde_json::to_value(r).map_err(|e| format!("{sleutel}: resultaat niet naar JSON: {e}"))?;
-            resultaten.insert(sleutel, waarde);
-        }
-        Ok::<_, String>(resultaten)
-    })
-    .await
-    .map_err(|e| RpcError::tool_exec(format!("3D-kern kon niet worden afgerond: {e}")))?
-    .map_err(|e| rekenfout(format!("De 3D-kern weigerde het geïmporteerde model: {e}")))?;
+    let mut resultaten = Map::new();
+    for (sleutel, naam, uitkomst) in reken_alle(verzoeken).await? {
+        let waarde = uitkomst
+            .map_err(|e| rekenfout(format!("De 3D-kern weigerde het geïmporteerde model: {naam} ({sleutel}): {e}")))?;
+        resultaten.insert(sleutel, waarde);
+    }
+    // De toets: een mislukte berekening is een uitkomst `{ fout }` (zie `staalhal_tools.rs`).
+    let toetsresultaten = if toetsen {
+        Some(toetsuitkomsten(lees_rekenverzoeken(&gelezen["toetsverzoeken"], "toetsverzoeken")?).await?)
+    } else {
+        None
+    };
 
     let mut per_geval_volledig = Vec::new();
     if volledig {
@@ -311,17 +316,17 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     }
 
     // Het gekozen model bij zijn nummer: de tweede import is dan zeker dezelfde.
-    let uitgewerkt = roep(
-        "ifc_uitwerken",
-        json!({
-            "inhoud": inhoud,
-            "analysemodel": gelezen["analysemodel"]["nummer"],
-            "reken": reken,
-            "resultaten": Value::Object(resultaten),
-        }),
-        a.timeout_s,
-    )
-    .await?;
+    let mut uitwerken = json!({
+        "inhoud": inhoud,
+        "analysemodel": gelezen["analysemodel"]["nummer"],
+        "reken": reken,
+        "resultaten": Value::Object(resultaten),
+    });
+    match toetsresultaten {
+        Some(t) => uitwerken["toetsresultaten"] = Value::Object(t),
+        None => uitwerken["toetsen"] = json!(false),
+    }
+    let uitgewerkt = roep("ifc_uitwerken", uitwerken, a.timeout_s).await?;
 
     let mut berekening = Map::new();
     berekening.insert("uitgevoerd".to_owned(), json!(true));
@@ -334,7 +339,14 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     if volledig {
         berekening.insert("per_geval".to_owned(), Value::Array(per_geval_volledig));
     }
-    if a.toetsen.unwrap_or(true) {
+    if toetsen {
+        eis_afgedwongen_toetsanalyse(&uitgewerkt["toetsanalyse"], "toetsanalyse", "eerste orde zonder scheefstand")?;
+        berekening.insert("toetsanalyse".to_owned(), uitgewerkt["toetsanalyse"].clone());
+    }
+    if toetsen && !uitgewerkt["toetsweigering"].is_null() {
+        // Geweigerd (B7): geen toetsing, wel de reden per combinatie. De resultaten blijven staan.
+        berekening.insert("toetsing".to_owned(), toetsweigering(&uitgewerkt["toetsweigering"]));
+    } else if toetsen {
         let invoer: Vec<steel_check::BeamCheckInput> = serde_json::from_value(uitgewerkt["toetsinvoer"].clone())
             .map_err(|e| RpcError::tool_exec(format!("de toetsinvoer van de sidecar past niet op BeamCheckInput: {e}")))?;
         let uitkomsten = tokio::task::spawn_blocking(move || steel_check::check_all_beams(invoer))

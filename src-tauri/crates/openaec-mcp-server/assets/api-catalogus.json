@@ -89,18 +89,23 @@
     },
     {
       "name": "app.view3d.explode",
-      "description": "De 3D-weergave per level uiteentrekken, zonder het rekenmodel te veranderen. 0 mm zet de normale weergave terug.",
+      "description": "De 3D-weergave uiteentrekken, zonder het rekenmodel te veranderen: per level (levels) of per elementsoort (elementTypes: opleggingen 0, kolommen 1×, liggers 2× en platen 3× de afstand omhoog). 0 mm zet de normale weergave terug.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "mode": {
-            "const": "levels"
+            "type": "string",
+            "enum": [
+              "levels",
+              "elementTypes"
+            ],
+            "description": "levels: per level; elementTypes: per elementsoort."
           },
           "amountMm": {
             "type": "number",
             "minimum": 0,
             "maximum": 10000,
-            "description": "Afstand per level in mm (0–10000)."
+            "description": "Afstand per stap (level of elementsoort) in mm (0–10000)."
           }
         },
         "required": [
@@ -3953,11 +3958,53 @@
       "kind": "document"
     },
     {
+      "name": "project.combinations.confirmOwnFactors",
+      "description": "Eigen factoren bewust houden (de knop \"Behoud eigen factoren\"): de huidige factoren van de genoemde eigen combinaties — zonder ids alle eigen combinaties — worden vastgelegd als bewust gekozen, bijvoorbeeld K_FI × NB tabel NB.4 (1,22 / 1,08). Een blijvend geval met zo'n factor geeft dan geen FOUT meer, en een eigen combinatie met dezelfde gevallen telt als vervanger van de standaardcombinatie waarvan ze alleen in bevestigde factoren afwijkt. De bevestiging geldt per factor en alleen voor precies die waarde: een gewijzigde factor verliest haar. Standaardcombinaties, combinaties van de windgenerator en de standaardset van versie 0.3.11 en ouder worden niet bevestigd (met ids: GEWEIGERD). De berekening verandert niet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een combinatie."
+            },
+            "minItems": 1,
+            "description": "Welke combinaties; ontbreekt = alle eigen combinaties."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
       "name": "project.combinations.resetToStandard",
       "description": "Alle combinaties vervangen door de standaardset volgens de norm (gevolgklasse en nationale bijlage van het project).",
       "inputSchema": {
         "type": "object",
         "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.combinations.revokeOwnFactors",
+      "description": "De bevestiging van eigen factoren intrekken (zonder ids: van alle combinaties). Daarna meldt de app een blijvend geval met een factor buiten NB tabel NB.4/NB.5 weer als FOUT. De berekening verandert niet.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Id van een combinatie."
+            },
+            "minItems": 1,
+            "description": "Welke combinaties; ontbreekt = alle eigen combinaties."
+          }
+        },
         "additionalProperties": false
       },
       "kind": "document"
@@ -4179,6 +4226,107 @@
           "discardChanges": {
             "type": "boolean",
             "description": "Alleen in de app: ook als het huidige project niet-opgeslagen wijzigingen heeft; die gaan verloren."
+          }
+        },
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.sway.get",
+      "description": "De instellingen van de initiële scheefstand (EN 1993-1-1 5.3.2): schakelaar voor de resultaten, bron van φ, vaste noemer, handmatige h en m, in 3D m per richting (membersX, membersY) en de torsievarianten van 5.3.2(10). De UGT-toets rekent altijd met scheefstand (issue #199).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "kind": "document"
+    },
+    {
+      "name": "project.sway.set",
+      "description": "De initiële scheefstand (EN 1993-1-1 5.3.2) instellen; alleen de opgegeven velden veranderen. membersX/membersY (alleen 3D, issue #212) overschrijven m per richting (5.3.2(3): een kolom met minder dan 50 % van de gemiddelde verticale kolomkracht mag eruit); null = de gedeelde m of de afleiding uit de kolomrijen. torsion (alleen 3D) zet de torsievarianten van 5.3.2(10) (figuur 5.5) aan: per richting met twee of meer kolomrijen twee varianten extra, wat het aantal P-Δ-berekeningen van de UGT-toets verdubbelt; niet bij vlaklasten op platen.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Scheefstand in de RESULTATEN (de UGT-toets rekent er altijd mee)."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "vast",
+              "en1993",
+              "en1992",
+              "en1995",
+              "ongunstigste"
+            ],
+            "description": "Bron van φ: vast (1/denominator) of een norm."
+          },
+          "denominator": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Vaste noemer x in φ = 1/x."
+          },
+          "heightM": {
+            "oneOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Handmatige h in m."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = afleiden."
+          },
+          "members": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Handmatige m, in X en in Y."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = afleiden."
+          },
+          "membersX": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Alleen 3D: handmatige m_X."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = members of afleiden."
+          },
+          "membersY": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Alleen 3D: handmatige m_Y."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = members of afleiden."
+          },
+          "torsion": {
+            "type": "boolean",
+            "description": "Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10)."
+          },
+          "ownColumnSway": {
+            "type": "boolean",
+            "description": "Alleen 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(φ_model, φ_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte."
           }
         },
         "additionalProperties": false

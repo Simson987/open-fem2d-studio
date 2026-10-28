@@ -12,11 +12,13 @@
 import { ApiFout } from "../register";
 import { documentCommando, nietGevonden } from "../commandoHulp";
 import { leegDocument, model3dVan, type ApiDocument } from "../projectDocument";
-import { getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
+import { geheel, getal, id, jaNee, keuze, lijst, obj, ofNull, tekst } from "../schemaBouw";
+import { SCHEEFSTAND_BRONNEN, type ScheefstandBron } from "../../lib/scheefstandNorm";
 import { combinationsFromFile, combinationsToFile } from "../../io/projectFile";
 import {
-  gevolgklasseBijOpenen, openCombinatieStaat, vervangDoorStandaard, verwijderBelastinggeval, verwijderCombinatie,
-  voegBelastinggevalToe, voegCombinatieToe, wijzigBelastinggeval, wijzigCombinatie, type CombinatieStaat,
+  beoordeelCombinatiesBijOpenen, bevestigEigenFactoren, gevolgklasseBijOpenen, openCombinatieStaat, trekBevestigingIn,
+  vervangDoorStandaard, verwijderBelastinggeval, verwijderCombinatie, voegBelastinggevalToe, voegCombinatieToe,
+  wijzigBelastinggeval, wijzigCombinatie, type CombinatieStaat, type CombinatieVervanging,
 } from "../../lib/combinatieBeheer";
 import { eigenGewichtNaGevalWijziging } from "../../lib/eigenGewicht";
 import { STANDAARD_GEVOLGKLASSE, type Gevolgklasse } from "../../components/fem/solver/normcombinaties";
@@ -38,7 +40,9 @@ interface Uitgangspunten { gevolgklasse?: unknown; nationaleBijlage?: unknown }
  * regel als het openen in de app (en de sidecar). Meldingen van die regel
  * (vervangen standaardset, afwijkingen) komen mee.
  */
-export function combinatieStaatVan(document: ApiDocument): { staat: CombinatieStaat; meldingen: string[] } {
+export function combinatieStaatVan(document: ApiDocument): {
+  staat: CombinatieStaat; meldingen: string[]; vervanging: CombinatieVervanging | null;
+} {
   const combinaties = combinationsFromFile(document.combinations);
   const uitgangspunten = (document.projectInfo as { uitgangspunten?: Uitgangspunten } | undefined)?.uitgangspunten;
   const uitBestand = GEVOLGKLASSEN.includes(uitgangspunten?.gevolgklasse as Gevolgklasse)
@@ -59,7 +63,21 @@ export function combinatieStaatVan(document: ApiDocument): { staat: CombinatieSt
   return {
     staat,
     meldingen: [vervanging?.samenvatting, afwijking?.samenvatting].filter((x): x is string => typeof x === "string" && x !== ""),
+    vervanging,
   };
+}
+
+/**
+ * De meldingen NA een bevestiging of intrekking (issue #196): wat het lezen
+ * verving, en wat er dan nog over blijvende factoren te melden is. De melding
+ * van vóór de handeling terugsturen zou een cliënt zeggen dat er nog iets mis
+ * is terwijl het net is opgelost.
+ */
+function meldingenNa(staat: CombinatieStaat, vervanging: CombinatieVervanging | null): string[] {
+  const afwijking = beoordeelCombinatiesBijOpenen({
+    combinations: staat.combinations, loadCases: staat.loadCases, bijlage: staat.bijlage,
+  });
+  return [vervanging?.samenvatting, afwijking?.samenvatting].filter((x): x is string => typeof x === "string" && x !== "");
 }
 
 export function metCombinatieStaat(document: ApiDocument, staat: CombinatieStaat): ApiDocument {
@@ -292,7 +310,138 @@ const standaardHerstellen = documentCommando<Record<string, never>, unknown>({
   },
 });
 
+/** De combinaties uit `ids`: elk id moet bestaan. */
+function eisCombinaties(staat: CombinatieStaat, ids: readonly number[] | undefined): void {
+  for (const combinationId of ids ?? []) {
+    if (!staat.combinations.some((c) => c.id === combinationId)) throw nietGevonden("Combinatie", combinationId, "ids");
+  }
+}
+
+const combinatieIds = lijst(id("Id van een combinatie."), "Welke combinaties; ontbreekt = alle eigen combinaties.", { minItems: 1 });
+
+const eigenFactorenHouden = documentCommando<{ ids?: number[] }, unknown>({
+  naam: "project.combinations.confirmOwnFactors",
+  beschrijving:
+    "Eigen factoren bewust houden (de knop \"Behoud eigen factoren\"): de huidige factoren van de genoemde eigen " +
+    "combinaties — zonder ids alle eigen combinaties — worden vastgelegd als bewust gekozen, bijvoorbeeld K_FI × " +
+    "NB tabel NB.4 (1,22 / 1,08). Een blijvend geval met zo'n factor geeft dan geen FOUT meer, en een eigen " +
+    "combinatie met dezelfde gevallen telt als vervanger van de standaardcombinatie waarvan ze alleen in bevestigde " +
+    "factoren afwijkt. De bevestiging geldt per factor en alleen voor precies die waarde: een gewijzigde factor " +
+    "verliest haar. Standaardcombinaties, combinaties van de windgenerator en de standaardset van versie 0.3.11 en " +
+    "ouder worden niet bevestigd (met ids: GEWEIGERD). De berekening verandert niet.",
+  invoer: obj({ ids: combinatieIds }),
+  uitvoeren: ({ ids }, document) => {
+    const { staat, vervanging } = combinatieStaatVan(document);
+    eisCombinaties(staat, ids);
+    const uit = bevestigEigenFactoren(staat, ids);
+    if (ids && uit.overgeslagen.length > 0) {
+      throw new ApiFout(
+        "GEWEIGERD",
+        uit.overgeslagen.map((o) => `Combinatie ${o.id} ("${o.naam}") is ${o.reden}.`).join(" "),
+      );
+    }
+    return {
+      uitkomst: {
+        confirmedCombinationIds: uit.bevestigd,
+        skipped: uit.overgeslagen.map((o) => ({ id: o.id, name: o.naam, reason: o.reden })),
+        combinations: combinationsToFile(uit.staat.combinations),
+        meldingen: meldingenNa(uit.staat, vervanging),
+      },
+      document: metCombinatieStaat(document, uit.staat),
+    };
+  },
+});
+
+const eigenFactorenIntrekken = documentCommando<{ ids?: number[] }, unknown>({
+  naam: "project.combinations.revokeOwnFactors",
+  beschrijving:
+    "De bevestiging van eigen factoren intrekken (zonder ids: van alle combinaties). Daarna meldt de app een " +
+    "blijvend geval met een factor buiten NB tabel NB.4/NB.5 weer als FOUT. De berekening verandert niet.",
+  invoer: obj({ ids: combinatieIds }),
+  uitvoeren: ({ ids }, document) => {
+    const { staat, vervanging } = combinatieStaatVan(document);
+    eisCombinaties(staat, ids);
+    const uit = trekBevestigingIn(staat, ids);
+    return {
+      uitkomst: {
+        revokedCombinationIds: uit.ingetrokken,
+        combinations: combinationsToFile(uit.staat.combinations),
+        meldingen: meldingenNa(uit.staat, vervanging),
+      },
+      document: metCombinatieStaat(document, uit.staat),
+    };
+  },
+});
+
+// ── Scheefstand (EN 1993-1-1 5.3.2) ───────────────────────────────────────
+
+/** De scheefstandinstellingen van het document, met de standaarden van de app bij ontbrekende velden. */
+function scheefstandVan(document: ApiDocument) {
+  return {
+    enabled: document.scheefstandEnabled === true,
+    source: (SCHEEFSTAND_BRONNEN as readonly unknown[]).includes(document.scheefstandBron)
+      ? document.scheefstandBron as ScheefstandBron : "vast",
+    denominator: typeof document.scheefstandNoemer === "number" && document.scheefstandNoemer > 0
+      ? document.scheefstandNoemer : 200,
+    heightM: document.scheefstandHoogteM ?? null,
+    members: document.scheefstandAantalElementen ?? null,
+    membersX: document.scheefstandAantalX ?? null,
+    membersY: document.scheefstandAantalY ?? null,
+    torsion: document.scheefstandTorsie === true,
+    ownColumnSway: document.scheefstandEigenKolom === true,
+  };
+}
+
+type ScheefstandInvoer = {
+  enabled?: boolean; source?: ScheefstandBron; denominator?: number; heightM?: number | null;
+  members?: number | null; membersX?: number | null; membersY?: number | null; torsion?: boolean;
+  ownColumnSway?: boolean;
+};
+
+const scheefstandLezen = documentCommando<Record<string, never>, unknown>({
+  naam: "project.sway.get",
+  beschrijving: "De instellingen van de initiële scheefstand (EN 1993-1-1 5.3.2): schakelaar voor de resultaten, bron van φ, vaste noemer, handmatige h en m, in 3D m per richting (membersX, membersY) en de torsievarianten van 5.3.2(10). De UGT-toets rekent altijd met scheefstand (issue #199).",
+  invoer: obj({}),
+  uitvoeren: (_invoer, document) => ({ uitkomst: scheefstandVan(document) }),
+});
+
+const scheefstandZetten = documentCommando<ScheefstandInvoer, unknown>({
+  naam: "project.sway.set",
+  beschrijving: "De initiële scheefstand (EN 1993-1-1 5.3.2) instellen; alleen de opgegeven velden veranderen. " +
+    "membersX/membersY (alleen 3D, issue #212) overschrijven m per richting (5.3.2(3): een kolom met minder dan 50 % " +
+    "van de gemiddelde verticale kolomkracht mag eruit); null = de gedeelde m of de afleiding uit de kolomrijen. " +
+    "torsion (alleen 3D) zet de torsievarianten van 5.3.2(10) (figuur 5.5) aan: per richting met twee of meer kolomrijen " +
+    "twee varianten extra, wat het aantal P-Δ-berekeningen van de UGT-toets verdubbelt; niet bij vlaklasten op platen.",
+  invoer: obj({
+    enabled: jaNee("Scheefstand in de RESULTATEN (de UGT-toets rekent er altijd mee)."),
+    source: keuze([...SCHEEFSTAND_BRONNEN], "Bron van φ: vast (1/denominator) of een norm."),
+    denominator: getal("Vaste noemer x in φ = 1/x.", { exclusiveMinimum: 0 }),
+    heightM: ofNull(getal("Handmatige h in m.", { exclusiveMinimum: 0 }), "null = afleiden."),
+    members: ofNull(geheel("Handmatige m, in X en in Y.", { minimum: 1 }), "null = afleiden."),
+    membersX: ofNull(geheel("Alleen 3D: handmatige m_X.", { minimum: 1 }), "null = members of afleiden."),
+    membersY: ofNull(geheel("Alleen 3D: handmatige m_Y.", { minimum: 1 }), "null = members of afleiden."),
+    torsion: jaNee("Alleen 3D: de torsievarianten van EN 1993-1-1 5.3.2(10)."),
+    ownColumnSway: jaNee("Alleen 3D (issue #199, fase 3): een kolom met een vrije kop krijgt in de UGT-toets max(φ_model, φ_eigen) op haar lasten (h = haar hoogte, m = 1); daarmee geldt voor een stalen losse kolom de systeemlengte."),
+  }),
+  uitvoeren: (invoer, document) => {
+    const nieuw: ApiDocument = {
+      ...document,
+      ...(invoer.enabled !== undefined ? { scheefstandEnabled: invoer.enabled } : {}),
+      ...(invoer.source !== undefined ? { scheefstandBron: invoer.source } : {}),
+      ...(invoer.denominator !== undefined ? { scheefstandNoemer: invoer.denominator } : {}),
+      ...(invoer.heightM !== undefined ? { scheefstandHoogteM: invoer.heightM } : {}),
+      ...(invoer.members !== undefined ? { scheefstandAantalElementen: invoer.members } : {}),
+      ...(invoer.membersX !== undefined ? { scheefstandAantalX: invoer.membersX } : {}),
+      ...(invoer.membersY !== undefined ? { scheefstandAantalY: invoer.membersY } : {}),
+      ...(invoer.torsion !== undefined ? { scheefstandTorsie: invoer.torsion } : {}),
+      ...(invoer.ownColumnSway !== undefined ? { scheefstandEigenKolom: invoer.ownColumnSway } : {}),
+    };
+    return { uitkomst: scheefstandVan(nieuw), document: nieuw };
+  },
+});
+
 export const PROJECT_COMMANDOS = [
   projectLezen, projectNieuw, gevalToevoegen, gevalWijzigen, gevalVerwijderen,
   combinatieToevoegen, combinatieWijzigen, combinatieVerwijderen, standaardHerstellen,
+  eigenFactorenHouden, eigenFactorenIntrekken, scheefstandLezen, scheefstandZetten,
 ];

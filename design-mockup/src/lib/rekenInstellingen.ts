@@ -62,6 +62,12 @@ export interface RekenInstellingen {
   scheefstandBron: ScheefstandBron;
   scheefstandHoogteM: number | null;
   scheefstandAantalElementen: number | null;
+  /** 3D (issue #212): handmatige m_X en m_Y, en de torsievarianten van 5.3.2(10). */
+  scheefstandAantalX: number | null;
+  scheefstandAantalY: number | null;
+  scheefstandTorsie: boolean;
+  /** 3D (issue #199, fase 3): de eigen scheefstand per losse kolom in de UGT-toets. */
+  scheefstandEigenKolom: boolean;
   /**
    * Gevolgklasse, CC1/CC2/CC3: de klasse waarmee de standaardcombinaties
    * rekenen (in de app die uit de projectinstellingen). Volgens NEN-EN 1990 NB
@@ -97,6 +103,10 @@ const VELDEN: Record<keyof RekenInstellingen, true> = {
   scheefstandBron: true,
   scheefstandHoogteM: true,
   scheefstandAantalElementen: true,
+  scheefstandAantalX: true,
+  scheefstandAantalY: true,
+  scheefstandTorsie: true,
+  scheefstandEigenKolom: true,
   gevolgklasse: true,
   nationaleBijlage: true,
 };

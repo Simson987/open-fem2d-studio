@@ -4,8 +4,9 @@
 //! opleggingen die de draaiing vrijlaten, of alleen scharnierende staafeinden
 //! in een knoop: de knoopdraaiing is onbepaald, maar constructief is er niets
 //! mis. De adapter houdt die draaiing vast (module `knoopdraaiing`); de
-//! uitkomsten volgen hier de klassieke handberekeningen. Een echt mechanisme
-//! blijft een fout.
+//! uitkomsten volgen hier de klassieke handberekeningen. Een mechanisme dat
+//! de belasting aanstoot, blijft een fout; een mechanisme dat zij niet
+//! aanstoot, geeft sinds #195 een uitkomst met een melding.
 
 use open_fem_3d::{
     solve, AnalysisKind, Bedding3D, BucklingSummary, EndReleases3D, GlobalDirection3D, Material3D, Member3D,
@@ -348,25 +349,32 @@ fn geknipt(mut s: Member3D, nodes: &mut Vec<Node3D>, delen: usize, volgende: &mu
     s
 }
 
-/// Een mechanisme mét translaties dat de belasting niet aanstoot, blijft een
-/// fout. De regel legt alleen de vrije knoopdraaiingen vast; daarna is de spil
-/// langs zo'n mechanisme afrondingsruis en vindt de kern bij een belasting
-/// loodrecht op het mechanisme een oplossing met een klein residu. De adapter
-/// controleert daarom met een proefbelasting of de stijfheidsmatrix regulier
-/// is. Drie gevallen die zonder die controle stil doorrekenden:
+/// Een mechanisme mét translaties dat de belasting niet aanstoot. De regel
+/// legt alleen de vrije knoopdraaiingen vast; daarna is de stijfheidsmatrix
+/// nog singulier. Tot #195 was dat altijd een fout. Sinds #195 volgt de regel
+/// dezelfde afspraak als elk ander mechanisme (module `mechanisme`): stoot de
+/// belasting het niet aan, dan een uitkomst met een melding die de beweging
+/// noemt; stoot zij het wel aan, dan een fout. Verantwoording per geval:
 /// - een vierstangenmechanisme (grond als vierde stang), 6 × 4 m, met
 ///   scharnierende voeten en staafeinden, de koppen alleen buiten het vlak
 ///   gesteund, in delen geknipt, onder alleen verticale last: het raam kan
-///   zwaaien. Lineair, met knik en tweede orde;
+///   zwaaien, de last werkt loodrecht op die beweging. Lineair, met en zonder
+///   knik: een uitkomst met de melding (de kolommen dragen elk 50 kN, het raam
+///   staat lood). In de tweede orde maken de drukkrachten het zwaaien
+///   instabiel: nog steeds een fout;
 /// - het trek-alleen raam onder alleen een verticale last op de ligger: beide
-///   diagonalen vallen weg en het raam kan zwaaien;
+///   diagonalen vallen weg en het raam kan zwaaien, maar de last stoot dat
+///   niet aan: een uitkomst met beide diagonalen inactief en de melding;
 /// - drie scharnieren op een lijn, in acht delen per staaf, onder alleen een
-///   axiale last.
-/// De opleggingen houden elk deel als geheel vast: een intern mechanisme.
+///   axiale last: de tussenknoop kan dwars bewegen (in Y en in Z), de last
+///   werkt langs de lijn: een uitkomst met de melding; de last verdeelt zich
+///   naar de axiale stijfheden over beide staven.
 #[test]
-fn mechanisme_dat_de_belasting_niet_aanstoot_blijft_een_fout() {
-    let intern = |geval: &str, fout: &str| {
-        assert!(fout.contains("het model is een mechanisme") && fout.contains("intern mechanisme"), "{geval}: {fout}");
+fn mechanisme_dat_de_belasting_niet_aanstoot_geeft_een_melding() {
+    let melding = |geval: &str, uit: &SolveResult3D, beweging: &str| {
+        let tekst = uit.diagnostics.iter().find(|m| m.starts_with("Mechanisme:"))
+            .unwrap_or_else(|| panic!("{geval}: geen melding {:?}", uit.diagnostics));
+        assert!(tekst.contains(beweging), "{geval}: {tekst}");
     };
     let y = [false, true, false, false, false, false];
     for delen in [2, 6] {
@@ -380,7 +388,18 @@ fn mechanisme_dat_de_belasting_niet_aanstoot_blijft_een_fout() {
             r.buckling_modes = knik;
             r.nodal_loads.push(knooplast(1, 3, [0.0, 0.0, -50.0, 0.0, 0.0, 0.0]));
             r.nodal_loads.push(knooplast(2, 4, [0.0, 0.0, -50.0, 0.0, 0.0, 0.0]));
-            intern(&geval, &solve(r).expect_err(&geval));
+            if analyse == AnalysisKind::PDelta {
+                let fout = solve(r).expect_err(&geval);
+                assert!(fout.contains("het model is een mechanisme") && fout.contains("intern mechanisme"), "{geval}: {fout}");
+                assert!(fout.contains("niet positief definiet") && fout.contains("bewegen in X"), "{geval}: {fout}");
+                continue;
+            }
+            let uit = solve(r).unwrap_or_else(|fout| panic!("{geval}: {fout}"));
+            melding(&geval, &uit, "kunnen samen bewegen in X");
+            assert!(vrije_knoopdraaiing(&uit), "{geval}: {:?}", uit.diagnostics);
+            dicht(reactie(&uit, 1).fz, 50.0, 1e-9, 1e-9, "R1");
+            dicht(reactie(&uit, 2).fz, 50.0, 1e-9, 1e-9, "R2");
+            for id in [3, 4] { dicht(verplaatsing(&uit, id).ux, 0.0, 0.0, 1e-14, "geen zwaai"); }
         }
     }
 
@@ -392,9 +411,10 @@ fn mechanisme_dat_de_belasting_niet_aanstoot_blijft_een_fout() {
         vec![scharnier(1), scharnier(2), steun(3, y), steun(4, y)],
     );
     r.member_loads.push(q_lokaal(1, 3, -10.0));
-    let fout = solve(r).expect_err("trek-alleen raam");
-    intern("trek-alleen raam", &fout);
-    assert!(fout.contains("inactief: staaf 5, 6"), "{fout}");
+    let uit = solve(r).unwrap_or_else(|fout| panic!("trek-alleen raam: {fout}"));
+    assert_eq!(uit.inactive_members, vec![5, 6], "{:?}", uit.diagnostics);
+    melding("trek-alleen raam", &uit, "knopen 3 en 4 kunnen samen bewegen in X");
+    dicht(reactie(&uit, 1).fz.abs(), 30.0, 1e-9, 1e-9, "trek-alleen raam: R1");
 
     let mut nodes = vec![knoop(1, 0.0, 0.0, 0.0), knoop(2, 4.0, 0.0, 0.0), knoop(3, 6.0, 0.0, 0.0)];
     let mut volgende = 100;
@@ -406,7 +426,12 @@ fn mechanisme_dat_de_belasting_niet_aanstoot_blijft_een_fout() {
     let rechts = geknipt(rechts, &mut nodes, 8, &mut volgende);
     let mut r = verzoek(nodes, vec![links, rechts], vec![scharnier(1), scharnier(3)]);
     r.nodal_loads.push(knooplast(1, 2, [9.0, 0.0, 0.0, 0.0, 0.0, 0.0]));
-    intern("drie scharnieren, axiale last", &solve(r).expect_err("drie scharnieren"));
+    let uit = solve(r).unwrap_or_else(|fout| panic!("drie scharnieren: {fout}"));
+    // Twee bewegingen: de tussenknoop en de rekenknopen dwars in Y en in Z.
+    melding("drie scharnieren", &uit, "2 vrije bewegingen");
+    melding("drie scharnieren", &uit, "kunnen samen bewegen in Z");
+    melding("drie scharnieren", &uit, "kunnen samen bewegen in Y");
+    dicht(krachten(&uit, 1).n_start_kn.abs() + krachten(&uit, 2).n_start_kn.abs(), 9.0, 1e-9, 1e-9, "drie scharnieren: N");
 }
 
 /// De grens voor de kunstmatige reacties is afrondingsruis. Een wringend

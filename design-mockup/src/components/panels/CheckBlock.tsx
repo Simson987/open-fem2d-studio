@@ -26,8 +26,10 @@ import {
   deelstapRegels,
   deelstappenVan,
   splitsArtikel,
+  toetsKrachtLabel,
   unityCheckLatex,
 } from "../report/checkReportUtils";
+import { useCheckStore } from "../../stores/checkStore";
 
 export type CheckLike = ResistanceCalc | StabilityCalc;
 
@@ -155,6 +157,14 @@ export default function CheckBlock({
   const { t } = useTranslation("check");
   const formulaRef = useRef<HTMLDivElement>(null);
   const ucRef = useRef<HTMLDivElement>(null);
+  // De combinatie bij naam, en waar haar krachten vandaan komen (issue #199):
+  // de UGT-toets rekent altijd tweede orde met scheefstand, ook in −x met een
+  // id dat het model niet kent ("Combinatie 1000003" zei de lezer niets).
+  const toetsCombinaties = useCheckStore((s) => s.toetsCombinaties);
+  const noemer = useCheckStore((s) => s.toets?.analyse.noemer);
+  const combinatieId = check.force_state.combination_id;
+  const combinatieNaam = toetsCombinaties.find((c) => c.id === combinatieId)?.name ?? String(combinatieId);
+  const herkomst = toetsKrachtLabel(t, combinatieId, toetsCombinaties, noemer);
 
   const { latex, ongebruikt } = afleidingLatex(check);
   const { artikel, vergelijking } = splitsArtikel(check.article);
@@ -185,7 +195,10 @@ export default function CheckBlock({
         <div className="check-force-state">{krachtregel}</div>
       ) : (
         <div className="check-force-state">
-          {t("block.combination")} {check.force_state.combination_id}
+          {t("block.combination")} {combinatieNaam}
+          {herkomst !== null && (
+            <span className="check-force-basis" title={t("block.forcesTitle")}> · {herkomst}</span>
+          )}
           &nbsp;&nbsp; x = {nl(check.force_state.position_mm, 0)} mm
           &nbsp;&nbsp; N = {nl(check.force_state.forces.n_ed, 2)} kN
           &nbsp;&nbsp; V<sub>z</sub> = {nl(check.force_state.forces.vz_ed, 2)} kN

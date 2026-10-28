@@ -51,6 +51,39 @@ export function openFem3DLayer(model: Pick<OpenFem3DModel, "layers">, id: number
   return model.layers?.find((layer) => layer.id === (id ?? 0)) ?? OPEN_FEM_3D_DEFAULT_LAYER;
 }
 
+/** Detect an edit that changes an object on a locked layer, including moving it away. */
+export function changedLockedOpenFem3DLayer(before: OpenFem3DModel, after: OpenFem3DModel): OpenFem3DLayer | null {
+  const oldLocked = new Map((before.layers ?? [OPEN_FEM_3D_DEFAULT_LAYER]).filter((layer) => layer.locked)
+    .map((layer) => [layer.id, layer]));
+  const newLocked = new Map((after.layers ?? [OPEN_FEM_3D_DEFAULT_LAYER]).filter((layer) => layer.locked)
+    .map((layer) => [layer.id, layer]));
+  if (!oldLocked.size && !newLocked.size) return null;
+  for (const key of ["nodes", "beams", "plates", "supports", "loads", "memberLoads",
+    "memberPointLoads", "thermalLoads", "surfaceLoads", "loadPanels", "envelopePanels"] as const) {
+    const idKey = key === "supports" ? "nodeId" : "id";
+    const previous = (before[key] ?? []) as Array<{ id?: number; nodeId?: number; layerId?: number }>;
+    const current = (after[key] ?? []) as Array<{ id?: number; nodeId?: number; layerId?: number }>;
+    if (previous === current) continue;
+    const oldById = new Map(previous.map((item) => [item[idKey], item]));
+    const newById = new Map(current.map((item) => [item[idKey], item]));
+    for (const item of previous) {
+      const layer = oldLocked.get(item.layerId ?? 0);
+      if (layer) {
+        const next = newById.get(item[idKey]);
+        if (!next || (next !== item && JSON.stringify(next) !== JSON.stringify(item))) return layer;
+      }
+    }
+    for (const item of current) {
+      const layer = newLocked.get(item.layerId ?? 0);
+      if (layer) {
+        const old = oldById.get(item[idKey]);
+        if (!old || (old !== item && JSON.stringify(old) !== JSON.stringify(item))) return layer;
+      }
+    }
+  }
+  return null;
+}
+
 /** Layer edits are a single model change, hence one undo step. */
 export function updateOpenFem3DLayer(
   model: OpenFem3DModel, id: number, patch: Partial<Pick<OpenFem3DLayer, "name" | "color" | "visible" | "locked">>,

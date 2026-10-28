@@ -1433,7 +1433,7 @@ fn opsomming_met(delen: &[String], voegwoord: &str) -> String {
 
 /// Oplopende nummers, opeenvolgende vanaf `min_reeks` stuks als reeks "7–9";
 /// lange lijsten ingekort.
-fn reeks(ids: &[usize], min_reeks: usize) -> String {
+pub(crate) fn reeks(ids: &[usize], min_reeks: usize) -> String {
     let mut ids = ids.to_vec();
     ids.sort_unstable();
     ids.dedup();
@@ -1640,6 +1640,14 @@ pub(crate) fn mechanismefout(request: &SolveRequest3D, context: &str, toelichtin
         specifiek(&bevindingen),
         crate::MECHANISME_UITLEG,
     )
+}
+
+/// Wat de controle zegt bij een mechanisme dat de adapter zelf vond (#195):
+/// "Opleggingen: …" met de bevindingen in de toestand `los` als de
+/// opleggingen tekortschieten, anders dat het een intern mechanisme is.
+pub(crate) fn bij_mechanisme(request: &SolveRequest3D, los: &Los) -> String {
+    let tekort: Vec<Bevinding> = controleer_bij(request, &HashSet::new(), los).into_iter().filter(|b| b.tekort()).collect();
+    if tekort.is_empty() { INTERN.to_string() } else { format!("Opleggingen: {}", beschrijf(&tekort)) }
 }
 
 /// Een andere rekenfout, aangevuld met de bevindingen als de opleggingen tekortschieten.

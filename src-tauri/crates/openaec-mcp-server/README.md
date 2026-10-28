@@ -39,6 +39,20 @@ app*). In het 2D-model nog niet: `solve_fem_model` en `check_fem_model` nemen
 `gui_build_model` bouwt ze in de draaiende app op. Een 2D-last erbij betekent
 het model opnieuw sturen.
 
+**Eigen factoren, bewust gekozen.** Een blijvend geval met een factor die niet
+uit NEN-EN 1990 NB tabel NB.4/NB.5 komt, staat als `FOUT:` in `warnings` (en
+`validate_fem_model` geeft `ok: false`), met per factor wat de NB geeft en of de
+set een schaal K_FI maal NB.4 volgt (`1,22 ≈ 0,9 × 1,35 (K_FI CC1 op NB.4 6.10a;
+NB.5 CC1 geeft 1,2)`). De herkomst "projectbestand van vóór september 2026"
+staat er alleen bij een echt spoor (de kolom van de oude standaardset, of
+factoren voor gevallen die niet bestaan). Zijn de factoren bewust gekozen, dan
+legt `project_combinations_confirmOwnFactors` (of de knop *Behoud eigen
+factoren* in de app) ze vast in `combinations[].bevestigdeFactoren`; intrekken
+met `project_combinations_revokeOwnFactors`. Een bevestiging geldt per factor en
+alleen voor precies die waarde, rekent niet mee, en staat daarna als vermelding
+in `warnings` in plaats van als `FOUT:`. `load_fem_project` geeft het veld mee;
+geef de combinaties ongewijzigd terug aan `solve_fem_model`.
+
 **De drie wegen.** Elke rekenkern in dit project hoort langs drie wegen
 bereikbaar te zijn: een Tauri-command (de desktop-app), een opdracht in
 `crates/toetsbrug` (de dev-server) en deze MCP-server.
@@ -373,6 +387,51 @@ Decode the base64 and write to disk to view. The PDF renders the OpenAEC
 header/footer, a project information block, and one section per beam with all
 checks, formulae and unity-check ratios.
 
+### `solve_fem_model` en `check_fem_model`: resultaten en toetskrachten
+
+De twee FEM-tools rekenen elk iets anders:
+
+- **`solve_fem_model` levert de resultaten.** Die volgen het analysetype van
+  het model (uit het projectbestand, anders het argument `nonlinear`, anders
+  eerste orde) en de schakelaar `scheefstandEnabled`. `stability` noemt dat
+  analysetype met α_cr per UGT-combinatie; wat α_cr daarover zegt, staat als
+  informatieve regel in `warnings` (geen `FOUT:` meer bij eerste orde met
+  α_cr < 10: de toets rekent nooit eerste orde). Er komt geen toetsinvoer mee:
+  die rustte op deze krachten, terwijl de toets zelf rekent.
+- **`check_fem_model` toetst altijd met tweede orde (P-Δ) en scheefstand.**
+  Elke UGT-combinatie wordt in +x en −x gerekend (de tegengestelde richting
+  onder id + 1 000 000), met φ uit de projectinstelling (`scheefstandBron`,
+  `scheefstandNoemer`, h en m; standaard 1/200), ook als `scheefstandEnabled`
+  uit staat. Met hout in het model geldt minstens φ volgens NEN-EN 1995-1-1
+  (5.1). De staaftoets gebruikt de systeemlengte (NEN-EN 1993-1-1 5.2.2(7)b).
+  De BGT-toetsen (doorbuiging, h/300) lezen de resultaten. Er is geen argument
+  `nonlinear`: meegestuurd wordt het geweigerd.
+
+De uitvoer van `check_fem_model` zegt welke analyse de toets had:
+
+| veld | betekenis |
+|---|---|
+| `stability.analysis_type` | de toetsanalyse: `tweedeOrdeGeometrisch` |
+| `stability.model_analysis_type` | het analysetype van de resultaten |
+| `stability.scheefstand` | `{phi, noemer, bron, model_scheefstand_aan, afgedwongen}`; `afgedwongen` is altijd `true` |
+| `stability.hergebruikt` | `true` als de resultaten al P-Δ met dezelfde φ waren: dan rekent de toets niets extra |
+| `stability.alpha_cr` | α_cr per UGT-basiscombinatie van de toets, informatief (de grens 10 van 5.2.1(3) geldt alleen voor eerste orde) |
+| `analyse_toelichting`, `scheefstand_toelichting` | de tekstblokken voor `generate_steel_report_pdf`, dezelfde teksten als in de app: de resultaten en de toetskrachten elk op een eigen regel |
+| `toetskrachten` | `{noemer, tweede_orde_combinaties, combinaties}`, ongewijzigd door te geven aan `generate_steel_report_pdf`: de krachtregel van elk toetsblok noemt dan "2e orde + scheefstand φ = 1/…" of "resultaten", en de combinatie bij haar naam (`combinaties`: `{id, naam}`, ook de varianten in −x onder id + 1 000 000) |
+| `warnings` | altijd een regel `Toetskrachten: …`, plus de meldingen van de toets (hout met E_mean, vervallen eindtoestandvarianten, een vaste noemer onder de normwaarde) |
+
+Divergeert de tweede orde van de toets in een UGT-combinatie (α_cr ≤ 1), dan
+komt er geen toetsing maar de fout `TOETSING_GEWEIGERD`, met per combinatie de
+reden (`reason`) en α_cr als getal (`alpha_cr`, `null` als hij niet bepaald is)
+in `detail.per_combinatie`, `detail.toets_geweigerd: true` en de toetsanalyse in
+`detail.stability`. Dat is een andere code dan `MODEL_ONOPLOSBAAR`: het model
+zelf rekent wel (`solve_fem_model` geeft de resultaten), alleen de toets heeft
+geen krachten. Er wordt nooit teruggevallen op
+eerste orde. Een projectbestand op `tweedeOrdeFysisch` wordt geweigerd, want de
+fysisch niet-lineaire betonronde draait alleen in de app. Meldt de bundel de
+toetsanalyse niet (een bundel van vóór deze regel), dan geeft de server
+`TOETSING_ONMOGELIJK` in plaats van een toetsing op de resultaatkrachten.
+
 ## Concrete tools (EN 1992-1-1)
 
 Same engine as the Tauri commands `list_concrete_classes`,
@@ -672,10 +731,26 @@ knoop hetzelfde model als in de wizard.
 `staalhal_maken`). Met `reken: true` rekent `open_fem_3d::solve` — dezelfde
 kern als `solve_open_fem_3d` — elk belast geval en elke standaardcombinatie; de
 sidecar (`staalhal_uitwerken`) werkt de resultaten uit en bouwt de
-EN 1993-toetsinvoer met dezelfde functie als de app, en
-`steel_check::check_all_beams` toetst. Er wordt hier niets nagerekend of
-geschat: de UC per groep is het maximum van de `uc_max` die de staaltoets zelf
-geeft.
+EN 1993- en EN 1995-toetsinvoer met dezelfde functies als de app, en
+`steel_check::check_all_beams` en `timber_check::check_all_timber_beams`
+toetsen. Er wordt hier niets nagerekend of geschat: de UC per groep is het
+maximum van de `uc_max` die de toets zelf geeft.
+
+**De toetskrachten (issue #199).** `analyse` geldt alleen voor de resultaten
+(gevallen en combinaties, zonder scheefstand). De UGT-toets rekent altijd zelf
+tweede orde (P-Δ) met scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en (7)b, 5.3.2):
+elke UGT-combinatie in +X, −X, +Y en −Y (id + k·1 000 000), met één knikvorm
+per berekening en φ uit de projectinstelling van het projectbestand (vast
+1/200; met hout minstens φ volgens NEN-EN 1995-1-1 (5.1)). De sidecar levert
+die `toetsverzoeken` in `staalhal_maken` (`design-mockup/src/mcp/toets3dSidecar.ts`,
+dezelfde functies als de knop Berekenen in de app); de server rekent ze met
+dezelfde kern, vier tegelijk, en een mislukte berekening wordt een uitkomst
+`{ fout }`. `staalhal_uitwerken` stelt daarmee de toetskrachten samen: de UGT
+uit de toets, de BGT uit de resultaten. Divergeert de toets in een combinatie
+(α_cr ≤ 1), dan is er geen UC maar een weigering met de reden per combinatie;
+de resultaten blijven staan en er wordt nooit teruggevallen op eerste orde.
+Meldt de bundel de afgedwongen toetsanalyse niet (een oude bundel), dan
+`TOETSING_ONMOGELIJK`.
 
 ### Argumenten
 
@@ -683,9 +758,9 @@ geeft.
 |---|---|---|
 | `hal` | `{}` | de parameters van de hal, zie hieronder |
 | `reken` | `false` | meteen doorrekenen met de 3D-kern |
-| `analyse` | `"linear"` | `"linear"` (eerste orde, zoals het projectbestand) of `"p-delta"` |
+| `analyse` | `"linear"` | de resultaten: `"linear"` (eerste orde, zoals het projectbestand) of `"p-delta"`, zonder scheefstand; de toets rekent hoe dan ook P-Δ met scheefstand |
 | `gevolgklasse` | `"CC2"` | factoren van de standaardcombinaties (NEN-EN 1990 NB) |
-| `toetsen` | `true` | met `reken`: ook EN 1993 toetsen |
+| `toetsen` | `true` | met `reken`: ook EN 1993 en EN 1995 toetsen, met UGT-krachten uit een eigen P-Δ-berekening met scheefstand (4 berekeningen per UGT-combinatie extra) |
 | `stramien` | `true` | stramien en levels van de hal in het projectbestand |
 | `detail` | `"samenvatting"` | `"volledig"`: ook alle reacties en verplaatsingen per geval en de toetsuitkomst per staaf |
 | `timeout_s` | — | tijdslimiet per sidecar-aanroep |
@@ -743,10 +818,21 @@ ontbrekende komen erbij).
 - met `reken`: `berekening.gevallen[]` en `berekening.combinaties[]` met
   `reactiesomKn`, `belastingsomKn`, `evenwicht` (kern én onafhankelijke
   krachten- en momentensom), `maxVerplaatsingMm`, `maxGootverplaatsingMm` en
-  (balkrooster) `paalreacties`; `grenzen_ter_vergelijking` (L/250, h/150) en —
-  met `toetsen` — `berekening.toetsing` met `uc_max`, de maatgevende staaf,
-  `per_groep`, `status_telling`, `niet_getoetst` (beton, met reden) en de
-  `notities` van de toetsinvoer.
+  (balkrooster) `paalreacties`; `grenzen_ter_vergelijking` (L/250, h/150);
+- met `reken` en `toetsen`: `berekening.toetsanalyse` — `analysis_type` (de
+  toetsanalyse, altijd tweede orde), `model_analysis_type` (de resultaten),
+  `hergebruikt`, `scheefstand` {`phi`, `noemer`, `bron`,
+  `model_scheefstand_aan`, `afgedwongen`}, `richtingen`,
+  `aantal_berekeningen`, `toelichting`, `meldingen` (bijv. hout met E_mean en
+  2·L), `alpha_cr` per UGT-basiscombinatie (informatief: de grens 10 van
+  5.2.1(3) geldt alleen voor eerste orde), `geweigerd` en per toetsberekening
+  `berekeningen[]` met `reactiesomKn`, `evenwicht` en `alphaCr` (of `fout`);
+  en `berekening.toetsing` met `uc_max`, de maatgevende staaf, `per_groep`,
+  `status_telling`, `niet_getoetst` (beton, met reden) en de `notities` van de
+  toetsinvoer (hout in `hout_toetsing`). Is de toets geweigerd, dan is
+  `berekening.toetsing` `{ geweigerd: true, uc_max: null, reden,
+  per_combinatie[] {combination_id, name, reason}, suggestie }`, zonder
+  staal- en houttoetsing.
 
 ### Voorbeeld
 
@@ -764,21 +850,33 @@ ontbrekende komen erbij).
     "reken": true } }
 ```
 
-Verkort antwoord van de voorbeeldhal (`{ "reken": true }`, release-build):
+Verkort antwoord van de voorbeeldhal (`{ "reken": true }`, release-build, ca. 7 s):
 
 ```json
 { "samenvatting": { "aantallen": { "knopen": 165, "staven": 340, "opleggingen": 22, "palen": 0 } },
   "berekening": { "aantal_berekeningen": 19,
     "gevallen": [ { "id": 1, "naam": "Permanent (G)", "reactiesomKn": { "fx": 0, "fy": 0, "fz": 540 },
                     "evenwicht": { "kern": true, "onafhankelijk": true }, "maxVerplaatsingMm": 31.9, "maxGootverplaatsingMm": 2.4 } ],
-    "toetsing": { "uc_max": 1.77, "maatgevend": { "groep": "wandverband", "profiel": "CHS 88.9x4" },
-                  "per_groep": { "kolom": { "uc_max": 0.78 }, "spantligger": { "uc_max": 0.68 }, "gording": { "uc_max": 1.59 } } } } }
+    "toetsanalyse": { "analysis_type": "tweedeOrdeGeometrisch", "model_analysis_type": "linear",
+                      "scheefstand": { "phi": 0.005, "noemer": 200, "bron": "vast", "model_scheefstand_aan": false, "afgedwongen": true },
+                      "aantal_berekeningen": 28, "geweigerd": true },
+    "toetsing": { "geweigerd": true, "uc_max": null,
+                  "reden": "De toetskrachten zijn niet te bepalen: de tweede-ordeberekening (P-Δ) met scheefstand φ = 1/200 in +X, −X, +Y en −Y faalt in 8 van de 28 toetsberekeningen. …",
+                  "per_combinatie": [ { "combination_id": 4, "name": "UGT 6.10b — Wind langs (W) leidend (scheefstand +X)",
+                                        "reason": "P-Δ: tweede-orde 3D-berekening wijst op instabiliteit: … alpha_cr=0.655770 … staaf 340 (CHS 88.9x4, L = 10,000 m): N = -30,76 kN, N_cr = 19,97 kN …" } ],
+                  "suggestie": "Gedrukte verbanden knikken zelf (wandverband 310, 312, 338, 340), waardoor de tweede-ordeberekening van de toets instabiel is: maak de verbanden trek-alleen (`hal.verbanden.trekAlleen: true`) of kies zwaardere verbanden (`hal.profielen.verband`, nu CHS 88.9x4 S235)." } } }
 ```
 
-De voorbeeldhal is een rekenvoorbeeld, geen ontwerp: met de veilige
-aannames van de 3D-toetsinvoer (kniklengte = staaflengte, geen kipsteunen)
-en beide diagonalen van de kruisen meewerkend halen de gordingen en de
-wanddiagonalen de toets niet. Kies zwaardere profielen of meer verbandvakken.
+De voorbeeldhal is een rekenvoorbeeld, geen ontwerp. Onder "Wind langs"
+krijgen de wandverbanden CHS 88,9×4 van 10 m meer druk dan hun eigen
+knikkracht (19,97 kN), dus de tweede orde van de toets is daar instabiel
+(α_cr 0,66–0,75) en de toets wordt geweigerd. Met trek-alleen verbanden
+(`"hal": { "verbanden": { "trekAlleen": true } }`, ca. 23 s) is elke
+toetsberekening stabiel (α_cr 1,15–5,24) en geeft de toets een UC per groep:
+kolom 0,79, spantligger 0,69, wandverband 0,21, en de gordingen IPE 160
+halen de toets niet (2,04, (6.62) met de veilige aannames van de
+3D-toetsinvoer: kniklengte = staaflengte, geen kipsteunen). Kies zwaardere
+profielen of meer verbandvakken.
 
 **In de draaiende app** (bedieningskanaal: Instellingen → AI-assistent (MCP), of `OPENAEC_GUI_CONTROL=1`):
 `gui_build_3d_steel_hall { "hal": { … } }` — paginaopdracht `staalhal_maken`.
@@ -809,6 +907,14 @@ onderdeel nog niet (trek-alleen staven, starre schijven) of mist een staaf een
 profiel, dan is `berekening.uitgevoerd` false met de reden; er wordt niets
 weggelaten om toch te rekenen.
 
+**De toetskrachten (issue #199)** zoals bij de stalen hal: `analyse` geldt
+alleen voor de resultaten, de UGT-toets rekent altijd zelf P-Δ met scheefstand
+in +X, −X, +Y en −Y met de φ van het projectbestand van de import (vast
+1/200), en een divergerende toets wordt geweigerd met de reden per combinatie.
+Draagt het bestand de scheefstand al als imperfectiegeval
+(`SYSTEM_IMPERFECTION`), dan meldt `toetsanalyse.meldingen` dat die in een
+UGT-combinatie met zo'n geval dubbel telt.
+
 ### Argumenten
 
 | veld | standaard | betekenis |
@@ -816,9 +922,9 @@ weggelaten om toch te rekenen.
 | `pad` | — (verplicht) | absoluut pad naar het `.ifc`-bestand (IFC4, STEP-vorm) |
 | `analysemodel` | — | naam (hoofdletterongevoelig) of volgnummer vanaf 1; verplicht als het bestand meer dan één analysemodel heeft, anders komt er een fout met de lijst |
 | `reken` | `false` | meteen doorrekenen met de 3D-kern |
-| `analyse` | `"linear"` | `"linear"` of `"p-delta"` |
+| `analyse` | `"linear"` | de resultaten: `"linear"` of `"p-delta"`, zonder scheefstand; de toets rekent hoe dan ook P-Δ met scheefstand |
 | `gevolgklasse` | `"CC2"` | alleen voor de standaardset, als het bestand geen combinaties heeft |
-| `toetsen` | `true` | met `reken`: ook EN 1993 toetsen |
+| `toetsen` | `true` | met `reken`: ook EN 1993 toetsen, met UGT-krachten uit een eigen P-Δ-berekening met scheefstand (4 berekeningen per UGT-combinatie extra) |
 | `detail` | `"samenvatting"` | `"volledig"`: ook reacties en verplaatsingen per geval en de toetsuitkomst per staaf |
 | `timeout_s` | — | tijdslimiet per sidecar-aanroep |
 
@@ -836,7 +942,7 @@ weggelaten om toch te rekenen.
 - `project` — de inhoud van een projectbestand (`.ifcfem`), te openen in de app of met `gui_load_model`;
 - `modellen` — de analysemodellen in het bestand (nummer, naam, beschrijving, aantallen) en `analysemodel` — het gekozen model;
 - `verslag` — `aantallen`, `trekAlleen`, `schijven`, en in Nederlandse zinnen `toelichting`, `waarschuwingen` (benaderd of aangenomen) en `nietOndersteund` (niet ingelezen), gelijke meldingen samen met een telling;
-- met `reken`: `berekening` met `uitgevoerd` (en anders `reden`), `gevallen[]` en `combinaties[]` met `reactiesomKn`, `belastingsomKn`, `evenwicht` en `maxVerplaatsingMm`, en met `toetsen` de `toetsing` per onderdeel (zoals bij de stalen hal).
+- met `reken`: `berekening` met `uitgevoerd` (en anders `reden`), `gevallen[]` en `combinaties[]` met `reactiesomKn`, `belastingsomKn`, `evenwicht` en `maxVerplaatsingMm`, en met `toetsen` de `toetsanalyse` en de `toetsing` per onderdeel, of de weigering (zoals bij de stalen hal).
 
 ### Voorbeeld
 
@@ -935,16 +1041,18 @@ cargo test -p openaec-mcp-server
 | test | what it pins down |
 |---|---|
 | `stdio_roundtrip.rs` | the full handshake against the real binary: `initialize` → `notifications/initialized` → `tools/list` → `tools/call`, and the complete tool roster |
-| `schema_strikt.rs` | the input schemas of `check_steel_beam`, `check_concrete_beam` and `concrete_mn_kappa` (and of the timber, steel-hall, IFC-import and `gui_start_app` tools) are complete and strict; a typo in a field name is refused, not silently defaulted |
+| `schema_strikt.rs` | the input schemas of `check_steel_beam`, `check_concrete_beam` and `concrete_mn_kappa` (and of the timber, steel-hall, IFC-import and `gui_start_app` tools) are complete and strict; a typo in a field name is refused, not silently defaulted; the `combinations` of `solve_fem_model` and `check_fem_model` know `bevestigdeFactoren` and nothing else besides the five combination fields |
+| `eigen_factoren_mcp.rs` | deliberately chosen custom factors (issue #196) end to end: reference project P01 (K_FI = 0.9 × NB.4) through `validate_fem_model` with `project_path` is `ok: false` with the scale in the error and no "before September 2026" origin; the same file with `bevestigdeFactoren` is `ok: true` with the confirmed factors as a note; `load_fem_project` returns the confirmation and `solve_fem_model` with exactly those combinations has no `FOUT:` and the same results as without it (needs Node ≥ 20) |
 | `drie_wegen_beton.rs` | **the three ways give the same answer**: the same JSON through the Tauri command's engine call, through `toetsbrug::behandel` and through the real MCP binary, compared field by field, plus anchor values so all three cannot drift together |
 | `drie_wegen_dekkingslijn.rs` | the same for `concrete_dekkingslijn` (§9.2.1.3 / figure 9.2 and §6.2): one member through all three ways, plus anchor values that follow from the norm — two bar bundles for a 3/5/3 curtailment, two points on every zone boundary (left and right of the jump), and the full tensile force jumping by 5/3 there. Also pins that an axial force without a supplied `z_mm` fails on ALL three ways with 6.2.3(1) in the reason, and that a typo in a field name is refused |
 | `beton_in_check_fem_model.rs` | a concrete beam in a mixed model is reported in `skipped_beams` instead of vanishing; `beam_ids` is respected; a model carrying a reinforcement cage is refused by the field gate |
 | `hout_in_check_fem_model.rs` | the same for a timber beam, including `beam_ids: [timber beam]`; and catalogue profiles outside the old prefix list (INP, DIN, L) are checked, not dropped |
 | `fem_golden.rs`, `sidecar.rs`, `fout_paden.rs` | the FEM chain: golden values, the Node sidecar, and the error paths |
-| `ifc_import_mcp.rs` | `open_fem_3d_ifc_importeren` end to end on the synthetic files of `docs/verificatie/ifc-analyse`: without a model choice the error lists both analysis models; the canopy model is imported, solved and checked with ΣR per load case equal to hand values and equilibrium everywhere; the hall comes back with its report and an honest calculation status; the mm/kN file gives exactly the same model; a missing file is reported (needs Node ≥ 20) |
+| `toets_tweede_orde_mcp.rs` | `check_fem_model` always checks with second-order (P-Δ) forces with sway imperfection: a first-order model of a free-standing column gets the P-Δ moment (between the hand values 34,8 and 43,5 kNm) in +x and −x, `stability` names the check analysis, a P-Δ project file with the same φ is reused, `nonlinear` is refused, `solve_fem_model` no longer returns `steel_check_inputs`, a diverging check gives `TOETSING_GEWEIGERD` with the reason and a numeric `alpha_cr` per combination while the results still solve, and a bundle that does not report the check analysis gives `TOETSING_ONMOGELIJK` (needs Node ≥ 20) |
+| `ifc_import_mcp.rs` | `open_fem_3d_ifc_importeren` end to end on the synthetic files of `docs/verificatie/ifc-analyse`: without a model choice the error lists both analysis models; the canopy model is imported, solved and checked with ΣR per load case equal to hand values and equilibrium everywhere, its check runs P-Δ with sway imperfection φ = 1/200 in ±X/±Y (issue #199) with ΣR per direction equal to the hand value ∓φ·ΣR_z; the hall comes back with its report and an honest calculation status; the mm/kN file gives exactly the same model; a missing file is reported (needs Node ≥ 20) |
 | `api_tools.rs` | the tools generated from the app's command catalogue: a chain of commands on a temporary project file (headless, through the Node sidecar), `save: false`, and the error codes — `NIET_GEVONDEN`, `INVOER_ONGELDIG`, `BESTAND_ONLEESBAAR`, and `ARGUMENT_ONGELDIG` for another file type or `project` on an app command (needs Node ≥ 20) |
 | `extensie_import.rs` | `project_import` through the actual MCP binary and Node sidecar: the example extension produces an `.ifcfem` file; an unknown type is refused without overwriting it (needs Node ≥ 20) |
-| `staalhal_mcp.rs` | `open_fem_3d_staalhal_maken` end to end: the default hall equals the example project file node for node, every schema default equals the generator's, ΣR per load case and Σ pile reactions match hand values, equilibrium in every case and combination, a UC for every steel member, and parameter errors come back with code and field (needs Node ≥ 20) |
+| `staalhal_mcp.rs` | `open_fem_3d_staalhal_maken` end to end: the default hall equals the example project file node for node, every schema default equals the generator's, ΣR per load case and Σ pile reactions match hand values, equilibrium in every case and combination; the member check always runs P-Δ with sway imperfection φ = 1/200 in ±X/±Y (issue #199, ΣR(+) − ΣR(−) = −2·φ·ΣR_z per pair), the default hall's check is refused (its wall bracing buckles under wind along, 8 of 28 check analyses) with the reason per combination and the suggestion tension-only or heavier bracing, with tension-only bracing every steel member gets a UC, a bundle that does not report the enforced check analysis gives TOETSING_ONMOGELIJK, and parameter errors come back with code and field (needs Node ≥ 20) |
 | `gui_start_app_pijpen.rs` | the app that `gui_start_app` starts does not hold the client's pipes open: a stand-in app (a copy of the test binary that keeps running) is started through the real server with piped stdio, the server stops on a closed stdin, and stdout and stderr must close within 2 s — on Windows the server clears the inherit flag of its own std handles before it starts the app |
 | `gui_bereikbaarheid.rs` | what a client hears when the app is not reachable — no control file, a closed port, a control file from an earlier session (token refused) — on a `gui_*` tool and on an app command: the text says *Instellingen → AI-assistent (MCP)*, `gui_start_app` and `OPENAEC_GUI_CONTROL=1`, with error code `APP_NIET_BEREIKBAAR`; and `gui_start_app` without an app executable starts nothing (`APP_NIET_GEVONDEN`). Runs with its own `OPENAEC_GUI_CONTROL_FILE` and a non-existent `OPENAEC_APP` |
 
@@ -1065,12 +1173,12 @@ started with `OPENAEC_EEN_INSTANTIE=1`.
 | `gui_load_model {path}` | loads a `.femp`/`.ifcfem`/`.ifcfem2d` (read by the app process) |
 | `gui_build_model {...}` | builds nodes/beams/supports/loads through the store actions |
 | `gui_build_3d_model {...}` | builds a 3D frame in metres, with supports, nodal loads, optional member profiles, tension-only members, rigid diaphragms and optional levels (nodes and plates linked to a level) |
-| `gui_configure_3d_view {...}` | sets the 3D camera, visibility, how plates are drawn (`plateDisplay`: `volume`, `surface` or `mesh`), the size of nodes and supports (`nodeSizePercent`, `supportSizePercent`: 25–400 %), profile volumes, the structural grid (X/Y grid axes and levels; linked nodes follow a level) and the section box (`section_box`: `enabled`, with `min_m`/`max_m` as `{x, y, z}` in metres or `fit`: `model`/`selection`; only what lies inside the box is drawn, selectable and snappable) |
+| `gui_configure_3d_view {...}` | sets the 3D camera, visibility, how plates are drawn (`plateDisplay`: `volume`, `surface` or `mesh`), the size of nodes and supports (`nodeSizePercent`, `supportSizePercent`: 25–400 %), profile volumes, the structural grid (X/Y grid axes and levels; linked nodes follow a level) and the section box (`section_box`: `enabled`, with `min_m`/`max_m` as `{x, y, z}` in metres or `fit`: `model`/`selection`; only what lies inside the box is drawn, selectable and snappable) and the exploded view (`explode`: `mode` `levels` or `elementTypes`, `amount_mm` 0–10000 per step; `elementTypes` puts supports at 0, columns at 1×, beams at 2× and plates at 3× the distance; display only, editing in the app is blocked while it is on) |
 | `gui_select_member {id}` | selects a member as if clicked |
 | `gui_set_cage {beam_id, cage}` | sets `checkConfig.betonKorf` (same `ReinforcementCage` as `check_concrete_beam`) |
 | `gui_set_analysis {analysis_type}` | `eersteOrde` / `tweedeOrdeGeometrisch` / `tweedeOrdeFysisch` |
-| `gui_solve` | the full Bereken run (solver, non-linear concrete round when asked, code checks); returns when all is done, with per-combination extremes |
-| `gui_run_checks` | runs the code checks and waits for the check store |
+| `gui_solve` | the full Bereken run (solver, non-linear concrete round when asked, code checks); returns when all is done, with per-combination extremes and the check analysis (`toetsanalyse`: ULS check forces always second order with sway imperfection, in 2D ±x, in 3D ±X/±Y). An app that does not report `toetsanalyse` (an older version) gives `TOETSING_ONMOGELIJK` |
+| `gui_run_checks` | runs the code checks and waits for the check store; `toetsanalyse`, `toetsmeldingen` (and in 3D `toetsAlphaCr`) describe the check forces, with the same `TOETSING_ONMOGELIJK` guard |
 | `gui_open_curtailment {beam_id}` | opens the dekkingslijn panel and returns `{verzoek, antwoord}` — replay `verzoek` through `concrete_dekkingslijn` to verify the GUI against the engine |
 | `gui_set_view {view}` | `default`, `check`, `report`, `insights`, `ifc` |
 | `gui_detach_report` | opens the live report in its own window; returns its label |

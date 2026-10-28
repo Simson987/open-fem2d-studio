@@ -154,6 +154,17 @@ export function voorgesteldeProjectnaam(pad: string | null | undefined): string 
  *      `combinatiesVervangenBijOpenen` — de tekst van die melding, zodat het
  *      rapport ook in een latere sessie vermeldt dat de combinaties bij het
  *      openen zijn vervangen. Puur bijschrift: er rekent niets mee.
+ *      Eveneens optioneel binnen v2 (oktober 2026, issue #196, geen
+ *      versie-bump): `combinations[].bevestigdeFactoren` — de eigen factoren
+ *      die de gebruiker met "Behoud eigen factoren" bewust heeft bevestigd
+ *      ({ caseId: factor }). Een bevestiging, geen rekenwaarde: de factoren
+ *      zelf staan ongewijzigd in `factors`, en de berekening hangt alleen
+ *      daarvan af. Een oudere uitgave laat het veld daarom stil vallen zonder
+ *      dat er één getal verschuift; zij meldt de afwijkende factor dan weer als
+ *      FOUT (zoals vóór dit veld), en na opslaan in die uitgave is de
+ *      bevestiging weg en vraagt deze uitgave opnieuw om haar — de veilige
+ *      kant. Daarom geen hogere versie: die zou een oudere uitgave een bestand
+ *      laten weigeren dat zij precies goed rekent.
  *      Eveneens optioneel binnen v2 (september 2026, geen versie-bump):
  *      `Beam.profileEnd` — het eindprofiel van een verlopende staaf; `profile`
  *      is dan het beginprofiel. Reist automatisch mee met de beams-array.
@@ -295,6 +306,11 @@ export interface ProjectFileCombination {
   factors: Record<string, number>;
   /** Kenmerk van een standaardcombinatie; ontbreekt bij een eigen combinatie. */
   standaard?: { sleutel: string; soort: string; gevolgklasse: string; bijlage?: string };
+  /**
+   * Bewust gekozen eigen factoren, { caseId: factor } (issue #196); zie
+   * `LoadCombination.bevestigdeFactoren`. Ontbreekt = niets bevestigd.
+   */
+  bevestigdeFactoren?: Record<string, number>;
 }
 
 const SOORTEN: readonly CombinatieSoort[] = ["6.10a", "6.10b", "6.14b", "6.15b", "6.16b"];
@@ -308,7 +324,26 @@ export function combinationsToFile(combos: LoadCombination[]): ProjectFileCombin
     formula: c.formula,
     factors: Object.fromEntries([...c.factors].map(([caseId, f]) => [String(caseId), f])),
     ...(c.standaard ? { standaard: { ...c.standaard } } : {}),
+    ...(c.bevestigdeFactoren && Object.keys(c.bevestigdeFactoren).length > 0
+      ? { bevestigdeFactoren: Object.fromEntries(Object.entries(c.bevestigdeFactoren)) }
+      : {}),
   }));
+}
+
+/**
+ * De bevestiging uit het bestand, of `undefined` als er geen (bruikbare) is.
+ * Een onleesbare regel valt weg in plaats van het bestand te weigeren: een
+ * bevestiging is geen rekenwaarde, en zonder haar meldt de app de afwijkende
+ * factor gewoon weer als FOUT — de veilige kant, en niet stil.
+ */
+function bevestigingUitBestand(raw: unknown): Record<number, number> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const uit: Record<number, number> = {};
+  for (const [sleutel, f] of Object.entries(raw as Record<string, unknown>)) {
+    const id = Number(sleutel);
+    if (Number.isInteger(id) && typeof f === "number" && Number.isFinite(f) && f !== 0) uit[id] = f;
+  }
+  return Object.keys(uit).length > 0 ? uit : undefined;
 }
 
 /**
@@ -404,6 +439,7 @@ export function combinationsFromFile(
       }
       factors.set(Number(caseId), getal);
     }
+    const bevestigdeFactoren = bevestigingUitBestand(c.bevestigdeFactoren);
     return {
       id: c.id,
       name: c.name,
@@ -411,6 +447,7 @@ export function combinationsFromFile(
       formula: c.formula ?? "",
       factors,
       ...(standaard ? { standaard } : {}),
+      ...(bevestigdeFactoren ? { bevestigdeFactoren } : {}),
     };
   });
   if (redenen.length > 0) throw new ProjectBestandFout(redenen);
@@ -509,6 +546,19 @@ export interface ProjectFile {
   scheefstandHoogteM?: number | null;
   /** Handmatig aantal verticale elementen m voor α_m (v2, optioneel — ontbreekt = afleiden). */
   scheefstandAantalElementen?: number | null;
+  /**
+   * Alleen 3D (issue #212, optioneel — geen versie-bump): handmatige m_X en
+   * m_Y per richting (ontbreekt/null = `scheefstandAantalElementen`, anders
+   * afleiden) en de torsievarianten van EN 1993-1-1 5.3.2(10) (ontbreekt = uit).
+   */
+  scheefstandAantalX?: number | null;
+  scheefstandAantalY?: number | null;
+  scheefstandTorsie?: boolean;
+  /**
+   * Alleen 3D (issue #199, fase 3, optioneel): de eigen scheefstand per losse
+   * kolom in de UGT-toets. Ontbreekt = uit.
+   */
+  scheefstandEigenKolom?: boolean;
   /**
    * Eigen doorsneden uit de profieleditor waarnaar staven verwijzen
    * (`EIGEN:<naam>`); v2, optioneel — geen versie-bump. Ontbreekt het veld
@@ -629,6 +679,7 @@ const BEKENDE_TOPVELDEN: readonly string[] = [
   "combinatiesVervangenBijOpenen", "structuralGrid",
   "scheefstandEnabled", "scheefstandNoemer", "scheefstandRichting",
   "scheefstandBron", "scheefstandHoogteM", "scheefstandAantalElementen",
+  "scheefstandAantalX", "scheefstandAantalY", "scheefstandTorsie", "scheefstandEigenKolom",
   "eigenDoorsneden", "eigenCltOpbouwen", "projectInfo", "windInstellingen",
   "rapport", "modelDimension", "model3d", "openFem3dViewSets", "openFem3dStandaardViewsUitRapport",
   // Oude veldnaam van de 3D-weergaven (ontwikkelspoor `frame3d`); bij openen

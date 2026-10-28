@@ -166,6 +166,18 @@ interface WireCheckState {
   plateSkipped?: PlaatSkip[];
   /** De kerninvoer hoort bij dit snapshot; oudere vensters laten haar weg. */
   lastRunInputs?: ReturnType<typeof useCheckStore.getState>["lastRunInputs"];
+  /**
+   * Id en naam van de combinaties waarop getoetst is, met de toetsvarianten in
+   * −x (issue #199). Ontbreekt in snapshots van een ouder hoofdvenster; dan
+   * leeg, en noemt het rapport alleen de combinaties van het model.
+   */
+  toetsCombinaties?: ReturnType<typeof useCheckStore.getState>["toetsCombinaties"];
+  /**
+   * De toetsanalyse van de ronde (issue #199): tweede orde met scheefstand,
+   * de toets-φ, α_cr en de meldingen. Ontbreekt in snapshots van een ouder
+   * hoofdvenster; dan null, en noemt het rapport de toetsanalyse niet.
+   */
+  toets?: ReturnType<typeof useCheckStore.getState>["toets"];
   lastRunAt: number | null;
   /**
    * De fout van de laatste toetsronde, of null. Reist mee zodat het losse
@@ -507,6 +519,8 @@ export function ReportWindowSync({ data }: { data: ReportData }): null {
         plateResults: check.plateResults,
         plateSkipped: check.plateSkipped,
         lastRunInputs: check.lastRunInputs,
+        toetsCombinaties: check.toetsCombinaties,
+        toets: check.toets,
         lastRunAt: check.lastRunAt,
         error: check.error,
       },
@@ -655,6 +669,8 @@ export function useDetachedReportSync(): ReportData | null {
           plateResults: msg.check.plateResults ?? [],
           plateSkipped: msg.check.plateSkipped ?? [],
           lastRunInputs: msg.check.lastRunInputs ?? null,
+          toetsCombinaties: msg.check.toetsCombinaties ?? [],
+          toets: msg.check.toets ?? null,
           lastRunAt: msg.check.lastRunAt,
           isRunning: false,
           // De fout van het hoofdvenster, niet stil `null`: een mislukte ronde

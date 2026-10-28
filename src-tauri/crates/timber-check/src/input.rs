@@ -5,7 +5,7 @@ use nen_en_1993_1_1_ltb::LateralBracing;
 use nen_en_1995_1_1::stability::{LtbLoadCase, LtbLoadPosition};
 use nen_en_1995_1_1::{LoadDurationClass, ServiceClass};
 use serde::{Deserialize, Serialize};
-use steel_check::{CustomSection, ZijdelingseKnikInAnalyse};
+use steel_check::{CustomSection, Staafeinden, ZijdelingseKnikInAnalyse};
 use ts_rs::TS;
 
 use crate::belastingduur::CombinationLoadDuration;
@@ -137,6 +137,29 @@ pub struct TimberBeamCheckInput {
     /// een as uit [`Self::zijdelingse_knik_in_analyse`] (dan L).
     #[serde(default)]
     pub is_cantilever: bool,
+    /// Wat er aan de twee staafeinden zit, in de referentierichting (begin =
+    /// x = 0) — hetzelfde type als bij staal ([`Staafeinden`]).
+    ///
+    /// WAAROM. Een staaf die zonder oplegging in het verlengde doorloopt in een
+    /// staaf met een andere doorsnede of een ander materiaal (een getrapte
+    /// kolom, een lijn die van doorsnede wisselt) heeft aan dat eind een
+    /// `Doorlopend` eind: geen gaffel en niet zijdelings gesteund. (De
+    /// 3D-bouwer voegt geen staven samen; daar is elke voortzetting in het
+    /// verlengde zonder steun doorlopend, ook met dezelfde doorsnede.) De
+    /// terugval van de kniklengte en van de kipsteunafstand op de staaflengte
+    /// zou dat eind wél als gesteund aannemen, met de lengte van één deel als
+    /// kniklengte. De kern weigert dan art. 6.3.2 zonder opgegeven
+    /// kniklengtes (beide), en art. 6.3.3 zonder opgegeven kniklengtes of
+    /// zonder opgegeven kipsteunafstand of l_ef; ontbreekt zo de kolomtoets
+    /// bij druk of de kiptoets bij buiging, dan is de status NotApplicable
+    /// (niet volledig getoetst), tenzij een andere toets boven 1 uitkomt.
+    ///
+    /// Een `Vrij` eind werkt als [`Self::is_cantilever`]. `None` of weglaten =
+    /// beide `Gaffel` (met `is_cantilever` voor een vrij eind), het gedrag van
+    /// vóór dit veld.
+    #[serde(default)]
+    #[ts(optional)]
+    pub staafeinden: Option<Staafeinden>,
     /// Zijdelingse steunen als fracties van de staaflengte, per rand — dezelfde
     /// vorm als bij staal (`top_flange_positions` = bovenrand,
     /// `bottom_flange_positions` = onderrand).

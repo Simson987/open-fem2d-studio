@@ -57,6 +57,7 @@ import {
   zoekEigenDoorsnede,
 } from "./profieleditor/eigenDoorsnedenStore";
 import { parseConcreteSection } from "./betonCheckBuilder";
+import { betonDoorsnedeGrootheden } from "./betonDoorsnedeGrootheden";
 import { parseVrijMateriaal } from "./vrijMateriaal";
 import { isAluminiumMateriaal, parseAluminiumMateriaal } from "./aluminiumMateriaal";
 import { aluminiumGrootheden, parseAluminiumProfiel } from "./aluminiumProfiel";
@@ -259,26 +260,10 @@ function betonDoorsnede(
 ): { A: number; I: number; bron: ResolvedSection["bron"] } | null {
   const uit = parseConcreteSection(profile);
   if (!uit.ok) return null;
-  const d = uit.doorsnede;
-  if (d.shape === "Rectangle") {
-    const A = d.b_mm * d.h_mm;
-    return { A, I: (d.b_mm * d.h_mm ** 3) / 12, bron: "beton-bxh" };
-  }
-  const bF = d.b_mm;
-  const hF = d.h_f_mm ?? 0;
-  const bW = d.b_w_mm ?? 0;
-  const hW = d.h_mm - hF;
-  const aF = bF * hF;
-  const aW = bW * hW;
-  const A = aF + aW;
-  if (!(A > 0)) return null;
-  // Zwaartepunt vanaf de onderrand, met het lijf onderin en de flens erboven.
-  const zF = hW + hF / 2;
-  const zW = hW / 2;
-  const zG = (aF * zF + aW * zW) / A;
-  const I =
-    (bF * hF ** 3) / 12 + aF * (zF - zG) ** 2 + (bW * hW ** 3) / 12 + aW * (zW - zG) ** 2;
-  return { A, I, bron: "beton-vorm" };
+  // Dezelfde grootheden als de 3D-adapter (issue #197): één hulpfunctie.
+  const g = betonDoorsnedeGrootheden(uit.doorsnede);
+  if (!g) return null;
+  return { A: g.A, I: g.Iy, bron: uit.doorsnede.shape === "Rectangle" ? "beton-bxh" : "beton-vorm" };
 }
 
 /** Waar de E-modulus van een staaf vandaan komt. */

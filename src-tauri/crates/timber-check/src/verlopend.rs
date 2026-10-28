@@ -43,7 +43,7 @@ use nen_en_1995_1_1::afgeschuind::SchuineRand;
 use nen_en_1993_1_1_section::CheckStatus;
 use steel_check::{
     CheckKind, MaatgevendPunt, NamedCheck, StabiliteitsDoorsnede, ToetsUc, Toetsdoorsnede,
-    VerloopMaten, VerloopRapport,
+    VerloopMaten, VerloopRapport, NIET_VOLLEDIG_GETOETST,
 };
 
 use crate::input::TimberBeamCheckInput;
@@ -590,11 +590,22 @@ pub fn check_timber_beam_verlopend(
             governing_check_id = c.id.clone();
         }
     }
-    let status = if uc_max <= 1.0 {
-        CheckStatus::Ok
-    } else {
-        CheckStatus::NotOk
-    };
+    let mut status = if uc_max <= 1.0 { CheckStatus::Ok } else { CheckStatus::NotOk };
+    // Een stabiliteitsdeelvraag die NIET VOLLEDIG GETOETST is (een doorlopend
+    // staafeind, issue #205) maakt de hele staaf niet volledig getoetst —
+    // tenzij een toets boven 1 uitkomt. Zonder deze regel kwam een verlopende
+    // staaf met een doorlopend eind op Ok; zie de staalkern
+    // (`steel_check::verlopend`).
+    let mut niet_volledig: Option<String> = None;
+    if status == CheckStatus::Ok {
+        if let Some(d) = per_grens
+            .iter()
+            .find(|d| d.resultaat.governing_check_id.starts_with(NIET_VOLLEDIG_GETOETST))
+        {
+            status = CheckStatus::NotApplicable;
+            niet_volledig = Some(d.resultaat.governing_check_id.clone());
+        }
+    }
     // De belastingduurklasse en de maatgevende combinatie komen van de
     // deelvraag die de maatgevende toets leverde; de k_mod-tabel van een
     // deelvraag met de VOLLE omhullende, want die kent alle combinaties.
@@ -609,6 +620,7 @@ pub fn check_timber_beam_verlopend(
     let governing_combination_id = (!governing_check_id.is_empty())
         .then(|| combinatie_van(&checks[governing]))
         .filter(|_| bron.resultaat.governing_combination_id.is_some());
+    let governing_check_id = niet_volledig.unwrap_or(governing_check_id);
 
     TimberBeamCheckResult {
         beam_id: input.beam_id,

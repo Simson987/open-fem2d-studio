@@ -737,7 +737,8 @@ log("\n[10] de bedrading");
   const app = bron("src", "App.tsx");
   const setter = app.slice(app.indexOf("const setOpenFem3d = useCallback"), app.indexOf("const [openFem3dTool, setOpenFem3dTool]"));
   check("App: elke bewerking (setOpenFem3d) voegt samen in dezelfde stap en meldt het",
-    setter.includes("openFem3DEditWithAutoConnect(openFem3dHistoryRef.current.model, model, leesSnapInstellingen(), meta?.historyGroup)")
+    setter.includes("openFem3DEditWithAutoConnect(current, model, snap, meta?.historyGroup)")
+    && setter.includes("changedLockedOpenFem3DLayer(current, stap.model)")
     && /if \(stap\.merge\) \{\s*meldOpenFem3DSamenvoegen\([\s\S]{0,200}femRef\.current\.structuralGrid\.zAxes\);/.test(setter)
     && setter.includes("return stap;"), setter.slice(0, 1200));
   check("App: ook na een levelwijziging (met de nieuwe levels voor de namen)",

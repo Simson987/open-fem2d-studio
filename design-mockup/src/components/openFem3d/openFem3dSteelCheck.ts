@@ -21,6 +21,44 @@ import { bepaalVerloop } from "../../lib/sectionResolver";
 import {
   eigenNaamVan, isEigenProfiel, naarCustomSection, zoekEigenDoorsnede,
 } from "../../lib/profieleditor/eigenDoorsnedenStore";
+import type { ToetsAnalyse } from "../../lib/toetsKrachten";
+import { toetsKrachtenNotitie3D } from "./openFem3dToetsKrachten";
+import { toetsPhiTekst3D } from "./openFem3dScheefstand";
+import {
+  openFem3DDoorgaandeLijnenSamen, openFem3DDoorlopendeEinden, openFem3DDoorlopendNotitie,
+  openFem3DLijnDelenOvergeslagen, openFem3DSamengevoegdeSet,
+} from "./openFem3dDoorgaandeLijn";
+
+/**
+ * De reden bij een staaf zonder UGT-toetskrachten: geen enkele UGT-combinatie
+ * raakt een belast geval (alleen BGT, of de UGT-combinaties zijn verwijderd).
+ * Gedeeld met de beton- en de houtbouwer.
+ */
+export const GEEN_UGT_TOETSCOMBINATIE =
+  "geen UGT-toetscombinatie — er is geen UGT-combinatie met een belast geval, dus geen toetskrachten " +
+  "(tweede orde met scheefstand); voeg UGT-combinaties toe";
+
+/**
+ * De kanttekening bij een opgegeven L_cr,z groter dan de staaflengte (B13 van
+ * #199, om de zwakke as). De UGT-toets rekent in 3D P-Δ met scheefstand in +X,
+ * −X, +Y en −Y: de zijdelingse verplaatsing van een kolom om z zit dan al in
+ * de krachten, en 5.2.2(7)b staat de systeemlengte toe. De opgave telt de
+ * sway dus nog een keer in χ_z. Dat ligt aan de veilige kant; er verandert geen
+ * getal. Bij een gedraaide kolom of een hoekprofiel (u/v-assen) werkt de
+ * scheefstand langs de hoofdas met een component van φ.
+ */
+export function dubbeleSwayZNotitie(lCrZM: number, lengteM: number, analyse: Pick<ToetsAnalyse, "noemer" | "phiPerAs">): string {
+  const mm = (m: number) => Math.round(m * 1000).toLocaleString("nl-NL");
+  return (
+    `KANTTEKENING, DUBBELE SWAY OM z: de opgegeven L_cr,z = ${mm(lCrZM)} mm is groter dan de staaflengte ` +
+    `L = ${mm(lengteM)} mm, wat op een knikvorm met verplaatsbare knopen (sway) wijst. De UGT-krachten van ` +
+    `deze toets komen uit een tweede-ordeberekening (P-Δ) met scheefstand ${toetsPhiTekst3D(analyse)} in ` +
+    "+X, −X, +Y en −Y (NEN-EN 1993-1-1 5.2.2(3)b en 5.3.2): de zijdelingse verplaatsing om de zwakke as en " +
+    "haar vergroting zitten dan al in de krachten (bij een gedraaide kolom of een hoekprofiel met de " +
+    "component van φ langs die as), en 5.2.2(7)b staat de systeemlengte L toe. Met deze opgave telt de " +
+    "sway dus dubbel, in χ_z. Dat ligt aan de veilige kant; de opgave blijft staan."
+  );
+}
 
 export interface OpenFem3DCheckSkip { beamId: number; reason: string }
 
@@ -29,6 +67,11 @@ export interface OpenFem3DSteelChecks {
   skipped: OpenFem3DCheckSkip[];
   /** Assumptions that apply to every generated check input. */
   notes: string[];
+  /**
+   * Doorgaande lijnen (issue #207): per getoetste staaf de staven die zij
+   * samen vormt (zij zelf erbij). De weergave zet de UC van de lijn op elk deel.
+   */
+  lijnDelen?: Record<number, number[]>;
 }
 
 type Vector = [number, number, number];
@@ -107,12 +150,34 @@ export interface OpenFem3DCombinationSet {
    */
   consequenceClass?: ConsequenceClass;
   /**
-   * De scheefstand φ (rad) waarmee de UGT-varianten ±X en ±Y zijn gerekend; één
-   * waarde voor beide richtingen. Nodig om te beslissen of de zijdelingse knik
+   * De scheefstand φ (rad) waarmee de UGT-varianten ±X en ±Y zijn gerekend: per
+   * richting (φ_X voor ±X, φ_Y voor ±Y, issue #194), of één waarde voor beide
+   * richtingen. Nodig om te beslissen of de zijdelingse knik
    * van een stalen kolom met een vrije kop in de krachten zit
    * (`openFem3DZijdelingseKnik`). Ontbreekt → niet bekend, en dan geldt 2·L.
+   * In de toetsset (`toetsSet3D`, issue #199) altijd de φ van de toets.
    */
-  scheefstandPhi?: number;
+  scheefstandPhi?: number | { x: number; y: number };
+  /**
+   * Per staaf de φ waarmee haar lasten zijn gerekend als die van
+   * `scheefstandPhi` afwijkt: de eigen scheefstand van een losse kolom (issue
+   * #199, fase 3, `eigenKolomScheefstand3D`).
+   */
+  scheefstandPhiPerStaaf?: ReadonlyMap<number, { x: number; y: number }>;
+  /**
+   * De analyse van de UGT-toetskrachten (issue #199): alleen in de toetsset
+   * (`toetsSet3D`). Daarmee zetten de bouwers bij elke staaf dat de
+   * UGT-krachten tweede orde met scheefstand zijn (`toetsKrachtenNotitie3D`).
+   * Ontbreekt = een aanroeper met zijn eigen combinatieset; dan geen notitie.
+   */
+  toetsAnalyse?: ToetsAnalyse;
+  /**
+   * De eerste orde van de toetsvarianten en de quasi-blijvende combinaties,
+   * voor de betonkolomtoets (§5.8.3.1 r_m, (5.19) M₀Ed en M₀Eqp; issue #199,
+   * B11). Alleen met een betonstaaf met kolomblok (`toetsSet3D`); ontbreekt =
+   * de UGT-krachten gelden zelf als eerste orde, zoals vóór dit veld.
+   */
+  eersteOrdeResultaten?: ReadonlyMap<number, OpenFem3DSolveResult>;
 }
 
 /**
@@ -149,10 +214,18 @@ export function liggersOnderVloerOfDak(model: OpenFem3DModel): Set<number> {
 }
 
 export function buildOpenFem3DSteelCheckInputs(
-  model: OpenFem3DModel,
-  result: OpenFem3DSolveResult,
-  combinationSet?: OpenFem3DCombinationSet,
-): { inputs: BeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[] } {
+  origineel: OpenFem3DModel,
+  origineelResultaat: OpenFem3DSolveResult,
+  origineleSet?: OpenFem3DCombinationSet,
+): { inputs: BeamCheckInput[]; skipped: OpenFem3DCheckSkip[]; notes: string[]; lijnDelen: Record<number, number[]> } {
+  // Doorgaande lijnen (issue #207): staven die op een knoop zonder oplegging,
+  // aansluiting, plaat of schijf zijn geknipt, gaan als één staaf de toets in,
+  // zoals in 2D. Alles hieronder ziet het samengevoegde model.
+  const samen = openFem3DDoorgaandeLijnenSamen(origineel);
+  const model = samen.model;
+  const result = samen.resultaat(origineelResultaat);
+  const combinationSet = openFem3DSamengevoegdeSet(origineleSet, samen);
+  const doorlopend = openFem3DDoorlopendeEinden(model);
   const inputs: BeamCheckInput[] = [];
   const skipped: OpenFem3DCheckSkip[] = [];
   const notes = [
@@ -161,6 +234,8 @@ export function buildOpenFem3DSteelCheckInputs(
       : "De EN 1993-krachten komen op alle solverstations uit de actuele 3D-rekentoestand; er is geen combinatieset meegegeven.",
     "Kniklengtes en kipsteunen komen uit de toetsinstellingen van de staaf; zonder opgave neemt de kern de staaflengte.",
     "De BGT-doorbuiging volgt uit de geïntegreerde solvermomentlijn M/EI en past exact op beide eindtranslaties; oude solverresultaten vallen terug op Hermite-interpolatie.",
+    // De toetsset (issue #199): de UGT-krachten zijn tweede orde met scheefstand.
+    ...(combinationSet?.toetsAnalyse ? [toetsKrachtenNotitie3D(combinationSet.toetsAnalyse)] : []),
   ];
   const displacements = new Map(result.displacements.map((value) => [value.nodeId, value]));
   const memberForces = new Map(result.memberForces.map((value) => [value.memberId, value]));
@@ -170,13 +245,18 @@ export function buildOpenFem3DSteelCheckInputs(
     combination.type === "sls" && combinationSet.results.has(combination.id)) ?? [];
   const deflectionCombinations = slsCombinations;
 
-  const onderVloerOfDak = liggersOnderVloerOfDak(model);
+  // Op het oorspronkelijke model (de belastingvlakken wijzen naar de delen);
+  // een lijn ligt onder een vloer als een van haar delen dat doet.
+  const onderVloerOfDakDelen = liggersOnderVloerOfDak(origineel);
+  const onderVloerOfDak = new Set(model.beams.map((b) => b.id)
+    .filter((id) => samen.ledenVan(id).some((deel) => onderVloerOfDakDelen.has(deel))));
   // Vrije einden en de inklemming van een uitkraging: dezelfde herkenning als
   // de houttoets (`openFem3dUitkraging.ts`) — een knoop op een plaat, een
   // oplegging, een andere staaf of bedding maakt een eind niet vrij.
   const einden = openFem3DEinden(model);
   const zijdelingseKnik = openFem3DZijdelingseKnik(
     model, ulsCombinations, (id) => combinationSet?.results.get(id)?.analysis, combinationSet?.scheefstandPhi,
+    combinationSet?.scheefstandPhiPerStaaf,
   );
   for (const beam of model.beams) {
     const material = beam.material?.trim().toUpperCase();
@@ -246,6 +326,14 @@ export function buildOpenFem3DSteelCheckInputs(
       const combinationResult = combinationSet?.results.get(combination.id);
       return combinationResult ? openFem3DForceStations(combinationResult, beam.id, combination.id) : [];
     });
+    // Met een toetsset (issue #199) nooit terug naar `result`: dat is het
+    // actieve geval, ongefactoreerd en volgens de instelling van de resultaten
+    // (eerste orde, zonder scheefstand), terwijl de notitie tweede orde met
+    // scheefstand zegt. Zonder UGT-toetscombinatie is er niets te toetsen.
+    if (ulsEnvelope.length === 0 && combinationSet?.toetsAnalyse) {
+      skipped.push({ beamId: beam.id, reason: GEEN_UGT_TOETSCOMBINATIE });
+      continue;
+    }
     const forcesEnvelope = ulsEnvelope.length > 0 ? ulsEnvelope : openFem3DForceStations(result, beam.id);
     const deflectionMm = deflectionCombinations.reduce((maximum, combination) => {
       const combinationResult = combinationSet?.results.get(combination.id);
@@ -303,7 +391,9 @@ export function buildOpenFem3DSteelCheckInputs(
     const lateralBracing = eigenKipsteunen
       ? kipsteunenVanStaaf(cfg, forces.lengthM * 1000, "staal").lateral_bracing
       : { top_flange_positions: vloerSteunt ? BOVENFLENS_DOORGAAND : [], bottom_flange_positions: [] };
-    const inputNotes = [...notes, ...permanentDeflection.notes,
+    const eindenDoorlopend = doorlopend(beam);
+    const doorlopendNotitie = openFem3DDoorlopendNotitie(eindenDoorlopend, "staal");
+    const inputNotes = [...notes, ...(samen.notities.get(beam.id) ?? []), ...permanentDeflection.notes,
       ...(inklemming ? [openFem3DUitkragingNotitie(inklemming)] : []),
       ...(!cfg?.deflectionClass
         ? [verticaal
@@ -354,7 +444,13 @@ export function buildOpenFem3DSteelCheckInputs(
       // dezelfde regel als in 2D (#111). Met 0 en 0 lag de last in het
       // dwarskrachtcentrum en kwam de kip-UC te gunstig uit.
       ...kipBelasting(forcesEnvelope, forces.lengthM * 1000, hMm),
-      staafeinden: { begin: startFree ? "Vrij" : "Gaffel", eind: endFree ? "Vrij" : "Gaffel" },
+      // Een eind dat zonder oplegging doorloopt in een staaf die niet is
+      // samengevoegd (een andere doorsnede, stand of materiaal, een scharnier):
+      // DOORLOPEND, zoals in 2D (issue #207).
+      staafeinden: {
+        begin: startFree ? "Vrij" : eindenDoorlopend.begin ? "Doorlopend" : "Gaffel",
+        eind: endFree ? "Vrij" : eindenDoorlopend.eind ? "Doorlopend" : "Gaffel",
+      },
       // Een vrij eind van een kolom, P-Δ met scheefstand in X en Y van minstens
       // de φ van de kolom zelf: de zijdelingse knik zit al in de krachten, en de
       // kern kiest L in plaats van 2·L (zie `openFem3DZijdelingseKnik`).
@@ -363,8 +459,16 @@ export function buildOpenFem3DSteelCheckInputs(
       // ook echt 2·L neemt: niet als beide kniklengtes zijn opgegeven.
       staaf_notities: [
         ...inputNotes,
+        ...(doorlopendNotitie ? [doorlopendNotitie] : []),
         ...(zijdelings.notitie && !((cfg?.bucklingLengthY_m ?? 0) > 0 && (cfg?.bucklingLengthZ_m ?? 0) > 0)
           ? [zijdelings.notitie] : []),
+        // Een opgegeven L_cr,z > L bij een kolom: de kern zet de kanttekening
+        // DUBBELE SWAY alleen om y (as 1), want alleen de bouwer weet dat de
+        // toets in 3D ook in ±Y rekent (in 2D dekt de P-Δ de zwakke as niet).
+        ...(combinationSet?.toetsAnalyse && verticaal
+          && (cfg?.bucklingLengthZ_m ?? 0) > forces.lengthM * (1 + 1e-6)
+          ? [dubbeleSwayZNotitie(cfg!.bucklingLengthZ_m!, forces.lengthM, combinationSet.toetsAnalyse)]
+          : []),
       ],
       // Een trek-alleen staaf (windverband) doet alleen mee zolang zij op trek
       // staat: de kern toetst dan alleen trek (6.2.3) en meldt een eventuele
@@ -372,7 +476,7 @@ export function buildOpenFem3DSteelCheckInputs(
       ...(beam.tensionOnly ? { tension_only: true } : {}),
     });
   }
-  return { inputs, skipped, notes };
+  return { inputs, skipped: [...skipped, ...openFem3DLijnDelenOvergeslagen(samen, skipped, inputs.map((i) => i.beam_id))], notes, lijnDelen: samen.lijnDelen };
 }
 
 export async function runOpenFem3DSteelChecks(
@@ -388,7 +492,7 @@ export async function runOpenFem3DSteelChecks(
   const results = built.inputs.length > 0
     ? await roepKern<BeamCheckResult[]>("check_steel_beams", built.inputs)
     : [];
-  return { results, skipped: built.skipped, notes: built.notes };
+  return { results, skipped: built.skipped, notes: built.notes, lijnDelen: built.lijnDelen };
 }
 
 export function checkUc(check: NamedCheck): number | null {

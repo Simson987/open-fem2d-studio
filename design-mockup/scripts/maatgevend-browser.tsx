@@ -8,6 +8,7 @@ import { flushSync } from "react-dom";
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import CheckPanel from "../src/components/panels/CheckPanel";
+import { PlaatToetsKaart } from "../src/components/panels/PlaatToetsKaart";
 import CheckTableSection from "../src/components/report/sections/CheckTableSection";
 import MaatgevendMarkering from "../src/components/fem/MaatgevendMarkering";
 import { useCheckStore } from "../src/stores/checkStore";
@@ -178,7 +179,65 @@ async function run() {
     ok(rijen[1].includes("Doorbuiging") && !rijen[1].includes("comb.") && !rijen[1].includes("x ="), rijen[1]);
     ok(rapportHost.textContent!.includes("Toetsen zonder unity check tellen niet mee"), "toelichting ontbreekt");
   });
+  // Issue #199: de UGT-toets rekent ook in −x, met id + 1 000 000, ook als de
+  // scheefstand van de resultaten uit staat. Het model kent dat id niet; de
+  // naam komt dan uit de combinaties waarop GETOETST is (`toetsCombinaties`).
+  await test("rapport: een toetsvariant in −x heet bij haar naam, niet 'comb. 1000003'", async () => {
+    const variant = { id: 1_000_003, name: "UGT 6.10b — Variabel (Q) leidend (scheefstand −x)" };
+    flushSync(() => useCheckStore.setState({
+      results: [{
+        beam_id: 4, profile_name: "HEA 200", steel_grade: "S235", classification: "Class1",
+        checks: [toets("6.2.5_bending_y", "Buiging om de y-as", "art. 6.2.5 (6.12)", 0.81, variant.id, 2500)],
+        uc_max: 0.81, status: "Ok", governing_check_id: "6.2.5_bending_y",
+      }] as never,
+      toetsCombinaties: [variant],
+    }));
+    await tick();
+    const rij = rapportHost.querySelector("tbody tr")?.textContent ?? "";
+    ok(rij.includes(`comb. ${variant.name}`) && !rij.includes("1000003"), rij);
+    flushSync(() => useCheckStore.setState({ results: results as never, toetsCombinaties: [] }));
+    await tick();
+  });
   flushSync(() => rapportRoot.unmount());
+
+  // ── De plaatkaart: dezelfde afleiding en dezelfde toetslijst als een staaf ──
+  // Een plaat heeft een element in plaats van een positie, alleen bij haar
+  // maatgevende toets; wat niet getoetst is, staat met reden in de lijst.
+  const plaatHost = document.createElement("div");
+  plaatHost.style.width = "860px";
+  document.body.appendChild(plaatHost);
+  const plaatRoot = createRoot(plaatHost);
+  const plaat = {
+    plate_id: 7, soort: "Staal", materiaal: "S235", thickness_mm: 12, norm: "NEN-EN 1993-1-1",
+    checks: [
+      toets("plaat_von_mises", "Von Mises", "art. 6.2.1 (6.1)", 0.62, 4, 0),
+      toets("plaat_buiging", "Buiging in de plaat", "art. 6.2.5", 0.88, 4, 0),
+    ],
+    uc_max: 0.88, status: "Ok", governing_check_id: "plaat_buiging",
+    governing_element_id: 12, governing_combination_id: 4,
+    combinaties: [], elementen: [], notes: [],
+    niet_getoetst: [{ id: "plaat_plooi", titel: "Plooi", reden: "geen plooitoets voor platen", bepaalt_status: false }],
+  };
+  flushSync(() => plaatRoot.render(<PlaatToetsKaart result={plaat as never} />));
+  await tick();
+  await test("plaatkaart: de maatgevende toets met element en combinatie in de kop", () => {
+    const kop = plaatHost.querySelector(".cp-card-governing")?.textContent ?? "";
+    ok(kop.includes("Buiging in de plaat") && kop.includes("12") && kop.includes("4"), kop);
+  });
+  await test("plaatkaart: opengeklapt de toetslijst op UC aflopend, maatgevend gelabeld, niet getoetst onderaan", async () => {
+    flushSync(() => plaatHost.querySelector<HTMLButtonElement>(".cp-card-head")!.click());
+    await tick();
+    const rijen = [...plaatHost.querySelectorAll<HTMLElement>(".cp-toetsregel")];
+    ok(rijen.length === 3, `drie regels, niet ${rijen.length}`);
+    ok(rijen[0].classList.contains("cp-toetsregel-maatgevend") && rijen[0].textContent!.includes("Buiging in de plaat"),
+      rijen.map((r) => r.textContent).join(" | "));
+    ok(rijen[2].textContent!.includes("Plooi") && rijen[2].textContent!.includes("telt niet mee als maatgevend")
+      && rijen[2].textContent!.includes("geen plooitoets voor platen"), rijen[2].textContent!);
+    ok(plaatHost.querySelector(".check-block")?.classList.contains("check-block-maatgevend"),
+      "de eerste afleiding is de maatgevende");
+  });
+  flushSync(() => plaatRoot.unmount());
+  plaatHost.remove();
 
   // ── De markering op het tekenvlak ──
   const svgHost = document.createElement("div");

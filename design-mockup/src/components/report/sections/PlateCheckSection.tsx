@@ -21,7 +21,15 @@ import "katex/dist/katex.min.css";
 import { useCheckStore } from "../../../stores/checkStore";
 import { useReportStore } from "../../../stores/reportStore";
 import { useReportData } from "../ReportDataContext";
-import { CHECK_REPORT_CSS, fmtCheckedAt, fmtUc, fmtValue, statusClass, statusLabel } from "../checkReportUtils";
+import {
+  CHECK_REPORT_CSS,
+  fmtCheckedAt,
+  fmtUc,
+  fmtValue,
+  statusClass,
+  statusLabel,
+  toetsCombinatieNamen,
+} from "../checkReportUtils";
 import { DerivationBlock } from "./CheckDetailSection";
 import type { PlateCheckResult } from "../../../lib/types/plaat/PlateCheckResult";
 import type { PlaatSkip } from "../../../lib/plaatCheckBuilder";
@@ -30,8 +38,12 @@ export default function PlateCheckSection() {
   const plateResults = useCheckStore((s) => s.plateResults);
   const plateSkipped = useCheckStore((s) => s.plateSkipped);
   const lastRunAt = useCheckStore((s) => s.lastRunAt);
+  const toetsCombinaties = useCheckStore((s) => s.toetsCombinaties);
   const gedetailleerd = useReportStore((s) => s.toetsingDetail === "gedetailleerd");
   const { plates, combinations } = useReportData();
+  // De namen van de toetsing gaan voor die van het model: de UGT-toets rekent
+  // ook in −x, met id's die het model niet kent (issue #199).
+  const namen = [...toetsCombinatieNamen(combinations, toetsCombinaties)].map(([id, name]) => ({ id, name }));
   return (
     <PlaatToetsRapport
       plateResults={plateResults}
@@ -39,7 +51,7 @@ export default function PlateCheckSection() {
       lastRunAt={lastRunAt}
       gedetailleerd={gedetailleerd}
       aantalPlaten={plates.length}
-      combinations={combinations}
+      combinations={namen}
     />
   );
 }

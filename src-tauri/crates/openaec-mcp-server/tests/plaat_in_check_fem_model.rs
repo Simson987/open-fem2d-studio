@@ -16,6 +16,20 @@
 //!   UGT 3,0·Q: σ_y = 150 N/mm²; S235, t ≤ 40 mm → f_y = 235 N/mm² (tabel 3.1),
 //!   γ_M0 = 1,00 → UC = 150/235 = 0,638298 (elementgemiddeld, binnen 2 %).
 //!
+//! DE TOETS REKENT MET SCHEEFSTAND (issue #199). De UGT-toetskrachten zijn
+//! altijd tweede orde met scheefstand φ = 1/200 in +x en −x, ook in dit model
+//! zonder scheefstandschakelaar. Elke verticale last krijgt dan een
+//! horizontale metgezel H = φ·V, ook een randlast op een plaat: bij 3,0·Q is
+//! dat 3,0·1000/200 = 15 kN/m langs de bovenrand, ΣH = 30 kN op 3 m hoogte. De
+//! wand buigt daardoor in zijn vlak (Bernoulli, I = t·B³/12 = 20·2000³/12 =
+//! 1,3333·10¹⁰ mm⁴). Het onderste randelement (hart x = 750 mm uit het midden,
+//! z = 250 mm; een lineair verloop middelt naar de waarde in het hart) krijgt
+//! M = 30·10³·(3000 − 250) = 82,5·10⁶ Nmm en σ_b = 82,5·10⁶·750/1,3333·10¹⁰ =
+//! 4,64 N/mm²: σ_y = 154,64 N/mm² en UC = 154,64/235 = 0,6580, 3,1 % boven de
+//! 0,6383 van vóór deze regel (toen zonder scheefstand). P-Δ speelt bij deze
+//! trekwand geen rol. Gemeten 0,6577 (−0,05 % op de hand): de 2 % blijft, en
+//! de oude waarde valt erbuiten.
+//!
 //! LET OP: hangt af van de ingebakken solverbundel. Na een wijziging in
 //! `design-mockup/src` eerst `npm run build:sidecar`.
 
@@ -144,11 +158,12 @@ async fn stalen_wand_wordt_doorgerekend_en_getoetst() {
     let r = &uit["plate_results"][0];
     assert!(r["geweigerd"].is_null(), "{r}");
     let uc = r["uc_max"].as_f64().unwrap();
-    let hand = 150.0 / 235.0;
-    assert!(
-        (uc - hand).abs() <= 0.02 * hand,
-        "UC {uc} tegen hand {hand}"
-    );
+    // Met de scheefstand van de toets (zie de kop): σ_y = 150 + 4,64 N/mm² →
+    // 0,6580. Was 150/235 = 0,638298 zolang de toets zonder scheefstand rekende.
+    let hand = (150.0 + 4.64) / 235.0;
+    assert!((uc - hand).abs() <= 0.02 * hand, "UC {uc} tegen hand {hand}");
+    // De combinatie in +x (id 2); haar spiegelbeeld in −x (id 1 000 002) geeft
+    // dezelfde UC in het andere hoekelement, en de eerste blijft maatgevend.
     assert_eq!(r["governing_combination_id"], 2);
     assert_eq!(r["status"], "Ok");
 
@@ -191,6 +206,12 @@ async fn plaat_zonder_materiaal_staat_met_reden_in_skipped_plates() {
 /// Bijlage F: σ_Edx = 0 (x), σ_Edy = −150 (z, trek) → f'_td,z = 150 N/mm²,
 /// n_td,z = 150·20 = 3000 kN/m; σ_cd = 0 → UC 0. Wapening nodig en niet
 /// getoetst → NotApplicable; een UC 0 is dan geen oordeel.
+///
+/// Met de scheefstand van de toets (issue #199, zie de kop van dit bestand)
+/// buigt de wand in zijn vlak: het onderste randelement krijgt σ_y = 150 +
+/// 4,64 = 154,64 N/mm², dus n_td,z = 154,64·20 = 3093 kN/m (+3,1 % op de
+/// 3000 van vóór deze regel). Gemeten 3080 kN/m (−0,4 % op de hand); de 2 %
+/// blijft.
 #[tokio::test]
 async fn betonnen_wand_geeft_benodigde_wapening_en_heet_niet_voldoet() {
     eis_node().await;
@@ -202,12 +223,10 @@ async fn betonnen_wand_geeft_benodigde_wapening_en_heet_niet_voldoet() {
     assert!(r["geweigerd"].is_null(), "{r}");
     assert_eq!(r["status"], "NotApplicable");
     let nz = r["wapening"]["max_z"]["n_td_z_kn_per_m"].as_f64().unwrap();
-    assert!((nz - 3000.0).abs() <= 0.02 * 3000.0, "n_td,z {nz}");
-    assert!(r["niet_getoetst"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|n| n["id"] == "wapening_aanwezig"));
+    // Was 3000 kN/m zonder scheefstand; met de buiging uit H = φ·V 3093 kN/m.
+    let hand = (150.0 + 4.64) * 20.0;
+    assert!((nz - hand).abs() <= 0.02 * hand, "n_td,z {nz} tegen hand {hand}");
+    assert!(r["niet_getoetst"].as_array().unwrap().iter().any(|n| n["id"] == "wapening_aanwezig"));
 }
 
 /// Houten drukwand — dezelfde handberekening als
@@ -215,6 +234,17 @@ async fn betonnen_wand_geeft_benodigde_wapening_en_heet_niet_voldoet() {
 /// G = 200 kN/m en Q (categorie A) = 300 kN/m op de bovenrand.
 ///   1,35·G:        σ = −2,7 N/mm², k_mod 0,60 → f_c,0,d = 9,692308 → UC 0,278571
 ///   1,2·G + 1,5·Q: σ = −6,9 N/mm², k_mod 0,80 → f_c,0,d = 12,923077 → UC 0,533929
+///
+/// Met de scheefstand van de toets (issue #199, φ = 1/200, ook zonder
+/// schakelaar) krijgt de randlast een metgezel H = φ·V langs de bovenrand en
+/// buigt de wand in zijn vlak (I = 100·2000³/12 = 6,6667·10¹⁰ mm⁴; onderste
+/// randelement x = 750 mm uit het midden, z = 250 mm, arm 2750 mm):
+///   1,35·G:        ΣH = 1,35·200·2/200 = 2,7 kN, σ_b = 2,7·10³·2750·750/6,6667·10¹⁰
+///                  = 0,0835 N/mm² → σ = −2,7835 N/mm² → UC 0,287190 (+3,1 %)
+///   1,2·G + 1,5·Q: ΣH = 690·2/200 = 6,9 kN, σ_b = 0,2135 N/mm² → σ = −7,1135 N/mm²
+///                  → UC 0,550444 (+3,1 %)
+/// P-Δ speelt bij een wand van 2 m breed geen merkbare rol. Gemeten 0,28735
+/// (+0,06 % op de hand); de 2 % blijft, en de oude waarden vallen erbuiten.
 #[tokio::test]
 async fn houten_wand_toetst_met_k_mod_per_combinatie() {
     eis_node().await;
@@ -247,16 +277,10 @@ async fn houten_wand_toetst_met_k_mod_per_combinatie() {
             .as_f64()
             .unwrap()
     };
-    assert!(
-        (uc(1) - 0.278_571).abs() <= 0.02 * 0.278_571,
-        "UC 1: {}",
-        uc(1)
-    );
-    assert!(
-        (uc(2) - 0.533_929).abs() <= 0.02 * 0.533_929,
-        "UC 2: {}",
-        uc(2)
-    );
+    // Met de buiging uit de scheefstand van de toets (zie hierboven); was
+    // 0,278571 en 0,533929 zolang de toets zonder scheefstand rekende.
+    assert!((uc(1) - 0.287_190).abs() <= 0.02 * 0.287_190, "UC 1: {}", uc(1));
+    assert!((uc(2) - 0.550_444).abs() <= 0.02 * 0.550_444, "UC 2: {}", uc(2));
     assert_eq!(r["governing_combination_id"], 2);
     let invoer = &uit["plate_check_inputs"][0];
     assert_eq!(invoer["service_class"], "Sc1");

@@ -693,11 +693,15 @@
     "derivation_one": "Herleitung ({{count}} Schritt)",
     "derivation_other": "Herleitung ({{count}} Schritte)",
     "combination": "Kombination",
+    "forcesSecondOrder": "Th. II. O. + Schiefstellung",
+    "forcesResults": "Ergebnisse",
+    "forcesTitle": "Woher die Schnittgrößen dieses Nachweises stammen. GZT: immer eine Berechnung nach Theorie II. Ordnung (P-Δ) mit Schiefstellung, unabhängig von den Einstellungen Berechnung und Schiefstellung (EN 1993-1-1 5.2.2(3)b und (7)b). GZG: die Ergebnisse, wie eingestellt.",
     "intermediates": "Zwischenwerte ({{aantal}})"
   },
   "panel": {
     "stressAt": "Spannungsverlauf im maßgebenden Schnitt: x = {{x}} mm, Kombination {{combinatie}}",
-    "tensionPositive": "Zug positiv"
+    "tensionPositive": "Zug positiv",
+    "forcesNotes": "Hinweise zu den Nachweisschnittgrößen"
   },
   "variants": {
     "stepBars": "{{stap}} Stk.",

@@ -29,9 +29,13 @@
 //      noemen, de dwarskrachttoets x = 0, beide in een UGT-combinatie; de
 //      doorbuigingstoetsen dragen geen combinatie.
 //  [9] puntOpStaaf: de markering op het tekenvlak ligt op de staaf.
-//  [10] paneel, plaatkaart en rapport gebruiken deze ene afleiding; het label
+//  [10] de klik naar het tekenvlak (App.tsx, uitgevoerd: selectie, combinatie,
+//      markering, en niets bij een combinatie zonder resultaat); het label
 //      "maatgevend" en "telt niet mee" staan als TEKST in de weergave (niet
-//      alleen kleur); de vertalingen bestaan in nl/en/de/fr.
+//      alleen kleur); de vertalingen bestaan in nl/en/de/fr, en elke sleutel
+//      die de componenten vragen bestaat. Dat paneel, plaatkaart en rapport
+//      deze ene afleiding gebruiken, toetst test-maatgevend-ui.mjs in de
+//      browser.
 //
 // Uitvoeren: npx tsx test-maatgevend.mjs   (vanuit design-mockup/)
 
@@ -40,6 +44,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { register } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { declaratie, jsxAttribuut, leesBron, voerUitIn } from "./scripts/bron-uitvoeren.mjs";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const TOETSBRUG = join(
@@ -317,22 +322,103 @@ log("\n[9] puntOpStaaf: de markering ligt op de staaf");
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-log("\n[10] paneel, plaatkaart, rapport en vertalingen");
+log("\n[10] de klik naar het tekenvlak, de weergave en de vertalingen");
 {
-  const paneel = bron("src/components/panels/CheckPanel.tsx");
-  check("het paneel leidt maatgevend af via lib/maatgevend", /maatgevendVanStaaf\(result\)/.test(paneel) && /modelMaatgevend\(results, plateResults\)/.test(paneel));
-  check("het paneel toont het modeloverzicht, de regel per kaart en de toetslijst",
-    paneel.includes("<ModelMaatgevendBlok") && paneel.includes("<MaatgevendRegel") && paneel.includes("<ToetsLijst"));
-  check("de volgorde staat standaard op unity check", /useState<ToetsVolgorde>\("uc"\)/.test(paneel));
-  check("de afleidingen volgen dezelfde volgorde als de lijst", /sorteerRegels\(overzicht\.regels, volgorde\)\.map/.test(paneel));
-  const kaart = bron("src/components/panels/PlaatToetsKaart.tsx");
-  check("de plaatkaart gebruikt dezelfde afleiding", kaart.includes("maatgevendVanPlaat(result)") && kaart.includes("<ToetsLijst"));
-  const rapport = bron("src/components/report/sections/CheckTableSection.tsx");
-  check("het rapport toont combinatie en positie uit dezelfde afleiding",
-    rapport.includes("maatgevendVanStaaf(result)") && rapport.includes("report.maatgevendPositie") && rapport.includes("report.maatgevendToelichting"));
-  const app = bron("src/App.tsx");
-  check("App zet het tekenvlak op de combinatie en markeert de positie",
-    app.includes("onToonOpTekenvlak={handleToonMaatgevend}") && /fem\.setActiveCombinationId\(id\)/.test(app) && app.includes("markering.zet("));
+  // Paneel, plaatkaart, rapportregel en markering worden in een echte browser
+  // getoetst (test-maatgevend-ui.mjs): het paneel leidt maatgevend af via
+  // lib/maatgevend, standaard op UC met de afleidingen in dezelfde volgorde,
+  // de plaatkaart met dezelfde toetslijst, het rapport met combinatie en
+  // positie, en de ring op het tekenvlak. Daar staat het GEDRAG; hier stond
+  // tot oktober 2026 alleen een bronteksttoets op dezelfde bestanden.
+
+  // ── De klik naar het tekenvlak (App.tsx), uitgevoerd ──
+  // `handleToonMaatgevend` in de AST opgezocht en uitgevoerd
+  // (scripts/bron-uitvoeren.mjs), met de echte markeringsstore.
+  const app = leesBron("src/App.tsx");
+  const { useMaatgevendMarkeringStore } = await import("./src/stores/maatgevendMarkeringStore.ts");
+  const { useCheckStore } = await import("./src/stores/checkStore.ts");
+  async function toon(doel, combinatieResultaten, instellingen = {}) {
+    const gezet = {};
+    const meldingen = [];
+    const handle = await voerUitIn(app, declaratie(app, "handleToonMaatgevend"), {
+      // De projectinstelling van de scheefstand (de φ van de resultaten).
+      scheefstandUitkomst: { noemer: instellingen.projectNoemer ?? 200 },
+      fem: {
+        analysetype: instellingen.analysetype ?? "eersteOrde",
+        scheefstandEnabled: instellingen.scheefstandEnabled ?? false,
+        combinationResults: combinatieResultaten,
+        setSelection: (s) => { gezet.selectie = s; },
+        setActiveCombinationId: (id) => { gezet.combinatie = id; },
+        setEnvelopeView: (v) => { gezet.omhullende = v; },
+        setShowLoads: (v) => { gezet.lasten = v; },
+      },
+      setResultsTabActive: (v) => { gezet.resultaten = v; },
+      dynamischeImport: async () => ({ notifyInfo: (titel, tekst) => meldingen.push({ titel, tekst }) }),
+      i18next: { t: (k, o) => (o?.naam ? `${k}|${o.naam}${o.noemer ? `|1/${o.noemer}` : ""}` : k) },
+    });
+    handle(doel);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    return { gezet, meldingen, markering: useMaatgevendMarkeringStore.getState().markering };
+  }
+  // Issue #199 (B4): de UGT-toets rekent altijd tweede orde met scheefstand. Het
+  // tekenvlak toont de resultaten. Een plek markeren mag alleen als de
+  // combinatie daar met DEZELFDE krachten staat: het resultaat in de toetsset
+  // is hetzelfde object als dat van de resultaten (hergebruik, of de BGT).
+  const resultaat3 = {};
+  const gerekend = new Map([[3, resultaat3]]);
+  const varianten = [{ id: 3, name: "UGT 6.10b" }, { id: 1_000_003, name: "UGT 6.10b (scheefstand −x)" }];
+  useCheckStore.setState({ lastRunAt: 42, lastRunData: {
+    combinations: varianten, combinationResults: new Map([[3, resultaat3], [1_000_003, {}]]) },
+    toets: { analyse: { soort: "tweedeOrdeGeometrisch", phi: 1 / 200, noemer: 200, bron: "vast", scheefstandModelAan: false, hergebruikt: false },
+      meldingen: [], alphaCr: [], weigering: null } });
+  const a = await toon({ beamId: 7, combinatieId: 3, positieMm: 2500 }, gerekend);
+  check("klik: de staaf geselecteerd, het tekenvlak op de combinatie, zonder omhullende, met resultaten",
+    a.gezet.selectie?.type === "beam" && a.gezet.selectie?.id === 7 && a.gezet.combinatie === 3
+      && a.gezet.omhullende === false && a.gezet.lasten === true && a.gezet.resultaten === true, JSON.stringify(a.gezet));
+  check("… en de positie gemarkeerd, bij deze toetsronde, zonder melding",
+    a.markering?.beamId === 7 && a.markering?.positieMm === 2500 && a.markering?.combinatieId === 3 && a.markering?.rondeVan === 42
+      && a.meldingen.length === 0, JSON.stringify(a));
+  const b = await toon({ beamId: 7, combinatieId: 1_000_003, positieMm: 2500 }, gerekend);
+  check("een toetscombinatie die niet op het tekenvlak staat: wel selecteren, niet omschakelen, oude markering weg",
+    b.gezet.selectie?.id === 7 && b.gezet.combinatie === undefined && b.markering === null, JSON.stringify(b));
+  check("… met een melding die de combinatie en de φ van de toets noemt (B4)",
+    b.meldingen.length === 1 && b.meldingen[0].titel === "common:app.check.otherForcesTitle"
+      && b.meldingen[0].tekst === "common:app.check.otherForcesBody|UGT 6.10b (scheefstand −x)|1/200", JSON.stringify(b.meldingen));
+  // Staan Analyse en Scheefstand al goed, met de φ van de toets, dan helpt het
+  // advies "zet ze goed" niet: de toets rekende apart (bijvoorbeeld zonder de
+  // UGT-eindtoestandvarianten van hout). Dan de tweede tekst.
+  const gelijk = await toon({ beamId: 7, combinatieId: 1_000_003, positieMm: 2500 }, gerekend,
+    { analysetype: "tweedeOrdeGeometrisch", scheefstandEnabled: true });
+  check("instellingen al gelijk aan de toets: de tekst zegt dat de toets apart rekende",
+    gelijk.meldingen[0]?.tekst === "common:app.check.otherForcesBodySame|UGT 6.10b (scheefstand −x)|1/200", JSON.stringify(gelijk.meldingen));
+  // Hout tilt de toets-φ boven de projectinstelling: het advies noemt de φ van de toets.
+  useCheckStore.setState({ toets: { ...useCheckStore.getState().toets,
+    analyse: { ...useCheckStore.getState().toets.analyse, phi: 1 / 268, noemer: 268, bron: "en1995" } } });
+  const houtPhi = await toon({ beamId: 7, combinatieId: 1_000_003, positieMm: 2500 }, gerekend,
+    { analysetype: "tweedeOrdeGeometrisch", scheefstandEnabled: true });
+  check("hout verhoogt de toets-φ: het advies noemt φ = 1/268 van de toets, niet de 1/200 van het project",
+    houtPhi.meldingen[0]?.tekst === "common:app.check.otherForcesBody|UGT 6.10b (scheefstand −x)|1/268", JSON.stringify(houtPhi.meldingen));
+  useCheckStore.setState({ toets: { ...useCheckStore.getState().toets,
+    analyse: { ...useCheckStore.getState().toets.analyse, phi: 1 / 200, noemer: 200, bron: "vast" } } });
+  // Dezelfde combinatie op het tekenvlak, maar met ANDERE krachten: de
+  // resultaten zijn eerste orde, de toets tweede orde met scheefstand.
+  await toon({ beamId: 7, combinatieId: 3, positieMm: 2500 }, gerekend);
+  const anders = await toon({ beamId: 7, combinatieId: 3, positieMm: 2500 }, new Map([[3, {}]]));
+  check("dezelfde combinatie met andere krachten op het tekenvlak: niet omschakelen, geen markering, wel een melding",
+    anders.gezet.combinatie === undefined && anders.markering === null && anders.meldingen.length === 1, JSON.stringify(anders));
+  const c = await toon({ plateId: 5, combinatieId: 3, positieMm: null }, gerekend);
+  check("plaat: de plaat geselecteerd en de combinatie gezet, geen markering (een plaat heeft geen positie x)",
+    c.gezet.selectie?.type === "plate" && c.gezet.combinatie === 3 && c.markering === null, JSON.stringify(c));
+  const d = await toon({ beamId: 7, combinatieId: null, positieMm: null }, gerekend);
+  check("geen combinatie (doorbuiging): selecteren, oude markering weg, geen melding",
+    d.gezet.selectie?.id === 7 && d.markering === null && d.meldingen.length === 0, JSON.stringify(d));
+  useCheckStore.setState({ lastRunData: null });
+  const naad = () => {};
+  check("het toetsingspaneel krijgt deze klik",
+    await voerUitIn(app, jsxAttribuut(app, "CheckPanel", "onToonOpTekenvlak"), { handleToonMaatgevend: naad }) === naad);
+  // Bronteksttoets met reden: het tekenvlak (FemCanvas, ruim 5000 regels) toont
+  // de markering pas na zijn eigen rekengang; dat is in een browser alleen met
+  // het hele tekenvlak na te spelen. De markering zelf staat in de browsertest.
   check("het tekenvlak toont de markering", bron("src/components/fem/FemCanvas.tsx").includes("<MaatgevendMarkering"));
 
   // De weergave zelf: het onderscheid staat als TEKST, niet alleen als kleur.
@@ -406,7 +492,9 @@ log("\n[10] paneel, plaatkaart, rapport en vertalingen");
     const rb = JSON.parse(bron(`src/i18n/locales/${taal}/ribbon.json`)).report;
     check(`${taal}: de rapportteksten bestaan`, RAPPORT.every((k) => typeof rb[k] === "string" && rb[k].length > 0));
   }
-  // Elke sleutel die de componenten vragen, bestaat.
+  // Elke sleutel die de componenten vragen, bestaat. Een bronscan met reden:
+  // welke sleutels de broncode vraagt, is een eigenschap van de broncode zelf,
+  // en i18next valt bij een ontbrekende sleutel stil terug in plaats van te falen.
   const gevraagd = new Set();
   for (const pad of ["src/components/panels/MaatgevendBlokken.tsx", "src/components/panels/CheckBlock.tsx", "src/components/fem/MaatgevendMarkering.tsx"]) {
     for (const m of bron(pad).matchAll(/"maatgevend\.([A-Za-z.]+)"/g)) gevraagd.add(m[1]);

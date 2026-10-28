@@ -10,8 +10,15 @@
  *
  * DE KETEN, en waarom precies deze
  *   bouwMultiInput  → solveAllCases / solveAllCasesNonlinear
- *                   → combineResults → computeEnvelope
- *                   → buildSteelCheckInputs, buildTimberCheckInputs, buildCltCheckInputs
+ *                   → combineResults → computeEnvelope              (`solve`: de resultaten)
+ *                   → bepaalToetsKrachten2D → toetsSet2D
+ *                   → buildSteelCheckInputs, buildTimberCheckInputs,
+ *                     buildCltCheckInputs, buildPlaatCheckInputs     (`check`: de toetsing)
+ * De resultaten volgen het analysetype en de scheefstandschakelaar van het
+ * model. De UGT-toetskrachten rekent `check` ALTIJD zelf tweede orde (P-Δ) met
+ * scheefstand, met de φ van de projectinstelling, in +x en −x — dezelfde
+ * functie als de app (`lib/toetsKrachten.ts`, NEN-EN 1993-1-1 5.2.2(3)b en
+ * (7)b). De BGT-toetsen lezen de resultaten.
  * NOOIT rechtstreeks `solveNonlinear` of `core/fem/Mesh`: die leveren andere
  * EENHEDEN én andere TEKENS. De omslag naar trek-positief gebeurt pas in de
  * adapterlaag (`engine.ts`, convertResult), dus wie de kern rechtstreeks
@@ -47,6 +54,7 @@ import {
   computeEnvelope,
   metScheefstandRichtingen,
   defaultCombinations,
+  SCHEEFSTAND_COMBO_OFFSET,
   type LoadCombination,
 } from "../components/fem/solver/combinations";
 import type { VeldSplitsing } from "../components/fem/solver/veldpatronen";
@@ -54,15 +62,35 @@ import { buildSteelCheckInputs, profileLookupKey } from "../lib/steelCheckBuilde
 import { buildTimberCheckInputs, matchSupportedTimberGrade } from "../lib/timberCheckBuilder";
 import { buildCltCheckInputs, isCltProfiel } from "../lib/cltCheckBuilder";
 import { buildPlaatCheckInputs } from "../lib/plaatCheckBuilder";
-import { alphaCrLabel, bepaalAlphaCr, stabiliteitsMeldingen } from "../components/fem/solver/alphaCr";
+import {
+  alphaCrLabel,
+  analyseToelichting,
+  bepaalAlphaCr,
+  noemerTekst,
+  stabiliteitsMeldingen,
+  type AlphaCrUitkomst,
+} from "../components/fem/solver/alphaCr";
+import {
+  bepaalToetsKrachten2D,
+  bepaalToetsScheefstand,
+  scheefstandToelichtingToets,
+  toetsOmschrijving,
+  toetsScheefstandNormen,
+  toetsSet2D,
+  TOETS_PHI_MARGE,
+  weigeringTekst,
+  type ToetsKrachten2D,
+} from "../lib/toetsKrachten";
 import {
   selecteerCombinaties,
   type OvergeslagenCombinatie,
 } from "../lib/combinatieSelectie";
 import {
+  bevestigdeEigenFactoren,
   gevolgklasseBijOpenen,
   meldingenBelastinggevallen,
   openCombinatieStaat,
+  tekstBevestigdeEigenFactoren,
   type KlasseBron,
 } from "../lib/combinatieBeheer";
 import {
@@ -92,6 +120,9 @@ import {
   leidScheefstandGeometrieAf,
   toepasselijkeScheefstandNormen,
   type ScheefstandBron,
+  type ScheefstandGeometrie,
+  type ScheefstandNorm,
+  type ScheefstandUitkomst,
 } from "../lib/scheefstandNorm";
 import {
   PROJECT_FORMAT_VERSION,
@@ -100,11 +131,12 @@ import {
 } from "../io/projectFile";
 import type {
   ElementForces,
+  MultiInput,
   MultiLcResult,
   SolverResult,
 } from "../components/fem/solver/types";
 import type { Beam, BeamCheckConfig, Analysetype } from "../components/fem/femTypes";
-import { ANALYSETYPEN } from "../components/fem/femTypes";
+import { ANALYSETYPEN, ANALYSETYPE_LABEL, ANALYSETYPE_OMSCHRIJVING } from "../components/fem/femTypes";
 import type { SteelProfile } from "../lib/types/steel/SteelProfile";
 import { version as PAKKET_VERSIE } from "../../package.json";
 import { beeldKernfoutAf } from "./fouten";
@@ -252,6 +284,13 @@ export function invoerHash(payload: unknown): string | null {
 
 // ── Payload lezen ──────────────────────────────────────────────────────────
 
+/**
+ * `detail.reden` bij een INVOER_ONGELDIG van de modelcontrole (een last naar
+ * een staaf, knoop of geval dat niet bestaat, een koppel zonder `my`, …). De
+ * MCP-server kiest er een eigen remedie op (sidecar.rs, REDEN_MODELCONTROLE).
+ */
+export const REDEN_MODELCONTROLE = "modelcontrole";
+
 /** Payload deugt niet (vorm, veld, type) → INVOER_ONGELDIG. */
 class InvoerFout extends Error {
   constructor(
@@ -361,6 +400,17 @@ interface GelezenModel {
     scheefstandHoogteM: number | null;
     scheefstandAantalElementen: number | null;
   };
+  /**
+   * De scheefstand van de PROJECTINSTELLING, ook als de schakelaar uit staat:
+   * de UGT-toets rekent er altijd mee (`lib/toetsKrachten.ts`). Dezelfde
+   * bepaling als `scheefstandUitkomst` in de app, met de geometrie en de
+   * toepasselijke normen ernaast voor de toets-φ en de toelichting.
+   */
+  scheefstandProject: {
+    uitkomst: ScheefstandUitkomst;
+    geometrie: ScheefstandGeometrie;
+    normen: ScheefstandNorm[];
+  };
 }
 
 /**
@@ -379,12 +429,23 @@ interface GelezenModel {
  * die de app niet kent wordt GEWEIGERD, niet stil als vaste noemer gerekend.
  * Zonder `scheefstandBron` (elk bestand van vóór de normkeuze) blijft het
  * precies de vaste noemer, tot op de bit.
+ *
+ * TWEE UITKOMSTEN. `noemer` is die van de RESULTATEN: alleen met de
+ * schakelaar aan zit er een scheefstand in de krachten, en dan met deze
+ * noemer. `project` is de projectinstelling zelf, ook met de schakelaar uit:
+ * de UGT-toets rekent altijd met scheefstand (`lib/toetsKrachten.ts`), en dus
+ * altijd met deze φ — precies `scheefstandUitkomst` van de app.
  */
 function leesScheefstand(
   rauw: Record<string, unknown>,
   model: Pick<FemModelInvoer, "nodes" | "beams" | "supports">,
   opgegevenNoemer: number,
-): { noemer: number; meldingen: string[]; keuze: GelezenModel["scheefstandKeuze"] } {
+): {
+  noemer: number;
+  meldingen: string[];
+  keuze: GelezenModel["scheefstandKeuze"];
+  project: GelezenModel["scheefstandProject"];
+} {
   const bronRauw = rauw.scheefstandBron;
   if (bronRauw !== undefined && bronRauw !== null &&
       !(SCHEEFSTAND_BRONNEN as readonly unknown[]).includes(bronRauw)) {
@@ -416,12 +477,11 @@ function leesScheefstand(
     scheefstandHoogteM: typeof hoogte === "number" ? hoogte : null,
     scheefstandAantalElementen: typeof aantal === "number" ? aantal : null,
   };
-  if (rauw.scheefstandEnabled !== true || bron === "vast") {
-    return { noemer: opgegevenNoemer, meldingen: [], keuze };
-  }
+  // De projectinstelling, ook met de schakelaar uit (de toets rekent ermee).
   const geometrie = leidScheefstandGeometrieAf({
     nodes: model.nodes, beams: model.beams, supports: model.supports,
   });
+  const normen = toepasselijkeScheefstandNormen(model.beams);
   const uit = bepaalScheefstand(
     {
       bron,
@@ -430,8 +490,14 @@ function leesScheefstand(
       aantalElementen: keuze.scheefstandAantalElementen,
     },
     geometrie,
-    toepasselijkeScheefstandNormen(model.beams),
+    normen,
   );
+  const project = { uitkomst: uit, geometrie, normen };
+  // De resultaten: zonder schakelaar geen scheefstand in de krachten, en met de
+  // vaste noemer precies de opgegeven noemer, tot op de bit.
+  if (rauw.scheefstandEnabled !== true || bron === "vast") {
+    return { noemer: opgegevenNoemer, meldingen: [], keuze, project };
+  }
   const herkomst = uit.norm
     ? `${SCHEEFSTAND_BRON_LABEL[uit.bron]}` +
       (uit.bron === "ongunstigste" ? ` (${SCHEEFSTAND_BRON_LABEL[uit.norm]})` : "") +
@@ -443,7 +509,7 @@ function leesScheefstand(
       "deze normkeuze niet.",
     ...uit.waarschuwingen.map((w) => `Scheefstand: ${w}`),
   ];
-  return { noemer: uit.noemer, meldingen, keuze };
+  return { noemer: uit.noemer, meldingen, keuze, project };
 }
 
 /** Een geldige gevolgklasse, of `null`. */
@@ -531,6 +597,7 @@ function leesModel(payload: Record<string, unknown>): GelezenModel {
       rauw: uitBestand as unknown as Record<string, unknown>,
       scheefstandMeldingen: scheef.meldingen,
       scheefstandKeuze: scheef.keuze,
+      scheefstandProject: scheef.project,
       beams: bestand.beams ?? [],
       combinatiesUitBestand: combinationsFromFile(bestand.combinations) ?? null,
       nonlinearUitBestand: bestand.nonlinearEnabled ?? null,
@@ -609,6 +676,7 @@ function leesModel(payload: Record<string, unknown>): GelezenModel {
     betonKruipcoefficientUitBestand: null,
     scheefstandMeldingen: scheef.meldingen,
     scheefstandKeuze: scheef.keuze,
+    scheefstandProject: scheef.project,
   };
 }
 
@@ -959,7 +1027,6 @@ function opHandshake() {
   };
 }
 
-/** Gedeelde kern van `solve` en `check`. */
 /**
  * EIGEN GEWICHT IN HET ANTWOORD (#231). In de MCP-modelvorm staat
  * `selfWeightEnabled` standaard UIT (een nieuw appproject zet hem aan). Tot
@@ -1044,7 +1111,44 @@ function eigenGewichtStatus(model: FemModelInvoer): {
   };
 }
 
-function rekenDoor(payload: Record<string, unknown>) {
+/** Welke bewerking de rekengang vraagt: alleen de resultaten, of ook de toetsing. */
+type Bewerking = "solve" | "check";
+
+/**
+ * De toets heeft geen krachten: de tweede-ordeberekening (P-Δ) van de toets
+ * faalt in een UGT-combinatie (`ToetsKrachten2D.weigering`). Wordt
+ * MODEL_ONOPLOSBAAR, met de reden per combinatie en de toetsanalyse in
+ * `detail` — dezelfde code als een tweede-ordeberekening die niet convergeert.
+ */
+class ToetsGeweigerdFout extends Error {
+  constructor(
+    melding: string,
+    readonly detail: Record<string, unknown>,
+  ) {
+    super(melding);
+  }
+}
+
+/** Eén α_cr-uitkomst in de vorm van de uitvoer. */
+function vormAlphaCr(u: AlphaCrUitkomst) {
+  return {
+    combination_id: u.combinatieId,
+    name: u.naam,
+    alpha_cr: u.alphaCr,
+    status: u.status,
+    ...(u.grens !== undefined ? { bound: u.grens } : {}),
+    ...(u.reden !== undefined ? { reason: u.reden } : {}),
+    label: alphaCrLabel(u),
+  };
+}
+
+/**
+ * De RESULTAATREKENGANG, gedeeld door `solve` en `check`: het model zoals het
+ * is ingesteld — het analysetype en de scheefstandschakelaar van het model.
+ * Hieruit komen de resultaten van `solve` en de BGT van de toetsing. De
+ * UGT-toetskrachten rekent `opCheck` daarna zelf (`bepaalToetsKrachten2D`).
+ */
+function rekenDoor(payload: Record<string, unknown>, bewerking: Bewerking) {
   const gelezen = leesModel(payload);
 
   // Strenge veldpoort VÓÓR het rekenen. Een onbekende of verkeerd getypte
@@ -1085,7 +1189,10 @@ function rekenDoor(payload: Record<string, unknown>) {
       `Model niet doorgerekend — de modelcontrole (dezelfde als \`validate_fem_model\` en de ` +
         `app) vindt ${modelFouten.length} fout(en): ${getoond.join(" ")}` +
         (modelFouten.length > getoond.length ? ` En nog ${modelFouten.length - getoond.length}; zie \`detail.fouten\`.` : ""),
-      { fouten: modelFouten },
+      // `reden` onderscheidt deze weigering van de veldpoort hierboven: de
+      // MCP-server geeft er een eigen remedie bij (issue #204), want hier gaat
+      // het om een fout in het model, niet om een onbekend veld.
+      { fouten: modelFouten, reden: REDEN_MODELCONTROLE },
     );
   };
 
@@ -1119,18 +1226,31 @@ function rekenDoor(payload: Record<string, unknown>) {
     gelezen.model.scheefstandEnabled,
     gelezen.model.scheefstandRichting,
   );
-  const profileDb = leesProfielen(payload);
 
-  // Het ANALYSETYPE: uit het projectbestand als dat er is — een projectbestand
-  // draagt de keuze van de constructeur, en die mag een tool-vlag niet
-  // stilzwijgend overrulen. Het veld `analysetype` wint van de oude booleaan
-  // `nonlinearEnabled`, precies zoals `analysetypeUitBestand` in de app.
+  // `check` kent geen `nonlinear`: de UGT-toets rekent altijd tweede orde met
+  // scheefstand, en een vlag die dat lijkt te kunnen omzetten wordt geweigerd
+  // in plaats van genegeerd (dezelfde regel als de argumenten van
+  // `check_fem_model` in de MCP-server).
+  if (bewerking === "check" && payload.nonlinear !== undefined) {
+    throw new InvoerFout(
+      "Veld `nonlinear` bestaat niet bij `check`: de UGT-toets rekent altijd tweede orde " +
+        "(P-Δ) met scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en (7)b), los van het analysetype. " +
+        "Laat het veld weg; het analysetype van de resultaten volgt uit het projectbestand.",
+    );
+  }
+  // Het ANALYSETYPE van de RESULTATEN: uit het projectbestand als dat er is —
+  // een projectbestand draagt de keuze van de constructeur, en die mag een
+  // tool-vlag niet stilzwijgend overrulen. Het veld `analysetype` wint van de
+  // oude booleaan `nonlinearEnabled`, precies zoals `analysetypeUitBestand` in
+  // de app. De toets rekent hoe dan ook tweede orde (`opCheck`).
   //
   // De fysisch niet-lineaire stand wordt langs deze weg GEWEIGERD in plaats
   // van als geometrische tweede orde gerekend: de secans-EI per segment komt
   // uit de betonkern (EN 1992-1-1 5.8.6) en die lus draait in de app, niet in
   // de sidecar. Stil terugvallen zou een andere krachtsverdeling opleveren
-  // dan het bestand bewaart, met "tweedeOrdeGeometrisch" als etiket erop.
+  // dan het bestand bewaart, met "tweedeOrdeGeometrisch" als etiket erop. Bij
+  // `check` geldt dat ook voor de toets: die draait de ronde in de app op haar
+  // eigen tweede-ordeberekening.
   const analysetype: Analysetype =
     gelezen.analysetypeUitBestand !== null
       ? gelezen.analysetypeUitBestand
@@ -1139,11 +1259,19 @@ function rekenDoor(payload: Record<string, unknown>) {
         : (payload.nonlinear === true ? "tweedeOrdeGeometrisch" : "eersteOrde");
   if (analysetype === "tweedeOrdeFysisch") {
     throw new InvoerFout(
-      "Het projectbestand staat op \"2e orde + fysisch\" (tweedeOrdeFysisch): de " +
-        "betonstaven krijgen daarbij per segment de secans-EI uit de betonkern " +
-        "(NEN-EN 1992-1-1 5.8.6). Die lus draait alleen in de app en niet langs " +
-        "deze weg. Er wordt NIET stil als geometrische tweede orde gerekend; zet " +
-        "het analysetype op \"tweedeOrdeGeometrisch\" als dat de bedoeling is.",
+      bewerking === "check"
+        ? "Het projectbestand staat op \"2e orde + fysisch\" (tweedeOrdeFysisch). De UGT-toets " +
+            "rekent dan op haar eigen tweede-ordeberekening met scheefstand de fysisch " +
+            "niet-lineaire betonronde: per segment de secans-EI uit de betonkern (NEN-EN 1992-1-1 " +
+            "5.8.6). Die ronde draait alleen in de app en niet langs deze weg. Er wordt NIET stil " +
+            "geometrisch getoetst; zet het analysetype op \"tweedeOrdeGeometrisch\" (of " +
+            "\"eersteOrde\": de toets rekent toch P-Δ met scheefstand) als de betonstijfheidslus " +
+            "niet de bedoeling is."
+        : "Het projectbestand staat op \"2e orde + fysisch\" (tweedeOrdeFysisch): de " +
+            "betonstaven krijgen daarbij per segment de secans-EI uit de betonkern " +
+            "(NEN-EN 1992-1-1 5.8.6). Die lus draait alleen in de app en niet langs " +
+            "deze weg. Er wordt NIET stil als geometrische tweede orde gerekend; zet " +
+            "het analysetype op \"tweedeOrdeGeometrisch\" als dat de bedoeling is.",
     );
   }
   const nonlinear = analysetype !== "eersteOrde";
@@ -1212,26 +1340,30 @@ function rekenDoor(payload: Record<string, unknown>) {
     throw new ModelFout(String((err as Error)?.message ?? err));
   }
 
+  // Bij `check` gebruikt de toets van de UGT-resultaten alleen wat ze kan
+  // hergebruiken (`bepaalToetsKrachten2D`): P-Δ met de schakelaar aan, dezelfde
+  // φ en richting als de toets en geen UGT-eindtoestandvariant. Anders rekent
+  // de toets alle UGT zelf in ±x; dan zijn de UGT-resultaten (bij P-Δ één som
+  // per combinatie) en de omhullende alleen rekentijd, en een UGT-som zonder
+  // scheefstand die divergeert zou de check afbreken met MODEL_ONOPLOSBAAR in
+  // plaats van via de weigering van de toets. De BGT komt altijd uit de
+  // resultaten (B6). `combinaties` blijft de volledige lijst.
+  const ugtNodig = bewerking !== "check" || ugtResultatenHergebruikbaar(
+    analysetype, gelezen, multiInput, combinaties,
+  );
+  const teRekenen = ugtNodig ? rekenCombinaties : rekenCombinaties.filter((c) => c.type !== "uls");
   let combinationResults: Map<number, SolverResult>;
-  let envelope: ReturnType<typeof computeEnvelope>;
+  let envelope: ReturnType<typeof computeEnvelope> | null;
   try {
     combinationResults = new Map(
-      rekenCombinaties.map((c) => [c.id, combineResults(c, perCase)] as const),
+      teRekenen.map((c) => [c.id, combineResults(c, perCase)] as const),
     );
-    envelope = computeEnvelope(rekenCombinaties, perCase);
+    // De omhullende staat alleen in het antwoord van `solve`.
+    envelope = bewerking === "check" ? null : computeEnvelope(rekenCombinaties, perCase);
   } catch (err) {
     throw new ModelFout(String((err as Error)?.message ?? err));
   }
   const solveMs = Date.now() - start;
-
-  // De kritieke lastfactor α_cr per UGT-combinatie (basisaudit nr 27). Bij
-  // eerste orde en α_cr < 10 komt er een FOUT in `warnings`: de norm staat de
-  // berekening dan niet toe, en de toetsinvoer die hieronder wordt gebouwd is
-  // dan geen toetsing.
-  const stabiliteit = bepaalAlphaCr(multiInput, combinaties, combinationResults);
-  const stabiliteitMeldingen = stabiliteitsMeldingen(
-    stabiliteit, analysetype, gelezen.model.scheefstandEnabled,
-  );
 
   const gevraagd = gelezen.model.loadCases.map((lc) => lc.id);
   // Alleen de gewone geval-id's: de tegengestelde scheefstandrichting staat
@@ -1241,128 +1373,20 @@ function rekenDoor(payload: Record<string, unknown>) {
   // over. Zonder deze lijst krijgt een client een ontbrekende sleutel die als
   // "nul" leest; daarom staat hij expliciet in het antwoord.
   const legeGevallen = gevraagd.filter((id) => !perCase.has(id));
-
-  const teToetsen = pasCheckConfigToe(gelezen.beams, payload);
-  const gevraagdeIds =
-    payload.beam_ids === undefined
-      ? []
-      : (eisArray(payload.beam_ids, "beam_ids") as unknown[]).map(Number);
-  // LEEG = ALLE STAVEN, zoals het toolschema van `check_fem_model` belooft
-  // ("Leeg of afwezig = alle staalstaven"). Tot september 2026 las een lege
-  // lijst hier als "geen enkele staaf": er werd niets getoetst, en de Rust-kant
-  // meldde daarna elke staalstaaf als "niet herkend als staal" (gemeten met een
-  // S235-ligger op IPE 200).
-  const beamIds = gevraagdeIds.length === 0 ? null : new Set(gevraagdeIds);
-  const staafSelectie =
-    beamIds === null ? teToetsen : teToetsen.filter((b) => beamIds.has(b.id));
-  // Een gevraagd nummer zonder staaf in het model. Tot september 2026 stond het
-  // nergens in het antwoord: `beam_ids` [1, 99] gaf staaf 1 en zweeg over 99 —
-  // en een staaf die nergens staat, leest als een staaf die in orde is.
-  const inModel = new Set(gelezen.beams.map((b) => b.id));
-  const onbekendeIds = [...new Set(gevraagdeIds)].filter((id) => !inModel.has(id));
-
-  const staal = buildSteelCheckInputs({
-    nodes: gelezen.model.nodes,
-    beams: staafSelectie,
-    // Het hele model, ook buiten `beam_ids`: een doorgaande lijn en een vrij
-    // staafeind worden op alle staven herkend (`lib/doorgaandeLijn.ts`).
-    alleBeams: teToetsen,
-    plates: gelezen.model.plates,
-    // Nodig om een tussensteunpunt te onderscheiden van een knoop waar een
-    // ligger alleen is doorgeknipt; zonder deze lijst zou de doorbuigingstoets
-    // dat verschil niet kunnen melden.
-    supports: gelezen.model.supports,
-    combinations: rekenCombinaties,
-    combinationResults,
-    profileDb,
-    gevolgklasse,
-    // Nodig om w₁ te vinden: de BGT-combinatie met alleen de blijvende
-    // belastinggevallen (NEN-EN 1990:2002/NB:2019 A1.4.3(2)). Zonder deze
-    // lijst valt w_add terug op de volledige zakking, mét notitie.
-    loadCases: rekenGevallen,
-    // De nationale bijlage gaat als `bijlage` mee naar de rekenkern.
-    nationaleBijlage: bijlage,
-    stabiliteit: {
-      analysetype, alphaCr: stabiliteit, scheefstandAan: gelezen.model.scheefstandEnabled,
-      // De φ waarmee is gerekend: 1/noemer, al naar de normkeuze omgezet
-      // (`leesScheefstand`). Zie `zijdelingseKnikInVlakModel`.
-      ...(gelezen.model.scheefstandEnabled ? { scheefstandPhi: 1 / gelezen.model.scheefstandNoemer } : {}),
-    },
-  });
-
-  // Hout en kruislaaghout: DEZELFDE bouwers als de app, met dezelfde filters
-  // (stores/checkStore.ts): de houtbouwer ziet de CLT-staven niet, want hun
-  // profiel is een opbouw en geen b × h. De belastingduur per UGT-combinatie
-  // (k_mod, EN 1995-1-1 3.1.3(2)) volgt uit de belastinggevallen; de gevallen
-  // zonder werkzame last — die de solve oversloeg — tellen daarbij niet mee.
-  // De toetsing zelf gebeurt in Rust (`check_all_timber_beams`,
-  // `check_all_clt_beams`).
-  const houtklassen = leesHoutklassen(payload);
-  const houtData = {
-    nodes: gelezen.model.nodes,
-    supports: gelezen.model.supports,
-    // Het hele model en de platen, net als bij staal: een vrij staafeind
-    // (uitkraging) en een doorgaande lijn worden op alle staven herkend, ook
-    // buiten `beam_ids`, en een knoop op een plaat is geen vrij eind.
-    alleBeams: teToetsen,
-    plates: gelezen.model.plates,
-    combinations: rekenCombinaties,
-    combinationResults,
-    supportedGrades: houtklassen ?? undefined,
-    loadCases: rekenGevallen,
-    gevallenMetLast: opgelost,
-    nationaleBijlage: bijlage,
-    // Analysetype, α_cr en scheefstand, zoals de app ze via de toetsstore
-    // meegeeft: voor de α_cr-kanttekening en de kniklengte bij een vrij eind
-    // (2·L, of L bij P-Δ met scheefstand). Ontbrak tot oktober 2026 langs
-    // deze weg, waardoor hout via MCP anders getoetst werd dan in de app.
-    stabiliteit: {
-      analysetype, alphaCr: stabiliteit, scheefstandAan: gelezen.model.scheefstandEnabled,
-      // De φ waarmee is gerekend: 1/noemer, al naar de normkeuze omgezet
-      // (`leesScheefstand`). Zie `zijdelingseKnikInVlakModel`.
-      ...(gelezen.model.scheefstandEnabled ? { scheefstandPhi: 1 / gelezen.model.scheefstandNoemer } : {}),
-    },
-  };
-  const hout = buildTimberCheckInputs({
-    ...houtData,
-    beams: staafSelectie.filter((b) => !isCltProfiel(b.profile)),
-  });
-  const clt = buildCltCheckInputs({ ...houtData, beams: staafSelectie });
   const metHout = gelezen.beams.some((b) => matchSupportedTimberGrade(b.material) !== null);
-  // Platen (wandschijven): DEZELFDE bouwer als de app (stores/checkStore.ts).
-  // Altijd alle platen — `beam_ids` gaat over staven. De toetsing zelf gebeurt
-  // in Rust (`plaat_check::check_all_plates`).
-  const plaat = buildPlaatCheckInputs({
-    nodes: gelezen.model.nodes,
-    plates: gelezen.model.plates ?? [],
-    combinations: rekenCombinaties,
-    combinationResults,
-    nationaleBijlage: bijlage,
-    loadCases: rekenGevallen,
-    gevallenMetLast: opgelost,
-  });
 
-  const waarschuwingen: string[] = [];
-  if (houtklassen === null && metHout) {
-    waarschuwingen.push(
-      "Geen houtsterkteklassen meegegeven (`timber_grades`); de bundel valt terug op zijn " +
-        "eigen lijst, die uit de pas kan lopen met de rekenkern.",
-    );
-  }
-  if (profileDb.size === 0) {
-    waarschuwingen.push(
-      "Geen profieldatabase meegegeven (`profiles`); `steel_check_inputs` " +
-        "blijft daardoor leeg. Lever de lijst uit de staalprofielendatabase mee.",
-    );
-  }
+  // De waarschuwingen over de resultaten. Ze komen in twee delen, omdat de
+  // α_cr-meldingen ertussen staan, en die verschillen per bewerking: `solve`
+  // meldt α_cr van de resultaten, `check` die van de toets.
+  const waarschuwingenVoor: string[] = [];
   // De scheefstand: welke φ er is gerekend als een norm is gekozen, en wat
   // die afleiding te melden had. Zo is in het antwoord te lezen waarom de
   // horizontale krachten niet bij de noemer uit het bestand horen.
-  waarschuwingen.push(...gelezen.scheefstandMeldingen);
+  waarschuwingenVoor.push(...gelezen.scheefstandMeldingen);
   // Eindstijfheid hout: wat er is doorgerekend en wat niet (2.2.3(4), 2.2.3(5)).
-  waarschuwingen.push(...eindstijfheid.meldingen.map((m) => (m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst)));
+  waarschuwingenVoor.push(...eindstijfheid.meldingen.map((m) => (m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst)));
   if (legeGevallen.length > 0) {
-    waarschuwingen.push(
+    waarschuwingenVoor.push(
       `Belastinggeval(len) ${legeGevallen.join(", ")} zonder werkzame last ` +
         "overgeslagen; ze tellen als nulbijdrage in de combinaties.",
     );
@@ -1370,7 +1394,7 @@ function rekenDoor(payload: Record<string, unknown>) {
   for (const weg of selectie.overgeslagen) {
     // Luid, niet stil: wie acht combinaties in het bestand zette en er zes
     // terugkrijgt, moet in het antwoord kunnen lezen waarom.
-    waarschuwingen.push(`Combinatie ${weg.id} overgeslagen — ${weg.reden}`);
+    waarschuwingenVoor.push(`Combinatie ${weg.id} overgeslagen — ${weg.reden}`);
   }
   // Ook als de standaardcombinaties uit een bestand komen of bij het inlezen
   // zijn vervangen: dan rekenen ze evengoed met de aangenomen (of uit het
@@ -1380,35 +1404,35 @@ function rekenDoor(payload: Record<string, unknown>) {
     combinatieBron === "standaard" || alleCombinaties.some((c) => c.standaard),
     bijlage,
   );
-  if (klasseMelding) waarschuwingen.push(klasseMelding);
+  if (klasseMelding) waarschuwingenVoor.push(klasseMelding);
+  // Wat er bij het inlezen van het projectbestand is vervangen of weggehaald —
+  // dezelfde tekst als de melding bij het openen in de app.
+  waarschuwingenVoor.push(...gelezenCombinaties.openMeldingen);
   // Eigen gewicht uit: altijd melden, met wat er wegvalt (#231).
   const eigenGewicht = eigenGewichtStatus(gelezen.model);
-  if (eigenGewicht.melding) waarschuwingen.push(eigenGewicht.melding);
+  if (eigenGewicht.melding) waarschuwingenVoor.push(eigenGewicht.melding);
+  // Veldsgewijze plaatsing (issue #219): afkapping van het aantal patronen, en
+  // bij een niet-lineaire berekening de waarschuwing dat er niet veldsgewijs
+  // is geplaatst — nooit stil.
+  if (veld.uitkomst) waarschuwingenVoor.push(...veld.uitkomst.meldingen);
+  const resultatenLineair = !nonlinear && !metTrekAlleen;
+  for (const m of veldpatroonMeldingen({
+    beams: gelezen.model.beams,
+    supports: gelezen.model.supports,
+    loadCases: gelezen.model.loadCases,
+    loads: gelezen.model.loads,
+    lineair: resultatenLineair,
+  })) {
+    waarschuwingenVoor.push(m.tekst);
+  }
+
   // Een belastinggeval met last dat in geen enkele doorgerekende UGT-combinatie
   // meetelt, en eigen gewicht zonder blijvend geval. Tot september 2026 kwam
   // hier niets: een geval van type "overig" telde stil als nul (basisaudit nr 1).
   // En — dezelfde functie als de app — een blijvend geval met factoren die
   // niet bij een blijvende belasting passen, en standaardcombinaties die
   // ontbreken: dan is de combinatieset stil een deel van de juiste set.
-  // Wat er bij het inlezen van het projectbestand is vervangen of weggehaald —
-  // dezelfde tekst als de melding bij het openen in de app.
-  waarschuwingen.push(...gelezenCombinaties.openMeldingen);
-  // Veldsgewijze plaatsing (issue #219): afkapping van het aantal patronen, en
-  // bij een niet-lineaire berekening de waarschuwing dat er niet veldsgewijs
-  // is geplaatst — nooit stil.
-  if (veld.uitkomst) waarschuwingen.push(...veld.uitkomst.meldingen);
-  for (const m of veldpatroonMeldingen({
-    beams: gelezen.model.beams,
-    supports: gelezen.model.supports,
-    loadCases: gelezen.model.loadCases,
-    loads: gelezen.model.loads,
-    lineair: !nonlinear && !metTrekAlleen,
-  })) {
-    waarschuwingen.push(m.tekst);
-  }
-  for (const m of stabiliteitMeldingen) {
-    waarschuwingen.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
-  }
+  const waarschuwingenNa: string[] = [];
   for (const m of meldingenBelastinggevallen({
     loadCases: gelezen.model.loadCases,
     combinations: combinaties,
@@ -1419,12 +1443,23 @@ function rekenDoor(payload: Record<string, unknown>) {
     selfWeightEnabled: gelezen.model.selfWeightEnabled,
     metHout,
   })) {
-    waarschuwingen.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
+    waarschuwingenNa.push(m.niveau === "fout" ? `FOUT: ${m.tekst}` : m.tekst);
   }
+  // Bewust gekozen eigen factoren (issue #196): geen FOUT, wel vermeld.
+  const bevestigd = tekstBevestigdeEigenFactoren(
+    bevestigdeEigenFactoren({ loadCases: gelezen.model.loadCases, combinations: combinaties, bijlage }), bijlage,
+  );
+  if (bevestigd) waarschuwingenNa.push(bevestigd);
 
   return {
     gelezen,
+    gevolgklasse,
+    bijlage,
     analysetype,
+    eindstijfheid,
+    multiInput,
+    // De invoer met de deelgevallen per veld (issue #219); zonder veldsplitsing `multiInput` zelf.
+    rekenInput,
     combinaties,
     veldSplitsing,
     veldVarianten: veld.uitkomst?.combinaties ?? [],
@@ -1434,31 +1469,41 @@ function rekenDoor(payload: Record<string, unknown>) {
     perCase,
     metStations,
     nonlinear,
+    metHout,
     solveMs,
     gevraagd,
     opgelost,
     legeGevallen,
-    staal,
-    hout,
-    clt,
-    plaat,
-    onbekendeIds,
-    waarschuwingen,
+    waarschuwingenVoor,
+    waarschuwingenNa,
+    rekenCombinaties,
+    rekenGevallen,
     eigenGewicht: eigenGewicht.info,
     formatVersion: gelezen.formatVersion,
-    stabiliteit: {
-      analysis_type: analysetype,
-      alpha_cr: stabiliteit.map((u) => ({
-        combination_id: u.combinatieId,
-        name: u.naam,
-        alpha_cr: u.alphaCr,
-        status: u.status,
-        ...(u.grens !== undefined ? { bound: u.grens } : {}),
-        ...(u.reden !== undefined ? { reason: u.reden } : {}),
-        label: alphaCrLabel(u),
-      })),
-    },
   };
+}
+
+/**
+ * Kan de toets van `check` de UGT-resultaten hergebruiken? Dezelfde voorwaarden
+ * als `hergebruikt` in `bepaalToetsKrachten2D`: tweede orde, de schakelaar aan,
+ * geen UGT-eindtoestandvariant, en de φ en richting van de resultaten gelijk
+ * aan die van de toets (met hout eventueel verhoogd volgens EN 1995 (5.1)).
+ */
+function ugtResultatenHergebruikbaar(
+  analysetype: Analysetype,
+  gelezen: GelezenModel,
+  multiInput: MultiInput,
+  combinaties: readonly LoadCombination[],
+): boolean {
+  if (analysetype === "eersteOrde" || !gelezen.model.scheefstandEnabled) return false;
+  if (combinaties.some((c) => c.type === "uls" && c.eindtoestand !== undefined)) return false;
+  const resultaat = multiInput.scheefstand;
+  if (!resultaat || resultaat.richting !== gelezen.model.scheefstandRichting) return false;
+  const ts = bepaalToetsScheefstand(
+    gelezen.scheefstandProject.uitkomst,
+    toetsScheefstandNormen(gelezen.model.beams, gelezen.model.plates ?? []),
+  );
+  return Math.abs(resultaat.phi - ts.phi) <= ts.phi * TOETS_PHI_MARGE;
 }
 
 /**
@@ -1493,8 +1538,26 @@ function eenmaalPerStaaf(
   return uit;
 }
 
+/**
+ * `solve`: de RESULTATEN — het model zoals het is ingesteld, met α_cr per
+ * UGT-combinatie van deze berekening. Geen toetsinvoer: die rustte op deze
+ * krachten, terwijl de toets altijd zelf tweede orde met scheefstand rekent
+ * (`opCheck`). Wie wil toetsen, vraagt `check`.
+ */
 function opSolve(payload: Record<string, unknown>) {
-  const d = rekenDoor(payload);
+  const d = rekenDoor(payload, "solve");
+
+  // De kritieke lastfactor α_cr per UGT-combinatie van de resultaten
+  // (basisaudit nr 27), met de meldingen bij het analysetype van het model.
+  // Informatief (issue #199, B14): de toets rekent altijd zelf tweede orde
+  // met scheefstand, dus "eerste orde niet toegestaan" is geen FOUT meer.
+  const stabiliteit = bepaalAlphaCr(d.multiInput, d.combinaties, d.combinationResults);
+  const waarschuwingen = [
+    ...d.waarschuwingenVoor,
+    ...stabiliteitsMeldingen(stabiliteit, d.analysetype, d.gelezen.model.scheefstandEnabled)
+      .map((m) => m.tekst),
+    ...d.waarschuwingenNa,
+  ];
 
   const antwoord = {
     solver_version: PAKKET_VERSIE,
@@ -1521,22 +1584,19 @@ function opSolve(payload: Record<string, unknown>) {
     combinations: mapNaarObject(d.combinationResults, (r) =>
       vormResultaat(r, d.metStations),
     ),
-    envelope: vormEnvelop(d.envelope),
+    envelope: vormEnvelop(d.envelope!),
     // De veldsgewijze plaatsing (issue #219): welke gevallen per veld zijn
     // gesplitst en welke combinatie-id's varianten zijn. Alleen aanwezig als
     // er iets te plaatsen viel; een model zonder blijft byte-gelijk.
     ...(d.veldSplitsing ? { field_patterns: vormVeldpatronen(d.veldSplitsing, d.veldVarianten) } : {}),
-    // α_cr per UGT-combinatie; een waarde onder 10 bij eerste orde staat ook
-    // als FOUT in `warnings` (NEN-EN 1993-1-1 5.2.1(3)).
-    stability: d.stabiliteit,
-    steel_check_inputs: d.staal.inputs,
-    skipped_beams: d.staal.skipped.map((s) => ({
-      beam_id: s.beamId,
-      reason: s.reason,
-    })),
+    // Het analysetype van deze resultaten en α_cr per UGT-combinatie.
+    stability: {
+      analysis_type: d.analysetype,
+      alpha_cr: stabiliteit.map(vormAlphaCr),
+    },
     // Of en waar het eigen gewicht is meegerekend, en hoeveel het is (#231).
     self_weight: d.eigenGewicht,
-    warnings: d.waarschuwingen,
+    warnings: waarschuwingen,
     solve_ms: d.solveMs,
   };
 
@@ -1553,15 +1613,311 @@ function opSolve(payload: Record<string, unknown>) {
   return antwoord;
 }
 
+/** De toetsanalyse in de vorm van de uitvoer (`stability` van `check`). */
+function vormToetsStabiliteit(toets: ToetsKrachten2D, modelAnalysetype: Analysetype) {
+  return {
+    // De analyse van de TOETSKRACHTEN: altijd tweede orde.
+    analysis_type: toets.analyse.soort,
+    // De analyse van de resultaten (en de BGT-toetsen).
+    model_analysis_type: modelAnalysetype,
+    // De resultaten waren al deze tweede orde met deze φ: geen extra som.
+    hergebruikt: toets.analyse.hergebruikt,
+    scheefstand: {
+      phi: toets.analyse.phi,
+      noemer: toets.analyse.noemer,
+      bron: toets.analyse.bron,
+      // De schakelaar van het model; die geldt alleen voor de resultaten.
+      model_scheefstand_aan: toets.analyse.scheefstandModelAan,
+      // De toets rekent altijd met deze scheefstand. Een bundel van vóór die
+      // regel kent het veld niet; de MCP-server weigert dan de toetsing.
+      afgedwongen: true,
+    },
+    // α_cr per UGT-basiscombinatie van de toets: informatief, want de grens
+    // α_cr ≥ 10 van 5.2.1(3) geldt alleen voor eerste orde.
+    alpha_cr: toets.alphaCr.map(vormAlphaCr),
+  };
+}
+
 /**
- * `check`: dezelfde doorrekening, maar het antwoord is toegespitst op de
- * toetsing. De normtoetsing zelf gebeurt in Rust (`steel_check::check_all_beams`,
- * `timber_check::check_all_timber_beams` en `…::clt::check_all_clt_beams`) —
- * dezelfde functies die de app aanroept. De sidecar levert alleen de invoer,
- * en levert die ook zichtbaar mee terug, zodat te zien is wát er getoetst is.
+ * De vaste regel over de toetskrachten in `warnings`: welke analyse, welke φ
+ * en waar die vandaan komt, en wat de instellingen van het model nog doen.
+ */
+function toetsRegel(
+  toets: ToetsKrachten2D,
+  modelAnalysetype: Analysetype,
+  scheefstandModelAan: boolean,
+  project: ScheefstandUitkomst,
+): string {
+  const a = toets.analyse;
+  const herkomst = a.bron === "en1995" && project.bron !== "en1995"
+    ? `${SCHEEFSTAND_BRON_LABEL.en1995}, want het model bevat hout`
+    : project.norm
+      ? `${SCHEEFSTAND_BRON_LABEL[project.bron]}` +
+        (project.bron === "ongunstigste" ? ` (${SCHEEFSTAND_BRON_LABEL[project.norm]})` : "") +
+        `, h = ${project.hoogteM} m, m = ${project.aantalElementen}`
+      : SCHEEFSTAND_BRON_LABEL[project.bron];
+  return (
+    `Toetskrachten: de UGT-toets rekent altijd ${ANALYSETYPE_LABEL[a.soort]} met scheefstand ` +
+    `φ = 1/${noemerTekst(a.noemer)} (${herkomst}), elke UGT-combinatie in +x en −x, los van het ` +
+    "analysetype en de scheefstandschakelaar van het model (NEN-EN 1993-1-1 5.2.2(3)b en (7)b, " +
+    "5.3.2); de staaftoets gebruikt de systeemlengte. De resultaten " +
+    `(${ANALYSETYPE_LABEL[modelAnalysetype]}, scheefstand ${scheefstandModelAan ? "aan" : "uit"}) ` +
+    "gelden voor de BGT-toetsen." +
+    (a.hergebruikt
+      ? " De resultaten zijn al deze tweede-ordeberekening; de toets gebruikt ze zonder nieuwe som."
+      : "")
+  );
+}
+
+/**
+ * `analyse_toelichting` van `check`: de resultaten en de toetskrachten, elk
+ * met hun analyse, en daarna α_cr van de toets — het tekstblok dat het
+ * rapport onder "Berekeningswijze en stabiliteit" zet. Dezelfde functie als de
+ * app (`analyseToelichting`), zodat MCP, scherm en PDF dezelfde tekst hebben.
+ */
+function toetsAnalyseToelichting(
+  toets: ToetsKrachten2D,
+  d: ReturnType<typeof rekenDoor>,
+  toetsNormen: readonly ScheefstandNorm[],
+): string {
+  const model = d.analysetype;
+  // De meldingen over de toets-φ zelf staan al in `scheefstand_toelichting`.
+  const phiMeldingen = bepaalToetsScheefstand(d.gelezen.scheefstandProject.uitkomst, toetsNormen).meldingen;
+  return analyseToelichting({
+    resultaten: {
+      analysetype: model,
+      label: ANALYSETYPE_LABEL[model],
+      omschrijving: ANALYSETYPE_OMSCHRIJVING[model],
+      scheefstandAan: d.gelezen.model.scheefstandEnabled,
+      scheefstandNoemer: d.gelezen.model.scheefstandNoemer,
+    },
+    toets: toetsOmschrijving(toets.analyse, "2d", toetsNormen.includes("en1992")),
+    alphaCr: toets.alphaCr,
+    // Wat er naast de gewone berekening is gedaan en wat niet: de eindstijfheid
+    // van hout (zoals in de app) en de meldingen van de toets.
+    meldingen: [
+      ...d.eindstijfheid.meldingen.map((m) => m.tekst),
+      ...toets.meldingen.filter((m) => !phiMeldingen.includes(m)),
+    ],
+  });
+}
+
+/**
+ * `check`: de resultaten (`rekenDoor`) plus de toetsing. De normtoetsing zelf
+ * gebeurt in Rust (`steel_check::check_all_beams`,
+ * `timber_check::check_all_timber_beams`, `…::clt::check_all_clt_beams` en
+ * `plaat_check::check_all_plates`) — dezelfde functies die de app aanroept. De
+ * sidecar levert de invoer, en levert die ook zichtbaar mee terug, zodat te
+ * zien is wát er getoetst is.
+ *
+ * DE TOETSKRACHTEN (issue #199). De UGT komt uit `bepaalToetsKrachten2D`:
+ * altijd tweede orde (P-Δ) met de scheefstand van de projectinstelling, in +x
+ * en −x, ook als de schakelaar uit staat of het model eerste orde rekent —
+ * dezelfde functie als de app. De BGT komt uit de resultaten (`toetsSet2D`).
+ * Zijn de resultaten al P-Δ met dezelfde φ, dan zijn de toetskrachten die
+ * resultaten zelf. Divergeert de tweede orde van de toets, dan is er geen
+ * toetsing: MODEL_ONOPLOSBAAR met de reden per combinatie, nooit eerste orde.
  */
 function opCheck(payload: Record<string, unknown>) {
-  const d = rekenDoor(payload);
+  const d = rekenDoor(payload, "check");
+  const { gelezen } = d;
+  const project = gelezen.scheefstandProject;
+  // De normen voor de toets-φ: die van de staven én van de platen (een houten
+  // wandschijf geeft het minimum van NEN-EN 1995-1-1 (5.1)), zoals de app.
+  const toetsNormen = toetsScheefstandNormen(gelezen.model.beams, gelezen.model.plates ?? []);
+
+  // ── De UGT-toetskrachten: altijd tweede orde met scheefstand ──
+  const start = Date.now();
+  let toets: ToetsKrachten2D;
+  try {
+    toets = bepaalToetsKrachten2D({
+      // De veldsgewijze plaatsing (issue #219) ook in de toets: de UGT-varianten
+      // per veldpatroon, elk als volledige P-Δ-som op de invoer met de
+      // deelgevallen. Het patroon zelf komt uit de eerste-orde-invloedslijn
+      // (NEN-EN 1991-1-1 6.2.1(1)); superpositie van tweede-ordeuitkomsten
+      // gebeurt niet. Zonder deze regel stond een veranderlijke vloerlast in
+      // de UGT-toets op alle velden tegelijk (MCP-proef: 12,19 in plaats van
+      // 21,56 kNm in het middenveld).
+      basis: d.rekenInput,
+      combinaties: d.rekenCombinaties,
+      scheefstand: {
+        project: project.uitkomst,
+        normen: toetsNormen,
+        richting: gelezen.model.scheefstandRichting,
+        modelAan: gelezen.model.scheefstandEnabled,
+      },
+      analysetype: d.analysetype,
+      resultaten: { perCase: d.perCase, combinationResults: d.combinationResults },
+    });
+  } catch (err) {
+    // `bepaalToetsKrachten2D` weigert zelf per combinatie; dit vangt een fout
+    // vóór de som (een onbruikbare toetsinvoer). Ook dan geen toetsing.
+    throw new ModelFout(String((err as Error)?.message ?? err));
+  }
+  const stability = vormToetsStabiliteit(toets, d.analysetype);
+  if (toets.weigering) {
+    // α_cr per combinatie als getal: die van haar basiscombinatie (de −x-
+    // variant draagt id + 1 000 000). `null` = niet bepaald; de reden noemt
+    // het getal alleen als het bepaald is.
+    const alphaVan = (id: number) =>
+      toets.alphaCr.find((u) => u.combinatieId === id)
+      ?? toets.alphaCr.find((u) => u.combinatieId === id - SCHEEFSTAND_COMBO_OFFSET);
+    throw new ToetsGeweigerdFout(weigeringTekst(toets.weigering), {
+      toets_geweigerd: true,
+      per_combinatie: toets.weigering.perCombinatie.map((p) => ({
+        combination_id: p.id,
+        name: p.naam,
+        reason: p.reden,
+        alpha_cr: alphaVan(p.id)?.alphaCr ?? null,
+      })),
+      stability,
+    });
+  }
+  // Het hele model, met de toetsconfiguratie uit `check_config` erbij.
+  const teToetsen = pasCheckConfigToe(gelezen.beams, payload);
+  // De toetsset: de UGT uit de toets, de BGT uit de resultaten. Een fout hier
+  // (de eerste orde voor §5.8 is een eigen som) is een rekenfout van het model.
+  let set: ReturnType<typeof toetsSet2D>;
+  try {
+    set = toetsSet2D(
+      toets,
+      { combinaties: d.rekenCombinaties, combinationResults: d.combinationResults, perCase: d.perCase },
+      teToetsen,
+    );
+  } catch (err) {
+    throw new ModelFout(String((err as Error)?.message ?? err));
+  }
+  const toetsMs = Date.now() - start;
+
+  const profileDb = leesProfielen(payload);
+  const gevraagdeIds =
+    payload.beam_ids === undefined
+      ? []
+      : (eisArray(payload.beam_ids, "beam_ids") as unknown[]).map(Number);
+  // LEEG = ALLE STAVEN, zoals het toolschema van `check_fem_model` belooft
+  // ("Leeg of afwezig = alle staalstaven"). Tot september 2026 las een lege
+  // lijst hier als "geen enkele staaf": er werd niets getoetst, en de Rust-kant
+  // meldde daarna elke staalstaaf als "niet herkend als staal" (gemeten met een
+  // S235-ligger op IPE 200).
+  const beamIds = gevraagdeIds.length === 0 ? null : new Set(gevraagdeIds);
+  const staafSelectie =
+    beamIds === null ? teToetsen : teToetsen.filter((b) => beamIds.has(b.id));
+  // Een gevraagd nummer zonder staaf in het model. Tot september 2026 stond het
+  // nergens in het antwoord: `beam_ids` [1, 99] gaf staaf 1 en zweeg over 99 —
+  // en een staaf die nergens staat, leest als een staaf die in orde is.
+  const inModel = new Set(gelezen.beams.map((b) => b.id));
+  const onbekendeIds = [...new Set(gevraagdeIds)].filter((id) => !inModel.has(id));
+
+  const staal = buildSteelCheckInputs({
+    nodes: gelezen.model.nodes,
+    beams: staafSelectie,
+    // Het hele model, ook buiten `beam_ids`: een doorgaande lijn en een vrij
+    // staafeind worden op alle staven herkend (`lib/doorgaandeLijn.ts`).
+    alleBeams: teToetsen,
+    plates: gelezen.model.plates,
+    // Nodig om een tussensteunpunt te onderscheiden van een knoop waar een
+    // ligger alleen is doorgeknipt; zonder deze lijst zou de doorbuigingstoets
+    // dat verschil niet kunnen melden.
+    supports: gelezen.model.supports,
+    // De toetsset: de UGT-toetskrachten en de BGT van de resultaten.
+    combinations: set.combinaties,
+    combinationResults: set.combinationResults,
+    profileDb,
+    gevolgklasse: d.gevolgklasse,
+    // Nodig om w₁ te vinden: de BGT-combinatie met alleen de blijvende
+    // belastinggevallen (NEN-EN 1990:2002/NB:2019 A1.4.3(2)). Zonder deze
+    // lijst valt w_add terug op de volledige zakking, mét notitie.
+    loadCases: d.rekenGevallen,
+    // De nationale bijlage gaat als `bijlage` mee naar de rekenkern.
+    nationaleBijlage: d.bijlage,
+    // De TOETSanalyse: tweede orde met scheefstand, de toets-φ en haar α_cr —
+    // zoals de app hem meegeeft. Een kolom met een vrije kop krijgt alleen L
+    // als die φ minstens haar eigen φ is (`zijdelingseKnikInVlakModel`).
+    stabiliteit: set.stabiliteit,
+  });
+
+  // Hout en kruislaaghout: DEZELFDE bouwers als de app, met dezelfde filters
+  // (stores/checkStore.ts): de houtbouwer ziet de CLT-staven niet, want hun
+  // profiel is een opbouw en geen b × h. De belastingduur per UGT-combinatie
+  // (k_mod, EN 1995-1-1 3.1.3(2)) volgt uit de belastinggevallen; de gevallen
+  // zonder werkzame last — die de solve oversloeg — tellen daarbij niet mee.
+  // De toetsing zelf gebeurt in Rust (`check_all_timber_beams`,
+  // `check_all_clt_beams`).
+  const houtklassen = leesHoutklassen(payload);
+  const houtData = {
+    nodes: gelezen.model.nodes,
+    supports: gelezen.model.supports,
+    // Het hele model en de platen, net als bij staal: een vrij staafeind
+    // (uitkraging) en een doorgaande lijn worden op alle staven herkend, ook
+    // buiten `beam_ids`, en een knoop op een plaat is geen vrij eind.
+    alleBeams: teToetsen,
+    plates: gelezen.model.plates,
+    combinations: set.combinaties,
+    combinationResults: set.combinationResults,
+    supportedGrades: houtklassen ?? undefined,
+    loadCases: d.rekenGevallen,
+    // Uit de RESULTATEN: de toetsrekengang lost geen gevallen los op.
+    gevallenMetLast: d.opgelost,
+    nationaleBijlage: d.bijlage,
+    // De toetsanalyse, zoals de app hem via de toetsstore meegeeft: voor de
+    // kniklengte bij een vrij eind (hout houdt 2·L, met E_mean in de P-Δ).
+    stabiliteit: set.stabiliteit,
+  };
+  const hout = buildTimberCheckInputs({
+    ...houtData,
+    beams: staafSelectie.filter((b) => !isCltProfiel(b.profile)),
+  });
+  const clt = buildCltCheckInputs({ ...houtData, beams: staafSelectie });
+  // Platen (wandschijven): DEZELFDE bouwer als de app (stores/checkStore.ts).
+  // Altijd alle platen — `beam_ids` gaat over staven. De toetsing zelf gebeurt
+  // in Rust (`plaat_check::check_all_plates`).
+  const plaat = buildPlaatCheckInputs({
+    nodes: gelezen.model.nodes,
+    plates: gelezen.model.plates ?? [],
+    combinations: set.combinaties,
+    combinationResults: set.combinationResults,
+    nationaleBijlage: d.bijlage,
+    loadCases: d.rekenGevallen,
+    gevallenMetLast: d.opgelost,
+  });
+
+  // ── De waarschuwingen ──
+  // Vooraan de vaste regel over de toetskrachten: zonder die regel leest een
+  // client de UC als een toetsing op de krachten van `solve`.
+  const waarschuwingen: string[] = [
+    toetsRegel(toets, d.analysetype, gelezen.model.scheefstandEnabled, project.uitkomst),
+  ];
+  if (houtklassen === null && d.metHout) {
+    waarschuwingen.push(
+      "Geen houtsterkteklassen meegegeven (`timber_grades`); de bundel valt terug op zijn " +
+        "eigen lijst, die uit de pas kan lopen met de rekenkern.",
+    );
+  }
+  if (profileDb.size === 0) {
+    waarschuwingen.push(
+      "Geen profieldatabase meegegeven (`profiles`); `steel_check_inputs` " +
+        "blijft daardoor leeg. Lever de lijst uit de staalprofielendatabase mee.",
+    );
+  }
+  waarschuwingen.push(...d.waarschuwingenVoor);
+  // Met de schakelaar uit stond de afleiding van φ nog nergens; de toets
+  // rekent er wel mee.
+  if (!gelezen.model.scheefstandEnabled) {
+    waarschuwingen.push(...project.uitkomst.waarschuwingen.map((w) => `Scheefstand (toets): ${w}`));
+  }
+  // α_cr van de TOETS, informatief (B14): de toets rekent nooit eerste orde,
+  // dus de grens α_cr ≥ 10 van 5.2.1(3) speelt voor de toets niet. Wat α_cr
+  // nog zegt, gaat over de resultaten (het analysetype en de schakelaar van het
+  // model) — dezelfde regels als in `analyse_toelichting`.
+  for (const m of stabiliteitsMeldingen(toets.alphaCr, d.analysetype, gelezen.model.scheefstandEnabled)) {
+    waarschuwingen.push(m.tekst);
+  }
+  waarschuwingen.push(...d.waarschuwingenNa);
+  // Wat de toets te melden had: hout met E_mean en 2·L, een door hout
+  // verhoogde φ, een vaste noemer onder de normwaarde, vervallen
+  // eindtoestandvarianten.
+  waarschuwingen.push(...toets.meldingen);
+
   return {
     solve_summary: {
       cases_requested: d.gevraagd,
@@ -1574,32 +1930,56 @@ function opCheck(payload: Record<string, unknown>) {
           reason: c.reden,
         }),
       ),
+      // De resultaten; de toets rekent hoe dan ook tweede orde.
       nonlinear_used: d.nonlinear,
       solve_ms: d.solveMs,
+      // De toetsrekengang: de P-Δ-sommen van de toets en de toetsset. Bij
+      // hergebruik alleen het samenstellen.
+      toets_ms: toetsMs,
     },
     units: EENHEDEN,
-    stability: d.stabiliteit,
-    steel_check_inputs: d.staal.inputs,
+    stability,
+    // De tekstblokken voor het rapport (`generate_steel_report_pdf`).
+    analyse_toelichting: toetsAnalyseToelichting(toets, d, toetsNormen),
+    // De afleiding van φ uit de projectinstelling, met de toets erbij: dezelfde
+    // functie als het rapport van de app (`scheefstandToelichtingToets`).
+    scheefstand_toelichting: scheefstandToelichtingToets(project.uitkomst, project.geometrie, toetsNormen),
+    // De herkomst van de toetskrachten per combinatie, in de vorm van
+    // `ReportInput.toetskrachten`: de krachtregel van de PDF noemt daarmee
+    // "2e orde + scheefstand φ = 1/…" bij een UGT-toetscombinatie en
+    // "resultaten" bij een BGT-combinatie — zoals de app hem meegeeft.
+    toetskrachten: {
+      noemer: toets.analyse.noemer,
+      tweede_orde_combinaties: toets.ugtCombinaties.map((c) => c.id),
+      // De namen, zodat de PDF "UGT … (scheefstand −x)" zegt in plaats van het
+      // id + 1 000 000 dat in geen combinatielijst staat. Alle toetscombinaties:
+      // de UGT van de toets en de BGT van de resultaten.
+      combinaties: [
+        ...toets.ugtCombinaties.map((c) => ({ id: c.id, naam: c.name })),
+        ...d.combinaties.filter((c) => c.type !== "uls").map((c) => ({ id: c.id, naam: c.name })),
+      ],
+    },
+    steel_check_inputs: staal.inputs,
     // Het bestaan van deze twee sleutels zegt de server dat deze bundel hout
     // toetsbaar maakt; een oudere bundel heeft ze niet, en dan meldt de server
     // dat in `skipped_beams` in plaats van "nul houtstaven" te lezen.
-    timber_check_inputs: d.hout.inputs,
-    clt_check_inputs: d.clt.inputs,
+    timber_check_inputs: hout.inputs,
+    clt_check_inputs: clt.inputs,
     // Elk gevraagd nummer staat in de toetsinvoer of hier — ook een nummer dat
     // geen staaf is — en elk maar één keer.
     skipped_beams: eenmaalPerStaaf(
-      [...d.staal.skipped, ...d.hout.skipped, ...d.clt.skipped]
+      [...staal.skipped, ...hout.skipped, ...clt.skipped]
         .map((s) => ({ beam_id: s.beamId, reason: s.reason }))
-        .concat(d.onbekendeIds.map((id) => ({ beam_id: id, reason: redenBestaatNiet(id) }))),
-      new Set([...d.staal.inputs, ...d.hout.inputs, ...d.clt.inputs].map((i) => i.beam_id)),
+        .concat(onbekendeIds.map((id) => ({ beam_id: id, reason: redenBestaatNiet(id) }))),
+      new Set([...staal.inputs, ...hout.inputs, ...clt.inputs].map((i) => i.beam_id)),
     ),
     // Platen: elke plaat staat in de toetsinvoer of hier, met reden. Het
     // bestaan van `plate_check_inputs` zegt de server dat deze bundel platen
     // toetsbaar maakt.
-    plate_check_inputs: d.plaat.inputs,
-    skipped_plates: d.plaat.skipped.map((s) => ({ plate_id: s.plateId, reason: s.reason })),
+    plate_check_inputs: plaat.inputs,
+    skipped_plates: plaat.skipped.map((s) => ({ plate_id: s.plateId, reason: s.reason })),
     self_weight: d.eigenGewicht,
-    warnings: d.waarschuwingen,
+    warnings: waarschuwingen,
   };
 }
 
@@ -1684,6 +2064,11 @@ function opLoadProject(payload: Record<string, unknown>) {
   })) {
     warnings.push(mld.niveau === "fout" ? `FOUT: ${mld.tekst}` : mld.tekst);
   }
+  // Bewust gekozen eigen factoren (issue #196): geen FOUT, wel vermeld.
+  const bevestigd = tekstBevestigdeEigenFactoren(
+    bevestigdeEigenFactoren({ loadCases: m.loadCases, combinations: lijst, bijlage }), bijlage,
+  );
+  if (bevestigd) warnings.push(bevestigd);
   return {
     path: typeof payload.path === "string" ? payload.path : null,
     format_version: gelezen.formatVersion,
@@ -1698,6 +2083,11 @@ function opLoadProject(payload: Record<string, unknown>) {
       type: c.type,
       formula: c.formula,
       factors: Object.fromEntries([...c.factors].map(([k, v]) => [String(k), v])),
+      // Bewust gekozen eigen factoren (issue #196) gaan mee: wie de combinaties
+      // ongewijzigd teruggeeft aan solve of validate, houdt de bevestiging.
+      ...(c.bevestigdeFactoren && Object.keys(c.bevestigdeFactoren).length > 0
+        ? { bevestigdeFactoren: Object.fromEntries(Object.entries(c.bevestigdeFactoren)) }
+        : {}),
     })),
     combinations_source: bron,
     gevolgklasse: klasse.klasse,
@@ -1733,7 +2123,8 @@ function opIfcfemresultsSchrijven(payload: Record<string, unknown>) {
   if (bestandsnaam !== undefined && typeof bestandsnaam !== "string") {
     throw new InvoerFout("`bestandsnaam` moet tekst zijn.");
   }
-  const d = rekenDoor(rekenPayload);
+  // Resultaten zoals `solve`: dezelfde rekengang en dezelfde meldingen.
+  const d = rekenDoor(rekenPayload, "solve");
   const m = d.gelezen.model;
   const perCase = gevalResultaten(d.perCase);
   const project = rekenPayload.project as { inhoud?: unknown } | undefined;
@@ -1758,7 +2149,7 @@ function opIfcfemresultsSchrijven(payload: Record<string, unknown>) {
     gevallen: [...perCase.keys()],
     combinaties: [...d.combinationResults.keys()],
     project_ingebed: projectTekst !== undefined,
-    warnings: d.waarschuwingen,
+    warnings: [...d.waarschuwingenVoor, ...d.waarschuwingenNa],
   };
 }
 
@@ -1884,6 +2275,15 @@ export function verwerkVerzoek(verzoek: SidecarVerzoek): SidecarAntwoord {
         staven: err.staven.map((s) => ({ beam_id: s.beamId, reason: s.reden })),
       });
     }
+    if (err instanceof ToetsGeweigerdFout) {
+      // De toets heeft geen krachten (de tweede orde van de toets divergeert).
+      // Een eigen code: het model IS doorgerekend (solve_fem_model geeft de
+      // resultaten) en heeft geen mechanisme; de remedie van MODEL_ONOPLOSBAAR
+      // ("controleer de opleggingen") zou de verkeerde kant op wijzen. Met de
+      // reden en α_cr per combinatie en de toetsanalyse in `detail`. Geen
+      // toetsing, en zeker geen toetsing op eerste-ordekrachten.
+      return maakFout(verzoek.id, "TOETSING_GEWEIGERD", err.message, err.detail);
+    }
     if (err instanceof ModelFout) {
       // De kern meldt in het Engels; `fouten.ts` beeldt bekende meldingen af op
       // Nederlands en kiest de foutcode. Een ONBEKENDE melding wordt niet
@@ -1973,7 +2373,12 @@ function leidConsoleOm(): void {
  */
 export function startSidecar(): void {
   leidConsoleOm();
-  let buffer = "";
+  // De stukken van de regel die nog niet af is. Alleen het NIEUWE stuk wordt
+  // op "\n" doorzocht: een verzoek van honderd MB (de staalhal met zijn
+  // toetsresultaten, issue #199) komt in duizenden stukken binnen, en steeds
+  // de hele buffer samenvoegen en doorzoeken kostte kwadratisch veel tijd
+  // (tientallen seconden voor één regel).
+  let stukken: string[] = [];
   let wachtrij = Promise.resolve();
   const plan = (regel: string) => {
     wachtrij = wachtrij.then(async () => {
@@ -1983,19 +2388,21 @@ export function startSidecar(): void {
   };
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (brok?: string) => {
-    buffer += brok ?? "";
-    let grens = buffer.indexOf("\n");
+    let rest = brok ?? "";
+    let grens = rest.indexOf("\n");
     while (grens >= 0) {
-      const regel = buffer.slice(0, grens);
-      buffer = buffer.slice(grens + 1);
-      plan(regel);
-      grens = buffer.indexOf("\n");
+      stukken.push(rest.slice(0, grens));
+      plan(stukken.join(""));
+      stukken = [];
+      rest = rest.slice(grens + 1);
+      grens = rest.indexOf("\n");
     }
+    if (rest.length > 0) stukken.push(rest);
   });
   process.stdin.on("end", () => {
     // Laatste regel zonder afsluitende "\n" telt gewoon mee.
-    plan(buffer);
-    buffer = "";
+    plan(stukken.join(""));
+    stukken = [];
     void wachtrij.then(() => { process.exitCode = 0; });
   });
   process.stdin.resume();

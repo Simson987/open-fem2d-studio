@@ -440,7 +440,7 @@ function combinatieSleutel(
   // De SOORT telt mee: de toetsen zoeken hun combinaties op soort (6.14b voor
   // de doorbuiging, 6.15b voor de scheurwijdte); een 6.14b-variant met alleen
   // G mag niet wegvallen omdat 6.16b toevallig dezelfde factoren heeft.
-  return `${c.type}|${soortVanCombinatie(c) ?? ""}|${c.scheefstandAs ?? ""}${c.scheefstandRichting ?? ""}|${e}|${deel}`;
+  return `${c.type}|${soortVanCombinatie(c) ?? ""}|${c.scheefstandAs ?? ""}${c.scheefstandRichting ?? ""}${c.scheefstandTorsie ? "t" : ""}|${e}|${deel}`;
 }
 
 /**
@@ -647,6 +647,11 @@ export interface VeldpatroonResultaat<T extends VeldGevalInvoer> {
   gevallen: T[];
   /** Meldingen (afkapping van het aantal patronen); leeg = niets. */
   meldingen: string[];
+  /**
+   * De invoer met de deelgevallen (`splitsing.input`): de UGT-toets rekent
+   * daarop elke variant als eigen P-Δ-som (issue #199 met #219).
+   */
+  input: MultiInput;
 }
 
 /**
@@ -672,6 +677,7 @@ export function veldpatronenUitkomst<T extends VeldGevalInvoer>(
       combinaties: varianten,
       gevallen: deelgevalBelastinggevallen(splitsing, loadCases),
       meldingen,
+      input: splitsing.input,
     },
   };
 }

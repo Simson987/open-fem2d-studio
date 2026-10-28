@@ -377,6 +377,27 @@ mod tests {
         assert_eq!(definition["inputSchema"]["properties"]["materials"]["items"]["properties"]["gMpa"]["exclusiveMinimum"], 0);
     }
 
+    /// Issue #197: de MCP-weg geeft het verzoek rechtstreeks aan de kern; een
+    /// afschuifoppervlak van nul wordt daar geweigerd met de doorsnede erbij,
+    /// niet als "mechanisme" door een singuliere matrix.
+    #[tokio::test]
+    async fn afschuifoppervlak_nul_wordt_geweigerd() {
+        let verzoek = |av: f64| json!({
+            "schemaVersion": 2,
+            "nodes": [{ "id": 1, "x": 0, "y": 0, "z": 0 }, { "id": 2, "x": 2, "y": 0, "z": 0 }],
+            "materials": [{ "id": 1, "name": "S235", "eMpa": 210000, "nu": 0.3 }],
+            "sections": [{ "id": 1, "name": "a", "areaM2": 0.01, "iyM4": 8e-6, "izM4": 8e-6, "torsionJM4": 5e-6,
+                "shearAreaYM2": av, "shearAreaZM2": 0.001 }],
+            "members": [{ "id": 1, "startNodeId": 1, "endNodeId": 2, "materialId": 1, "sectionId": 1 }],
+            "supports": [{ "nodeId": 1, "ux": true, "uy": true, "uz": true, "rx": true, "ry": true, "rz": true }],
+            "nodalLoads": [{ "id": 1, "nodeId": 2, "fx": 0, "fy": 0, "fz": -10, "mx": 0, "my": 0, "mz": 0 }]
+        });
+        let fout = dispatch(TOOL, verzoek(0.0)).await.expect_err("Av,y = 0 hoort geweigerd te worden");
+        let tekst = format!("{fout:?}");
+        assert!(tekst.contains("Av,y") && tekst.contains("doorsnede 1"), "{tekst}");
+        dispatch(TOOL, verzoek(0.001)).await.expect("een geldige Av,y rekent");
+    }
+
     #[test]
     fn schema_biedt_platen_strikt_aan() {
         let definition = &tool_definitions()[0];

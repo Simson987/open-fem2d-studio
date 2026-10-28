@@ -134,7 +134,7 @@ pub fn extend_with_houthoofdstuk(flow: &mut Vec<Box<dyn Flowable>>, input: &Repo
     )));
 
     for r in &input.clt_check_results {
-        extend_met_staaf(flow, r, &stijl);
+        extend_met_staaf(flow, r, &stijl, input);
     }
 }
 
@@ -146,6 +146,7 @@ fn extend_met_staaf(
     flow: &mut Vec<Box<dyn Flowable>>,
     r: &CltBeamCheckResult,
     stijl: &Figuurstijl,
+    input: &ReportInput,
 ) {
     flow.push(Box::new(
         Paragraph::new(
@@ -190,7 +191,7 @@ fn extend_met_staaf(
                  z_0 = {} mm · (EI)_ef = {} kNm² · I_ef,net = {}·10^6 mm⁴ · (EA)_ef = {} kN · \
                  L/h = {} · UC = {} ({})",
                 klimaatklasse(r.service_class),
-                belastingduur_regel(r),
+                belastingduur_regel(r, input),
                 nl(r.layup.height_mm, 0),
                 nl(r.layup.width_mm, 0),
                 nl(r.layup.z0_mm, 1),
@@ -653,7 +654,7 @@ fn klimaatklasse(s: ServiceClass) -> &'static str {
 /// combinaties en de maatgevende (EN 1995-1-1 3.1.3(2): de kortstdurende
 /// belasting in een combinatie bepaalt k_mod). Dezelfde opbouw als
 /// `belastingduurTekst` in het rapport op het scherm.
-fn belastingduur_regel(r: &CltBeamCheckResult) -> String {
+fn belastingduur_regel(r: &CltBeamCheckResult, input: &ReportInput) -> String {
     if r.k_mod_per_load_duration.is_empty() {
         return format!("belastingduur {}", belastingduur(r.load_duration));
     }
@@ -665,19 +666,17 @@ fn belastingduur_regel(r: &CltBeamCheckResult) -> String {
                 "{} (k_mod {}) comb. {}",
                 belastingduur(k.load_duration),
                 nl(k.k_mod, 2),
-                k.combination_ids
-                    .iter()
-                    .map(|i| i.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                // De naam: de toetsvarianten met id + 1 000 000 staan in geen lijst.
+                k.combination_ids.iter().map(|i| input.combinatie_label(*i)).collect::<Vec<_>>().join(", ")
             )
         })
         .collect();
     let mut regel = format!("belastingduur per combinatie: {}", delen.join("; "));
     if let Some(c) = r.governing_combination_id {
         regel.push_str(&format!(
-            " · maatgevend: {}, comb. {c}",
-            belastingduur(r.load_duration)
+            " · maatgevend: {}, comb. {}",
+            belastingduur(r.load_duration),
+            input.combinatie_label(c)
         ));
     }
     regel

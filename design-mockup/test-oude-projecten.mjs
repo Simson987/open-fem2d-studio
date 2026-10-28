@@ -17,7 +17,8 @@
 //
 // Onderdelen:
 //  [1] herkenning van een oude standaardcombinatie — en alle 67 projectbestanden
-//      in de repo, zonder klasse geopend in CC1, CC2 en CC3
+//      in de repo, zonder klasse geopend in CC1, CC2 en CC3; daarbij staat
+//      "vóór september 2026" alleen bij een echt spoor (issue #196)
 //  [2] B7    oud bestand, geval 3 veranderlijk: 122,850 / 85,50 kNm
 //  [3] B8    oud CC3-bestand, ook na opslaan en heropenen: 95,625 kNm; N2: een
 //            CC3-set zonder klasse in de projectgegevens houdt CC3 (uit het kenmerk)
@@ -228,6 +229,12 @@ log("\n[1] Herkenning van een oude standaardcombinatie — op naam én factorpat
   bestanden.push(join(REPO, "src-tauri", "crates", "openaec-mcp-server", "tests", "golden", "portaal.ifcfem2d"));
   const vorm = (l) => JSON.stringify((l ?? []).map((c) => [c.id, c.name, c.type, c.formula, [...c.factors].sort((x, y) => x[0] - y[0]), c.standaard ?? null]));
   const afwijkend = [];
+  // Issue #65: de herkomst "projectbestand van vóór september 2026" alleen bij
+  // een echt spoor — de kolom van de oude standaardset, of wees-factoren in
+  // hetzelfde bestand. Bewust gekozen eigen factoren (P01, P03, P04: K_FI = 0,9
+  // maal NB.4) kregen die zin vroeger zonder enige voorwaarde, onder elke klasse.
+  const herkomstZonderSpoor = [];
+  let metBlijvendeMelding = 0;
   let openingen = 0;
   for (const f of bestanden) {
     const tekst = readFileSync(f, "utf8");
@@ -241,17 +248,30 @@ log("\n[1] Herkenning van een oude standaardcombinatie — op naam én factorpat
       openingen++;
       const ongewijzigd = combos === undefined || vorm(o.staat.combinations) === vorm(combos);
       // Ook de controle na het openen mag de set niet voor een oude standaardset aanzien.
-      const oudGemeld = B.meldingenBelastinggevallen({
+      const meld = B.meldingenBelastinggevallen({
         loadCases: o.staat.loadCases, combinations: o.staat.combinations, alleCombinaties: o.staat.combinations,
         gevolgklasse: o.staat.gevolgklasse, loads: p.loads,
-      }).some((m) => /standaardset van versie 0\.3\.11/.test(m.tekst));
+      });
+      const oudGemeld = meld.some((m) => /standaardset van versie 0\.3\.11/.test(m.tekst));
       if (herkend > 0 || o.vervanging !== null || !ongewijzigd || oudGemeld) {
         afwijkend.push(`${f} (${k}): herkend ${herkend}, vervangen ${o.vervanging !== null}, ongewijzigd ${ongewijzigd}, oude set gemeld ${oudGemeld}`);
+      }
+      const oudeKolom = B.blijvendeFactorAfwijkingen({ loadCases: o.staat.loadCases, combinations: o.staat.combinations })
+        .some((a) => a.oudeKolom !== null);
+      const spoor = oudeKolom || (o.afwijking?.weesFactoren.length ?? 0) > 0;
+      if ((o.afwijking?.blijvend.length ?? 0) > 0) metBlijvendeMelding++;
+      const datumBijOpenen = /vóór september 2026/.test(o.afwijking?.samenvatting ?? "");
+      const datumDaarna = meld.some((m) => /vóór september 2026/.test(m.tekst));
+      if ((datumBijOpenen && !spoor) || (datumDaarna && !oudeKolom)) {
+        herkomstZonderSpoor.push(`${f} (${k}): bij openen ${datumBijOpenen}, daarna ${datumDaarna}`);
       }
     }
   }
   checkWaar(`${bestanden.length} projectbestanden (${openingen} openingen): niets herkend, niets vervangen, lijst ongewijzigd, geen melding over een oude set`,
     bestanden.length >= 67 && afwijkend.length === 0, afwijkend.join(" | ") || String(bestanden.length));
+  checkWaar(`dezelfde openingen: "vóór september 2026" alleen bij een echt spoor (oude kolom of wees-factoren), ook bij ` +
+    `de ${metBlijvendeMelding} openingen met eigen blijvende factoren (onder meer P01, P03 en P04, elk onder CC1, CC2 en CC3)`,
+    herkomstZonderSpoor.length === 0 && metBlijvendeMelding >= 9, herkomstZonderSpoor.join(" | ") || String(metBlijvendeMelding));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -471,8 +491,15 @@ for (const [naam, tellers] of [["zonder tellers", null], ["met tellers", { belas
   checkWaar("useFemStore: Ctrl+Y vervangt opnieuw", /vervangVerouderdeCombinaties\(combiRef\.current\)/.test(store));
   checkWaar("useFemStore: de knop Ongedaan maken herstelt met herstelCombinaties", /herstelCombinaties\(combiRef\.current, v\.voor\)/.test(store));
   const appBron = readFileSync(join(HIER, "src", "App.tsx"), "utf8");
+  // Sinds issue #196 maakt io/combinatieMeldingen.ts de meldingen bij het
+  // openen (ook "Behoud eigen factoren"), zodat de browserproef dezelfde
+  // functie aanroept als de app. De knop is dezelfde: App geeft
+  // fem.maakCombinatieVervangingOngedaan door, de module zet hem onder "undo".
+  const meldBron = readFileSync(join(HIER, "src", "io", "combinatieMeldingen.ts"), "utf8");
   checkWaar("App: de melding bij het openen draagt de knop Ongedaan maken",
-    /label: i18next\.t\("common:undo"\), onClick: fem\.maakCombinatieVervangingOngedaan/.test(appBron) &&
+    /maakOngedaan: fem\.maakCombinatieVervangingOngedaan/.test(appBron) &&
+      /meldCombinatiesBijOpenen\(/.test(appBron) &&
+      /label: i18next\.t\("common:undo"\), onClick: p\.maakOngedaan/.test(meldBron) &&
       // De knoptekst loopt via i18n: de bron noemt de sleutel, de
       // Nederlandse locale de tekst die de gebruiker ziet.
       JSON.parse(readFileSync(join(HIER, "src", "i18n", "locales", "nl", "common.json"), "utf8")).undo === "Ongedaan maken");

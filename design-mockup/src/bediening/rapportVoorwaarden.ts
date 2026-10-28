@@ -36,7 +36,12 @@ export interface RekenVoorwaarden {
   toetsfout: string | null;
   /** Is er getoetst sinds de laatste wissing (checkStore.lastRunAt !== null)? */
   toetsingGedraaid: boolean;
-  /** Is die toetsing gedaan op precies de resultaten die nu in het rapport staan? */
+  /**
+   * Is die toetsing samengesteld uit precies de resultaten die nu in het
+   * rapport staan? De toetsset is een eigen Map (de UGT altijd tweede orde met
+   * scheefstand, de BGT uit de resultaten; issue #199), dus de vraag is of hij
+   * uit DEZE resultaatrekengang komt (`CheckRunData.resultaten`).
+   */
   toetsingHoortBijResultaten: boolean;
   /** Heeft het model staven die de toetsing zou oppakken (anyCheckableBeams)? */
   toetsbareStaven: boolean;

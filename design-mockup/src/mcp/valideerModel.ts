@@ -87,7 +87,9 @@ import type { Gevolgklasse } from "../components/fem/solver/normcombinaties";
 import type { NationaleBijlageCode } from "../lib/normAanduidingen";
 // Eén regel voor "telt dit geval mee": dezelfde functie voedt de projectboom,
 // het rapport en de solve-waarschuwingen van de sidecar.
-import { meldingenBelastinggevallen } from "../lib/combinatieBeheer";
+import {
+  bevestigdeEigenFactoren, meldingenBelastinggevallen, tekstBevestigdeEigenFactoren,
+} from "../lib/combinatieBeheer";
 import { matchSupportedTimberGrade } from "../lib/timberCheckBuilder";
 // "C30" is hout én de korte naam van C30/37 — dezelfde melding als de
 // modelcontrole in de app (basisaudit nr 16).
@@ -295,7 +297,7 @@ const LOAD_VELDEN = [
   "plateId", "edge", "edgeIndex", "openingId", "gegenereerdDoor", "omschrijving",
 ] as const;
 
-const LOADCASE_VELDEN = ["id", "name", "type", "categorie", "gegenereerd", "eigenGewicht"] as const;
+const LOADCASE_VELDEN = ["id", "name", "type", "categorie", "gegenereerd", "eigenGewicht", "imperfectie"] as const;
 
 const SUPPORT_TYPES = [
   "pinned", "fixed", "xRoller", "zRoller", "zSpring", "xSpring", "rotSpring",
@@ -1138,6 +1140,14 @@ export function controleerVelden(rauw: unknown): string[] {
     // "geen kenmerk" betekenen en het eigen gewicht naar het eerste blijvende
     // geval sturen; een kenmerk op een veranderlijk geval zou het eigen
     // gewicht ψ₂ = 0,3 geven. Beide worden geweigerd, met reden.
+    // Het kenmerk van een imperfectiegeval (issue #199): alleen `true`. Een
+    // `false` of tekst zou stil "geen imperfectiegeval" betekenen, en dan telt
+    // de scheefstand in de UGT-toets dubbel.
+    if (lc.imperfectie !== undefined && lc.imperfectie !== true) {
+      fouten.push(
+        `${pad}.imperfectie: alleen de waarde true is toegestaan (laat het veld weg voor een ` +
+        "gewoon belastinggeval).");
+    }
     if (lc.eigenGewicht !== undefined) {
       if (lc.eigenGewicht !== true) {
         fouten.push(
@@ -1990,6 +2000,17 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
   }).filter((mld) => opties.combinaties !== undefined || mld.caseId === null);
   for (const mld of gevalMeldingen) {
     (mld.niveau === "fout" ? errors : warnings).push(mld.tekst);
+  }
+  // Bewust gekozen eigen factoren (issue #196): geen fout, maar wel vermeld.
+  // Zonder deze regel gaf een bevestigde set ok:true zonder dat een cliënt kon
+  // zien dat er met factoren buiten NB.4/NB.5 wordt gerekend.
+  if (opties.combinaties !== undefined) {
+    const bevestigd = tekstBevestigdeEigenFactoren(bevestigdeEigenFactoren({
+      loadCases: loadCases as unknown as Pick<LoadCase, "id" | "name" | "type">[],
+      combinations: opties.combinaties,
+      bijlage: opties.bijlage,
+    }), opties.bijlage);
+    if (bevestigd) warnings.push(bevestigd);
   }
 
   return { ok: errors.length === 0, errors, warnings };

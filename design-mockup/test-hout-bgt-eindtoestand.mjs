@@ -19,7 +19,10 @@
 //   [6] Geen lekkage: de staaltoets en de w_inst/w₁-keuze lezen de
 //       BGT-eindtoestand niet als gewone combinatie (w₁ zelf: zie [3]).
 //   [7] De MCP-weg: sidecar `check` en de MCP-server `check_fem_model` leveren
-//       dezelfde w_qp,fin en dezelfde w_fin.
+//       dezelfde w_qp,fin en dezelfde w_fin. Sinds issue #199 rekent `check` de
+//       UGT-toetskrachten altijd tweede orde met scheefstand (`toetsSet2D`):
+//       de houtinvoer is dan gelijk aan die van de app-gang via de toetsset,
+//       en de BGT-velden blijven die van de eerste-orde-app-gang.
 //
 // ── HANDBEREKENING ──────────────────────────────────────────────────────────
 // Ligger over twee velden A–B–C, elk L = 5000 mm, doorgaand over B.
@@ -90,6 +93,9 @@ const {
 const { buildTimberCheckInputs } = await import("./src/lib/timberCheckBuilder.ts");
 const { buildSteelCheckInputs, profileLookupKey } = await import("./src/lib/steelCheckBuilder.ts");
 const { verwerkVerzoek } = await import("./src/mcp/sidecar.ts");
+const { bepaalToetsKrachten2D, toetsSet2D } = await import("./src/lib/toetsKrachten.ts");
+const { bepaalScheefstand, leidScheefstandGeometrieAf, toepasselijkeScheefstandNormen } =
+  await import("./src/lib/scheefstandNorm.ts");
 
 let passed = 0, failed = 0;
 const log = (s = "") => process.stdout.write(s + "\n");
@@ -191,6 +197,30 @@ function rekenOud(m) {
     loadCases: m.loadCases, gevallenMetLast: [...perCase.keys()],
   };
   return { data, hout: buildTimberCheckInputs(data) };
+}
+
+/**
+ * De houtinvoer van de app-gang sinds issue #199: de UGT uit de toetsrekengang
+ * (altijd P-Δ met scheefstand φ = 1/noemer van het project, in +x en −x, zonder
+ * UGT-eindtoestandvarianten), de BGT uit de resultaten van `reken` — via
+ * dezelfde `bepaalToetsKrachten2D` en `toetsSet2D` als de app en de sidecar.
+ */
+function houtinvoerMetToetsset(m, r) {
+  const normen = toepasselijkeScheefstandNormen(m.beams);
+  const project = bepaalScheefstand(
+    { bron: "vast", noemer: m.scheefstandNoemer, hoogteM: null, aantalElementen: null },
+    leidScheefstandGeometrieAf(m), normen,
+  );
+  const toets = bepaalToetsKrachten2D({
+    basis: r.input, combinaties: r.combinations,
+    scheefstand: { project, normen, richting: m.scheefstandRichting, modelAan: m.scheefstandEnabled },
+    analysetype: m.analysetype,
+    resultaten: { perCase: r.perCase, combinationResults: r.combinationResults },
+  });
+  const set = toetsSet2D(toets, { combinaties: r.combinations, combinationResults: r.combinationResults, perCase: r.perCase }, m.beams);
+  return buildTimberCheckInputs({
+    ...r.data, combinations: set.combinaties, combinationResults: set.combinationResults, stabiliteit: set.stabiliteit,
+  }).inputs;
 }
 
 async function kern(opdracht, inputs) {
@@ -407,6 +437,10 @@ log("\n[6] Geen lekkage naar de andere toetsen");
   // De houtinvoer van de gang zonder BGT-eindtoestand (alleen de UGT-varianten)
   // heeft dezelfde w_inst en w₁: de variant telt niet mee als karakteristieke
   // of blijvende combinatie.
+  // LET OP: dit is een regel van de BOUWER, niet de app-route. Sinds issue
+  // #199 (B10) stuurt de app geen UGT-eindtoestandvarianten meer naar de
+  // houtbouwer (de toets rekent tweede orde); de bouwer moet ze wel blijven
+  // herkennen als een aanroeper ze meegeeft.
   const alleenUgt = { ...data, combinations: zonderBgtEindtoestand(combinations) };
   const h0 = buildTimberCheckInputs(alleenUgt).inputs.find((i) => i.beam_id === 1);
   const h1 = rStaal.hout.inputs.find((i) => i.beam_id === 1);
@@ -427,7 +461,26 @@ log("\n[7] De MCP-weg");
   ok("sidecar: houtinvoer voor staaf 1", h !== undefined, JSON.stringify(r).slice(0, 300));
   if (h) {
     dicht("sidecar: w_qp,fin = −8,7251 mm", h.deflection_quasi_perm_fin_mm, -H.qpFin, 1e-3);
-    ok("sidecar: identiek aan de app-gang", JSON.stringify(h) === JSON.stringify(rStaal.hout.inputs.find((i) => i.beam_id === 1)));
+    // Tot issue #199 was deze invoer byte-identiek met de eerste-orde-app-gang
+    // `reken`. Nu rekent `check` de UGT zelf tweede orde met scheefstand
+    // (φ = 1/200, ±x; de UGT-eindtoestandvarianten vallen weg), dus verschillen
+    // `forces_envelope` en de belastingduur per combinatie (nu met de varianten
+    // in −x). Gelijk blijft hij met de app-gang via de toetsset — dezelfde
+    // functies — en de BGT-velden met die van `reken` (B6: de BGT leest de
+    // resultaten).
+    // Wat dit bewijst: de sidecar volgt DEZELFDE toetsfuncties
+    // (`bepaalToetsKrachten2D` + `toetsSet2D`) als de testhulp. De
+    // samenvoeging in App.tsx zelf (`handleRunMemberChecks`) bewaken
+    // test-toets-drie-wegen en test-toets-app-route; de BGT-eindtoestand van
+    // hout langs die app-route niet.
+    ok("sidecar: gelijk aan dezelfde toetsfuncties (bepaalToetsKrachten2D + toetsSet2D: UGT tweede orde met scheefstand, BGT uit de resultaten)",
+      JSON.stringify(h) === JSON.stringify(houtinvoerMetToetsset(tweeVelden(), rStaal).find((i) => i.beam_id === 1)));
+    const bgt = (i) => JSON.stringify(Object.fromEntries(Object.entries(i ?? {}).filter(([k]) => k.startsWith("deflection_"))));
+    ok("sidecar: de BGT-velden zijn die van de eerste-orde-app-gang", bgt(h) === bgt(rStaal.hout.inputs.find((i) => i.beam_id === 1)), bgt(h));
+    ok("sidecar: de UGT-toets bevat beide richtingen en geen UGT-eindtoestandvariant",
+      h.forces_envelope.some((p) => p.combination_id >= 1_000_000 && p.combination_id < EINDTOESTAND_COMBO_OFFSET) &&
+      !h.forces_envelope.some((p) => p.combination_id >= EINDTOESTAND_COMBO_OFFSET),
+      JSON.stringify([...new Set(h.forces_envelope.map((p) => p.combination_id))]));
   }
   ok("sidecar: de BGT-melding in `warnings`",
     (r.warnings ?? []).some((w) => w.startsWith("Eindstijfheid hout doorgerekend (BGT).")) &&
@@ -465,6 +518,55 @@ log("\n[7] De MCP-weg");
       dicht("MCP: w_add = 8,9327 mm", toets(res, "deflection_w_add")?.uc?.ed, H.add, 2e-3);
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+log("\n[8] Het staalveld in de UGT-toets: zonder eindtoestandvariant (B10 van #199)");
+// VERANDERD GETAL, VERANTWOORD. Tot issue #199 kreeg de staaltoets van dit
+// model M_B uit de UGT-variant met E_mean,fin (2.2.2(1)P, tweede streepje):
+// het hout slapper, dus meer moment naar het staal. De toets rekent nu altijd
+// tweede orde en laat die varianten vallen (B10); het hout rekent met E_mean.
+// HAND (1,2·G + 1,5·Q = 6,9 kN/m op veld 1, qL²/8 = 21,5625 kNm):
+//   E_mean      : M_B = 21,5625 · 4,074/(2,475 + 4,074)     = 13,4136 kNm (de toets nu)
+//   E_mean,fin  : M_B = 21,5625 · 4,074/(2,475/1,6 + 4,074) = 15,6285 kNm (vóór #199)
+//   E_d (γ_M 1,3): M_B = 21,5625 · 4,074/(2,475/1,3 + 4,074) = 14,6952 kNm (normroute 2e orde)
+// Verschil −14,2 % tegen het oude getal en −8,7 % tegen de normroute: het
+// staalveld is in de toets te LICHT. Dat is een gemelde beperking tot fase 4
+// (E_d per houtstaaf): de melding van de vervallen varianten zegt nu dat de
+// staal- en betonstaven daardoor minder kracht krijgen en dat de eindtoestand
+// apart beoordeeld moet worden. Scheefstand en P-Δ veranderen het moment hier
+// nauwelijks (geen noemenswaardige normaalkracht in de ligger).
+{
+  const m = tweeVelden();
+  const r = reken(m);
+  const normen = toepasselijkeScheefstandNormen(m.beams);
+  const project = bepaalScheefstand(
+    { bron: "vast", noemer: m.scheefstandNoemer, hoogteM: null, aantalElementen: null },
+    leidScheefstandGeometrieAf(m), normen,
+  );
+  const t = bepaalToetsKrachten2D({
+    basis: r.input, combinaties: r.combinations,
+    scheefstand: { project, normen, richting: 1, modelAan: false },
+    analysetype: "eersteOrde",
+    resultaten: { perCase: r.perCase, combinationResults: r.combinationResults },
+  });
+  const maxStaal = (map, filter = () => true) => Math.max(...[...map.entries()].filter(([id]) => filter(id))
+    .map(([, res]) => Math.max(...res.elements.get(2).bendingMoment.map(Math.abs)))) / 1e6;
+  const handEmean = mB(6.9, EI_HOUT, EI_STAAL) / 1e6;
+  const handFin = mB(6.9, EI_HOUT / 1.6, EI_STAAL) / 1e6;
+  const handEd = mB(6.9, EI_HOUT / 1.3, EI_STAAL) / 1e6;
+  const inToets = maxStaal(t.combinationResults);
+  const inResultaten = maxStaal(r.combinationResults, (id) => r.combinations.find((c) => c.id === id)?.type === "uls");
+  log(`    staalveld max|M|: toets ${inToets.toFixed(4)} kNm, resultaten (met E_mean,fin-variant) ${inResultaten.toFixed(4)} kNm; ` +
+    `hand E_mean ${handEmean.toFixed(4)}, E_mean,fin ${handFin.toFixed(4)}, E_d ${handEd.toFixed(4)}`);
+  dicht("hand: M_B met E_mean = 13,4136 kNm", handEmean, 13.4136, 1e-4);
+  dicht("hand: M_B met E_mean,fin = 15,6285 kNm", handFin, 15.6285, 1e-4);
+  dicht("hand: M_B met E_d = E_mean/1,3 = 14,6952 kNm", handEd, 14.6952, 1e-4);
+  dicht("toets: max|M| in het staalveld = 13,414 kNm (E_mean; de hand 13,4136, +0,004 %)", inToets, 13.414, 2e-3);
+  dicht("resultaten: de E_mean,fin-variant geeft 15,6285 kNm (zoals vóór #199)", inResultaten, 15.6285, 2e-3);
+  ok("de toets bevat geen eindtoestandvariant", ![...t.combinationResults.keys()].some((id) => id >= EINDTOESTAND_COMBO_OFFSET));
+  ok("de melding zegt dat staal en beton in de toets minder kracht krijgen en dat de eindtoestand apart moet",
+    t.meldingen.some((x) => /Vervallen in de toets/.test(x) && /MINDER kracht/.test(x) && /apart/.test(x)), t.meldingen.join(" | "));
 }
 
 log(`\n${failed === 0 ? "GESLAAGD" : "GEFAALD"}: ${passed} geslaagd, ${failed} gefaald.`);

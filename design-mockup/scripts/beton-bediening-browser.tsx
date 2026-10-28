@@ -81,7 +81,7 @@ function seedRun() {
     shearForce: [0, 0], bendingMoment: [1e7, 1e7], deflection: [0, 0], axialDisp: [0, 0] }]]) };
   const map = new Map([[7, result], [8, result]]);
   flushSync(() => { useCheckStore.setState({ lastRunData: { nodes, beams: [current], combinations: [
-    { id: 7, type: "uls", name: "UGT", formula: "", factors: {} }, { id: 8, type: "sls", name: "frequent", formula: "", factors: {} }], combinationResults: map } }); setCurrentResults(map); });
+    { id: 7, type: "uls", name: "UGT", formula: "", factors: {} }, { id: 8, type: "sls", name: "frequent", formula: "", factors: {} }], combinationResults: map, resultaten: map } }); setCurrentResults(map); });
   return map;
 }
 async function test(name: string, run: () => void | Promise<void>) { try { await run(); tests.push({ name }); } catch (e) { tests.push({ name, error: String(e) }); } }

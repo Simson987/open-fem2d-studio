@@ -29,7 +29,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Beam, Node, Plate, Support } from "../components/fem/femTypes";
 import type { SolverResult } from "../components/fem/solver/types";
 import type { LoadCombination } from "../components/fem/solver/combinations";
-import type { StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
+import type { AlphaCrUitkomst, StabiliteitVoorToets } from "../components/fem/solver/alphaCr";
+import type { ToetsAnalyse } from "../lib/toetsKrachten";
 import type { Gevolgklasse } from "../components/fem/solver/normcombinaties";
 import type { BeamCheckResult } from "../lib/types/steel/BeamCheckResult";
 import type { TimberBeamCheckResult } from "../lib/types/timber/TimberBeamCheckResult";
@@ -183,11 +184,34 @@ export interface CheckRunData {
    */
   gevallenMetLast?: readonly number[];
   /**
-   * Het analysetype en α_cr per combinatie van de rekengang waarop getoetst
-   * wordt (`solver/alphaCr.ts`). De staal- en houtbouwer zetten er bij eerste
-   * orde onder de grens een kanttekening mee bij elke op druk belaste staaf.
+   * Het analysetype, de scheefstand en α_cr per combinatie van de rekengang
+   * waarop getoetst wordt (`solver/alphaCr.ts`). In de app is dat de
+   * TOETSrekengang (issue #199, `toetsSet2D`): altijd tweede orde met
+   * scheefstand, met de toets-φ. De staalbouwer beslist ermee over L of 2·L bij
+   * een vrij eind (`zijdelingseKnikInVlakModel`); de houtbouwer zet er de vaste
+   * houtmelding mee (`HOUT_TOETS_STAAFNOTITIE`). De α_cr-kanttekening bij
+   * eerste orde bestaat sinds issue #199 niet meer.
    */
   stabiliteit?: StabiliteitVoorToets;
+  /**
+   * De combinatieresultaten van de RESULTAATrekengang waaruit deze toetsset is
+   * samengesteld (issue #199): de BGT-krachten zijn eruit overgenomen, de
+   * UGT-toetskrachten zijn op dezelfde invoer gerekend. `combinationResults`
+   * hierboven is de toetsset zelf en dus een andere Map dan de resultaten van
+   * de app.
+   *
+   * Waarvoor: "hoort deze toetsing bij de resultaten die nu op het scherm en in
+   * het rapport staan?" (`bediening/rapportExport`, het betonvenster). Elke
+   * rekengang maakt een nieuwe Map, dus gelijk = dezelfde rekengang. Ontbreekt
+   * = onbekend, en dan hoort de toetsing nergens bij.
+   */
+  resultaten?: Map<number, SolverResult>;
+  /**
+   * De analyse van de toetskrachten (`lib/toetsKrachten.ts`): soort, φ, bron,
+   * of de resultaten zijn hergebruikt, en wat de toets te melden had (hout,
+   * een verhoogde of te kleine φ, vervallen eindtoestandvarianten).
+   */
+  toets?: { analyse: ToetsAnalyse; meldingen: string[] };
   /**
    * De kruipcoëfficiënt φ(∞,t₀) van het PROJECT (art. 3.1.4), dezelfde waarde
    * die de fysisch niet-lineaire lus als `standaardPhiInfT0` krijgt. De
@@ -207,9 +231,41 @@ export interface CheckRunData {
    * De eerste-orde-oplossing per combinatie na een tweede-orde- of fysisch
    * niet-lineaire rekengang (`lib/eersteOrdeResultaten.ts`), voor r_m en φ_ef
    * van de betonkolomtoets (§5.8.3.1(1), (5.19); issue #35). `undefined` = de
-   * rekengang was eerste orde of er is geen kolom.
+   * rekengang was eerste orde of er is geen kolom. In de app rekent de toets
+   * altijd tweede orde (issue #199), dus gaat dit veld mee zodra er een kolom
+   * is: de UGT uit de toetsrekengang, de quasi-blijvende uit de resultaten.
    */
   eersteOrdeResultaten?: Map<number, SolverResult>;
+}
+
+/** Een combinatie van de toetsing, JSON-veilig: voor de namen in het rapport. */
+export interface ToetsCombinatieNaam {
+  id: number;
+  name: string;
+  /**
+   * De krachten van deze combinatie zijn in de toets tweede orde (P-Δ) met
+   * scheefstand (issue #199): een UGT-toetscombinatie. Een BGT-combinatie
+   * komt uit de resultaten en draagt `false`. Ontbreekt = onbekend (een
+   * snapshot van een ouder hoofdvenster); dan staat er geen label bij.
+   */
+  tweedeOrde?: boolean;
+}
+
+/**
+ * De toets van de laatste ronde, JSON-veilig (issue #199): voor het
+ * toetsingspaneel, het rapport en het losgekoppelde rapportvenster, dat geen
+ * `lastRunData` heeft. Ook bij een geweigerde toets: dan staat de reden in
+ * `weigering` en is er geen uitslag.
+ */
+export interface ToetsVanRonde {
+  /** Soort, φ, bron, de schakelaar van het model en of de resultaten zijn hergebruikt. */
+  analyse: ToetsAnalyse;
+  /** Wat de toets te melden had (hout, de toets-φ, vervallen eindtoestandvarianten). */
+  meldingen: string[];
+  /** α_cr per UGT-basiscombinatie van de toets; informatief. */
+  alphaCr: AlphaCrUitkomst[];
+  /** De weigering als tekst (`weigeringTekst`); `null` = de toets had krachten. */
+  weigering: string | null;
 }
 
 interface CheckState {
@@ -266,6 +322,23 @@ interface CheckState {
    */
   lastRunData: CheckRunData | null;
   /**
+   * Id en naam van elke combinatie waarop de laatste run toetste
+   * (`lastRunData.combinations`), JSON-veilig.
+   *
+   * WAAROM. De toets rekent de UGT altijd in +x en −x (issue #199), ook als de
+   * scheefstandschakelaar van de resultaten uit staat. De variant −x heeft dan
+   * een id (id + 1 000 000) dat in de combinatielijst van het rapport niet
+   * voorkomt; zonder deze namen stond er "comb. 1000003". Een eigen veld en
+   * niet `lastRunData`, want het losgekoppelde rapportvenster krijgt alleen
+   * JSON (`reportSync`) en heeft geen `lastRunData`.
+   */
+  toetsCombinaties: ToetsCombinatieNaam[];
+  /**
+   * De toetsanalyse van de laatste run (of de laatste weigering), JSON-veilig;
+   * `null` zolang er niet getoetst is en na `clear()`. Zie `ToetsVanRonde`.
+   */
+  toets: ToetsVanRonde | null;
+  /**
    * De KERNINVOER van de laatste run, per kern, precies zoals de vijf bouwers
    * hem samenstelden en naar de rekenkern stuurden.
    *
@@ -292,6 +365,16 @@ interface CheckState {
   run: (data: CheckRunData) => Promise<void>;
   /** Wis resultaten (bijv. wanneer het model wijzigt). */
   clear: () => void;
+  /**
+   * De toets heeft geen krachten (issue #199, besluit B7): de tweede-orde-
+   * berekening van de toets faalt in een UGT-combinatie, of de fysisch
+   * niet-lineaire ronde van de toets loopt vast. Wist alles zoals `clear()` en
+   * zet de reden als fout, zodat het toetsingspaneel, het rapport en de export
+   * hem tonen. De resultaten van de app blijven staan; die horen niet bij deze
+   * store. Met `toets` (de analyse, de meldingen en α_cr van de geweigerde
+   * toets) kan het rapport zeggen wélke berekening er faalde.
+   */
+  weiger: (reden: string, toets?: Omit<ToetsVanRonde, "weigering">) => void;
 }
 
 // Module-level caches — de profieldatabase en de klassenlijsten veranderen
@@ -409,6 +492,8 @@ export const useCheckStore = create<CheckState>((set) => ({
   error: null,
   lastRunAt: null,
   lastRunData: null,
+  toetsCombinaties: [],
+  toets: null,
   lastRunInputs: null,
 
   run: async (data: CheckRunData) => {
@@ -572,6 +657,22 @@ export const useCheckStore = create<CheckState>((set) => ({
         error: null,
         lastRunAt: Date.now(),
         lastRunData: data,
+        // Met een toetsanalyse (de app en de sidecar, issue #199) zijn de
+        // UGT-krachten tweede orde met scheefstand en komt de BGT uit de
+        // resultaten.
+        toetsCombinaties: data.combinations.map((c) => ({
+          id: c.id,
+          name: c.name,
+          ...(data.toets ? { tweedeOrde: c.type === "uls" } : {}),
+        })),
+        toets: data.toets
+          ? {
+              analyse: data.toets.analyse,
+              meldingen: data.toets.meldingen,
+              alphaCr: data.stabiliteit?.alphaCr ?? [],
+              weigering: null,
+            }
+          : null,
         lastRunInputs: {
           steel: steel.inputs,
           timber: timber.inputs,
@@ -608,6 +709,8 @@ export const useCheckStore = create<CheckState>((set) => ({
         plateSkipped: [],
         lastRunAt: null,
         lastRunData: null,
+        toetsCombinaties: [],
+        toets: null,
         lastRunInputs: null,
         error: e instanceof Error ? e.message : String(e),
         isRunning: false,
@@ -630,6 +733,29 @@ export const useCheckStore = create<CheckState>((set) => ({
       error: null,
       lastRunAt: null,
       lastRunData: null,
+      toetsCombinaties: [],
+      toets: null,
+      lastRunInputs: null,
+    });
+  },
+
+  weiger: (reden: string, toets?: Omit<ToetsVanRonde, "weigering">) => {
+    // Net als `clear()`: een lopende ronde hoort bij een toets die er niet is.
+    toetsGeneratie += 1;
+    set({
+      results: [],
+      skipped: [],
+      beff: [],
+      kruip: [],
+      kruipMislukt: [],
+      plateResults: [],
+      plateSkipped: [],
+      error: reden,
+      isRunning: false,
+      lastRunAt: null,
+      lastRunData: null,
+      toetsCombinaties: [],
+      toets: toets ? { ...toets, weigering: reden } : null,
       lastRunInputs: null,
     });
   },

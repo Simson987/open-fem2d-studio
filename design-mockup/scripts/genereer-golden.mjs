@@ -430,10 +430,14 @@ if (echteWaarschuwingen.length > 0) {
       `berekening te komen:\n    ${echteWaarschuwingen.join("\n    ")}`,
   );
 }
-if (waarden.skipped_beams.length > 0) {
+// De solve levert sinds issue #199 geen toetsinvoer meer (`steel_check_inputs`,
+// `skipped_beams`): die rustte op de resultaatkrachten, terwijl de toets altijd
+// zelf tweede orde met scheefstand rekent (`check_fem_model`). Een bundel die
+// ze nog meegeeft, hoort niet in het gouden bestand.
+if ("steel_check_inputs" in waarden || "skipped_beams" in waarden) {
   stop(
-    "Er zijn staven overgeslagen bij de toetsinvoer; dat hoort in dit model niet:\n    " +
-      JSON.stringify(waarden.skipped_beams),
+    "De solve levert nog toetsinvoer (`steel_check_inputs`/`skipped_beams`); die hoort " +
+      "bij check_fem_model. Bouw de bundel opnieuw (npm run build:sidecar).",
   );
 }
 

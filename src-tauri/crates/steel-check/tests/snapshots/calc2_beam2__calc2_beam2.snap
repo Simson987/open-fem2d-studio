@@ -1052,7 +1052,7 @@ expression: run()
               "notes": [
                 "Herkomst: opgegeven.",
                 "L_cr,y is voor deze staaf opgegeven: 5000 mm. Een opgegeven kniklengte gaat altijd voor; de kern leidt dan niets af.",
-                "Knik om de y-as is uitbuigen IN het vlak van het model. De raamwerkberekening ziet die richting; rekent zij tweede orde, dan zit het globale effect in de krachten. Deze toets blijft nodig zolang de staafimperfecties niet in die berekening zitten (NEN-EN 1993-1-1 5.2.2(7))."
+                "Knik om de y-as is uitbuigen IN het vlak van het model. De raamwerkberekening ziet die richting; bij de toetsing van een model in deze app komen de UGT-krachten altijd uit een tweede-ordeberekening (P-Δ) met scheefstand, en dan zit het globale effect in de krachten. Deze toets blijft nodig zolang de staafimperfecties niet in die berekening zitten (NEN-EN 1993-1-1 5.2.2(7)); in de berekening van deze app zitten zij niet."
               ]
             },
             {

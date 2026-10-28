@@ -293,10 +293,29 @@ pub struct ReportInput {
     /// tweede-orde-berekening met imperfecties bindt. Een regel die met "!"
     /// begint is een waarschuwing of fout en wordt rood gezet.
     ///
+    /// Sinds issue #199 noemt het blok twee berekeningen, elk op een eigen
+    /// regel: de resultaten (het gekozen analysetype, met of zonder
+    /// scheefstand) en de UGT-toetskrachten (altijd tweede orde P-Δ met
+    /// scheefstand). α_cr is daarin informatief.
+    ///
     /// Leeg of afwezig = niet meegestuurd; het rapport zwijgt dan.
     #[serde(default)]
     #[ts(optional)]
     pub analyse_toelichting: Option<String>,
+    /// Waar de krachten van elke toets vandaan komen (issue #199): de
+    /// UGT-toetscombinaties rekenen tweede orde (P-Δ) met scheefstand, de
+    /// BGT-combinaties komen uit de resultaten. Met dit veld zegt de
+    /// krachtregel van elk toetsblok dat ("2e orde + scheefstand φ = 1/200").
+    ///
+    /// Een veld en geen afleiding uit de getallen: de kern ziet aan een
+    /// `force_state` niet of hij uit een tweede-ordeberekening komt. De app en
+    /// `check_fem_model` weten het wel.
+    ///
+    /// Leeg of afwezig = niet meegestuurd (een eigen aanroep met zelf
+    /// aangeleverde krachten); de krachtregel blijft dan zoals hij was.
+    #[serde(default)]
+    #[ts(optional)]
+    pub toetskrachten: Option<ToetskrachtenRapport>,
     /// De windbelasting zoals de windgenerator haar in het model zette, als
     /// tekstblok — woordelijk uit `lib/wind/windGenerator.ts`
     /// (`vrijstaandDakUitgangspunten`): een kopregel met de normgrondslag
@@ -342,6 +361,76 @@ pub struct ReportInput {
     #[serde(default)]
     #[ts(as = "Option<Vec<plaathoofdstuk::RapportPlaatOvergeslagen>>", optional)]
     pub plate_skipped: Vec<plaathoofdstuk::RapportPlaatOvergeslagen>,
+}
+
+impl ReportInput {
+    /// De naam van combinatie `id` uit de toetskrachten (de varianten met id +
+    /// 1 000 000 staan in geen combinatielijst), anders het id.
+    pub(crate) fn combinatie_label(&self, id: u32) -> String {
+        self.toetskrachten
+            .as_ref()
+            .map(|t| t.label(id))
+            .unwrap_or_else(|| id.to_string())
+    }
+}
+
+/// De herkomst van de toetskrachten, voor de krachtregel per toetsblok (issue
+/// #199). Zie [`ReportInput::toetskrachten`].
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
+pub struct ToetskrachtenRapport {
+    /// 1/φ van de scheefstand in de toets (bijvoorbeeld 200).
+    pub noemer: f64,
+    /// De combinaties waarvan de krachten tweede orde (P-Δ) met scheefstand
+    /// zijn: de UGT-toetscombinaties, ook de varianten in de tegengestelde
+    /// richting (id + 1 000 000). Elke andere combinatie komt uit de resultaten.
+    pub tweede_orde_combinaties: Vec<u32>,
+    /// De namen van de toetscombinaties, zoals de app ze toont. De toets rekent
+    /// elke UGT-combinatie ook in de tegengestelde richting, onder id +
+    /// 1 000 000; die id's staan in geen enkele combinatielijst van het model.
+    /// Met de naam noemt het rapport "UGT 6.10b (scheefstand −x)" in plaats
+    /// van "Comb 1000003". Leeg = de kale id's.
+    #[serde(default)]
+    #[ts(as = "Option<Vec<ToetsCombinatieNaam>>", optional)]
+    pub combinaties: Vec<ToetsCombinatieNaam>,
+}
+
+/// De naam van één toetscombinatie. Zie [`ToetskrachtenRapport::combinaties`].
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
+pub struct ToetsCombinatieNaam {
+    pub id: u32,
+    pub naam: String,
+}
+
+impl ToetskrachtenRapport {
+    /// De naam van combinatie `id` als die is meegegeven, anders het id.
+    pub(crate) fn label(&self, id: u32) -> String {
+        self.combinaties
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.naam.clone())
+            .unwrap_or_else(|| id.to_string())
+    }
+
+    /// Het stukje van de krachtregel dat de herkomst noemt, of `None` als het
+    /// veld niets zegt over deze combinatie.
+    fn herkomst(&self, combinatie: u32) -> String {
+        if self.tweede_orde_combinaties.contains(&combinatie) {
+            // Zoals de app hem toont (`noemerTekst`): een geheel getal kaal,
+            // anders op één decimaal met een komma.
+            let noemer = if self.noemer.fract() == 0.0 {
+                format!("{:.0}", self.noemer)
+            } else {
+                format!("{:.1}", self.noemer).replace('.', ",")
+            };
+            format!("2e orde + scheefstand φ = 1/{noemer}")
+        } else {
+            "resultaten".to_string()
+        }
+    }
 }
 
 // ── Materiaal-neutrale rapportweergave ────────────────────────────────────────
@@ -1078,7 +1167,7 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
         }
 
         for nc in m.checks {
-            extend_with_check_block(&mut flow, &nc.kind);
+            extend_with_check_block(&mut flow, &nc.kind, input.toetskrachten.as_ref());
         }
 
         // De afleiding van de MAATGEVENDE toets, uitgeschreven. Dezelfde keuze
@@ -1132,8 +1221,9 @@ pub fn generate_report_pdf(input: ReportInput) -> Vec<u8> {
 /// De scheefstand is een eigenschap van de CONSTRUCTIE en niet van een staaf —
 /// één bouwwerk staat één keer scheef — en hoort daarom vooraan en niet bij een
 /// staaf. Zij levert bovendien een vervangende horizontale kracht H = φ·V op
-/// élke verticale lastcomponent, dus zij zit in alle krachten waarop de
-/// toetsingen hierna zijn gedraaid.
+/// élke verticale lastcomponent. In de UGT-toetskrachten zit zij bij een model
+/// uit de app altijd (issue #199); in de resultaten en de BGT-toetsen alleen
+/// met de schakelaar Scheefstand aan.
 ///
 /// De tekst gaat WOORDELIJK mee zoals `scheefstandToelichting` hem opstelt:
 /// regel voor regel het symbool, de waarde en het normartikel, daarna de
@@ -1166,10 +1256,13 @@ fn extend_with_uitgangspunten(flow: &mut Vec<Box<dyn Flowable>>, input: &ReportI
             Paragraph::new("Berekeningswijze en stabiliteit (α_cr)", style_h3()).kop(),
         ));
         flow.push(Box::new(Paragraph::new(
-            "Het analysetype bepaalt of de tweede-orde-effecten in de krachten zitten. NEN-EN 1993-1-1 \
-             5.2.1(3) staat een eerste-orde-berekening alleen toe bij α_cr ≥ 10; de terugval van de \
-             kniklengte op de systeemlengte in de staaftoets (5.2.2(7)b) veronderstelt bovendien \
-             krachten uit een tweede-orde-berekening met imperfecties.",
+            "Er zijn twee berekeningen. De resultaten (momentenlijnen, zakkingen, reacties en de \
+             BGT-toetsen) volgen het gekozen analysetype, met of zonder scheefstand. De \
+             UGT-toetskrachten komen bij de toetsing van een model in deze app altijd uit een \
+             tweede-ordeberekening (P-Δ) met scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en 5.3.2); \
+             daarom mag de staaftoets de systeemlengte als kniklengte nemen (5.2.2(7)b). De grens \
+             α_cr ≥ 10 van 5.2.1(3) gaat alleen over een eerste-ordeberekening van de resultaten; \
+             voor de toets is α_cr informatief.",
             style_body(),
         )));
         zet_regels(flow, tekst);
@@ -1198,9 +1291,10 @@ fn extend_with_uitgangspunten(flow: &mut Vec<Box<dyn Flowable>>, input: &ReportI
     ));
     flow.push(Box::new(Paragraph::new(
         "De scheefstand is een eigenschap van de constructie als geheel en niet van een staaf: zij \
-         beschrijft hoe scheef het bouwwerk staat. Zij is als vervangende horizontale kracht \
-         H = φ·V op elke verticale lastcomponent gezet, en werkt dus door in alle krachten waarop \
-         de toetsingen hieronder zijn gedraaid.",
+         beschrijft hoe scheef het bouwwerk staat. In de UGT-toetskrachten staat zij altijd als \
+         vervangende horizontale kracht H = φ·V op elke verticale lastcomponent, in beide \
+         richtingen; in de resultaten en de BGT-toetsen alleen als de schakelaar Scheefstand aan \
+         staat.",
         style_body(),
     )));
     zet_regels(flow, tekst);
@@ -1655,8 +1749,33 @@ fn build_summary_table(members: &[ReportMember<'_>]) -> Table {
 
 // ── Per-check block (heading + force state + formula + UC + notes) ────────────
 
-fn extend_with_check_block(flow: &mut Vec<Box<dyn Flowable>>, kind: &CheckKind) {
-    extend_with_check_block_regel(flow, kind, None);
+/// Het toetsblok van een staaf. Met `toetskrachten` noemt de krachtregel de
+/// herkomst van de krachten: tweede orde met scheefstand (de UGT-toets) of de
+/// resultaten (BGT). Zonder blijft de regel zoals hij was.
+fn extend_with_check_block(
+    flow: &mut Vec<Box<dyn Flowable>>,
+    kind: &CheckKind,
+    toetskrachten: Option<&ToetskrachtenRapport>,
+) {
+    let regel = toetskrachten.map(|t| {
+        let f = extract(kind);
+        krachtregel(&f, &t.label(f.combo), Some(t.herkomst(f.combo)))
+    });
+    extend_with_check_block_regel(flow, kind, regel);
+}
+
+/// De krachtregel van een staaf: combinatie (de naam als die bekend is),
+/// herkomst van de krachten (als die bekend is), x en de snedekrachten.
+fn krachtregel(f: &ExtractedFields<'_>, combinatie: &str, herkomst: Option<String>) -> String {
+    format!(
+        "Combinatie {}{}  ·  x = {:.0} mm  ·  N_Ed = {} kN  ·  V_Ed = {} kN  ·  M_Ed = {} kNm",
+        combinatie,
+        herkomst.map(|h| format!(" ({h})")).unwrap_or_default(),
+        f.pos_mm,
+        getal_tekst(f.n_ed, 2),
+        getal_tekst(f.vz_ed, 2),
+        getal_tekst(f.my_ed, 2)
+    )
 }
 
 /// Het toetsblok, met een eigen krachtregel waar de snedekrachten niets
@@ -1666,7 +1785,7 @@ fn extend_with_check_block(flow: &mut Vec<Box<dyn Flowable>>, kind: &CheckKind) 
 pub(crate) fn extend_with_check_block_regel(
     flow: &mut Vec<Box<dyn Flowable>>,
     kind: &CheckKind,
-    krachtregel: Option<String>,
+    regel: Option<String>,
 ) {
     let f = extract(kind);
 
@@ -1689,7 +1808,7 @@ pub(crate) fn extend_with_check_block_regel(
         && f.my_ed == 0.0;
 
     // Force state line
-    match krachtregel {
+    match regel {
         Some(regel) => flow.push(Box::new(Paragraph::new(regel, style_mono()))),
         None if zakking && zonder_krachtpunt => flow.push(Box::new(Paragraph::new(
             "Bruikbaarheidstoets (zakking); de combinaties waaruit de zakkingen komen, staan in de toelichting hieronder."
@@ -1697,14 +1816,7 @@ pub(crate) fn extend_with_check_block_regel(
             style_mono(),
         ))),
         None => flow.push(Box::new(Paragraph::new(
-            format!(
-                "Combinatie {}  ·  x = {:.0} mm  ·  N_Ed = {} kN  ·  V_Ed = {} kN  ·  M_Ed = {} kNm",
-                f.combo,
-                f.pos_mm,
-                getal_tekst(f.n_ed, 2),
-                getal_tekst(f.vz_ed, 2),
-                getal_tekst(f.my_ed, 2)
-            ),
+            krachtregel(&f, &f.combo.to_string(), None),
             style_mono(),
         ))),
     }

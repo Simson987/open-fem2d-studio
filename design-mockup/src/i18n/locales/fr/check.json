@@ -693,11 +693,15 @@
     "derivation_one": "Développement ({{count}} étape)",
     "derivation_other": "Développement ({{count}} étapes)",
     "combination": "Combinaison",
+    "forcesSecondOrder": "2nd ordre + défaut d'aplomb",
+    "forcesResults": "résultats",
+    "forcesTitle": "D'où viennent les efforts de cette vérification. ELU : toujours un calcul au second ordre (P-Δ) avec défaut d'aplomb, indépendamment des réglages Analyse et Défaut d'aplomb (EN 1993-1-1 5.2.2(3)b et (7)b). ELS : les résultats, tels que réglés.",
     "intermediates": "Valeurs intermédiaires ({{aantal}})"
   },
   "panel": {
     "stressAt": "Répartition des contraintes à la section déterminante : x = {{x}} mm, combinaison {{combinatie}}",
-    "tensionPositive": "Traction positive"
+    "tensionPositive": "Traction positive",
+    "forcesNotes": "Remarques sur les efforts de vérification"
   },
   "variants": {
     "stepBars": "{{stap}} barres",

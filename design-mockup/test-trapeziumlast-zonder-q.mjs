@@ -238,6 +238,12 @@ if (!existsSync(MCP_SERVER)) {
   check("MCP 028-b C (qStart = qEnd, zonder q): R_A = 18 kN", b?.["3"]?.reactions?.["1"]?.fz, 18);
   const fe = a[2].uit?.steel_check_inputs?.[0]?.forces_envelope ?? [];
   const begin = fe.find((p) => p.position_mm === 0);
+  // VERSCHOVEN BINNEN DE TOLERANTIE (issue #199). `check_fem_model` rekent de
+  // UGT-toetskrachten altijd P-Δ met scheefstand φ = 1/200 in ±x: de metgezel
+  // ΣH = φ·ΣV = 68/200 = 0,34 kN gaat naar het scharnier, en via de
+  // geometrische stijfheid verschuift V aan de oplegging met orde N·θ_A
+  // (θ_A ≈ q·L³/24EI = 5,8·10⁻³ met q = 68/6 kN/m: 0,002 kN). Gemeten 43,4987
+  // tegen 43,5000 in eerste orde: −0,0013 kN (−3·10⁻⁵), binnen relTol 1e-4.
   check("MCP check 028-a: V_Ed bij de oplegging = 43,5 kN (was 37,5)", Math.abs(begin?.forces?.vz_ed ?? NaN), 43.5);
   ok("MCP solve zonder waarde: geweigerd met \"heeft geen waarde\"", /INVOER_ONGELDIG/.test(a[3].fout ?? "") && /Lijnlast 2 op staaf 1 heeft geen waarde/.test(a[3].fout ?? ""), (a[3].fout ?? "").slice(0, 200));
 }

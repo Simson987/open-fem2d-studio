@@ -2794,6 +2794,38 @@ export function solveAllCasesNonlinear(input: MultiInput): MultiLcResult {
   return { perCase };
 }
 
+/**
+ * Een tweede-orde-rekengang ZONDER de lineaire sommen per belastinggeval: een
+ * lege perCase-Map met alleen de tweede-orde-status (en, met een scheefstand,
+ * de markering van de richtingen). `combineResults` lost elke combinatie dan
+ * zelf geometrisch niet-lineair op, precies als na `solveAllCasesNonlinear`;
+ * `eersteOrdeCombinatieResultaat` werkt er ook op.
+ *
+ * Waarvoor: de toetsrekengang (`lib/toetsKrachten.ts`, issue #199) heeft
+ * alleen de combinaties nodig. De gevallen los tonen of toetsen niets, en met
+ * een scheefstand staat elk geval in beide richtingen: dat scheelt tweemaal
+ * het aantal belastinggevallen aan lineaire sommen.
+ *
+ * Elke aanroep krijgt een EIGEN status met een eigen cache. De cachesleutel
+ * (`tweedeOrdeSleutel`: id en factoren) kent geen φ en geen richting, dus een
+ * status mag nooit gedeeld worden tussen invoer met een andere scheefstand.
+ *
+ * Eén verschil met `solveAllCasesNonlinear`: een combinatie die geen enkele
+ * last activeert, valt in `combineResults` terug op superpositie, en over deze
+ * lege Map is dat een resultaat zonder staven. Daar gaf de gewone rekengang
+ * nulkrachten per staaf, mits een geval met factor 0 wél lasten had.
+ */
+export function tweedeOrdePerCombinatie(input: MultiInput): MultiLcResult {
+  const perCase = new Map<number, SolverResult>();
+  if (input.scheefstand) {
+    const sr: ScheefstandRichtingen = { primair: input.scheefstand.richting, offset: SCHEEFSTAND_ID_OFFSET };
+    (perCase as any)[SCHEEFSTAND_KEY] = sr;
+  }
+  const state: SecondOrderState = { input, cache: new Map(), eersteOrdeCache: new Map() };
+  (perCase as any)[SECOND_ORDER_KEY] = state;
+  return { perCase };
+}
+
 // ── Inspection helpers — for the Insights matrix viewer ────────────────────
 // (Not the solver. These rebuild K/per-beam-K via core utilities for display.)
 

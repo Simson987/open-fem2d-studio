@@ -21,13 +21,26 @@
 //! als in de app: een onbekend veld of een verkeerd type is een fout, nooit
 //! een stille standaardwaarde. Het schema hieronder is daar de spiegel van
 //! (zie de test `schema_spiegelt_de_veldpoort_van_de_generator`).
+//!
+//! DE TOETSKRACHTEN (issue #199, B9). `analyse` geldt alleen voor de
+//! resultaten (gevallen en combinaties, zonder scheefstand). Met `toetsen`
+//! levert de sidecar in stap 1 ook de `toetsverzoeken` van de UGT-toets: elke
+//! UGT-combinatie P-Δ met scheefstand in +X, −X, +Y en −Y, met dezelfde
+//! functies als de app (`design-mockup/src/mcp/toets3dSidecar.ts`). Hier gaan
+//! ze door dezelfde kern; een mislukte berekening is geen afgebroken aanroep
+//! maar een uitkomst `{ fout }`, en de sidecar maakt daar in stap 3 een
+//! weigering van, met de reden per combinatie. De resultaten blijven dan
+//! staan en er wordt niets getoetst; nooit eerste orde. Meldt de sidecar de
+//! afgedwongen toetsanalyse niet (een oude bundel), dan TOETSING_ONMOGELIJK.
 
 use openaec_mcp_server::sidecar::{self, SidecarOpties};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
-use crate::fem_tools::van_sidecar;
+use crate::fem_tools::{eis_afgedwongen_toetsanalyse, van_sidecar};
 use crate::RpcError;
 
 pub(crate) const TOOL: &str = "open_fem_3d_staalhal_maken";
@@ -194,7 +207,7 @@ pub(crate) fn hal_schema() -> Value {
 pub(crate) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": TOOL,
-        "description": "Maak een stalen hal als 3D-raamwerk (spanten, gordingen, randliggers, dak- en wandverbanden, lasten G/S/W dwars/W langs, optioneel dakgebruik Q en eigen gewicht), eventueel op een betonnen balkrooster op palen. Geeft het projectbestand (.ifcfem-inhoud, te openen in Open FEM Studio of met gui_load_model), een samenvatting (aantallen, maten, staafnummers per groep) en waarschuwingen. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belastinggeval en elke standaardcombinatie, en komen per geval de reactiesommen, het evenwicht, de grootste verplaatsing, de zijverplaatsing van de goot en de paalreacties terug; met `toetsen` (standaard aan) ook de EN 1993-toetsing met UC per groep. Dezelfde generator als de wizard \"Stalen hal…\" in de app.",
+        "description": "Maak een stalen hal als 3D-raamwerk (spanten, gordingen, randliggers, dak- en wandverbanden, lasten G/S/W dwars/W langs, optioneel dakgebruik Q en eigen gewicht), eventueel op een betonnen balkrooster op palen. Geeft het projectbestand (.ifcfem-inhoud, te openen in Open FEM Studio of met gui_load_model), een samenvatting (aantallen, maten, staafnummers per groep) en waarschuwingen. Met `reken: true` rekent dezelfde 3D-kern als solve_open_fem_3d elk belastinggeval en elke standaardcombinatie (de RESULTATEN, volgens `analyse`, zonder scheefstand), en komen per geval de reactiesommen, het evenwicht, de grootste verplaatsing, de zijverplaatsing van de goot en de paalreacties terug; met `toetsen` (standaard aan) ook de EN 1993- en EN 1995-toetsing met UC per groep. TOETSKRACHTEN: de UGT-toets rekent ALTIJD zelf tweede orde (P-Delta) met scheefstand (NEN-EN 1993-1-1 5.2.2(3)b en (7)b, 5.3.2), elke UGT-combinatie in +X, −X, +Y en −Y (id + k·1000000), met één knikvorm per berekening en phi uit de projectinstelling van het projectbestand (vast 1/200; met hout minstens phi volgens NEN-EN 1995-1-1 (5.1)), los van `analyse`; de BGT-toetsen lezen de resultaten. Dezelfde functies als de app. `berekening.toetsanalyse` beschrijft de toets: `analysis_type` (de toetsanalyse), `model_analysis_type` (de resultaten), `scheefstand` {phi, noemer, phi_x, phi_y, noemer_x, noemer_y, bron, model_scheefstand_aan, afgedwongen}: phi_x geldt voor ±X en phi_y voor ±Y, elk met m per rij kolommen in die richting (EN 1993-1-1 5.3.2(3)), phi is de grootste, `alpha_cr` per UGT-basiscombinatie met `stabiliteitsmeldingen` ({niveau, tekst}: dezelfde meldingen als de app, informatief over de resultaten; alleen een geweigerde toets is een fout) (informatief: de grens 10 van 5.2.1(3) geldt alleen voor eerste orde), `meldingen` en per toetsberekening ΣR en evenwicht (`berekeningen`). Divergeert de tweede orde van de toets in een UGT-combinatie (alpha_cr ≤ 1), dan is `berekening.toetsing.geweigerd` true met de reden per combinatie en een `suggestie`, en is er GEEN UC (ook geen houttoetsing); de resultaten blijven staan en er wordt nooit teruggevallen op eerste orde. De standaardhal wordt zo geweigerd: zijn wandverbanden CHS 88.9x4 knikken onder wind langs zelf; maak de verbanden trek-alleen (`hal.verbanden.trekAlleen`) of kies zwaardere verbanden. Dezelfde generator als de wizard \"Stalen hal…\" in de app.",
         "inputSchema": {
             "type": "object",
             "additionalProperties": false,
@@ -203,11 +216,11 @@ pub(crate) fn tool_definitions() -> Vec<Value> {
                 "reken": { "type": "boolean", "default": false,
                     "description": "Meteen doorrekenen met de 3D-kern (per belast geval en per standaardcombinatie)." },
                 "analyse": { "type": "string", "enum": ["linear", "p-delta"], "default": "linear",
-                    "description": "Eerste orde (linear, zoals het projectbestand) of tweede orde (p-delta)." },
+                    "description": "De RESULTATEN: eerste orde (linear, zoals het projectbestand) of tweede orde (p-delta), zonder scheefstand. De toets rekent hoe dan ook P-Delta met scheefstand." },
                 "gevolgklasse": { "type": "string", "enum": ["CC1", "CC2", "CC3"], "default": "CC2",
                     "description": "Gevolgklasse voor de factoren van de standaardcombinaties (NEN-EN 1990 NB)." },
                 "toetsen": { "type": "boolean", "default": true,
-                    "description": "Met reken: staal toetsen volgens EN 1993 en hout volgens EN 1995; beton wordt met reden overgeslagen." },
+                    "description": "Met reken: staal toetsen volgens EN 1993 en hout volgens EN 1995, met UGT-krachten uit een eigen tweede-ordeberekening (P-Delta) met scheefstand in +X, −X, +Y en −Y (4 berekeningen per UGT-combinatie extra); beton wordt met reden overgeslagen." },
                 "stramien": { "type": "boolean", "default": true,
                     "description": "Het stramien van de hal (spanten, gevels, levels) in het projectbestand." },
                 "detail": { "type": "string", "enum": ["samenvatting", "volledig"], "default": "samenvatting",
@@ -287,6 +300,7 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
         return Err(argumentfout("`detail` moet \"samenvatting\" of \"volledig\" zijn."));
     }
     let volledig = detail == "volledig";
+    let toetsen = a.toetsen.unwrap_or(true);
     let hal = a.hal.unwrap_or_else(|| json!({}));
     let reken = json!({
         "analyse": a.analyse.as_deref().unwrap_or("linear"),
@@ -296,6 +310,12 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     let mut maken = json!({ "hal": hal, "stramien": a.stramien.unwrap_or(true) });
     if a.reken {
         maken["reken"] = reken.clone();
+        // Alleen het afwijkende `false` gaat mee: zonder het veld rekent de
+        // sidecar de toets, en een bundel van vóór de toets geeft dan geen
+        // `toetsanalyse` — wat hieronder TOETSING_ONMOGELIJK oplevert.
+        if !toetsen {
+            maken["toetsen"] = json!(false);
+        }
     }
     let gemaakt = roep("staalhal_maken", maken, a.timeout_s).await?;
     let mut uit = Map::new();
@@ -305,33 +325,25 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     if !a.reken {
         return Ok(Value::Object(uit));
     }
+    if toetsen {
+        eis_afgedwongen_toetsanalyse(&gemaakt["toetsanalyse"], "toetsanalyse", "eerste orde zonder scheefstand")?;
+    }
 
     // ── Rekenen: elk verzoek door dezelfde 3D-kern als solve_open_fem_3d ──
-    let verzoeken: Vec<(String, String, open_fem_3d::SolveRequest3D)> = gemaakt["rekenverzoeken"]
-        .as_array()
-        .ok_or_else(|| RpcError::tool_exec("de sidecar leverde geen rekenverzoeken"))?
-        .iter()
-        .map(|v| {
-            let sleutel = v["sleutel"].as_str().unwrap_or_default().to_owned();
-            let naam = v["naam"].as_str().unwrap_or_default().to_owned();
-            serde_json::from_value(v["verzoek"].clone())
-                .map(|verzoek| (sleutel.clone(), naam, verzoek))
-                .map_err(|e| RpcError::tool_exec(format!("rekenverzoek {sleutel} past niet op het 3D-contract: {e}")))
-        })
-        .collect::<Result<_, _>>()?;
+    let verzoeken = lees_rekenverzoeken(&gemaakt["rekenverzoeken"], "rekenverzoeken")?;
     let aantal_verzoeken = verzoeken.len();
-    let resultaten = tokio::task::spawn_blocking(move || {
-        let mut resultaten = Map::new();
-        for (sleutel, naam, verzoek) in verzoeken {
-            let r = open_fem_3d::solve(verzoek).map_err(|e| format!("{naam} ({sleutel}): {e}"))?;
-            let waarde = serde_json::to_value(r).map_err(|e| format!("{sleutel}: resultaat niet naar JSON: {e}"))?;
-            resultaten.insert(sleutel, waarde);
-        }
-        Ok::<_, String>(resultaten)
-    })
-    .await
-    .map_err(|e| RpcError::tool_exec(format!("3D-kern kon niet worden afgerond: {e}")))?
-    .map_err(|e| rekenfout(format!("De 3D-kern weigerde de hal: {e}")))?;
+    let mut resultaten = Map::new();
+    for (sleutel, naam, uitkomst) in reken_alle(verzoeken).await? {
+        let waarde = uitkomst.map_err(|e| rekenfout(format!("De 3D-kern weigerde de hal: {naam} ({sleutel}): {e}")))?;
+        resultaten.insert(sleutel, waarde);
+    }
+    // De toets: elke berekening door dezelfde kern; een mislukte is een
+    // uitkomst `{ fout }` waar de sidecar een weigering van maakt.
+    let toetsresultaten = if toetsen {
+        Some(toetsuitkomsten(lees_rekenverzoeken(&gemaakt["toetsverzoeken"], "toetsverzoeken")?).await?)
+    } else {
+        None
+    };
 
     let mut per_geval_volledig = Vec::new();
     if volledig {
@@ -346,12 +358,12 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
         }
     }
 
-    let uitgewerkt = roep(
-        "staalhal_uitwerken",
-        json!({ "hal": gemaakt["parameters"], "reken": reken, "resultaten": Value::Object(resultaten) }),
-        a.timeout_s,
-    )
-    .await?;
+    let mut uitwerken = json!({ "hal": gemaakt["parameters"], "reken": reken, "resultaten": Value::Object(resultaten) });
+    match toetsresultaten {
+        Some(t) => uitwerken["toetsresultaten"] = Value::Object(t),
+        None => uitwerken["toetsen"] = json!(false),
+    }
+    let uitgewerkt = roep("staalhal_uitwerken", uitwerken, a.timeout_s).await?;
 
     let mut berekening = Map::new();
     berekening.insert("analyse".to_owned(), uitgewerkt["reken"]["analyse"].clone());
@@ -364,7 +376,15 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
         berekening.insert("per_geval".to_owned(), Value::Array(per_geval_volledig));
     }
 
-    if a.toetsen.unwrap_or(true) {
+    if toetsen {
+        eis_afgedwongen_toetsanalyse(&uitgewerkt["toetsanalyse"], "toetsanalyse", "eerste orde zonder scheefstand")?;
+        berekening.insert("toetsanalyse".to_owned(), uitgewerkt["toetsanalyse"].clone());
+    }
+    if toetsen && !uitgewerkt["toetsweigering"].is_null() {
+        // Geweigerd (B7): geen staal- en geen houttoets, wel de reden per
+        // combinatie en wat eraan te doen is. De resultaten blijven staan.
+        berekening.insert("toetsing".to_owned(), toetsweigering(&uitgewerkt["toetsweigering"]));
+    } else if toetsen {
         let invoer: Vec<steel_check::BeamCheckInput> = serde_json::from_value(uitgewerkt["toetsinvoer"].clone())
             .map_err(|e| RpcError::tool_exec(format!("de toetsinvoer van de sidecar past niet op BeamCheckInput: {e}")))?;
         let uitkomsten = tokio::task::spawn_blocking(move || steel_check::check_all_beams(invoer))
@@ -393,6 +413,104 @@ pub(crate) async fn dispatch(naam: &str, args: Value) -> Result<Value, RpcError>
     }
     uit.insert("berekening".to_owned(), Value::Object(berekening));
     Ok(Value::Object(uit))
+}
+
+/// Eén rekenverzoek van de sidecar: sleutel, naam en het 3D-contract.
+pub(crate) type Rekenverzoek = (String, String, open_fem_3d::SolveRequest3D);
+
+/// De rekenverzoeken van de sidecar (`rekenverzoeken` of `toetsverzoeken`),
+/// gelezen op het contract van de 3D-kern. Ook gebruikt door de IFC-import.
+pub(crate) fn lees_rekenverzoeken(lijst: &Value, veld: &str) -> Result<Vec<Rekenverzoek>, RpcError> {
+    lijst
+        .as_array()
+        .ok_or_else(|| RpcError::tool_exec(format!("de sidecar leverde geen {veld}")))?
+        .iter()
+        .map(|v| {
+            let sleutel = v["sleutel"].as_str().unwrap_or_default().to_owned();
+            let naam = v["naam"].as_str().unwrap_or_default().to_owned();
+            serde_json::from_value(v["verzoek"].clone())
+                .map(|verzoek| (sleutel.clone(), naam, verzoek))
+                .map_err(|e| RpcError::tool_exec(format!("{veld} {sleutel} past niet op het 3D-contract: {e}")))
+        })
+        .collect()
+}
+
+/// Hoeveel berekeningen tegelijk: de app start ze allemaal tegelijk; hier
+/// hoogstens zoveel als er kernen zijn, en niet meer dan dit (geheugen van de
+/// tweede orde op een grote hal).
+const MAX_TEGELIJK: usize = 4;
+
+/// Rekent elk verzoek met `open_fem_3d::solve` — dezelfde kern als
+/// `solve_open_fem_3d` — een paar tegelijk, en geeft de uitkomsten in de
+/// volgorde van de verzoeken: per verzoek het resultaat als JSON of de
+/// melding van de kern. De kern is een pure functie, dus de volgorde van
+/// rekenen verandert geen getal. Ook gebruikt door de IFC-import.
+pub(crate) async fn reken_alle(verzoeken: Vec<Rekenverzoek>) -> Result<Vec<(String, String, Result<Value, String>)>, RpcError> {
+    tokio::task::spawn_blocking(move || {
+        let aantal = verzoeken.len();
+        let draden = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .clamp(1, MAX_TEGELIJK)
+            .min(aantal.max(1));
+        let wachtrij: Vec<Mutex<Option<Rekenverzoek>>> = verzoeken.into_iter().map(|v| Mutex::new(Some(v))).collect();
+        let uitkomsten: Vec<Mutex<Option<(String, String, Result<Value, String>)>>> =
+            (0..aantal).map(|_| Mutex::new(None)).collect();
+        let volgende = AtomicUsize::new(0);
+        std::thread::scope(|s| {
+            for _ in 0..draden {
+                s.spawn(|| loop {
+                    let i = volgende.fetch_add(1, Ordering::Relaxed);
+                    if i >= aantal {
+                        break;
+                    }
+                    let (sleutel, naam, verzoek) =
+                        wachtrij[i].lock().expect("wachtrij").take().expect("elk verzoek één keer");
+                    let uitkomst = open_fem_3d::solve(verzoek)
+                        .and_then(|r| serde_json::to_value(r).map_err(|e| format!("resultaat niet naar JSON: {e}")));
+                    *uitkomsten[i].lock().expect("uitkomst") = Some((sleutel, naam, uitkomst));
+                });
+            }
+        });
+        uitkomsten
+            .into_iter()
+            .map(|u| u.into_inner().expect("uitkomst").expect("elk verzoek gerekend"))
+            .collect()
+    })
+    .await
+    .map_err(|e| RpcError::tool_exec(format!("3D-kern kon niet worden afgerond: {e}")))
+}
+
+/// De toetsverzoeken door de kern, als `toetsresultaten` voor de sidecar:
+/// per sleutel `{ "resultaat": … }` of, als de kern weigert (bijv. instabiel in
+/// de tweede orde), `{ "fout": "<melding van de kern>" }`. Een mislukte
+/// toetsberekening breekt de aanroep niet af: de sidecar maakt er een
+/// weigering van de toets van, met de reden per combinatie (B7). Ook gebruikt
+/// door de IFC-import.
+pub(crate) async fn toetsuitkomsten(verzoeken: Vec<Rekenverzoek>) -> Result<Map<String, Value>, RpcError> {
+    Ok(reken_alle(verzoeken)
+        .await?
+        .into_iter()
+        .map(|(sleutel, _, uitkomst)| {
+            let waarde = match uitkomst {
+                Ok(resultaat) => json!({ "resultaat": resultaat }),
+                Err(fout) => json!({ "fout": fout }),
+            };
+            (sleutel, waarde)
+        })
+        .collect())
+}
+
+/// `berekening.toetsing` bij een geweigerde toets: geen UC, wel de reden, per
+/// combinatie de reden (met α_cr) en de suggestie van de sidecar. Ook gebruikt
+/// door de IFC-import.
+pub(crate) fn toetsweigering(weigering: &Value) -> Value {
+    json!({
+        "geweigerd": true,
+        "uc_max": Value::Null,
+        "reden": weigering["reden"],
+        "per_combinatie": weigering["per_combinatie"],
+        "suggestie": weigering["suggestie"],
+    })
 }
 
 /// De uitkomst van `check_all_beams` per groep van de hal. Geen eigen

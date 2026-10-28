@@ -12,6 +12,15 @@
 //  B7 — klasse 4 met effectieve breedtes in plaats van "niet toetsbaar".
 //  K3 — hout trek met buiging (6.17).
 //
+// DE APP-ROUTE SINDS ISSUE #199. De toetsbouwers krijgen wat de app ze geeft:
+// de UGT uit de toetsrekengang (altijd P-Δ met scheefstand φ = 1/noemer van
+// het project, in +x en −x; `bepaalToetsKrachten2D`), de BGT uit de resultaten
+// (`toetsSet2D`). K5 en B15 zijn BGT en lezen dus dezelfde resultaten als
+// vóór #199. Voor B6 en B7 (UGT) staat bij het blok waarom de handwaarde ook
+// met de toetskrachten blijft gelden; de eerste-ordewaarde van dezelfde toets
+// wordt ter vergelijking getoond. K3 toetst de toetsrekengang tegen de hand
+// (het knoopmoment op een scharnier; zie dat blok).
+//
 // Draaien met: npx tsx test-controle-2026-10.mjs
 //         of : node scripts/run-tests.mjs --filter=controle-2026-10
 // Vereist de release-toetsbrug: cargo build --release -p toetsbrug.
@@ -33,6 +42,9 @@ const { selecteerCombinaties } = await import("./src/lib/combinatieSelectie.ts")
 const { bouwMultiInput } = await import("./src/lib/modelNaarSolverInput.ts");
 const { buildSteelCheckInputs, profileLookupKey, chordRelativeMaxMm } = await import("./src/lib/steelCheckBuilder.ts");
 const { buildTimberCheckInputs } = await import("./src/lib/timberCheckBuilder.ts");
+const { bepaalToetsKrachten2D, toetsSet2D } = await import("./src/lib/toetsKrachten.ts");
+const { bepaalScheefstand, leidScheefstandGeometrieAf, toepasselijkeScheefstandNormen } =
+  await import("./src/lib/scheefstandNorm.ts");
 
 const PROFIELEN = JSON.parse(
   readFileSync(join(REPO, "src-tauri", "crates", "steel-profiles", "data", "profiles.json"), "utf8"),
@@ -69,21 +81,45 @@ function reken(m) {
   const sel = selecteerCombinaties(alle, m.beams, m.plates ?? [], { loadCases: m.loadCases, nodes: m.nodes });
   const combinations = sel.actief;
   const combinationResults = new Map(combinations.map((c) => [c.id, combineResults(c, perCase)]));
-  return { perCase, combinations, combinationResults };
+  return { perCase, combinations, combinationResults, basis: bouwMultiInput(m) };
 }
-function staal(m) {
+/**
+ * De toetsset zoals de app hem maakt (issue #199): de UGT uit de eigen
+ * toetsrekengang, de BGT uit de resultaten. Deze bestanden hebben geen
+ * scheefstandvelden: dan geldt wat de app bij openen zet (vast 1/200, +x).
+ */
+function toetsset(m, r) {
+  const normen = toepasselijkeScheefstandNormen(m.beams);
+  const project = bepaalScheefstand(
+    { bron: "vast", noemer: m.scheefstandNoemer ?? 200, hoogteM: null, aantalElementen: null },
+    leidScheefstandGeometrieAf(m), normen,
+  );
+  const toets = bepaalToetsKrachten2D({
+    basis: r.basis, combinaties: r.combinations,
+    scheefstand: { project, normen, richting: m.scheefstandRichting ?? 1, modelAan: m.scheefstandEnabled ?? false },
+    analysetype: m.analysetype ?? (m.nonlinearEnabled ? "tweedeOrdeGeometrisch" : "eersteOrde"),
+    resultaten: { perCase: r.perCase, combinationResults: r.combinationResults },
+  });
+  if (toets.weigering) throw new Error(`toets geweigerd: ${toets.weigering.reden}`);
+  return toetsSet2D(toets, { combinaties: r.combinations, combinationResults: r.combinationResults, perCase: r.perCase }, m.beams);
+}
+/** De toetsinvoer zoals de app: de toetsset, of met `eersteOrde` de resultaten zelf (de route van vóór #199). */
+function staal(m, { eersteOrde = false } = {}) {
   const r = reken(m);
+  const set = eersteOrde ? null : toetsset(m, r);
   return buildSteelCheckInputs({
     nodes: m.nodes, beams: m.beams, alleBeams: m.beams, supports: m.supports, plates: m.plates ?? [],
-    combinations: r.combinations, combinationResults: r.combinationResults, profileDb, loadCases: m.loadCases,
+    combinations: set?.combinaties ?? r.combinations, combinationResults: set?.combinationResults ?? r.combinationResults,
+    profileDb, loadCases: m.loadCases, ...(set ? { stabiliteit: set.stabiliteit } : {}),
   });
 }
-function hout(m) {
+function hout(m, { eersteOrde = false } = {}) {
   const r = reken(m);
+  const set = eersteOrde ? null : toetsset(m, r);
   return buildTimberCheckInputs({
     nodes: m.nodes, beams: m.beams, supports: m.supports,
-    combinations: r.combinations, combinationResults: r.combinationResults,
-    loadCases: m.loadCases, gevallenMetLast: [...r.perCase.keys()],
+    combinations: set?.combinaties ?? r.combinations, combinationResults: set?.combinationResults ?? r.combinationResults,
+    loadCases: m.loadCases, gevallenMetLast: [...r.perCase.keys()], ...(set ? { stabiliteit: set.stabiliteit } : {}),
   });
 }
 function kern(opdracht, inputs) {
@@ -176,6 +212,11 @@ log("\n[B15] Stalen vloerligger IPE 300, L = 6000 mm: w_fin tegen ℓ_rep/250");
 // ─────────────────────────────────────────────────────────────────────────
 {
   const inv = staal(laad("b15-ipe300-vloerligger.ifcfem")).inputs[0];
+  // BGT uit de resultaten (issue #199, B6): de doorbuigingsvelden zijn die van
+  // de route van vóór #199, tot op de bit.
+  const doorbuiging = (i) => JSON.stringify(Object.entries(i).filter(([k]) => k.startsWith("deflection_")));
+  ok("BGT: de doorbuigingsinvoer is die van de resultaten (bit-gelijk met de eerste-orderoute)",
+    doorbuiging(inv) === doorbuiging(staal(laad("b15-ipe300-vloerligger.ifcfem"), { eersteOrde: true }).inputs[0]));
   ok("deflection_limit_class Floor", inv.deflection_limit_class === "Floor");
   ok("deflection_limit_numerator = 250 (de noemer die de kern toetst)", inv.deflection_limit_numerator === 250, String(inv.deflection_limit_numerator));
   dicht("w = 14,746 mm", -inv.deflection_actual_max_mm, 14.746, 2e-3);
@@ -191,10 +232,20 @@ log("\n[B15] Stalen vloerligger IPE 300, L = 6000 mm: w_fin tegen ℓ_rep/250");
 log("\n[B6] IPE 300 S235, V_z,Ed = 300 kN: 6.2.8 volgens (6.30)");
 // Hand: M_y,V,Rd = 130,70 kNm; staaf 1 (M = 100) UC 0,765, staaf 2 (M = 200)
 // UC 1,530 — beide als M_y,Ed/M_y,V,Rd.
+// Met de toetskrachten (issue #199): de puntlast 1,5·400 = 600 kN krijgt
+// H = φ·V = 600/200 = 3 kN, die via het scharnier afgaat (N ≤ 3 kN in de
+// ligger; 6.2.8 kent geen N). V en M blijven 300 kN en 100/200 kNm: de kleine
+// N geeft via K_G en het P-δ-moment N·w(x) (sinds de staafkrachten uit
+// (K_E + K_G)·u komen) een verwaarloosbaar verschil. De handwaarden gelden dus
+// onveranderd. Gemeten: staaf 2 1,53062 tegen 1,53059 in eerste orde
+// (+0,002 %; met alleen K_E·u was het 1,53063), ruim binnen de 2e-3.
 // ─────────────────────────────────────────────────────────────────────────
 if (heeftKern) {
   const inputs = staal(laad("b6-ipe300-buiging-dwarskracht.ifcfem")).inputs;
   const uit = kern("check_steel_beams", inputs);
+  const eo = kern("check_steel_beams", staal(laad("b6-ipe300-buiging-dwarskracht.ifcfem"), { eersteOrde: true }).inputs);
+  log(`    6.2.8 staaf 1/2: toetskrachten ${toets(uit[0], "6.2.8_combined_mv").uc.uc.toFixed(5)}/${toets(uit[1], "6.2.8_combined_mv").uc.uc.toFixed(5)}, ` +
+    `eerste orde ${toets(eo[0], "6.2.8_combined_mv").uc.uc.toFixed(5)}/${toets(eo[1], "6.2.8_combined_mv").uc.uc.toFixed(5)}`);
   const mv1 = toets(uit[0], "6.2.8_combined_mv"), mv2 = toets(uit[1], "6.2.8_combined_mv");
   dicht("M_y,V,Rd = 130,70 kNm", mv1.value, 130.70, 5e-4);
   dicht("staaf 1: UC 0,765", mv1.uc.uc, 0.765, 2e-3);
@@ -207,10 +258,17 @@ if (heeftKern) {
 log("\n[B7] IPE 300 S355 onder druk: klasse 4 met A_eff");
 // Hand: A_eff = 5269 mm², N_c,Rd = 1870,5 kN (UC 0,267), χ_z = 0,500,
 // N_b,Rd = 936,0 kN (UC 0,534). 2026.41.0: alles "n.v.t.", uc_max 0.
+// Met de toetskrachten (issue #199): de kop van de kolom hangt aan een rol in
+// x, dus H = φ·V = 500/200 = 2,5 kN gaat rechtstreeks naar die oplegging en de
+// kop verplaatst niet: geen moment, geen P-Δ. N blijft 1,5·333,3 = 500 kN en
+// de handwaarden gelden onveranderd.
 // ─────────────────────────────────────────────────────────────────────────
 if (heeftKern) {
   const inputs = staal(laad("b7-ipe300-s355-klasse4.ifcfem")).inputs;
   const uit = kern("check_steel_beams", inputs);
+  const eo = kern("check_steel_beams", staal(laad("b7-ipe300-s355-klasse4.ifcfem"), { eersteOrde: true }).inputs);
+  log(`    uc_max staaf 1: toetskrachten ${uit.find((r) => r.beam_id === 1).uc_max.toFixed(5)}, ` +
+    `eerste orde ${eo.find((r) => r.beam_id === 1).uc_max.toFixed(5)}`);
   const s1 = uit.find((r) => r.beam_id === 1);
   ok("staaf 1 klasse 4", s1.classification === "Class4");
   ok("staaf 1 getoetst (status niet n.v.t.)", s1.status !== "NotApplicable", s1.governing_check_id);
@@ -225,10 +283,28 @@ if (heeftKern) {
 // ─────────────────────────────────────────────────────────────────────────
 log("\n[K3] GL24h 90×180 onder trek met buiging: (6.17)");
 // Hand: (6.17) = 0,5480 (staaf 1) en 1,0960 (staaf 2, voldoet niet).
+// LANGS DE TOETSREKENGANG VAN DE APP (issue #199, altijd P-Δ met scheefstand).
+// Het maatgevende moment is het knoopmoment op het scharnier, 1,5·2 = 3,000
+// kNm (staaf 1) en 6,000 kNm (staaf 2): een opgelegd moment, dat P-Δ niet
+// verandert. De handwaarden gelden dus ook voor de toetskrachten.
+// TOT OKTOBER 2026 gaf deze route 0,5275 / 1,0182 (3,7 % en 7,1 % aan de
+// onveilige kant): de kern rekende de staafeindkrachten na P-Δ met alleen
+// K_E·u (BeamForces.ts), terwijl het stelsel K_E + K_G bevat. Staaf 1 kreeg
+// M = 2,831 kNm waar 3,000 kNm aangrijpt (trek 40 kN, N·L²/EI = 0,72). Met
+// (K_E + K_G)·u sluit het knoopevenwicht en geeft de route de handwaarde
+// (gemeten 0,54801 / 1,09603, gelijk aan eerste orde). Dit punt bewaakt dat:
+// het toetst de UC van de toetsrekengang tegen de hand, en de eerste orde
+// ernaast als tegenproef van de kern.
 // ─────────────────────────────────────────────────────────────────────────
 if (heeftKern) {
-  const inputs = hout(laad("k3-gl24h-trek-buiging.ifcfem")).inputs;
-  const uit = kern("check_timber_beams", inputs);
+  const uit = kern("check_timber_beams", hout(laad("k3-gl24h-trek-buiging.ifcfem")).inputs);
+  const eo = kern("check_timber_beams", hout(laad("k3-gl24h-trek-buiging.ifcfem"), { eersteOrde: true }).inputs);
+  log(`    (6.17) staaf 1/2: toetsrekengang (P-Δ) ${[1, 2].map((id) => toets(uit.find((x) => x.beam_id === id), "6.2.3_bending_tension").uc.uc.toFixed(5)).join("/")}, ` +
+    `eerste orde ${[1, 2].map((id) => toets(eo.find((x) => x.beam_id === id), "6.2.3_bending_tension").uc.uc.toFixed(5)).join("/")}`);
+  for (const [id, hand] of [[1, 0.5480], [2, 1.0960]]) {
+    dicht(`staaf ${id}: eerste orde (de kern met de handkrachten): (6.17) = ${hand}`,
+      toets(eo.find((x) => x.beam_id === id), "6.2.3_bending_tension").uc.uc, hand, 2e-3);
+  }
   for (const [id, hand, status] of [[1, 0.5480, "Ok"], [2, 1.0960, "NotOk"]]) {
     const r = uit.find((x) => x.beam_id === id);
     const t = toets(r, "6.2.3_bending_tension");

@@ -242,13 +242,15 @@ log("\n[4] Schijven, belastingvlakken, lasten, gevallen, combinaties, levels");
   check("puntacties op knopen: 2 kN op K13 (W), 0,5 op K5 en 0,25 kN op K11 (imperfectie)",
     knoopLast("K13", 4)?.fx === 2 && knoopLast("K5", 5)?.fx === 0.5 && knoopLast("K11", 5)?.fx === 0.25);
 
-  check("belastinggevallen: type uit ActionType en ActionSource, imperfectie 'overig', eigen gewicht uit (0, 0, −1)",
+  check("belastinggevallen: type uit ActionType en ActionSource, imperfectie 'overig' met kenmerk, eigen gewicht uit (0, 0, −1)",
     JSON.stringify(hal.loadCases) === JSON.stringify([
       { id: 1, name: "G1 eigen gewicht", type: "dead", eigenGewicht: true },
       { id: 2, name: "G2 afbouw", type: "dead" },
       { id: 3, name: "Q vloer", type: "live" },
       { id: 4, name: "W wind X", type: "wind" },
-      { id: 5, name: "Imp G +X", type: "other" },
+      // Het kenmerk `imperfectie` (issue #199): de UGT-toets telt dit geval
+      // met factor 0, want zij rekent zelf met de scheefstand.
+      { id: 5, name: "Imp G +X", type: "other", imperfectie: true },
     ]) && hal.selfWeightCaseId === 1, JSON.stringify(hal.loadCases));
   const c = Object.fromEntries(hal.combinations.map((x) => [x.name, x]));
   const factoren = (x) => JSON.stringify([...x.factors].sort((a, b) => a[0] - b[0]));

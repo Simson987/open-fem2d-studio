@@ -48,7 +48,9 @@ import {
   renderLatexHtml,
   splitsArtikel,
   statusLabel,
+  toetsCombinatieNamen,
 } from "../checkReportUtils";
+import { SCHEEFSTAND_BRON_LABEL, noemerTekst } from "../../../lib/scheefstandNorm";
 import type { CheckStatus } from "../../../lib/types/steel/CheckStatus";
 
 /** Kleurklasse van een statuscel (tabelvariant van statusClass). */
@@ -210,8 +212,14 @@ export default function CheckTableSection() {
   const results = useCheckStore((s) => s.results);
   const skipped = useCheckStore((s) => s.skipped);
   const lastRunAt = useCheckStore((s) => s.lastRunAt);
+  const toetsCombinaties = useCheckStore((s) => s.toetsCombinaties);
+  // Waar de UGT-toetskrachten vandaan komen (issue #199): onder de toetsbasis.
+  const toets = useCheckStore((s) => s.toets);
   const { beams, combinations } = useReportData();
-  const namen = new Map(combinations.map((c) => [c.id, c.name]));
+  // De namen van de combinaties waarop GETOETST is gaan voor die van het
+  // model: de UGT-toets rekent ook in −x, met id's die het model niet kent
+  // (issue #199). Anders stond er "comb. 1000003".
+  const namen = toetsCombinatieNamen(combinations, toetsCombinaties);
   // WAAROM DRIE LEEG-MELDINGEN. "Nog niet getoetst — voer de toetsing uit" stond
   // hier ook bij een model zonder één toetsbare staaf (de toetsing keert dan
   // terug zonder te draaien, `lastRunAt` blijft leeg) en bij een ronde waarin
@@ -243,6 +251,22 @@ export default function CheckTableSection() {
   //
   // Het detailniveau stuurt dus alleen nog de afleidingen, niet deze tabel.
 
+  // De herkomst van de toetskrachten: ook bij een geweigerde toets, want dan
+  // zegt zij welke berekening er faalde.
+  const toetsAlinea = toets && (
+    <p className="rpt-note rpt-check-basis" data-toetskrachten>
+      {t("resultView.checkForces", {
+        ns: "common",
+        analyse: t(`loadCases.analysisType.${toets.analyse.soort}`, { ns: "common" }),
+        noemer: noemerTekst(toets.analyse.noemer),
+        bron: toets.analyse.bron === "vast" || toets.analyse.bron === "ongunstigste"
+          ? t(`loadCases.swaySource.${toets.analyse.bron}`, { ns: "common" })
+          : SCHEEFSTAND_BRON_LABEL[toets.analyse.bron],
+      })}
+      {toets.analyse.hergebruikt && ` ${t("resultView.checkForcesReused", { ns: "common" })}`}
+    </p>
+  );
+
   const checkedTime = fmtCheckedAt(lastRunAt);
   // De toetsbasis noemt de uitgaven van de bijlage van HET PROJECT (normnaad).
   const basis = basisText(t, results, useRapportProjectInfo().uitgangspunten?.nationaleBijlage);
@@ -254,7 +278,19 @@ export default function CheckTableSection() {
 
       {results.length === 0 ? (
         <>
-          <p className="rpt-empty-note">{leegMelding}</p>
+          {toets?.weigering ? (
+            // GEWEIGERD (issue #199, B7): de tweede orde van de toets divergeert
+            // of de fysische ronde liep vast. "Nog niet getoetst — voer de
+            // toetsing uit" zou naar een handeling sturen die niets oplost; hier
+            // staat de reden, per combinatie op een eigen regel.
+            <div className="rpt-empty-note" data-toets-geweigerd>
+              <strong>{t("app.check.refused", { ns: "common" })}</strong>
+              <p style={{ whiteSpace: "pre-line", margin: "4px 0 0" }}>{toets.weigering}</p>
+            </div>
+          ) : (
+            <p className="rpt-empty-note">{leegMelding}</p>
+          )}
+          {toetsAlinea}
           <OvergeslagenStaven skipped={skipped} />
         </>
       ) : (
@@ -288,6 +324,8 @@ export default function CheckTableSection() {
               "Combinatie en x (mm vanaf staafbegin) tonen het maatgevende rekenpunt. Toetsen zonder unity check tellen niet mee.",
             )}
           </p>
+
+          {toetsAlinea}
 
           {basis && <p className="rpt-note rpt-check-basis">{basis}</p>}
 

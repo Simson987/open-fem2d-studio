@@ -80,7 +80,7 @@ const TIJDSLIMIET_MS = 300_000;
 // slaagden alle 87 controles, maar de test had 322 s nodig en werd daarna
 // door de algemene grens afgebroken. Houd ook deze langzame test begrensd.
 const SELECTIE_UI_TIJDSLIMIET_MS = 600_000;
-// De P-Δ-test van de staalhal rekent 104 berekeningen met de debugbouw van de
+// De P-Δ-test van de hallen rekent 151 berekeningen (104 staal, 47 hout) met de debugbouw van de
 // 3D-kern, die gedrukte staven voor de knik en de tweede orde in delen rekent
 // (controle oktober 2026, K4). Alleen: 75 s; naast de rest van de batterij
 // liep hij tot 228 s op, driekwart van de algemene grens. Eigen ruimere grens.
@@ -136,6 +136,14 @@ const BUNDEL_TESTS = new Set([
   // en juist de sidecar gebruikt deze afleiding voor zijn standaardset — dus
   // hoort hij ook tegen de bundel te bewijzen dat die dezelfde factoren geeft.
   "belastingcombinaties",
+  // Eigen factoren, bewust gekozen (issue #196): de melding bij het openen van
+  // P01, P03 en P04 onder elke klasse (geen "vóór september 2026" zonder spoor,
+  // wel de schaal K_FI op NB.4 en de NB-waarde), "Behoud eigen factoren" en
+  // intrekken, de bevestiging door opslaan en heropenen, en de MCP- en API-weg.
+  // Praat met `combinatieBeheer`, `projectFile`, de sidecar en de
+  // projectcommando's: allemaal in de barrel, dus ook tegen de bundel — de
+  // MCP-server leest de bevestiging met precies die code.
+  "eigen-factoren",
   // De stalen hal langs de MCP-weg: `staalhal_maken` en `staalhal_uitwerken`
   // in de sidecar, met de 3D-kern ertussen. Importeert alleen de barrel en
   // hoort juist tegen de bundel: die voert de MCP-server uit.
@@ -204,6 +212,12 @@ const BUNDEL_TESTS = new Set([
   // engine, combinations en alphaCr; de sidecar zet de FOUT in `warnings`,
   // dus hoort dit ook tegen de bundel.
   "alpha-cr",
+  // De toetsrekengang 2D (issue #199): de UGT-toetskrachten altijd tweede orde
+  // met scheefstand, hergebruik, divergentie als weigering en de toets-φ. Raakt
+  // engine, combinations, alphaCr, scheefstandNorm en toetsKrachten — alles in
+  // de barrel; de sidecar gebruikt dezelfde functie, dus hoort dit ook tegen de
+  // bundel.
+  "toets-krachten",
   "hoekverdraaiing",
   // Bewaakt dat de kniklengte van een HOUTEN staaf tot in de toetsinvoer
   // komt (buckling_length_y_m/_z_m in TimberBeamCheckInput). Praat alleen met
@@ -499,8 +513,13 @@ const ALLEEN_BRON = new Map([
   ["backstage-import-export", "#235: leest de bron van Backstage.tsx en App.tsx (React-UI), niets uit de sidecarbundel"],
   ["chs-profielnaam", "#240: de profielsleutel (lib/strip.ts) en de CHS-toets via de 3D-staalbouwer (openFem3dSteelCheck, buiten de barrel) en de toetsbrug als apart proces; de kern zelf staat in steel-check/tests/chs_naam_en_kip.rs"],
   ["staal-wringing", "#249: wringing 6.2.7 langs de 3D-staalbouwer (openFem3dSteelCheck, buiten de barrel) en de toetsbrug als apart proces; de toets zelf staat in steel-check/tests/wringing.rs"],
-  ["vrij-eind-tweede-orde", "vrij staafeind, 2·L of L bij P-Δ met scheefstand: de 3D-houtbouwer (openFem3dTimberCheck) staat buiten de barrel; de MCP-weg (check_fem_model) rekent in deze test al met de bundel, via de MCP-server"],
+  ["open-fem3d-beton-tl", "#197: betonnen T/L in 3D; de 3D-adapter (openFem3dSolver) staat buiten de barrel en de test start de afzonderlijke 3D-kern. De gedeelde hulpfunctie (lib/betonDoorsnedeGrootheden) zit via sectionResolver ook in de bundel"],
+  ["open-fem3d-plaatomhullenden", "#197: plaatomhullenden en randreacties in het 3D-rapport (React); het plaatnet, de 3D-adapter en het rapport staan buiten de barrel en de test start de afzonderlijke 3D-kern"],
+  ["bediening-samenvatting", "#203: de samenvatting van het bedieningskanaal (src/bediening) hoort bij de draaiende app en staat niet in de barrel; het veldmaximum zelf (veldExtremen) loopt in de bundelstand mee via test-veldmaximum"],
+  ["vrij-eind-tweede-orde", "vrij staafeind, 2·L of L bij P-Δ met scheefstand: de 3D-houtbouwer (openFem3dTimberCheck) en de taalbestanden met de uitleg in het 3D-eigenschappenpaneel staan buiten de barrel; de MCP-weg (check_fem_model) rekent in deze test al met de bundel, via de MCP-server"],
   ["niet-getoetst-weergave", "B7: de weergave van een niet getoetste staaf zit in het HTML-rapport, de React-panelen en het 3D-rapport; die staan buiten de headless sidecarbundel (de MCP-kant toetst drie_wegen_controle_2026_10.rs)"],
+  ["hout-doorlopend", "issue #205, het doorlopende staafeind bij hout: de 3D-houtbouwer en de herkenning van de 3D-staafeinden (openFem3dTimberCheck, openFem3dUitkraging) staan buiten de barrel; de 2D-bouwer en de MCP-weg (check_fem_model, via de MCP-server en dus de bundel) lopen in deze test al mee"],
+  ["hout-w-add", "issue #200, w_add = w₂ + w₃ per BGT-combinatie bij hout: de 3D-houtbouwer (openFem3dTimberCheck, openFem3dDisplacement) staat buiten de barrel; de 2D-bouwer en de MCP-weg (check_fem_model, via de MCP-server en dus de bundel) lopen in deze test al mee"],
   ["controle-2026-10-3d", "K5 in 3D: de houttoets en de verplaatsingsstations van de 3D-staaf (openFem3dTimberCheck, openFem3dDisplacement) staan buiten de barrel; de staaltoets in 3D en de 2D-bouwers lopen in de bundelstand mee via test-controle-2026-10"],
   ["open-fem3d-nbc2025-transfer", "de 3D-overdrachtsproef start de afzonderlijke Rust-kern"],
   ["wind-zone-report-2d", "React-rapportweergave en projectbestandsopslag staan buiten de headless sidecarbundel"],
@@ -514,7 +533,7 @@ const ALLEEN_BRON = new Map([
   // De 3D-proeven raken React/Three, de projectadapter of de aparte Rust-kern.
   // Deze modules zitten niet in de 2D-sidecarbundel.
   ...[
-    "open-fem3d-analysis-mode", "open-fem3d-analysemodulus", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-staalgewicht", "open-fem3d-opleggingsteken", "open-fem3d-model-api", "open-fem3d-eigen-doorsnede", "open-fem3d-gedraaide-hoofdassen", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
+    "open-fem3d-analysis-mode", "open-fem3d-analysemodulus", "open-fem3d-wheel-anchor", "open-fem3d-staalhal", "open-fem3d-staalhal-generator", "open-fem3d-knooppaneel", "open-fem3d-meldingen", "open-fem3d-modelvelden", "open-fem3d-scheefstand", "open-fem3d-scheefstand-torsie", "open-fem3d-scheefstand-losse-kolom", "open-fem3d-toets-prestatie", "open-fem3d-kipsteunen", "open-fem3d-rapportsamenvatting", "open-fem3d-staalgewicht", "open-fem3d-opleggingsteken", "open-fem3d-model-api", "open-fem3d-eigen-doorsnede", "open-fem3d-gedraaide-hoofdassen", "open-fem3d-beam-screen-pick", "open-fem3d-box-selection", "open-fem3d-campus-frame", "open-fem3d-trek-schijf",
     // Belastingvlakken: afdracht en vlakmeetkunde, en de browsertest (tekenen
     // op het werkvlak, doorzichtig vlak, klikken door het vlak heen).
     "open-fem3d-belastingvlak", "open-fem3d-belastingvlak-ui",
@@ -612,9 +631,10 @@ const ALLEEN_BRON = new Map([
     // Eigen gewicht langs de staafas als verdeelde last (issue #112): een staande kolom, een schuine spant en een
     // verlopende kolom door de rekenweg van de app en de echte kern; de N-lijn op elk punt tegen de hand.
     "open-fem3d-eigen-gewicht-e2e",
-    // Tweede orde (P-Δ) van de stalen hal uit de wizard (issue #60): elk geval en elke standaardcombinatie, ook met
-    // scheefstand ±X/±Y, een lessenaarsdak, een plat dak en een balkrooster, door de rekenweg van de app en de echte
-    // kern: convergent, stabiel, ΣR gelijk aan de handsom en de onafhankelijke krachtensom (104 berekeningen; alleen
+    // Tweede orde (P-Δ) van de stalen en de houten hal uit de wizard (issues #60, #202): elk geval en elke
+    // standaardcombinatie, ook met scheefstand ±X/±Y, een lessenaarsdak, een plat dak en een balkrooster, door de
+    // rekenweg van de app en de echte kern: convergent, stabiel, ΣR gelijk aan de handsom en de onafhankelijke
+    // krachtensom (151 berekeningen, waarvan 47 voor de houten hal van 12 × 8 m, die klein is; alleen
     // ongeveer 75 s, in de batterij tot bijna 4 min, eigen grens 600 s). Sinds de kern gedrukte staven in delen rekent
     // (controle oktober 2026, K4) weigert de stabiliteitspoort bij "Wind langs (W) leidend" in de standaardhal terecht
     // 3 (met scheefstand 8) berekeningen: de wandverbanden knikken zelf (α_cr < 1); de test eist dat waar de hand het
@@ -723,7 +743,13 @@ const ALLEEN_BRON = new Map([
   ["reken-ui", "React-interactie voor resultaatselectie, meldingen en het toetsingspaneel; geen sidecarcode."],
   ["staalhal-wizard-ui", "React-interactie van de wizard Stalen hal in Chromium (stappen, mm-invoer, voorbeeld, meldingen); de generator zelf draait ook in de bundel via staalhal-sidecar."],
   ["ifc-import-ui", "React-interactie van \"Rekenmodel importeren\" in Chromium (knop op het IFC-tabblad, keuzevenster, vraag bij niet-opgeslagen werk, verslag, foutmelding); de import zelf draait ook in de bundel via ifc-analyse-sidecar."],
-  ["rekengang-generatie", "Asynchrone rekenregie van de app met afgeschermde React- en native IO-grenzen; niet beschikbaar in de sidecarbundel."],
+  ["rekengang-generatie", "Asynchrone rekenregie van de app met afgeschermde React- en native IO-grenzen, uitgevoerd uit de AST van App.tsx (scripts/bron-uitvoeren.mjs); niet beschikbaar in de sidecarbundel."],
+  ["toets-app-route", "Issue #199: de route van de 2D-app naar de toetskern (handleRunMemberChecks uit de AST van App.tsx, scripts/bron-uitvoeren.mjs), met de echte checkStore (zustand), de staalbouwer, `bediening/rapportExport` en de toetsbrug als apart proces. App, store en bediening staan niet in de sidecarbundel; de toetsrekengang zelf (`lib/toetsKrachten`) wordt tegen de bundel getoetst in `toets-krachten`."],
+  ["toetskrachten-weergave", "Issue #199, taak 7: wat scherm en rapport over de toetskrachten zeggen — de scheefstand- en analysetekst van App.tsx (uit de AST, scripts/bron-uitvoeren.mjs) en het toetsingspaneel en de rapportsecties (React, gerenderd met react-dom/server, met de checkStore). React, App en store staan niet in de sidecarbundel; de gedeelde tekstfuncties (`alphaCr.analyseToelichting`) worden tegen de bundel getoetst in `alpha-cr`."],
+  ["toets-drie-wegen", "Issue #199: dezelfde toetsinvoer en UC langs de app (handleRunMemberChecks uit de AST van App.tsx, de echte checkStore en de toetsbrug), de sidecar uit de bron en `check_fem_model` via de gebouwde MCP-server. App en store staan niet in de sidecarbundel; de bundel zelf wordt hier al getoetst, want de MCP-server draait hem."],
+  ["open-fem3d-doorgaande-lijn", "Issue #207: doorgaande lijnen in 3D (`openFem3dDoorgaandeLijn`), met de echte 3D-kern als apart proces (via de rekenweg van de app, POST /api/openFem3d/solve) en de staal- en houttoets via de toetsbrug. De 3D-rekenweg (`solveOpenFem3DCombination`) en de toetsstore staan niet in de sidecarbundel."],
+  ["open-fem3d-toets-krachten", "Issue #199, bouwsteen B: de UGT-toets in 3D altijd P-Δ met scheefstand in ±X/±Y (`openFem3dToetsKrachten`), met de echte 3D-kern als apart proces (via de rekenweg van de app, POST /api/openFem3d/solve), de staaltoets via de toetsbrug, en de 3D-tak van handleSolve uit de AST van App.tsx (scripts/bron-uitvoeren.mjs). De 3D-rekenweg (`solveOpenFem3DCombination`), de toetsstore en App staan niet in de sidecarbundel; de zuivere toetsfunctie zelf staat er wel in (kernel-exports), voor de 3D-MCP-paden."],
+  ["toets-3d-mcp", "Issue #199, B9: de UGT-toets van de 3D-MCP-tools is die van de app. Vergelijkt de MCP-weg (sidecar `staalhal_maken`/`staalhal_uitwerken` met de 3D-kern als apart proces) met de app-weg (`solveOpenFem3DCombination` via POST /api/openFem3d/solve, `bepaalToetsKrachten3D`, `toetsSet3D`, de bouwers): dezelfde verzoeken en dezelfde toetsinvoer. De app-rekenweg staat niet in de sidecarbundel; de MCP-weg tegen de bundel staat in `staalhal-sidecar` en `ifc-analyse-sidecar`."],
   ["beton-tooltips", "Leest KorfVelden.tsx en ProfielKiezer.tsx als bron: waar de uitleg staat (tooltip of tekst); geen solvercode en niet in de sidecarbundel."],
   ["lijnlast-pijlen", "Pijlafstand van lijnlasten op het 2D-tekenvlak en de bron van FemCanvas; geen solvercode en niet in de sidecarbundel."],
   ["html2canvas-ui", "DOM-schermafbeelding met html2canvas en color-mix in Chromium (bedieningskanaal en feedback); geen solvercode en niet in de sidecarbundel."],
@@ -748,6 +774,7 @@ const ALLEEN_BRON = new Map([
   ["bestandskoppeling-recent", "Bestandskoppeling (#90): de echte useRecentFiles en useBestandskoppeling in React in Chromium, met de native IPC-grens nagebootst; meerdere paden in één ophaalronde komen alle in de recente bestanden. Geen solvercode en niet in de sidecarbundel."],
   ["mcp-koppeling-ui", "Een AI-assistent koppelen (#109): het paneel Instellingen → AI-assistent (MCP) in React in Chromium (schakelaar, status, pad van de MCP-server, Toevoegen aan Claude Desktop, opdracht voor Claude Code, JSON-fragment, vier talen, lint en tabblad), met de native IPC-grens nagebootst, plus broncontroles op lib.rs, gui_control.rs en mcp_koppeling.rs. Geen solvercode en niet in de sidecarbundel; de Rust-kant toetsen src-tauri/tests/gui_kanaal.rs en mcp_koppeling.rs."],
   ["eigen-gewicht-ui", "Echte tabbalk en tekenvlak (React, CSS, thema's) in Chromium met het geval \"Eigen gewicht\" (issue #42); geen solvercode en niet in de sidecarbundel. De rekenkant bewaakt test-eigen-gewicht-geval in beide standen."],
+  ["eigen-factoren-ui", "Eigen factoren, bewust gekozen (issue #196): de echte melding bij het openen (io/combinatieMeldingen, ToastHost), het venster Belastinggevallen & combinaties en de rapportsectie in React in Chromium, met de knoppen Behoud eigen factoren en Bevestiging intrekken. UI en niet in de sidecarbundel; de regels bewaakt test-eigen-factoren in beide standen."],
   ["window-controls","Echte React-titelbalk en native IPC-grens in Chromium, met de Tauri-windowcapability; geen solvercode en niet beschikbaar in de sidecarbundel."],
   ["beton-ui", "Echte React-interactie, async-resultaatverversing en containerlayout in Chromium; geen solverwijziging."],
   ["plaat-wapening-ui", "React/CSS-browsertests voor bereikbare wandwapeningsvelden, veldvalidatie en responsieve indeling."],
@@ -880,7 +907,7 @@ const ALLEEN_BRON = new Map([
   ],
   [
     "rapport-gereedheid",
-    "toetst het klaar-signaal en de weigerregels van de PDF-export via het bedieningskanaal: de leesbare toestand van de inhoudsopgave (`components/report/toc`), de gereedheid van de paginering (`components/report/rapportGereedheid`), de kop van één export (`components/report/useProjectInfo`) en de oordelen van `bediening/rapportVoorwaarden`, plus een bronteksttoets op App.tsx en bediening.ts. Rapport- en bedieningslogica van de frontend — de solver komt er niet aan te pas en geen van die modules hoort in de barrel",
+    "toetst het klaar-signaal en de weigerregels van de PDF-export via het bedieningskanaal: de leesbare toestand van de inhoudsopgave (`components/report/toc`), de gereedheid van de paginering (`components/report/rapportGereedheid`), de kop van één export (`components/report/useProjectInfo`), de oordelen van `bediening/rapportVoorwaarden` en het analysetype van de export (`bediening/rapportExport`), het commando `rekenen` van `bediening/bediening` met nagebootste acties en de bedrading in App.tsx, uitgevoerd uit de AST (scripts/bron-uitvoeren.mjs), plus een bronteksttoets op DOM-gedrag (zijbalk, ReportShell, paginering). Rapport- en bedieningslogica van de frontend — de solver komt er niet aan te pas en geen van die modules hoort in de barrel",
   ],
   [
     "bediening-wachten",
@@ -930,7 +957,7 @@ const ALLEEN_BRON = new Map([
   ],
   [
     "kolom-eerste-orde",
-    "r_m, λ_lim en φ_ef van de betonkolomtoets uit de eerste-orde-momenten na een tweede-orde-berekening (issue #35): de eerste-orde-cache in de engine en lib/eersteOrdeResultaten, de doorvoer via korvenUitStaven (een zustand-store), betonCheckBuilder en de (5.19)-stap uit lib/betonStijfheid (buiten de barrel), App.tsx, checkStore en variantStore als bronbestand, en een blok dat de toetsbrug als apart proces aanroept en tegen de handberekening legt. De store en de stijfheidslus staan buiten de barrel en de Rust-kern hoort niet in de sidecarbundel",
+    "r_m, λ_lim en φ_ef van de betonkolomtoets uit de eerste-orde-momenten na een tweede-orde-berekening (issue #35): de eerste-orde-cache in de engine en lib/eersteOrdeResultaten, de doorvoer via korvenUitStaven (een zustand-store), betonCheckBuilder en de (5.19)-stap uit lib/betonStijfheid (buiten de barrel), de toetsing en de fysisch niet-lineaire ronde van App.tsx uitgevoerd uit de AST (scripts/bron-uitvoeren.mjs), checkStore en variantStore met de toetsbrug als kern, en een blok dat de toetsbrug als apart proces aanroept en tegen de handberekening legt. De store en de stijfheidslus staan buiten de barrel en de Rust-kern hoort niet in de sidecarbundel",
   ],
   [
     "kruip-bijlage-b",
@@ -1066,11 +1093,11 @@ const ALLEEN_BRON = new Map([
   ],
   [
     "maatgevend",
-    "issue #41: welke toets maatgevend is, in welke combinatie en op welke positie. Test `lib/maatgevend` (weergavelogica van het toetsingspaneel en het live rapport) en `stores/maatgevendMarkeringStore` (zustand), rendert de React-blokken van het paneel, doet een bronteksttoets op paneel, plaatkaart, rapportsectie en App.tsx, leest de vertalingen en start de toetsbrug als apart proces voor een echt antwoord van de staal- en de houtkern. Geen van die modules staat in de barrel van de sidecarbundel; de sidecar toont niets en kent geen paneel",
+    "issue #41: welke toets maatgevend is, in welke combinatie en op welke positie. Test `lib/maatgevend` (weergavelogica van het toetsingspaneel en het live rapport) en `stores/maatgevendMarkeringStore` (zustand), rendert de React-blokken van het paneel, voert de klik naar het tekenvlak uit App.tsx uit (uit de AST, scripts/bron-uitvoeren.mjs), leest de vertalingen en start de toetsbrug als apart proces voor een echt antwoord van de staal- en de houtkern. Geen van die modules staat in de barrel van de sidecarbundel; de sidecar toont niets en kent geen paneel",
   ],
   [
     "maatgevend-ui",
-    "issue #41: het toetsingspaneel in een echte browser (headless Chromium): modeloverzicht, samenvattingsregel per kaart, de toetslijst met balkjes, de keuze van de volgorde en de klik naar het tekenvlak, plus de regel in het toetsingsoverzicht van het live rapport en de markering op het tekenvlak (die lezen uit een zustand-store, en die geeft bij renderen op de server de beginstand terug). Bundelt `components/panels/CheckPanel` met esbuild en vult `stores/checkStore` met een vaste uitslag; React, de DOM en die store bestaan in de sidecarbundel niet",
+    "issue #41: het toetsingspaneel in een echte browser (headless Chromium): modeloverzicht, samenvattingsregel per kaart, de toetslijst met balkjes, de keuze van de volgorde en de klik naar het tekenvlak, de plaatkaart met dezelfde toetslijst, plus de regel in het toetsingsoverzicht van het live rapport en de markering op het tekenvlak (die lezen uit een zustand-store, en die geeft bij renderen op de server de beginstand terug). Bundelt `components/panels/CheckPanel` met esbuild en vult `stores/checkStore` met een vaste uitslag; React, de DOM en die store bestaan in de sidecarbundel niet",
   ],
   [
     "rapport-datum",
@@ -1082,7 +1109,7 @@ const ALLEEN_BRON = new Map([
   ],
   [
     "verouderd",
-    "bewaakt dat resultaten en toetsuitslagen vervallen na een wijziging van de rekeninstellingen en na een mislukte toetsronde: `lib/rekenInstellingen`, de toetsstore `stores/checkStore` (zustand) en een bronteksttoets op de afhankelijkheden van de invalidatie-effecten in App.tsx en `hooks/useFemStore`. Geen van die modules staat in de barrel, en React-effecten bestaan in de sidecar niet; het slotblok start de toetsbrug als apart proces",
+    "bewaakt dat resultaten en toetsuitslagen vervallen na een wijziging van de rekeninstellingen en na een mislukte toetsronde: `lib/rekenInstellingen`, de toetsstore `stores/checkStore` (zustand) en de invalidatie-effecten in App.tsx en `hooks/useFemStore`, uitgevoerd uit de AST (scripts/bron-uitvoeren.mjs). Geen van die modules staat in de barrel, en React-effecten bestaan in de sidecar niet; het slotblok start de toetsbrug als apart proces",
   ],
   [
     "zwakke-as",

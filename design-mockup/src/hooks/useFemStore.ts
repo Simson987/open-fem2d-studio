@@ -39,7 +39,8 @@ import {
 // lib/combinatieBeheer (puur, zodat de tests precies deze code aanroepen).
 import {
   gevolgklasseBijOpenen, type KlasseBron,
-  herstelCombinaties, meldingenBelastinggevallen, openCombinatieStaat, synchroniseerStandaard,
+  bevestigEigenFactoren, herstelCombinaties, meldingenBelastinggevallen, openCombinatieStaat, synchroniseerStandaard,
+  trekBevestigingIn,
   vervangDoorStandaard, vervangVerouderdeCombinaties, verwijderBelastinggeval, verwijderCombinatie,
   voegBelastinggevalToe, voegCombinatieToe, volgendVrijId, wijzigBelastinggeval, wijzigCombinatie,
   zetBijlage, zetGevolgklasse, bijlageUitKenmerk, verplaatsEigenGewichtNaarEigenGeval,
@@ -1625,6 +1626,8 @@ export interface VeldpatroonOutputs {
   combinaties: LoadCombination[];
   gevallen: LoadCase[];
   meldingen: string[];
+  /** De invoer met de deelgevallen, voor de P-Δ-toets per variant (issue #199 met #219). */
+  input?: import("../components/fem/solver/types").MultiInput;
 }
 
 export interface FemStore {
@@ -2019,6 +2022,27 @@ export interface FemStore {
    */
   scheefstandAantalElementen: number | null;
   setScheefstandAantalElementen: (v: number | null) => void;
+  /**
+   * Alleen 3D (issue #212): handmatige m_X en m_Y per richting (EN 1993-1-1
+   * 5.3.2(3)); `null` = `scheefstandAantalElementen`, en anders de afgeleide m
+   * van die richting.
+   */
+  scheefstandAantalX: number | null;
+  setScheefstandAantalX: (v: number | null) => void;
+  scheefstandAantalY: number | null;
+  setScheefstandAantalY: (v: number | null) => void;
+  /**
+   * Alleen 3D (issue #212): de torsievarianten van EN 1993-1-1 5.3.2(10)
+   * (figuur 5.5) erbij. Standaard uit: ze verdubbelen de P-Δ-sommen van de toets.
+   */
+  scheefstandTorsie: boolean;
+  setScheefstandTorsie: (v: boolean) => void;
+  /**
+   * Alleen 3D (issue #199, fase 3): de eigen scheefstand per losse kolom (een
+   * kolomlijn met een vrije kop) in de UGT-toets. Standaard uit.
+   */
+  scheefstandEigenKolom: boolean;
+  setScheefstandEigenKolom: (v: boolean) => void;
   /** Canvas view mode: false = model-only (no loads drawn), true = LC active loads visible. */
   showLoads: boolean;
   setShowLoads: (v: boolean) => void;
@@ -2047,6 +2071,15 @@ export interface FemStore {
   vervangDoorStandaardCombinaties: () => void;
   /** Sluit de melding van `combinatieAfwijking` zonder iets te veranderen. */
   sluitCombinatieAfwijking: () => void;
+  /**
+   * "Behoud eigen factoren" (issue #196): de huidige factoren van alle eigen
+   * combinaties gelden als bewust gekozen (`bevestigEigenFactoren`). De
+   * berekening verandert niet; de FOUT over die factoren vervalt zolang ze
+   * niet veranderen, en de melding bij het openen gaat dicht.
+   */
+  bevestigEigenFactoren: () => void;
+  /** De bevestiging van alle eigen factoren intrekken (`trekBevestigingIn`). */
+  trekBevestigingEigenFactorenIn: () => void;
   /**
    * Maak de vervanging bij het openen ongedaan: de combinaties uit het bestand
    * terug, precies zoals ze waren. Werkt ook als er na het openen al andere
@@ -2089,6 +2122,10 @@ export interface FemStore {
     scheefstandBron?: string;
     scheefstandHoogteM?: number | null;
     scheefstandAantalElementen?: number | null;
+    scheefstandAantalX?: number | null;
+    scheefstandAantalY?: number | null;
+    scheefstandTorsie?: boolean;
+    scheefstandEigenKolom?: boolean;
     /**
      * Gevolgklasse uit de projectgegevens van het bestand. Ontbreekt → de
      * klasse uit het kenmerk van de standaardcombinaties in het bestand, en
@@ -2311,6 +2348,11 @@ export function useFemStore(opties?: {
   const [scheefstandHoogteM, setScheefstandHoogteM] = useState<number | null>(null);
   const [scheefstandAantalElementen, setScheefstandAantalElementen] =
     useState<number | null>(null);
+  // 3D (issue #212): m per richting en de torsievarianten; null/uit = het gedrag van vóór #212.
+  const [scheefstandAantalX, setScheefstandAantalX] = useState<number | null>(null);
+  const [scheefstandAantalY, setScheefstandAantalY] = useState<number | null>(null);
+  const [scheefstandTorsie, setScheefstandTorsie] = useState<boolean>(false);
+  const [scheefstandEigenKolom, setScheefstandEigenKolom] = useState<boolean>(false);
   // Eén versie van alles buiten het model dat de uitkomst bepaalt. Elk veld
   // van `RekenInstellingen` is verplicht, dus een nieuwe instelling kan hier
   // niet ontbreken zonder dat het niet compileert.
@@ -2343,14 +2385,16 @@ export function useFemStore(opties?: {
       loadCases, combinations, selfWeightEnabled, analysetype, axialMaterialLoadPath, betonSegmentLengteMm,
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
-      scheefstandHoogteM, scheefstandAantalElementen, gevolgklasse,
+      scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
+      scheefstandTorsie, scheefstandEigenKolom, gevolgklasse,
       nationaleBijlage: projectBijlage,
     }),
     [
       loadCases, combinations, selfWeightEnabled, analysetype, axialMaterialLoadPath, betonSegmentLengteMm,
       betonKruipcoefficient, betonKruipInvoer,
       scheefstandEnabled, scheefstandNoemer, scheefstandRichting, scheefstandBron,
-      scheefstandHoogteM, scheefstandAantalElementen, gevolgklasse, projectBijlage,
+      scheefstandHoogteM, scheefstandAantalElementen, scheefstandAantalX, scheefstandAantalY,
+      scheefstandTorsie, scheefstandEigenKolom, gevolgklasse, projectBijlage,
     ],
   );
   // Canvas view mode: false = "Model" tab (no loads drawn), true = LC active.
@@ -3205,6 +3249,11 @@ export function useFemStore(opties?: {
     setCombinationResults(null);
     setEnvelope(null);
     setVeldpatronen(null);
+    // α_cr hoort net zo goed bij het oude model: bleef hij staan, dan kreeg het
+    // rapport de analysetoelichting van het vorige model, en de toets via het
+    // API-pad (zonder verse rekengang) de α_cr van vóór de wijziging. Dezelfde
+    // vier velden die `setSolverOutputs(null)` wist.
+    setStabiliteit(null);
     // We deliberately depend on the model-bearing state, not on the setters.
     // `plates` doet mee sinds platen meerekenen (P2): zonder die dependency
     // zou een dikte- of meshSize-wijziging verouderde resultaten laten staan.
@@ -3252,6 +3301,10 @@ export function useFemStore(opties?: {
     scheefstandBron, setScheefstandBron,
     scheefstandHoogteM, setScheefstandHoogteM,
     scheefstandAantalElementen, setScheefstandAantalElementen,
+    scheefstandAantalX, setScheefstandAantalX,
+    scheefstandAantalY, setScheefstandAantalY,
+    scheefstandTorsie, setScheefstandTorsie,
+    scheefstandEigenKolom, setScheefstandEigenKolom,
     showLoads, setShowLoads,
     pendingLoadFocus, setPendingLoadFocus,
     canUndo, canRedo, undo, redo,
@@ -3306,6 +3359,13 @@ export function useFemStore(opties?: {
       setActiveCombinationId(null);
     },
     sluitCombinatieAfwijking: () => setCombinatieAfwijking(null),
+    bevestigEigenFactoren: () => {
+      pasCombiStaatToe(bevestigEigenFactoren(combiRef.current).staat);
+      setCombinatieAfwijking(null);
+    },
+    trekBevestigingEigenFactorenIn: () => {
+      pasCombiStaatToe(trekBevestigingIn(combiRef.current).staat);
+    },
     maakCombinatieVervangingOngedaan: () => {
       const v = vervangingRef.current;
       if (!v) return;
@@ -3348,6 +3408,10 @@ export function useFemStore(opties?: {
       scheefstandBron?: string;
       scheefstandHoogteM?: number | null;
       scheefstandAantalElementen?: number | null;
+      scheefstandAantalX?: number | null;
+      scheefstandAantalY?: number | null;
+      scheefstandTorsie?: boolean;
+      scheefstandEigenKolom?: boolean;
       gevolgklasse?: Gevolgklasse;
       /** De nationale bijlage uit de projectgegevens van het bestand, zoals gelezen. */
       nationaleBijlage?: unknown;
@@ -3455,6 +3519,12 @@ export function useFemStore(opties?: {
         typeof p.scheefstandAantalElementen === "number" && p.scheefstandAantalElementen >= 1
           ? Math.floor(p.scheefstandAantalElementen) : null,
       );
+      // 3D (issue #212): ontbreekt = afleiden en geen torsievarianten, het gedrag van vóór #212.
+      const mPerAs = (v: unknown) => (typeof v === "number" && v >= 1 ? Math.floor(v) : null);
+      setScheefstandAantalX(mPerAs(p.scheefstandAantalX));
+      setScheefstandAantalY(mPerAs(p.scheefstandAantalY));
+      setScheefstandTorsie(p.scheefstandTorsie === true);
+      setScheefstandEigenKolom(p.scheefstandEigenKolom === true);
       // v2-velden; v1-bestanden (of Nieuw) vallen terug op de defaults.
       // (De combinaties zijn hierboven al gezet, samen met de gevallen.)
       const nieuwGrid = p.structuralGrid ?? DEFAULT_STRUCTURAL_GRID;

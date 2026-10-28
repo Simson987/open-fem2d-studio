@@ -1,4 +1,5 @@
 import type { OpenFem3DModel } from "./openFem3dModel";
+import { changedLockedOpenFem3DLayer } from "./openFem3dLayers";
 import type { OpenFem3DLevelPatch, OpenFem3DLevelTransition } from "./openFem3dLevels";
 
 /**
@@ -48,7 +49,9 @@ export interface OpenFem3DEditMeta {
 }
 
 export type OpenFem3DAction =
-  | ({ type: "edit"; model: OpenFem3DModel; levels?: OpenFem3DLevelTransition | null } & OpenFem3DEditMeta)
+  | ({ type: "edit"; model: OpenFem3DModel; levels?: OpenFem3DLevelTransition | null;
+      /** Explicit whole-model replacement (e.g. the hall wizard) overrides entity locks. */
+      ignoreLayerLocks?: boolean } & OpenFem3DEditMeta)
   | { type: "replace"; model: OpenFem3DModel }
   | { type: "undo" | "redo" };
 
@@ -110,6 +113,7 @@ export function openFem3DHistoryExtern(state: OpenFem3DHistory, kind: "undo" | "
 export function openFem3dHistoryReducer(state: OpenFem3DHistory, action: OpenFem3DAction): OpenFem3DHistory {
   if (action.type === "replace") return { model: action.model, past: [], future: [] };
   if (action.type === "edit") {
+    if (!action.ignoreLayerLocks && changedLockedOpenFem3DLayer(state.model, action.model)) return state;
     const levels = action.levels ?? null;
     const extern = action.extern ?? null;
     // Een levelwijziging zonder gekoppelde knopen, of een gevallenwijziging

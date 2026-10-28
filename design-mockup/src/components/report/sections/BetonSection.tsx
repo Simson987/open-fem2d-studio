@@ -32,6 +32,7 @@ import { useCheckStore } from "../../../stores/checkStore";
 import { useBetonStijfheidStore } from "../../../stores/betonStijfheidStore";
 import { isToetsStaafZichtbaar, useReportStore } from "../../../stores/reportStore";
 import { useReportData } from "../ReportDataContext";
+import { useToetsCombinatieNamen } from "../useToetsCombinatieNamen";
 import { useRapportProjectInfo } from "../useProjectInfo";
 import { isConcreteCheckResult } from "../../../lib/checkTypes";
 import { parseSectionNaam, DEFAULT_N_STRIPS } from "../../../lib/betonCheckBuilder";
@@ -50,6 +51,7 @@ import { RAPPORT_KLEUREN } from "../../beton/tekenkleuren";
 import { rijLabel, rijOppervlakMm2, type Wapeningskorf } from "../../beton/wapeningskorf";
 import {
   CHECK_REPORT_CSS,
+  toetsKrachtLabel,
   normAanduidingenVoor,
   afleidingLatex,
   fmtCheckedAt,
@@ -123,6 +125,11 @@ function BetonStaafBlok({
   kruip: CreepCoefficientResponse | undefined;
 }) {
   const { t } = useTranslation("ribbon");
+  // De combinatie bij naam en de herkomst van de krachten (issue #199, B4): de
+  // UGT-toets rekent ook in −x onder id + 1 000 000, en altijd tweede orde.
+  const combinatieLabel = useToetsCombinatieNamen();
+  const toetsCombinaties = useCheckStore((s) => s.toetsCombinaties);
+  const toetsNoemer = useCheckStore((s) => s.toets?.analyse.noemer);
   const fout = r.checks.length === 0 || r.governing_check_id.startsWith("ERROR:");
   const korf = korfVoorTekening(r, korfUitModel);
   // De doorsnede zoals de KERN hem heeft gebruikt — bij een T of L draagt die
@@ -370,7 +377,11 @@ function BetonStaafBlok({
                       {vergelijking && <> ({vergelijking})</>}
                     </td>
                     <td className="rpt-num">
-                      {c.force_state.combination_id} / {fmtValue(c.force_state.position_mm, 0)} mm
+                      {combinatieLabel(c.force_state.combination_id)}
+                      {(() => {
+                        const herkomst = toetsKrachtLabel(t, c.force_state.combination_id, toetsCombinaties, toetsNoemer);
+                        return herkomst ? <> ({herkomst})</> : null;
+                      })()} / {fmtValue(c.force_state.position_mm, 0)} mm
                     </td>
                     <td className="rpt-num">
                       {c.uc ? `${fmtValue(c.uc.ed, 2)} ${c.unit}` : "—"}
@@ -645,12 +656,15 @@ function nietGetoetst(fysisch: boolean, creepNote: string | null): Beperking[] {
     : {
         artikel: "5.8",
         key: "report.betonNietTweedeOrde",
+        // Sinds issue #199 rekent de UGT-toets altijd zelf P-Δ met scheefstand;
+        // zonder de fysische ronde wel met de ongescheurde stijfheid.
         nl:
-          "Tweede-orde-effecten bij aanwezigheid van axiale belastingen. N_Ed en M_Ed komen " +
-          "uit de eerste-orde-berekening; er is geen slankheidscriterium, geen methode " +
-          "gebaseerd op de nominale stijfheid (5.8.7) en geen methode gebaseerd op de " +
-          "nominale kromming (5.8.8). Voor een slanke gedrukte staaf is deze toetsing " +
-          "daarmee aan de ONVEILIGE kant.",
+          "Tweede-orde-effecten bij aanwezigheid van axiale belastingen. N_Ed en M_Ed van de " +
+          "UGT komen uit de tweede-ordeberekening (P-Δ) met scheefstand van de toets, met de " +
+          "ongescheurde elastische stijfheid; dat onderschat de tweede-orde-effecten van " +
+          "gescheurd beton. Er is geen slankheidscriterium, geen methode gebaseerd op de " +
+          "nominale stijfheid (5.8.7) en geen methode gebaseerd op de nominale kromming " +
+          "(5.8.8). Voor een slanke gedrukte staaf is deze toetsing daarmee aan de ONVEILIGE kant.",
       };
   const kruip: Beperking =
     fysisch && creepNote

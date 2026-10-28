@@ -18,6 +18,16 @@
  * Er wordt nergens iets tweemaal uitgerekend: de sidecar kent de kern niet,
  * Rust kent de generator niet.
  *
+ * DE TOETSKRACHTEN (issue #199, B9). `reken.analyse` geldt alleen voor de
+ * resultaten (gevallen en combinaties, zonder scheefstand). Met `toetsen`
+ * (standaard aan) levert stap 1 ook de `toetsverzoeken`: elke UGT-combinatie
+ * P-Δ met scheefstand in +X, −X, +Y en −Y (`toets3dSidecar.ts`, dezelfde
+ * functies als de app). Rust rekent ze in stap 2 mee, een mislukte als
+ * `{ fout }`, en stap 3 stelt de toetskrachten samen: de UGT uit de toets, de
+ * BGT uit de resultaten. Divergeert de toets, dan is er geen toetsinvoer maar
+ * een `toetsweigering` met de reden per combinatie en een suggestie; de
+ * resultaten blijven.
+ *
  * DETERMINISME. Beide bewerkingen bouwen de hal opnieuw uit dezelfde
  * parameters. De generator is een pure functie, dus stap 3 ziet precies het
  * model en de verzoeken van stap 1; een resultaat dat bij een ander verzoek
@@ -43,10 +53,20 @@ import {
   StaalhalFout,
   type StaalhalResultaat,
 } from "../components/openFem3d/wizards/staalhal";
+import type { ToetsWeigering } from "../lib/toetsKrachten";
+import {
+  leesToetsen,
+  toets3DOpzet,
+  toets3DUitwerken,
+  toets3DVerzoeken,
+  vormToetsanalyse3D,
+  vormToetsweigering3D,
+  type Toets3DOpzet,
+} from "./toets3dSidecar";
 
 /** De velden van een `staalhal_maken`-payload; een ander veld wordt geweigerd. */
-const MAKEN_VELDEN = ["hal", "reken", "stramien"] as const;
-const UITWERKEN_VELDEN = ["hal", "reken", "resultaten"] as const;
+const MAKEN_VELDEN = ["hal", "reken", "stramien", "toetsen"] as const;
+const UITWERKEN_VELDEN = ["hal", "reken", "resultaten", "toetsen", "toetsresultaten"] as const;
 const REKEN_VELDEN = ["analyse", "gevolgklasse"] as const;
 
 export interface StaalhalRekeninstellingen {
@@ -99,6 +119,8 @@ interface Rekenopzet {
   rekenmodel: OpenFem3DModel;
   combinaties: LoadCombination[];
   verzoeken: StaalhalRekenverzoek[];
+  /** Het geval met het automatische eigen gewicht; ontbreekt als dat uit staat. */
+  eigenGewichtGeval?: number;
 }
 
 /**
@@ -128,7 +150,61 @@ function rekenopzet(hal: StaalhalResultaat, reken: StaalhalRekeninstellingen): R
       sleutel: `combinatie:${c.id}`, soort: "combinatie" as const, id: c.id, naam: c.name, verzoek: verzoek(c.factors),
     })),
   ];
-  return { rekenmodel, combinaties, verzoeken };
+  return { rekenmodel, combinaties, verzoeken, ...(egGeval ? { eigenGewichtGeval: egGeval.id } : {}) };
+}
+
+/**
+ * De UGT-toets van de hal (issue #199): het plan en de verzoeken van
+ * `toets3dSidecar.ts`, met de φ van het projectbestand dat de tool teruggeeft.
+ * Puur, dus in `staalhal_maken` en `staalhal_uitwerken` dezelfde.
+ */
+function toetsopzet(hal: StaalhalResultaat, reken: StaalhalRekeninstellingen, opzet: Rekenopzet): Toets3DOpzet {
+  return toets3DOpzet({
+    model: hal.model,
+    rekenmodel: opzet.rekenmodel,
+    combinaties: opzet.combinaties,
+    loadCases: hal.loadCases,
+    ...(opzet.eigenGewichtGeval !== undefined ? { selfWeightCaseId: opzet.eigenGewichtGeval } : {}),
+    project: staalhalProject(hal),
+    modelAnalyse: reken.analyse,
+  });
+}
+
+/** De verbandgroepen van de hal. */
+const VERBANDGROEPEN: readonly string[] = ["dakverband", "wandverband", "kopgevelverband"];
+
+/**
+ * Wat de constructeur aan een geweigerde toets kan doen. De 3D-kern noemt in
+ * zijn melding de staven die in de eerste orde meer druk krijgen dan hun
+ * eigen knikkracht ("staaf 331 (CHS 88.9x4, …"). Zijn dat verbanden van de
+ * hal, dan zegt de suggestie dat met de staafnummers per groep: de wand-
+ * verbanden van de standaardhal (CHS 88,9×4 op druk) knikken zelf.
+ */
+function toetsSuggestie(hal: StaalhalResultaat, weigering: ToetsWeigering): string {
+  const groepVan = new Map<number, string>();
+  for (const [groep, ids] of Object.entries(hal.samenvatting.groepen)) for (const id of ids) groepVan.set(id, groep);
+  const genoemd = new Set<number>();
+  for (const c of weigering.perCombinatie) {
+    for (const m of c.reden.matchAll(/staaf (\d+) \(/g)) genoemd.add(Number(m[1]));
+  }
+  const verbanden = new Map<string, number[]>();
+  for (const id of [...genoemd].sort((a, b) => a - b)) {
+    const groep = groepVan.get(id);
+    if (groep && VERBANDGROEPEN.includes(groep)) verbanden.set(groep, [...(verbanden.get(groep) ?? []), id]);
+  }
+  const p = hal.parameters;
+  const verband = `${p.profielen.verband.profiel} ${p.profielen.verband.materiaal}`;
+  const raad = p.verbanden.trekAlleen
+    ? `kies zwaardere verbanden (\`hal.profielen.verband\`, nu ${verband}) of meer verbandvakken (\`hal.verbanden.vakken\`)`
+    : `maak de verbanden trek-alleen (\`hal.verbanden.trekAlleen: true\`) of kies zwaardere verbanden ` +
+      `(\`hal.profielen.verband\`, nu ${verband})`;
+  if (verbanden.size > 0) {
+    const welke = [...verbanden].map(([groep, ids]) => `${groep} ${ids.join(", ")}`).join("; ");
+    return `Gedrukte verbanden knikken zelf (${welke}), waardoor de tweede-ordeberekening van de toets ` +
+      `instabiel is: ${raad}.`;
+  }
+  return `De tweede-ordeberekening van de toets is instabiel. Verstijf de hal: ${raad}, of kies zwaardere ` +
+    "kolommen en spantliggers.";
 }
 
 function combinatieNaarJson(c: LoadCombination) {
@@ -148,7 +224,9 @@ function leesPayloadObject(payload: Record<string, unknown>, veld: string): unkn
 
 /**
  * `staalhal_maken`: de hal, het projectbestand en — met `reken` — de
- * rekenverzoeken. Gooit `StaalhalFout` bij invoer die niet deugt.
+ * rekenverzoeken van de resultaten en, met `toetsen` (standaard aan), de
+ * `toetsanalyse` en de `toetsverzoeken` van de UGT-toets. Gooit `StaalhalFout`
+ * bij invoer die niet deugt.
  */
 export function opStaalhalMaken(payload: Record<string, unknown>) {
   eisVelden(payload, MAKEN_VELDEN, "de payload");
@@ -157,7 +235,9 @@ export function opStaalhalMaken(payload: Record<string, unknown>) {
   if (payload.stramien !== undefined && typeof payload.stramien !== "boolean") {
     throw invoerFout("stramien", "`stramien` moet true of false zijn.");
   }
+  const toetsen = leesToetsen(payload.toetsen, invoerFout);
   const opzet = reken ? rekenopzet(hal, reken) : null;
+  const toets = opzet && reken && toetsen ? toetsopzet(hal, reken, opzet) : null;
   return {
     parameters: hal.parameters,
     project: staalhalProject(hal, {}, { stramien: payload.stramien !== false }),
@@ -167,6 +247,7 @@ export function opStaalhalMaken(payload: Record<string, unknown>) {
       reken,
       combinaties: opzet.combinaties.map(combinatieNaarJson),
       rekenverzoeken: opzet.verzoeken,
+      ...(toets ? { toetsanalyse: vormToetsanalyse3D(toets), toetsverzoeken: toets3DVerzoeken(toets) } : {}),
     } : {}),
   };
 }
@@ -190,12 +271,18 @@ function leesResultaat(resultaten: Record<string, unknown>, v: StaalhalRekenverz
 
 /**
  * `staalhal_uitwerken`: uit de rekenresultaten van Rust de controles per
- * geval en combinatie, en de toetsinvoer voor EN 1993.
+ * geval en combinatie, en — met `toetsen` (standaard aan) en de
+ * `toetsresultaten` van de `toetsverzoeken` — de toetsanalyse en de
+ * toetsinvoer voor EN 1993 en EN 1995, of de weigering van de toets.
  */
 export function opStaalhalUitwerken(payload: Record<string, unknown>) {
   eisVelden(payload, UITWERKEN_VELDEN, "de payload");
   const hal = maakStaalhal(leesPayloadObject(payload, "hal"));
   const reken = leesReken(payload.reken ?? {})!;
+  const toetsen = leesToetsen(payload.toetsen, invoerFout);
+  if (!toetsen && payload.toetsresultaten !== undefined) {
+    throw invoerFout("toetsresultaten", "`toetsresultaten` horen bij `toetsen: true`.");
+  }
   const resultaten = leesPayloadObject(payload, "resultaten") as Record<string, unknown>;
   const opzet = rekenopzet(hal, reken);
   const bekend = new Set(opzet.verzoeken.map((v) => v.sleutel));
@@ -257,28 +344,48 @@ export function opStaalhalUitwerken(payload: Record<string, unknown>) {
     }
   }
   if (!basis) throw invoerFout("resultaten", "Er is geen enkel belast geval om uit te werken.");
-  const toets = buildOpenFem3DSteelCheckInputs(hal.model, basis, {
-    combinations: opzet.combinaties, results: combinatieResultaten, loadCases: hal.loadCases,
-    consequenceClass: reken.gevolgklasse,
-  });
-  const houtToets = buildOpenFem3DTimberCheckInputs(hal.model, basis, {
-    combinations: opzet.combinaties, results: combinatieResultaten, loadCases: hal.loadCases,
-    consequenceClass: reken.gevolgklasse,
-  });
-  return {
+  const uit = {
     reken,
     gevallen,
     combinaties,
-    toetsinvoer: toets.inputs,
-    nietGetoetst: toets.skipped,
-    notities: toets.notes,
-    houtToetsinvoer: houtToets.inputs,
-    houtNietGetoetst: houtToets.skipped,
-    houtNotities: houtToets.notes,
     // Ter vergelijking, niet als oordeel: L/250 over de overspanning, h/150 op de goot.
     grenzen: {
       doorbuigingMm: hal.parameters.breedteMm / 250,
       zijverplaatsingMm: hal.parameters.goothoogteMm / 150,
     },
+  };
+  if (!toetsen) return uit;
+
+  // De UGT-toets (issue #199): P-Δ met scheefstand uit de toetsresultaten van
+  // Rust, de BGT uit de resultaten hierboven.
+  const toetsOpzet = toetsopzet(hal, reken, opzet);
+  const { toets, combinationSet, berekeningen } = toets3DUitwerken(toetsOpzet, {
+    rekenmodel: opzet.rekenmodel,
+    toetsresultaten: payload.toetsresultaten,
+    combinaties: opzet.combinaties,
+    combinationResults: combinatieResultaten,
+    loadCases: hal.loadCases,
+    consequenceClass: reken.gevolgklasse,
+  }, invoerFout);
+  const toetsanalyse = { ...vormToetsanalyse3D(toetsOpzet, toets), berekeningen };
+  if (!combinationSet) {
+    // Geweigerd: geen toetsinvoer, wel de reden per combinatie en wat eraan te doen is.
+    return {
+      ...uit,
+      toetsanalyse,
+      toetsweigering: { ...vormToetsweigering3D(toets.weigering!), suggestie: toetsSuggestie(hal, toets.weigering!) },
+    };
+  }
+  const staal = buildOpenFem3DSteelCheckInputs(hal.model, basis, combinationSet);
+  const hout = buildOpenFem3DTimberCheckInputs(hal.model, basis, combinationSet);
+  return {
+    ...uit,
+    toetsanalyse,
+    toetsinvoer: staal.inputs,
+    nietGetoetst: staal.skipped,
+    notities: staal.notes,
+    houtToetsinvoer: hout.inputs,
+    houtNietGetoetst: hout.skipped,
+    houtNotities: hout.notes,
   };
 }

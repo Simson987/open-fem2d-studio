@@ -8,7 +8,7 @@
  * (`bediening/apiAdapter.ts`) vervangt hun uitvoering door de echte.
  */
 import { ApiFout, maakRegister, type ApiCommando, type ApiRegister } from "./register";
-import { getal, jaNee, obj, tekst } from "./schemaBouw";
+import { getal, jaNee, keuze, obj, tekst } from "./schemaBouw";
 import { MODEL3D_GEOMETRIE_COMMANDOS } from "./commands/model3dGeometrie";
 import { MODEL3D_ANALYSIS_MATERIAL_COMMANDOS } from "./commands/model3dAnalysisMaterial";
 import { MODEL3D_VOORWAARDEN_COMMANDOS } from "./commands/model3dVoorwaarden";
@@ -29,8 +29,13 @@ function alleenInApp(naam: string, beschrijving: string, invoer = obj({})): ApiC
 }
 
 export const APP_COMMANDOS: readonly ApiCommando[] = [
-  alleenInApp("app.view3d.explode", "De 3D-weergave per level uiteentrekken, zonder het rekenmodel te veranderen. 0 mm zet de normale weergave terug.",
-    obj({ mode: { const: "levels" }, amountMm: getal("Afstand per level in mm (0–10000).", { minimum: 0, maximum: 10000 }) }, ["mode", "amountMm"])),
+  alleenInApp("app.view3d.explode",
+    "De 3D-weergave uiteentrekken, zonder het rekenmodel te veranderen: per level (levels) of per elementsoort "
+    + "(elementTypes: opleggingen 0, kolommen 1×, liggers 2× en platen 3× de afstand omhoog). 0 mm zet de normale weergave terug.",
+    obj({
+      mode: keuze(["levels", "elementTypes"], "levels: per level; elementTypes: per elementsoort."),
+      amountMm: getal("Afstand per stap (level of elementsoort) in mm (0–10000).", { minimum: 0, maximum: 10000 }),
+    }, ["mode", "amountMm"])),
   alleenInApp("app.undo", "De laatste modelwijziging ongedaan maken (zoals Ctrl+Z)."),
   alleenInApp("app.redo", "De ongedaan gemaakte wijziging opnieuw doen (zoals Ctrl+Y)."),
   alleenInApp("app.project.save",

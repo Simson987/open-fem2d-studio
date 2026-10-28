@@ -308,6 +308,8 @@ pub struct ConcreteColumnCheckRequest {
     pub sls_quasi_permanent_envelope: Vec<ForcePoint>,
     /// UGT-krachtsverloop uit een EERSTE-ORDE-berekening, voor M₀Ed, M₀₁ en
     /// M₀₂ (§5.8.3.1(1), (5.19)) wanneer `forces_envelope` tweede orde is.
+    /// Om z ook M₀Ed,z en r_m,z; daar hoort M_z zonder globale scheefstand te
+    /// zijn, want de toets voegt e_i en e₂ om z zelf toe.
     /// `None` = `forces_envelope` is eerste orde. Zie hetzelfde veld in
     /// `ConcreteBeamCheckInput`.
     #[serde(default)]
@@ -1199,17 +1201,7 @@ pub fn kolomtoetsen(
     // model, want dan is M_Edz door de imperfectie en de tweede orde om z
     // nog steeds niet nul. Zie de toelichting boven [`TweedeAsUitkomst`].
     let (checks_z, tweede_as) = tweede_as_toetsen(
-        section,
-        cage,
-        mat,
-        situation,
-        k,
-        lengte_mm,
-        ugt,
-        bgt_qp,
-        &gov,
-        &slank,
-        n_strips,
+        section, cage, mat, situation, k, lengte_mm, ugt, bgt_qp, eerste_orde, &gov, &slank, n_strips,
         nominaal_y.as_ref(),
     );
     checks.extend(checks_z);
@@ -2240,6 +2232,32 @@ impl Snede {
     }
 }
 
+/// De toelichting bij M₀z uit de eerste-orde-omhullende (`first_order_envelope`).
+fn eerste_orde_z_notitie(gov: &ForcePoint, m0z: f64, ontbrekend: usize, sneden: usize) -> String {
+    let mut tekst = format!(
+        "M_z OM DE z-AS UIT DE EERSTE ORDE. De UGT-krachten van deze staaf komen uit een \
+         tweede-ordeberekening; daarin kan M_z al de globale scheefstand en het tweede-orde-effect \
+         om z bevatten. Deze toets telt de imperfectie (N_Ed·e_i, §5.2) en de tweede orde \
+         (N_Ed·e₂) om z zelf op. Daarom komen M₀Ed,z en de eindmomenten om z (r_m) uit de \
+         eerste-orde-omhullende, zonder globale scheefstand: anders tellen imperfectie en tweede \
+         orde om z dubbel. N_Ed blijft uit de tweede-ordeberekening. Op de snede van de poort \
+         (x = {} mm, combinatie {}): M_z eerste orde = {} kNm, tegen {} kNm in de \
+         tweede-ordeberekening.",
+        gov.position_mm.round() as i64,
+        gov.combination_id,
+        nl(m0z, 2),
+        nl(gov.forces.mz_ed, 2)
+    );
+    if ontbrekend > 0 {
+        tekst.push_str(&format!(
+            " Voor {} van de {} sneden stond de combinatie niet in de eerste-orde-omhullende; \
+             daar is M_z uit de tweede-ordeberekening genomen (groter, dus de veilige kant).",
+            ontbrekend, sneden
+        ));
+    }
+    tekst
+}
+
 /// De toetsen om de tweede as. Zie de toelichting boven [`TweedeAsUitkomst`].
 #[allow(clippy::too_many_arguments)]
 fn tweede_as_toetsen(
@@ -2251,6 +2269,7 @@ fn tweede_as_toetsen(
     lengte_mm: f64,
     ugt: &[ForcePoint],
     bgt_qp: &[ForcePoint],
+    eerste_orde: Option<&[ForcePoint]>,
     gov: &ForcePoint,
     slank_y: &Kolomslankheid,
     n_strips: usize,
@@ -2320,8 +2339,41 @@ fn tweede_as_toetsen(
     };
 
     // M_z langs de staaf: uit het model plus het extern opgegeven deel.
+    //
+    // EERSTE ORDE OM z. Deze toets telt de imperfectie (N·e_i) en de tweede
+    // orde (N·e₂) om z zelf op. Het moment uit het model hoort daarom een
+    // eerste-ordemoment ZONDER imperfectie te zijn. In een vlak raamwerk is het
+    // nul. Komt de omhullende uit een ruimtelijke tweede-ordeberekening met
+    // scheefstand, dan zit de globale imperfectie, vergroot door P-Δ, al in
+    // M_z: met e_i en e₂ erbovenop tellen imperfectie en tweede orde dubbel.
+    // Is `first_order_envelope` meegegeven, dan komt M₀z daarom per snede uit
+    // die lijst: dezelfde combinatie, de dichtstbijzijnde plaats. N_Ed blijft
+    // uit de omhullende. De aanroeper levert in die lijst om z het moment
+    // zonder globale scheefstand (zie het veld in `ConcreteBeamCheckInput`).
     let m0_extern = k.m0_edz_knm.unwrap_or(0.0);
-    let mz_van = |p: &ForcePoint| p.forces.mz_ed + m0_extern;
+    let eerste_orde_z = |p: &ForcePoint| -> Option<f64> {
+        eerste_orde?
+            .iter()
+            .filter(|q| q.combination_id == p.combination_id)
+            .min_by(|a, b| {
+                (a.position_mm - p.position_mm)
+                    .abs()
+                    .total_cmp(&(b.position_mm - p.position_mm).abs())
+            })
+            .map(|q| q.forces.mz_ed)
+    };
+    // Ontbreekt een combinatie in de eerste-ordelijst, dan het moment uit de
+    // omhullende zelf: dat is groter (tweede orde), dus de veilige kant. Het
+    // aantal sneden waarvoor dat gold, staat in de toelichting.
+    let mz_model = |p: &ForcePoint| match eerste_orde {
+        Some(_) => eerste_orde_z(p).unwrap_or(p.forces.mz_ed),
+        None => p.forces.mz_ed,
+    };
+    let z_zonder_eerste_orde = match eerste_orde {
+        Some(_) => ugt.iter().filter(|p| eerste_orde_z(p).is_none()).count(),
+        None => 0,
+    };
+    let mz_van = |p: &ForcePoint| mz_model(p) + m0_extern;
 
     // ── Eerste doorgang: l₀,z en λ_z, meer niet ──────────────────────────
     let basis = KolomInvoer {
@@ -2546,7 +2598,7 @@ fn tweede_as_toetsen(
          effect van imperfecties), samen {} kNm. {}",
         gov.position_mm.round() as i64,
         gov.combination_id,
-        nl(gov.forces.mz_ed, 2),
+        nl(mz_model(gov), 2),
         nl(m0_extern, 2),
         nl(m0z_gov, 2),
         nl(n_gov_kn, 1),
@@ -2593,6 +2645,9 @@ fn tweede_as_toetsen(
              blijft onbekend en §5.8.3.1(1) staat dan C = 0,7 toe."
                 .to_string(),
         ),
+    }
+    if eerste_orde.is_some() {
+        poort_z.notes.push(eerste_orde_z_notitie(gov, mz_model(gov), z_zonder_eerste_orde, ugt.len()));
     }
     for kant in &slank_z.kanttekeningen {
         poort_z.notes.push(kant.clone());
@@ -2901,6 +2956,9 @@ fn tweede_as_toetsen(
          een ruimtelijk model — tellen hier gewoon mee."
             .to_string(),
     );
+    if eerste_orde.is_some() {
+        moment_z.notes.push(eerste_orde_z_notitie(gov, mz_model(gov), z_zonder_eerste_orde, ugt.len()));
+    }
     moment_z.notes.push(herkomst_z);
     moment_z.notes.push(phi_note.clone());
     match maatgevend_z {

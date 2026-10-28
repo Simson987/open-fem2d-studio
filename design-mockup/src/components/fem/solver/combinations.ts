@@ -74,6 +74,20 @@ export interface LoadCombination {
    */
   standaard?: StandaardHerkomst;
   /**
+   * EIGEN FACTOREN, BEWUST GEKOZEN (issue #196): per belastinggeval de factor
+   * die de gebruiker met "Behoud eigen factoren" heeft bevestigd, bijvoorbeeld
+   * K_FI = 0,9 maal NB tabel NB.4 (1,22 / 1,08). Een bevestiging geldt alleen
+   * zolang de factor in `factors` PRECIES deze waarde heeft
+   * (`isBevestigdeFactor` in lib/combinatieBeheer); een gewijzigde factor
+   * verliest haar. Ze rekent niet mee: de uitkomst hangt alleen van `factors`
+   * af. Ze zwijgt alleen de controles op de factorWAARDE (een blijvend geval
+   * met een factor buiten NB.4/NB.5, en een standaardcombinatie die door deze
+   * combinatie met dezelfde gevallen wordt vervangen). Een gewoon object en
+   * geen Map: het reist zo ongeschonden door JSON en het rapportvenster.
+   * Ontbreekt = niets bevestigd.
+   */
+  bevestigdeFactoren?: Readonly<Record<number, number>>;
+  /**
    * De richting van de initiële scheefstand in deze combinatie: +1 = +x,
    * −1 = −x. Gezet door `metScheefstandRichtingen`, dat elke combinatie in
    * twee varianten ontvouwt zodra er een scheefstand is; ontbreekt = de
@@ -88,6 +102,12 @@ export interface LoadCombination {
    * opgeslagen.
    */
   scheefstandAs?: "x" | "y";
+  /**
+   * Alleen in 3D (issue #212): een TORSIEVARIANT van EN 1993-1-1 5.3.2(10),
+   * de buitenste kolomrijen haaks op `scheefstandAs` tegengesteld scheef en
+   * lineair ertussen. Gezet bij het rekenen, niet opgeslagen.
+   */
+  scheefstandTorsie?: boolean;
   /**
    * Aanwezig = een EINDTOESTANDVARIANT van een UGT-combinatie: dezelfde
    * factoren, maar doorgerekend met de eindstijfheid van het hout

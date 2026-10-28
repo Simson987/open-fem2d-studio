@@ -144,7 +144,11 @@ export const LINT_3D: Record<string, Dekking> = {
   "ribbon:home.temp": { commando: "model3d.load.thermal.add" },
   "ribbon:home.loadCases": { commando: ["project.loadCase.add", "project.loadCase.update", "project.loadCase.delete"] },
   "ribbon:home.combinations": {
-    commando: ["project.combination.add", "project.combination.update", "project.combination.delete", "project.combinations.resetToStandard"],
+    commando: [
+      "project.combination.add", "project.combination.update", "project.combination.delete", "project.combinations.resetToStandard",
+      // Behoud eigen factoren en de bevestiging intrekken (issue #196), in hetzelfde venster.
+      "project.combinations.confirmOwnFactors", "project.combinations.revokeOwnFactors",
+    ],
   },
   "ribbon:home.generateEnvelopeLoads": { commando: "model3d.envelope.generateLoads" },
   "ribbon:home.waterAccumulation": { fase: 2, reden: "generator voor het 2D-model; in 3D staat de knop uit" },
@@ -170,6 +174,8 @@ export const LINT_3D: Record<string, Dekking> = {
   // Section box (issue #86): hoort bij de weergave (zichtbaarheid en views); via de
   // MCP-tool gui_configure_3d_view (section_box) in de draaiende app, nog geen API-commando.
   "ribbon:openFem3d.sectionBox": WEERGAVE,
+  // Exploderen: per level of per elementsoort (issue #198, veld mode); ook via
+  // gui_configure_3d_view (explode) in de draaiende app.
   "ribbon:openFem3d.explode": { commando: "app.view3d.explode" },
 };
 
@@ -454,6 +460,7 @@ export const VELDEN_3D = {
     categorie: veld(["project.loadCase.add", "project.loadCase.update"], "categorie"),
     gegenereerd: { afgeleid: "de windgenerator markeert de gevallen die hij maakt (fase 2)" },
     eigenGewicht: { afgeleid: "het standaardgeval Eigen gewicht draagt het kenmerk" },
+    imperfectie: { afgeleid: "de import van een IFC-analysemodel markeert zijn imperfectiegevallen (SYSTEM_IMPERFECTION)" },
   } satisfies Record<keyof LoadCase, Dekking>,
   combinatie: {
     id: ID,
@@ -462,8 +469,11 @@ export const VELDEN_3D = {
     formula: veld(["project.combination.add", "project.combination.update"], "formula"),
     factors: veld(["project.combination.add", "project.combination.update"], "factors"),
     standaard: { afgeleid: "de standaardset zet het (project.combinations.resetToStandard)" },
+    // Eigen factoren, bewust gekozen (issue #196): de knop "Behoud eigen factoren" en intrekken.
+    bevestigdeFactoren: { commando: ["project.combinations.confirmOwnFactors", "project.combinations.revokeOwnFactors"] },
     scheefstandRichting: { afgeleid: "rekenvariant van de scheefstand, gezet bij het rekenen en niet opgeslagen" },
     scheefstandAs: { afgeleid: "rekenvariant van de scheefstand, gezet bij het rekenen en niet opgeslagen" },
+    scheefstandTorsie: { afgeleid: "torsievariant van de scheefstand (5.3.2(10)), gezet bij het rekenen en niet opgeslagen" },
     eindtoestand: { afgeleid: "rekenvariant met de eindstijfheid, gezet bij het rekenen en niet opgeslagen" },
     veldpatroon: { afgeleid: "rekenvariant met veldsgewijs geplaatste veranderlijke vloerbelasting (issue #219), gezet bij het rekenen en niet opgeslagen" },
   } satisfies Record<keyof LoadCombination, Dekking>,

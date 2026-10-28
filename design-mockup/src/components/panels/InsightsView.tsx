@@ -42,8 +42,11 @@ interface Props {
   /** Solver-fouttekst uit App (getoond in de fouten-strip). */
   solverError?: string | null;
   /**
-   * De blokkerende stabiliteitsmelding (eerste orde met α_cr < 10, basisaudit
-   * nr 27): de rekengang slaagde, maar de norm staat haar niet toe.
+   * De blokkerende stabiliteitsmelding: de toets is geweigerd, want haar
+   * tweede-ordeberekening (P-Δ met scheefstand) faalt (issue #199, B7). De
+   * resultaten staan er wel. Tot 2026.42 stond hier "eerste orde niet
+   * toegestaan" (α_cr < 10); die is informatief geworden (B14) en staat in de
+   * analysetoelichting van het rapport.
    */
   stabiliteitsMelding?: string | null;
 }
