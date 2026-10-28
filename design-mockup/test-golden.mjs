@@ -279,7 +279,9 @@ log("\n[3] Waarden — elke gegenereerde uitkomst, exact");
   // Wat per bouw of per run verschilt zit bewust niet in het gouden bestand:
   // `solve_ms` is een klok, `bundle_hash` en `solver_version` veranderen bij elke
   // herbouw ook als er geen getal verschuift.
-  const { solve_ms, bundle_hash, solver_version, ...gemeten } = actueel;
+  // `model_hash` (issue #244): de identiteit van de invoer, geen rekenwaarde.
+  const { solve_ms, bundle_hash, solver_version, model_hash, ...gemeten } = actueel;
+  void model_hash;
   void solve_ms;
   void bundle_hash;
   void solver_version;

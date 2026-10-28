@@ -411,8 +411,10 @@ const r = solve.result;
 // Velden die per bouw of per run verschillen horen niet in een gouden bestand:
 // `solve_ms` is een klok, `bundle_hash` en `solver_version` veranderen bij elke
 // herbouw van de bundel — ook als er geen getal verschuift. De bundelidentiteit
-// wordt al bewaakt door `build.rs` en de handshake, niet hier.
-const { solve_ms, bundle_hash, solver_version, ...waarden } = r;
+// wordt al bewaakt door `build.rs` en de handshake, niet hier. `model_hash`
+// (issue #244) is de identiteit van de invoer, geen rekenwaarde.
+const { solve_ms, bundle_hash, solver_version, model_hash, ...waarden } = r;
+void model_hash;
 void solve_ms;
 void bundle_hash;
 void solver_version;

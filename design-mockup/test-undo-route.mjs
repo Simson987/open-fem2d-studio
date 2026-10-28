@@ -43,9 +43,11 @@ check("undo- en redo-knoppen wachten op de blur-commit en lezen de actuele histo
   /setTimeout\(\(\) => \{[\s\S]*undoRedoRef\.current\[kind\]\(\);[\s\S]*}, 0\)/.test(werkbalk)
   && /onUndoClick=\{\(\) => toolbarUndoRedo\("undo"\)\}/.test(app)
   && /onUndo=\{\(\) => toolbarUndoRedo\("undo"\)\}/.test(app));
+// Sinds issue #244 (punt 001) melden de acties of er een stap was: in 3D
+// eerst de 3D-historie nagaan, dan undoRedoOpenFem3D; in 2D canUndo/canRedo.
 check("API-undo en redo kiezen ook de historie van de modeldimensie",
-  /ongedaanMaken: \(\) => \{\s*if \(modelDimension === "3d" && explodeAmountRef\.current > 0\)[^\n]*\n\s*if \(modelDimension === "3d"\) undoRedoOpenFem3D\("undo"\)/.test(app)
-  && /opnieuw: \(\) => \{\s*if \(modelDimension === "3d" && explodeAmountRef\.current > 0\)[^\n]*\n\s*if \(modelDimension === "3d"\) undoRedoOpenFem3D\("redo"\)/.test(app));
+  /ongedaanMaken: \(\) => \{\s*if \(modelDimension === "3d" && explodeAmountRef\.current > 0\)[^\n]*\n\s*if \(modelDimension === "3d"\) \{\s*if \(openFem3dHistoryRef\.current\.past\.length === 0\) return false;\s*undoRedoOpenFem3D\("undo"\)/.test(app)
+  && /opnieuw: \(\) => \{\s*if \(modelDimension === "3d" && explodeAmountRef\.current > 0\)[^\n]*\n\s*if \(modelDimension === "3d"\) \{\s*if \(openFem3dHistoryRef\.current\.future\.length === 0\) return false;\s*undoRedoOpenFem3D\("redo"\)/.test(app));
 
 log("\n[3] een klik op het tekenvlak laat een veld los (anders ging Ctrl+Z na slepen naar het veld)");
 {
