@@ -120,6 +120,8 @@ export interface BedieningActies {
     /** Staat het automatische eigen gewicht aan? (issue #42) */
     selfWeightEnabled?: boolean;
     combinations: readonly { id: number; name: string }[];
+    /** De combinaties van de laatste rekengang, met de veldpatroonvarianten (#219). */
+    rekenCombinaties?: readonly { id: number; name: string }[];
     combinationResults: Map<number, SolverResult> | null;
     analysetype: Analysetype;
     addNode: (x: number, z: number) => number;
@@ -1146,7 +1148,7 @@ export async function voerUit(
       }
       const t = useCheckStore.getState();
       return {
-        ...samenvatting(cr, a().fem.combinations),
+        ...samenvatting(cr, a().fem.rekenCombinaties ?? a().fem.combinations),
         analysetype: a().fem.analysetype,
         fysischeRonde: uitkomst.fysisch,
         // De toetsing liep mee; wat ze opleverde staat hier samengevat, de

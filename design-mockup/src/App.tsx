@@ -126,7 +126,7 @@ import { getDetachedParams, useWindowManager } from "./hooks/useWindowManager";
 // Het bedieningskanaal (OPENAEC_GUI_CONTROL=1): dezelfde closures als de knoppen,
 // aangesproken van buiten. Doet niets zolang Rust zegt dat het kanaal uit staat.
 import { useBediening, type RekengangUitkomst } from "./bediening/bediening";
-import { useFemStore } from "./hooks/useFemStore";
+import { useFemStore, type VeldpatroonOutputs } from "./hooks/useFemStore";
 import type { GridAxisLine, GridSettings, Selection, StructuralGrid, Tool } from "./components/fem/femTypes";
 import { DEFAULT_GRID, DEFAULT_STRUCTURAL_GRID, nonlinearVoorBestand } from "./components/fem/femTypes";
 import LengthInput from "./components/LengthInput";
@@ -169,6 +169,7 @@ import {
 import { bepaalKruipPerStaaf, kruipWaardenPerStaaf, modelHeeftBetonstaaf } from "./lib/kruipcoefficient";
 import { bepaalOnbepaaldheid } from "./lib/statischeOnbepaaldheid";
 import { losEindtoestandOp, losEindtoestandNativeOp } from "./lib/houtEindstijfheid";
+import { splitsVeldgevallen, veldpatronenUitkomst, voegVeldpatronenIn } from "./components/fem/solver/veldpatronen";
 import { DEFAULT_DISPLAY_FLAGS, type DisplayFlags } from "./components/fem/FemResultsOverlay";
 import ZichtbaarheidVenster from "./components/fem/ZichtbaarheidVenster";
 import { WEERGAVE_VOORKEUREN_SLEUTEL, metVoorkeuren, voorkeurenVan } from "./lib/zichtbaarheid";
@@ -2139,6 +2140,24 @@ function App() {
   /** De solverinvoer van de laatste rekengang, voor α_cr na de fysisch niet-lineaire ronde. */
   const laatsteMultiInputRef = useRef<MultiInput | null>(null);
   /**
+   * Wat de veldsgewijze plaatsing te melden heeft (issue #219): alleen als er
+   * meer veldpatronen waren dan er zijn doorgerekend. Eén keer per tekst, net
+   * als de rekenfout, zodat live herberekenen niet bij elke wijziging meldt.
+   */
+  const gemeldeVeldpatronenRef = useRef<string | null>(null);
+  const meldVeldpatronen = useCallback((uitkomst: VeldpatroonOutputs | null, generatie: number) => {
+    const tekst = uitkomst && uitkomst.meldingen.length > 0 ? uitkomst.meldingen.join("\n\n") : null;
+    if (tekst === null || gemeldeVeldpatronenRef.current === tekst) {
+      if (tekst === null) gemeldeVeldpatronenRef.current = null;
+      return;
+    }
+    gemeldeVeldpatronenRef.current = tekst;
+    void import("./io/notify").then(({ notifyWarning }) => {
+      if (generatie === rekenGeneratieRef.current)
+        notifyWarning(i18next.t("common:app.solve.fieldPatternsLimited"), tekst);
+    }).catch(() => {});
+  }, []);
+  /**
    * α_cr per UGT-combinatie bepalen en de meldingen tonen. Aangeroepen na
    * elke rekengang; de blokkerende melding wordt niet bij elke live
    * herberekening opnieuw als toast gemeld, wel bij een andere tekst.
@@ -2220,30 +2239,41 @@ function App() {
       // Beide tweede-orde-standen lopen via hetzelfde per-combinatie-pad. De
       // fysisch niet-lineaire stand doet daar ná deze (synchrone) rekengang
       // nog een ronde overheen — zie `rekenFysischNietlineair`.
-      const { perCase } = fem.analysetype !== "eersteOrde"
+      // Veranderlijke vloerbelasting veldsgewijs (issue #219, NEN-EN 1991-1-1
+      // 6.2.1(1)): alleen bij eerste orde, waar superpositie geldt. De
+      // deelgevallen per veld rekenen mee; de varianten komen achter hun
+      // basiscombinatie. Zonder zo'n geval is `veld.combinaties` dezelfde
+      // lijst en `veld.input` dezelfde invoer.
+      const lineair = fem.analysetype === "eersteOrde";
+      const veldSplitsing = lineair ? splitsVeldgevallen(multiInput, fem.loadCases) : null;
+      const rekenInput = veldSplitsing?.input ?? multiInput;
+      const { perCase } = !lineair
         ? solveAllCasesNonlinear(multiInput)
-        : solveAllCases(multiInput);
+        : solveAllCases(rekenInput);
+      const veld = veldpatronenUitkomst(veldSplitsing, fem.loadCases, fem.actieveCombinaties, perCase);
+      const rekenCombinaties = veld.combinaties;
       // De eindtoestand met E_mean,fin (NEN-EN 1995-1-1 2.3.2.2(2)) voor elke
       // eindtoestandvariant in de combinaties. Zonder varianten — het gewone
       // geval, waarin 2.2.3(5) geldt — lost dit niets op en verandert er niets.
-      losEindtoestandOp(multiInput, perCase, fem.actieveCombinaties, fem.eindstijfheid);
+      losEindtoestandOp(rekenInput, perCase, rekenCombinaties, fem.eindstijfheid);
       // `actieveCombinaties`, niet `combinations`: een combinatie die dit model
       // niet nodig heeft (zuiver staal zonder vloer-/dakeis → 6.15/6.16, zie
       // lib/combinatieSelectie)
       // wordt niet doorgerekend. Alles wat resultaten toont filtert op de
       // sleutels van deze Map, dus die volgen vanzelf.
       const combinationResults = new Map(
-        fem.actieveCombinaties.map(c => [c.id, combineResults(c, perCase)])
+        rekenCombinaties.map(c => [c.id, combineResults(c, perCase)])
       );
-      const envelope = computeEnvelope(fem.actieveCombinaties, perCase);
+      const envelope = computeEnvelope(rekenCombinaties, perCase);
       // De kritieke lastfactor per combinatie (basisaudit nr 27): bepaald ná de
       // rekengang, met de normaalkrachten van de combinatie. Bij eerste orde en
       // α_cr < 10 volgt de rode melding; zonder deze stap zou een instabiel
       // portaal met een groene kolom worden getoond.
       laatsteMultiInputRef.current = multiInput;
       const stabiliteit = bepaalStabiliteit(multiInput, combinationResults);
-      const outputs = { perCase, combinationResults, envelope, stabiliteit };
+      const outputs = { perCase, combinationResults, envelope, stabiliteit, veldpatronen: veld.uitkomst };
       fem.setSolverOutputs(outputs);
+      meldVeldpatronen(veld.uitkomst, generatie);
       rekenFoutRef.current = null;
       gemeldeRekenfoutRef.current = null;
       setSolverErrorText(null);
@@ -2272,7 +2302,7 @@ function App() {
       }
       return null;
     }
-  }, [fem, scheefstandUitkomst.noemer, bepaalStabiliteit]);
+  }, [fem, scheefstandUitkomst.noemer, bepaalStabiliteit, meldVeldpatronen]);
 
   const computeAndStoreNativePlateOutputs = useCallback(async (generatie: number) => {
     controleerVoorRekenen({
@@ -2299,22 +2329,27 @@ function App() {
     if (nativeFrame && fem.plates.length === 0 && fem.analysetype === "axiaalFysischRust"
         && !fem.beams.some(beam => beam.axialMaterialLaw))
       throw new Error("Kies bij ten minste één staaf een axiale staal- of betonwet voor Rust-FNL.");
+    // Issue #219: veldsgewijze plaatsing alleen bij een lineaire berekening.
+    const veldSplitsing = analysis === "linear" ? splitsVeldgevallen(multiInput, fem.loadCases) : null;
+    const rekenInput = veldSplitsing?.input ?? multiInput;
     const perCase = nativeFrame
-      ? await solveAllCasesNativeFrame2D(multiInput, analysis)
-      : await solveAllCasesNativeMembrane2D(multiInput, analysis);
+      ? await solveAllCasesNativeFrame2D(rekenInput, analysis)
+      : await solveAllCasesNativeMembrane2D(rekenInput, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
-    if (fem.actieveCombinaties.some(combination => combination.eindtoestand !== undefined)) {
+    const veld = veldpatronenUitkomst(veldSplitsing, fem.loadCases, fem.actieveCombinaties, perCase);
+    const rekenCombinaties = veld.combinaties;
+    if (rekenCombinaties.some(combination => combination.eindtoestand !== undefined)) {
       if (analysis !== "linear") {
         throw new Error("Eindstijfheidvarianten horen bij een eerste-orde-berekening en zijn niet beschikbaar bij Rust GNL/FNL.");
       }
-      await losEindtoestandNativeOp(multiInput, perCase, fem.actieveCombinaties, fem.eindstijfheid,
+      await losEindtoestandNativeOp(rekenInput, perCase, rekenCombinaties, fem.eindstijfheid,
         adjustedInput => nativeFrame
           ? solveAllCasesNativeFrame2D(adjustedInput, "linear")
           : solveAllCasesNativeMembrane2D(adjustedInput, "linear"));
       if (generatie !== rekenGeneratieRef.current) return null;
     }
     const combinationResults = analysis === "linear"
-      ? new Map(await Promise.all(fem.actieveCombinaties.map(async combination => [
+      ? new Map(await Promise.all(rekenCombinaties.map(async combination => [
         combination.id,
         await voegNativeDrieLagencontroleToe(multiInput, combineResults(combination, perCase)),
       ] as const)))
@@ -2323,17 +2358,18 @@ function App() {
           analysis === "combined" ? "combined" : "geometric")
         : await solveAllCombinationsNativeMembrane2D(multiInput, fem.actieveCombinaties, analysis);
     if (generatie !== rekenGeneratieRef.current) return null;
-    const envelope = computeEnvelope(fem.actieveCombinaties, perCase,
+    const envelope = computeEnvelope(rekenCombinaties, perCase,
       analysis === "linear" ? undefined : combinationResults);
     laatsteMultiInputRef.current = multiInput;
     const stabiliteit = bepaalStabiliteit(multiInput, combinationResults);
-    const outputs = { perCase, combinationResults, envelope, stabiliteit };
+    const outputs = { perCase, combinationResults, envelope, stabiliteit, veldpatronen: veld.uitkomst };
     fem.setSolverOutputs(outputs);
+    meldVeldpatronen(veld.uitkomst, generatie);
     rekenFoutRef.current = null;
     gemeldeRekenfoutRef.current = null;
     setSolverErrorText(null);
     return outputs;
-  }, [fem, scheefstandUitkomst.noemer, bepaalStabiliteit]);
+  }, [fem, scheefstandUitkomst.noemer, bepaalStabiliteit, meldVeldpatronen]);
 
   /**
    * De fysisch niet-lineaire ronde over de zojuist berekende uitkomsten.
@@ -2637,7 +2673,8 @@ function App() {
   const handleRunMemberChecks = useCallback(async (opts?: {
     openPanel?: boolean;
     generatie?: number;
-    outputs?: { combinationResults: Map<number, SolverResult>; perCase?: Map<number, SolverResult>; stabiliteit?: AlphaCrUitkomst[] } | null;
+    outputs?: { combinationResults: Map<number, SolverResult>; perCase?: Map<number, SolverResult>; stabiliteit?: AlphaCrUitkomst[];
+      veldpatronen?: VeldpatroonOutputs | null } | null;
   }) => {
     const generatie = opts?.generatie ?? rekenGeneratieRef.current;
     const openPanel = opts?.openPanel ?? true;
@@ -2662,10 +2699,14 @@ function App() {
     // Een geval zonder werkzame last slaat de solve over, en het mag de
     // belastingduur van een combinatie niet korter maken (EN 1995-1-1 3.1.3(2)).
     let perCase = opts?.outputs ? opts.outputs.perCase ?? null : fem.multiLcResult;
+    // De veldpatroonvarianten (issue #219) van DEZE uitkomsten: verse
+    // uitkomsten dragen ze zelf; de store loopt één render achter.
+    let veldpatronen = opts?.outputs ? opts.outputs.veldpatronen ?? null : fem.veldpatronen;
     if (!combinationResults) {
       const vers = computeAndStoreSolverOutputs();
       combinationResults = vers?.combinationResults ?? null;
       perCase = vers?.perCase ?? null;
+      veldpatronen = vers?.veldpatronen ?? null;
     }
     if (!combinationResults) {
       // De ECHTE reden. "Controleer het model (opleggingen, belastingen)" stond
@@ -2689,8 +2730,12 @@ function App() {
       // De toetsbouwers zoeken hun combinaties in deze lijst (de karakteristieke
       // BGT voor de doorbuiging, de quasi-blijvende voor de kruip). Ze moet dus
       // gelijklopen met de sleutels van `combinationResults`; een combinatie
-      // noemen die niet is doorgerekend levert een lege zakking op.
-      combinations: fem.actieveCombinaties,
+      // noemen die niet is doorgerekend levert een lege zakking op. Met de
+      // veldpatroonvarianten (issue #219): de toetsen lezen de veldsgewijs
+      // geplaatste veranderlijke vloerbelasting als gewone combinaties.
+      combinations: veldpatronen
+        ? voegVeldpatronenIn(fem.actieveCombinaties, veldpatronen.combinaties)
+        : fem.actieveCombinaties,
       combinationResults,
       // Ter vermelding in de staalkern; de factoren zitten al in de combinaties.
       gevolgklasse: fem.gevolgklasse,
@@ -2699,7 +2744,8 @@ function App() {
       nationaleBijlage: bijlageVanProject(fem.nationaleBijlage),
       // De hout- en CLT-toetsing leiden hieruit de belastingduur PER
       // UGT-combinatie af (k_mod, EN 1995-1-1 3.1.3(2)).
-      loadCases: fem.loadCases,
+      // Met de deelgevallen per veld erbij (zelfde type en categorie).
+      loadCases: veldpatronen ? [...fem.loadCases, ...veldpatronen.gevallen] : fem.loadCases,
       gevallenMetLast: perCase ? [...perCase.keys()] : undefined,
       // α_cr en het analysetype: bij eerste orde onder de grens zet de bouwer
       // een kanttekening bij elke op druk belaste staaf met een teruggevallen
@@ -3748,7 +3794,7 @@ function App() {
                 setStructuralGrid={fem.setStructuralGrid}
                 verplaatsStramienAs={fem.verplaatsStramienAs}
                 grid={grid}
-                combinations={fem.actieveCombinaties}
+                combinations={fem.rekenCombinaties}
                 activeCombinationId={fem.activeCombinationId}
                 envelopeView={fem.envelopeView}
                 combinationResults={solverStatus.kind === "solved" ? fem.combinationResults : null}
@@ -3832,7 +3878,7 @@ function App() {
                     addLoad={fem.addLoad}
                     updateLoad={fem.updateLoad}
                     removeLoad={fem.removeLoad}
-                    combinations={fem.actieveCombinaties}
+                    combinations={fem.rekenCombinaties}
                     combinationResults={fem.combinationResults}
                     caseResults={fem.multiLcResult}
                     envelope={fem.envelope}

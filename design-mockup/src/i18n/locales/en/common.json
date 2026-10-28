@@ -557,6 +557,7 @@
       "firstOrderNotAllowed": "Stability: first-order analysis not permitted"
     },
     "solve": {
+      "fieldPatternsLimited": "Span-by-span load placement limited",
       "failed": "Calculation failed",
       "done": "Calculated in {{tijd}} s",
       "doneBody": "{{analyse}} · {{gevallen}} load cases · {{combinaties}} combinations",
@@ -1112,6 +1113,7 @@
     "creepT0": "t₀",
     "creepDays": "d",
     "creepCement": "cement",
+    "fieldPatternNonlinear": "Not placed span by span over {{velden}} spans in a non-linear analysis",
     "creepAnnexBFailedTitle": "Creep coefficient according to annex B not determined",
     "creepAnnexBFailedBody": "Member {{staaf}}: {{reden}} This member is analysed without a creep coefficient.",
     "swayDerivation": {
