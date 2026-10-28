@@ -16391,7 +16391,12 @@ function buildCltCheckInputs(ruweData) {
       ...doorbuiging.addMm !== void 0 ? { deflection_add_mm: doorbuiging.addMm } : {},
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
-      deflection_notes: doorbuiging.notes
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg (issue #252), zoals bij massief hout: w_net,fin = w_fin − w_c.
+      ...(() => {
+        const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
+        return zeeg !== void 0 && zeeg !== 0 ? { pre_camber_mm: zeeg } : {};
+      })()
     });
   }
   return { inputs, skipped };
@@ -18379,6 +18384,7 @@ function buildTimberCheckInputs(ruweData) {
       steunpuntenMm: steunpuntenOpLijn(beam, data.nodes, lijnVanStaaf)
     });
     const cfg = beam.checkConfig ?? {};
+    const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
     const kip = kipsteunenVanStaaf(cfg, lengthMm, "hout");
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
@@ -18566,7 +18572,11 @@ function buildTimberCheckInputs(ruweData) {
       // Referentielijn + eventuele waarschuwing over een doorgeknipte staaf
       // (gedeeld met de staalbouwer), gevolgd door de herkomst van w_inst,
       // w_qp en w₁.
-      deflection_notes: doorbuiging.notes,
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg w_c (positief omhoog): de kern toetst dan w_net,fin = w_fin − w_c
+      // (EN 1995-1-1 7.2(2), (7.2)); w_add blijft zonder zeeg. Alleen een
+      // getal ≠ 0 gaat mee, zodat de invoer zonder zeeg byte-gelijk blijft.
+      ...zeeg !== void 0 && zeeg !== 0 ? { pre_camber_mm: zeeg } : {},
       // De toelichting bij een doorgaande lijn die als een staaf is getoetst;
       // de kern zet hem bij de kolomtoets, de kiptoets en de eindzakking.
       ...staafNotities.length > 0 ? { staaf_notities: staafNotities } : {}

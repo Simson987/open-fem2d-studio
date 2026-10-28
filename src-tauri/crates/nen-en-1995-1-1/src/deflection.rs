@@ -324,9 +324,15 @@ pub fn check_deflection_pair_met_langeduur(
 }
 
 /// Beide doorbuigingstoetsen met de volledige opgave: w_fin volgens 2.2.3(4)
-/// of (5) en w₃ = w_c − w₁ PER BGT-COMBINATIE (`w3_per_combinatie_mm`).
-/// `None` = precies [`check_deflection_pair_met_langeduur`], tot op het
-/// laatste bit.
+/// of (5), w₃ = w_c − w₁ PER BGT-COMBINATIE (`w3_per_combinatie_mm`) en de
+/// zeeg w_c (`zeeg_omhoog_mm`, positief = omhoog). `None` en zeeg 0 = precies
+/// [`check_deflection_pair_met_langeduur`], tot op het laatste bit.
+///
+/// ZEEG (issue #252). EN 1995-1-1 7.2(2), uitdrukking (7.2) en figuur 7.1:
+/// w_net,fin = w_inst + w_creep − w_c = w_fin − w_c; NEN-EN 1990 A1.4.3:
+/// w_max = w_tot − w_c. In de tekenconventie van de kern (zakking negatief
+/// omlaag, zeeg positief omhoog): w_net,fin = w_fin + w_zeeg. De zeeg telt
+/// NIET in w_add: A1.4.3(3) begrenst w₂ + w₃, en daar zit geen zeeg in.
 ///
 /// w₃ PER COMBINATIE (issues #200, #210). Zonder opgave is w_add = w_fin − w₁
 /// = w₂ + (w_inst − w₁), met w_inst de zakking van de combinatie met de
@@ -342,12 +348,13 @@ pub fn check_deflection_pair_volledig(
     w_quasi_perm_fin_mm: Option<f64>,
     w_perm_mm: f64,
     w3_per_combinatie_mm: Option<f64>,
+    zeeg_omhoog_mm: f64,
     k_def: f64,
     lengte_mm: f64,
     noemer_fin: f64,
     noemer_add: f64,
 ) -> (ResistanceCalc, ResistanceCalc) {
-    let (fin, mut add) = check_deflection_pair_met_langeduur(
+    let (mut fin, mut add) = check_deflection_pair_met_langeduur(
         w_inst_mm,
         w_quasi_perm_mm,
         w_quasi_perm_fin_mm,
@@ -393,7 +400,43 @@ pub fn check_deflection_pair_volledig(
             nl(w_add_mm(w_fin, w_perm_mm), 2),
         ));
     }
+    if zeeg_omhoog_mm != 0.0 {
+        let w_net = w_fin + zeeg_omhoog_mm;
+        let mut netto = doorbuigingstoets(
+            "deflection_w_fin",
+            "Doorbuiging w_net,fin (BGT, met zeeg)",
+            w_net,
+            lengte_mm,
+            noemer_fin,
+            &format!("{} + w_{{zeeg,z}}", fin.formula_latex.replace("w_{fin,z} =", "w_{net,fin,z} =")),
+            vec![],
+        );
+        // De afleiding van w_fin blijft staan, met w_fin en de zeeg erbij.
+        netto.variables.extend(fin.variables.iter().skip(3).cloned());
+        netto.variables.push(NamedValue { symbol: r"w_{fin}".to_string(), value: w_fin, unit: "mm".to_string() });
+        netto.variables.push(NamedValue { symbol: r"w_{zeeg}".to_string(), value: zeeg_omhoog_mm, unit: "mm".to_string() });
+        netto.notes = std::mem::take(&mut fin.notes);
+        netto.notes.push(format!(
+            "Zeeg verrekend: w_net,fin = w_fin + w_zeeg = {} + {} = {} mm (EN 1995-1-1 7.2(2), \
+             uitdrukking (7.2) en figuur 7.1: w_net,fin = w_fin − w_c; NEN-EN 1990 A1.4.3: w_max = \
+             w_tot − w_c, daar beide omlaag positief). De zakking is hier negatief omlaag, de zeeg \
+             positief omhoog. De zeeg telt NIET mee in w_add: A1.4.3(3) begrenst w₂ + w₃.",
+            nl(w_fin, 2),
+            nl(zeeg_omhoog_mm, 2),
+            nl(w_net, 2),
+        ));
+        fin = netto;
+    }
     (fin, add)
+}
+
+/// Keurt een opgegeven zeeg (`pre_camber_mm`, issue #252). Weglaten is altijd
+/// goed; een niet-eindig getal is geen zeeg.
+pub fn keur_zeeg(zeeg: Option<f64>) -> Result<(), String> {
+    match zeeg {
+        Some(z) if !z.is_finite() => Err(format!("pre_camber_mm = {z} is geen zeeg — er is niet getoetst")),
+        _ => Ok(()),
+    }
 }
 
 /// Keurt een opgegeven w₃ per combinatie (`deflection_add_mm`). Weglaten is
@@ -516,22 +559,39 @@ mod tests {
     #[test]
     fn w_add_met_w3_per_combinatie() {
         let (f0, a0) = check_deflection_pair_met_langeduur(7.0, 4.0, None, 4.0, 0.6, 2000.0, 125.0, 166.5);
-        let (f1, a1) = check_deflection_pair_volledig(7.0, 4.0, None, 4.0, None, 0.6, 2000.0, 125.0, 166.5);
+        let (f1, a1) = check_deflection_pair_volledig(7.0, 4.0, None, 4.0, None, 0.0, 0.6, 2000.0, 125.0, 166.5);
         assert_eq!(format!("{f0:?}"), format!("{f1:?}"));
         assert_eq!(format!("{a0:?}"), format!("{a1:?}"));
         // w₂ = 0,6·4 = 2,4; w₃ = −10 → w_add = −7,6 (zonder: 9,4 − 4 = 5,4).
-        let (f2, a2) = check_deflection_pair_volledig(7.0, 4.0, None, 4.0, Some(-10.0), 0.6, 2000.0, 125.0, 166.5);
+        let (f2, a2) = check_deflection_pair_volledig(7.0, 4.0, None, 4.0, Some(-10.0), 0.0, 0.6, 2000.0, 125.0, 166.5);
         assert_eq!(format!("{f0:?}"), format!("{f2:?}"), "w_fin verandert niet");
         assert_relative_eq!(a2.variables[1].value, -7.6, max_relative = 1e-12);
         assert_relative_eq!(a2.uc.as_ref().unwrap().ed, 7.6, max_relative = 1e-12);
         assert!(a2.notes.iter().any(|n| n.contains("-7,60") && n.contains("5,40")));
         // Met w_qp,fin: w₂ = 5,5 − 4 = 1,5 → w_add = −8,5.
-        let (_, a3) = check_deflection_pair_volledig(7.0, 4.0, Some(5.5), 4.0, Some(-10.0), 0.6, 2000.0, 125.0, 166.5);
+        let (_, a3) = check_deflection_pair_volledig(7.0, 4.0, Some(5.5), 4.0, Some(-10.0), 0.0, 0.6, 2000.0, 125.0, 166.5);
         assert_relative_eq!(a3.variables[1].value, -8.5, max_relative = 1e-12);
         assert!(keur_w_add(None).is_ok() && keur_w_add(Some(-3.0)).is_ok());
         for w in [f64::NAN, f64::INFINITY] {
             assert!(keur_w_add(Some(w)).unwrap_err().contains("deflection_add_mm"));
         }
+    }
+
+    /// Issue #252 (controle N11): GL28h 115×360, L = 7,2 m, w_inst = −24,84,
+    /// w_qp = −20,50, k_def = 0,6 → w_fin = −37,14 mm; zeeg 15 mm omhoog →
+    /// w_net,fin = −22,14 mm, UC = 22,14/28,8 = 0,769 (zonder zeeg 1,290).
+    /// w_add verandert niet door de zeeg.
+    #[test]
+    fn zeeg_in_de_netto_einddoorbuiging() {
+        let (f0, a0) = check_deflection_pair_volledig(-24.84, -20.50, None, -11.0, None, 0.0, 0.6, 7200.0, 250.0, 333.0);
+        assert_relative_eq!(f0.uc.as_ref().unwrap().uc, 37.14 / 28.8, max_relative = 1e-12);
+        let (f1, a1) = check_deflection_pair_volledig(-24.84, -20.50, None, -11.0, None, 15.0, 0.6, 7200.0, 250.0, 333.0);
+        assert_relative_eq!(f1.variables[1].value, -22.14, max_relative = 1e-12);
+        assert_relative_eq!(f1.uc.as_ref().unwrap().uc, 0.76875, max_relative = 1e-12);
+        assert!(f1.notes.iter().any(|n| n.contains("Zeeg verrekend")));
+        assert!(f1.variables.iter().any(|v| v.symbol == "w_{zeeg}" && v.value == 15.0));
+        assert_eq!(format!("{a0:?}"), format!("{a1:?}"), "de zeeg telt niet in w_add");
+        assert!(keur_zeeg(Some(f64::NAN)).is_err() && keur_zeeg(Some(15.0)).is_ok());
     }
 
     #[test]

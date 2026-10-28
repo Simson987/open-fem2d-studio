@@ -274,6 +274,8 @@ fn schema_houten_staaf() -> Value {
                 "description": "Reden waarom de BGT-zakking van deze staaf niet betrouwbaar te bepalen is (bijvoorbeeld een ontbrekende BGT-combinatie, of verbonden delen met verschillend kruipgedrag zonder eindstijfheidsberekening, EN 1995-1-1 2.2.3(4)). Opgegeven = w_fin en w_add krijgen status NotApplicable zonder UC, met 'BGT niet getoetst: <reden>' in hun notities; de sterkte- en stabiliteitstoetsen lopen door. Weglaten = de doorbuiging wordt getoetst." },
             "deflection_add_mm": { "type": "number",
                 "description": "w3 = w_c - w1 in mm, met teken (negatief = omlaag): de ogenblikkelijke zakking bovenop de blijvende, PER BGT-combinatie c bepaald, voor de combinatie met de grootste |w2 + w_c - w1|. De kern rekent dan w_add = w2 + w3, met w2 = w_fin - w_inst het kruipdeel van de quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1); dezelfde tekenconventie als 'deflection_add_mm' van de staaltoets. Nodig als de combinatie met de grootste |w| niet het grootste verschil met w1 geeft (bijvoorbeeld opwaartse wind tegenover vloerbelasting, of een uitkraging). Weglaten = w3 = deflection_inst_mm - deflection_permanent_mm. Een niet-eindig getal wordt geweigerd. `check_fem_model` vult dit veld zelf als het verschilt." },
+            "pre_camber_mm": { "type": "number",
+                "description": "Zeeg w_c in mm, POSITIEF = OMHOOG (tegen de doorbuiging in). De eindzakking wordt dan de NETTO eindzakking w_net,fin = w_fin - w_c (EN 1995-1-1 7.2(2), uitdrukking (7.2), figuur 7.1; NEN-EN 1990 A1.4.3: w_max = w_tot - w_c), met zakking negatief omlaag geschreven als w_fin + pre_camber_mm. Telt NIET mee in w_add (A1.4.3(3) begrenst w2 + w3). Dezelfde tekenconventie als 'pre_camber_mm' van de staaltoets. Weglaten of 0 = geen zeeg. `check_fem_model` vult dit uit checkConfig.preCamber_mm van een liggende staaf." },
             "deflection_notes": { "type": "array", "items": { "type": "string" }, "default": [],
                 "description": "Vrije toelichtingen bij de doorbuigingstoets; ze komen letterlijk in de 'notes' van de w_fin-regel van het resultaat. Bedoeld om zichtbaar te maken uit welke combinatie 'deflection_quasi_perm_mm' komt — of dat die combinatie niet gevonden is en er op de volle last is teruggevallen." },
             "staaf_notities": { "type": "array", "items": { "type": "string" }, "default": [],
@@ -378,6 +380,8 @@ fn schema_clt_staaf() -> Value {
                 "description": "Langeduurzakking w_qp,fin in mm, met teken: de zakking onder de quasi-blijvende BGT-combinatie, berekend met E_mean,fin = E_mean/(1 + k_def) voor het hout (EN 1995-1-1 2.3.2.2(1), uitdrukking 2.7) en de langeduurstijfheid van de andere delen. Alleen nodig in een statisch onbepaalde constructie met delen van VERSCHILLEND kruipgedrag (hout naast staal, beton of hout met een andere k_def): dan geldt de vereenvoudiging w_fin = w_inst + k_def * w_qp van 2.2.3(5) niet en rekent de kern volgens 2.2.3(4) w_fin = w_inst + (w_qp,fin - w_qp); w_add blijft w_fin - w_perm = w2 + w3, met w2 = w_qp,fin - w_qp. Weglaten = de vereenvoudiging. `check_fem_model` vult dit veld zelf in zo'n constructie, uit de eindtoestandvariant van de quasi-blijvende combinatie." },
             "deflection_add_mm": { "type": "number",
                 "description": "w3 = w_c - w1 in mm, met teken (negatief = omlaag): de ogenblikkelijke zakking bovenop de blijvende, PER BGT-combinatie c bepaald, voor de combinatie met de grootste |w2 + w_c - w1|. De kern rekent dan w_add = w2 + w3, met w2 = w_fin - w_inst het kruipdeel van de quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1); dezelfde tekenconventie als 'deflection_add_mm' van de staaltoets. Nodig als de combinatie met de grootste |w| niet het grootste verschil met w1 geeft (bijvoorbeeld opwaartse wind tegenover vloerbelasting, of een uitkraging). Weglaten = w3 = deflection_inst_mm - deflection_permanent_mm. Een niet-eindig getal wordt geweigerd. `check_fem_model` vult dit veld zelf als het verschilt." },
+            "pre_camber_mm": { "type": "number",
+                "description": "Zeeg w_c in mm, POSITIEF = OMHOOG (tegen de doorbuiging in). De eindzakking wordt dan de NETTO eindzakking w_net,fin = w_fin - w_c (EN 1995-1-1 7.2(2), uitdrukking (7.2), figuur 7.1; NEN-EN 1990 A1.4.3: w_max = w_tot - w_c), met zakking negatief omlaag geschreven als w_fin + pre_camber_mm. Telt NIET mee in w_add (A1.4.3(3) begrenst w2 + w3). Dezelfde tekenconventie als 'pre_camber_mm' van de staaltoets. Weglaten of 0 = geen zeeg. `check_fem_model` vult dit uit checkConfig.preCamber_mm van een liggende staaf." },
             "deflection_notes": { "type": "array", "items": { "type": "string" }, "default": [],
                 "description": "Vrije toelichtingen bij de doorbuigingstoets; ze komen letterlijk in de 'notes' van de w_fin-regel. Bedoeld om zichtbaar te maken uit welke combinatie elke zakking komt, en welke terugval er eventueel is toegepast." }
         },
@@ -574,6 +578,8 @@ mod tests {
             "deflection_not_applicable_reason",
             // Issues #200/#210: w₃ = w_c − w₁ per BGT-combinatie.
             "deflection_add_mm",
+            // Issue #252: de zeeg in de netto eindzakking.
+            "pre_camber_mm",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het staafschema mist `{v}`");
@@ -708,6 +714,8 @@ mod tests {
             "f_v_rol_k_bron",
             // Issue #210: w₃ = w_c − w₁ per BGT-combinatie, zoals bij hout.
             "deflection_add_mm",
+            // Issue #252: de zeeg in de netto eindzakking.
+            "pre_camber_mm",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het CLT-schema mist `{v}`");

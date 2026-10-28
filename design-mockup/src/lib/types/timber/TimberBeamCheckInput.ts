@@ -255,6 +255,15 @@ deflection_quasi_perm_fin_mm?: number,
  */
 deflection_add_mm?: number,
 /**
+ * Zeeg w_c in mm, POSITIEF = OMHOOG (issue #252): de eindzakking wordt de
+ * NETTO eindzakking w_net,fin = w_fin − w_c (EN 1995-1-1 7.2(2), (7.2) en
+ * figuur 7.1), hier met zakking negatief omlaag geschreven als
+ * w_fin + w_zeeg. Telt NIET in w_add (A1.4.3(3)). Dezelfde
+ * tekenconventie als `pre_camber_mm` van de staalkern. `None` of 0 = geen
+ * zeeg, tot op het laatste bit het gedrag van vóór dit veld.
+ */
+pre_camber_mm?: number,
+/**
  * Reden waarom de BGT-zakking niet betrouwbaar kan worden bepaald.
  * De sterkte- en stabiliteitstoetsen blijven beschikbaar; w_fin en w_add
  * worden expliciet `NotApplicable` zonder UC.

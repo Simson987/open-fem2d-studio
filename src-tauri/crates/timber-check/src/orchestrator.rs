@@ -577,6 +577,7 @@ pub(crate) fn check_timber_beam_intern(
         nen_en_1995_1_1::deflection::keur_langeduurzakking(input.deflection_quasi_perm_fin_mm)
     })
     .and_then(|_| nen_en_1995_1_1::deflection::keur_w_add(input.deflection_add_mm))
+    .and_then(|_| nen_en_1995_1_1::deflection::keur_zeeg(input.pre_camber_mm))
     {
         return TimberBeamCheckResult {
             beam_id: input.beam_id,
@@ -719,6 +720,7 @@ pub(crate) fn check_timber_beam_intern(
         input.deflection_quasi_perm_fin_mm,
         input.deflection_permanent_mm,
         input.deflection_add_mm,
+        input.pre_camber_mm.unwrap_or(0.0),
         kdef,
         input.length_m * 1e3,
         input.deflection_limit_fin,

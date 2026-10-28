@@ -161,6 +161,7 @@ fn cltstaaf() -> CltBeamCheckResult {
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
         deflection_add_mm: None,
+        pre_camber_mm: None,
     })
 }
 
@@ -209,6 +210,7 @@ fn geweigerde_cltstaaf() -> CltBeamCheckResult {
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
         deflection_add_mm: None,
+        pre_camber_mm: None,
     });
     assert!(
         r.checks.is_empty(),

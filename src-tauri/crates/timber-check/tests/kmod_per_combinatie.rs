@@ -83,6 +83,7 @@ fn ligger(klasse: &str, b: f64, h: f64, l_m: f64, env: Vec<ForcePoint>) -> Timbe
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
         deflection_add_mm: None,
+        pre_camber_mm: None,
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,
@@ -522,6 +523,7 @@ fn clt_per_klasse_met_de_laagregel_uit_de_klasse_van_elke_toets() {
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
         deflection_add_mm: None,
+        pre_camber_mm: None,
     };
     let oud = check_clt_beam(invoer(vec![]));
     // Oud: middellang, M = 14 → 3,6842 / 14,769 = 0,2495.

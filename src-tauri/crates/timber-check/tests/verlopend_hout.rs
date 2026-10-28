@@ -87,6 +87,7 @@ fn staaf(
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
         deflection_add_mm: None,
+        pre_camber_mm: None,
         staaf_notities: None,
         width_end_mm: b_eind,
         height_end_mm: h_eind,

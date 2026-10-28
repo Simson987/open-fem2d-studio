@@ -199,6 +199,15 @@ pub struct CltBeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub deflection_add_mm: Option<f64>,
+    /// Zeeg w_c in mm, POSITIEF = OMHOOG (issue #252): de eindzakking wordt de
+    /// NETTO eindzakking w_net,fin = w_fin − w_c (EN 1995-1-1 7.2(2), (7.2) en
+    /// figuur 7.1), hier met zakking negatief omlaag geschreven als
+    /// w_fin + w_zeeg. Telt NIET in w_add (A1.4.3(3)). Dezelfde
+    /// tekenconventie als `pre_camber_mm` van de staalkern. `None` of 0 = geen
+    /// zeeg, tot op het laatste bit het gedrag van vóór dit veld.
+    #[serde(default)]
+    #[ts(optional)]
+    pub pre_camber_mm: Option<f64>,
 }
 
 /// Uitkomst per laag — de regel in de tabel "toetsing per lamel".
@@ -427,6 +436,7 @@ fn doorbuiging_toetsen(input: &CltBeamCheckInput) -> Vec<NamedCheck> {
                 input.deflection_quasi_perm_fin_mm,
                 input.deflection_permanent_mm,
                 input.deflection_add_mm,
+                input.pre_camber_mm.unwrap_or(0.0),
                 kdef,
                 input.length_m * 1e3,
                 input.deflection_limit_fin,
@@ -748,6 +758,7 @@ pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
         deflection::keur_noemers(input.deflection_limit_fin, input.deflection_limit_add)
             .and_then(|_| deflection::keur_langeduurzakking(input.deflection_quasi_perm_fin_mm))
             .and_then(|_| deflection::keur_w_add(input.deflection_add_mm))
+            .and_then(|_| deflection::keur_zeeg(input.pre_camber_mm))
     {
         let mut r = foutresultaat(&input, reden.clone());
         r.notes = vec![format!("Niet getoetst: {reden}")];
@@ -1004,6 +1015,7 @@ mod tests {
             deflection_notes: vec![],
             deflection_quasi_perm_fin_mm: None,
             deflection_add_mm: None,
+            pre_camber_mm: None,
         }
     }
 

@@ -42,7 +42,7 @@ import type { CltLayupResult } from "./types/timber/CltLayupResult";
 import type { CltPreset } from "./types/timber/CltPreset";
 import type { CheckSkip, MemberCheckResult } from "./checkTypes";
 import { beamLengthMm, buildForcesEnvelope } from "./steelCheckBuilder";
-import { toetsdataInReferentierichting } from "./referentierichting";
+import { toetsdataInReferentierichting, zeegNotities, zeegVoorToets } from "./referentierichting";
 import {
   houtDoorbuigingsInvoer,
   houtDoorbuigingsNoemers,
@@ -690,7 +690,12 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
       ...(doorbuiging.addMm !== undefined ? { deflection_add_mm: doorbuiging.addMm } : {}),
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
-      deflection_notes: doorbuiging.notes,
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg (issue #252), zoals bij massief hout: w_net,fin = w_fin − w_c.
+      ...((): { pre_camber_mm?: number } => {
+        const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
+        return zeeg !== undefined && zeeg !== 0 ? { pre_camber_mm: zeeg } : {};
+      })(),
     });
   }
 

@@ -436,16 +436,15 @@ export default function BarPropertiesDialog({ beam, nodes, beams, beamForces, on
           />
         </DialoogRij>
       )}
-      {!isTimber && (
-        <DialoogRij label={t("cfg.preCamber")} info={t("cfg.preCamberHint")}>
-          <input
-            type="number" className="bar-props-input" step="1"
-            placeholder="0"
-            value={preCamberStr}
-            onChange={(e) => setPreCamberStr(e.target.value)}
-          />
-        </DialoogRij>
-      )}
+      {/* Zeeg: ook voor hout en kruislaaghout (issue #252, EN 1995-1-1 7.2(2)). */}
+      <DialoogRij label={t("cfg.preCamber")} info={t("cfg.preCamberHint")}>
+        <input
+          type="number" className="bar-props-input" step="1"
+          placeholder="0"
+          value={preCamberStr}
+          onChange={(e) => setPreCamberStr(e.target.value)}
+        />
+      </DialoogRij>
     </div>
   );
 

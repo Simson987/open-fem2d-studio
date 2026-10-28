@@ -1090,7 +1090,8 @@ function BeamProperties({ beam, nFrom, nTo, nodes, beams, loads, updateBeam, res
                 />
               </Row>
             )}
-            {!isHout && !isBeton && (
+            {/* Zeeg: ook voor hout (issue #252, EN 1995-1-1 7.2(2)). */}
+            {!isBeton && (
               <Row label={t("props.beam.preCamber")} info={t("cfg.preCamberHint")}>
                 <input
                   type="number" className="fem-prop-input" step="1"

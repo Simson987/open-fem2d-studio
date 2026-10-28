@@ -50,9 +50,9 @@
  *    op de volle last; w_perm (w₁) komt uit de BGT-combinatie die alleen de
  *    blijvende belastinggevallen draagt (zie `lib/blijvendeZakking.ts`), zodat
  *    w_add werkelijk w₂ + w₃ is; ontbreekt die combinatie, dan 0 mét notitie.
- *    Zeeg kent de houtkern
- *    (nog) niet — preCamber_mm wordt hier bewust NIET geconsumeerd en de UI
- *    toont het veld niet voor hout.
+ *    Zeeg (preCamber_mm, positief omhoog) gaat als `pre_camber_mm` naar de
+ *    kern, die de netto eindzakking w_net,fin = w_fin − w_c toetst (EN 1995-1-1
+ *    7.2(2), issue #252); bij een staande staaf niet (`zeegVoorToets`).
  */
 import type { Beam, BeamCheckConfig, LoadCase, Node, Support } from "../components/fem/femTypes";
 import type { SolverResult } from "../components/fem/solver/types";
@@ -97,7 +97,7 @@ import {
   naarCustomSection,
   zoekEigenDoorsnede,
 } from "./profieleditor/eigenDoorsnedenStore";
-import { toetsdataInReferentierichting } from "./referentierichting";
+import { toetsdataInReferentierichting, zeegNotities, zeegVoorToets } from "./referentierichting";
 import { bepaalVerloop } from "./sectionResolver";
 import type { CustomSection } from "./types/steel/CustomSection";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "./normAanduidingen";
@@ -1003,10 +1003,9 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
     });
 
     // Per-staaf toetsconfiguratie; ontbrekende velden → defaults hierboven.
-    // preCamber_mm wordt voor hout bewust niet geconsumeerd: de houtkern
-    // kent geen zeeg, en de EN 1995-sectie van de dialoog biedt het veld
-    // daarom niet aan.
     const cfg = beam.checkConfig ?? {};
+    // Zeeg (issue #252): alleen bij een liggende staaf, zie `zeegVoorToets`.
+    const zeeg = zeegVoorToets(beam, data.nodes).preCamber_mm;
     // Kipsteunen per rand en de kipsteunafstand: één afleiding, gedeeld met het
     // tekenvlak (`lib/kipsteunen.ts`, issue #40).
     const kip = kipsteunenVanStaaf(cfg, lengthMm, "hout");
@@ -1210,7 +1209,11 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // Referentielijn + eventuele waarschuwing over een doorgeknipte staaf
       // (gedeeld met de staalbouwer), gevolgd door de herkomst van w_inst,
       // w_qp en w₁.
-      deflection_notes: doorbuiging.notes,
+      deflection_notes: [...doorbuiging.notes, ...zeegNotities(beam, data.nodes)],
+      // Zeeg w_c (positief omhoog): de kern toetst dan w_net,fin = w_fin − w_c
+      // (EN 1995-1-1 7.2(2), (7.2)); w_add blijft zonder zeeg. Alleen een
+      // getal ≠ 0 gaat mee, zodat de invoer zonder zeeg byte-gelijk blijft.
+      ...(zeeg !== undefined && zeeg !== 0 ? { pre_camber_mm: zeeg } : {}),
       // De toelichting bij een doorgaande lijn die als een staaf is getoetst;
       // de kern zet hem bij de kolomtoets, de kiptoets en de eindzakking.
       ...(staafNotities.length > 0 ? { staaf_notities: staafNotities } : {}),
