@@ -471,6 +471,7 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["categorie-h-combinaties", "#237: leest alleen de combinatiegenerator (normcombinaties.ts) rechtstreeks; geen sidecarpad"],
   ["backstage-import-export", "#235: leest de bron van Backstage.tsx en App.tsx (React-UI), niets uit de sidecarbundel"],
   ["vrij-eind-tweede-orde", "vrij staafeind, 2·L of L bij P-Δ met scheefstand: de 3D-houtbouwer (openFem3dTimberCheck) staat buiten de barrel; de MCP-weg (check_fem_model) rekent in deze test al met de bundel, via de MCP-server"],
   ["niet-getoetst-weergave", "B7: de weergave van een niet getoetste staaf zit in het HTML-rapport, de React-panelen en het 3D-rapport; die staan buiten de headless sidecarbundel (de MCP-kant toetst drie_wegen_controle_2026_10.rs)"],

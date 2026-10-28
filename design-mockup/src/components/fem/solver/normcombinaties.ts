@@ -564,6 +564,27 @@ function uitdrukking(
  * 6.14b en 6.16b met gelijke factoren blijven allebei, want elke toets zoekt
  * zijn eigen soort.
  */
+/**
+ * Issue #237: bij een leidende last met ψ₁ = 0 (categorie H, dak) valt de
+ * frequente combinatie 6.15b samen met een quasi-blijvende 6.16b: de leidende
+ * last krijgt factor 0 en de rest staat met ψ₂ in beide. Formeel blijft het
+ * een frequente combinatie, en de toetsen die alleen de 6.15b-lijst lezen
+ * (scheurwijdte, plaat) hebben haar nodig — weghalen kan daar een maatgevende
+ * opstelling laten verdwijnen. Daarom blijft ze staan, maar zegt haar formule
+ * met welke quasi-blijvende combinatie ze samenvalt.
+ */
+function markeerSamenvallend(set: StandaardCombinatie[]): StandaardCombinatie[] {
+  const sleutel = (c: StandaardCombinatie) =>
+    [...c.factors].filter(([, x]) => x !== 0).sort((a, b) => a[0] - b[0]).map(([id, x]) => `${id}:${x}`).join(",");
+  const quasi = new Map<string, string>();
+  for (const c of set) if (c.standaard.soort === "6.16b") quasi.set(sleutel(c), c.name);
+  return set.map((c) => {
+    if (c.standaard.soort !== "6.15b") return c;
+    const zelfde = quasi.get(sleutel(c));
+    return zelfde ? { ...c, formula: `${c.formula} (= ${zelfde}: ψ₁ van de leidende last is 0)` } : c;
+  });
+}
+
 function ontdubbel(set: readonly StandaardCombinatie[]): StandaardCombinatie[] {
   const gezien = new Set<string>();
   return set.filter((c) => {
@@ -691,7 +712,7 @@ export function genereerStandaardCombinaties(
     g(1), begeleidend(null, ψ2, 1), bgtBron, gevolgklasse, bijlage, perGeval,
   ));
 
-  return ontdubbel([...ugt, ...bgt]);
+  return markeerSamenvallend(ontdubbel([...ugt, ...bgt]));
 }
 
 // ── Voor de windgenerator ─────────────────────────────────────────────────

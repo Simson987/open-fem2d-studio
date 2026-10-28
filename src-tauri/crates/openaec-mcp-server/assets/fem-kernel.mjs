@@ -14169,6 +14169,16 @@ function uitdrukking(naam, type, soort, sleutel, g, bijdragen, bron, gevolgklass
     });
   });
 }
+function markeerSamenvallend(set) {
+  const sleutel = (c) => [...c.factors].filter(([, x]) => x !== 0).sort((a, b) => a[0] - b[0]).map(([id2, x]) => `${id2}:${x}`).join(",");
+  const quasi = /* @__PURE__ */ new Map();
+  for (const c of set) if (c.standaard.soort === "6.16b") quasi.set(sleutel(c), c.name);
+  return set.map((c) => {
+    if (c.standaard.soort !== "6.15b") return c;
+    const zelfde = quasi.get(sleutel(c));
+    return zelfde ? { ...c, formula: `${c.formula} (= ${zelfde}: \u03C8\u2081 van de leidende last is 0)` } : c;
+  });
+}
 function ontdubbel(set) {
   const gezien = /* @__PURE__ */ new Set();
   return set.filter((c) => {
@@ -14315,7 +14325,7 @@ function genereerStandaardCombinaties(loadCases, gevolgklasse = STANDAARD_GEVOLG
     bijlage,
     perGeval
   ));
-  return ontdubbel([...ugt, ...bgt]);
+  return markeerSamenvallend(ontdubbel([...ugt, ...bgt]));
 }
 function begeleidendeOpstellingen(gevallen, leidendeSoort, factor, bijlage = STANDAARD_BIJLAGE) {
   const eigen = gevallen.filter((c) => c.gegenereerd?.bron !== "wind");
