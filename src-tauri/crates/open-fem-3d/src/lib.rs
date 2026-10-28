@@ -1974,6 +1974,68 @@ fn convert_result(
     }
 }
 
+/// Grens op de draaiing waarboven de kleine-verplaatsingentheorie niet meer
+/// vanzelf geldt: 0,05 rad ≈ 2,9° (tan θ wijkt dan 0,08 % van θ af, maar de
+/// geometrie van een staaf die zoveel draait verandert merkbaar). Voorstel
+/// uit de controle van issue #244 (punt 054) — GEEN normeis.
+const GROTE_DRAAIING_RAD: f64 = 0.05;
+/// Grens op de verplaatsing: L/50 met L de grootste afmeting van het model.
+/// Eveneens het voorstel uit de controle, geen normeis.
+const GROTE_VERPLAATSING_NOEMER: f64 = 50.0;
+
+/// Waarschuwing bij een uitkomst buiten de kleine-verplaatsingentheorie
+/// (issue #244, punt 054). Zowel de lineaire berekening als de P-Δ-iteratie
+/// rekenen met de onvervormde geometrie voor de evenwichtsrichtingen; een
+/// draaiing van 12° of een zakking van L/19 (gemeten: plaat 6 × 3 m op twee
+/// liggers met vrije r_x) gaf alleen solverdiagnostiek. Het resultaat blijft
+/// staan; de melding zegt dat het buiten het geldigheidsgebied ligt.
+fn grote_vervorming(request: &SolveRequest3D, solved: &SolveResult3D) -> Option<String> {
+    let (mut laag, mut hoog) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+    for n in &request.nodes {
+        for (i, c) in [n.x, n.y, n.z].into_iter().enumerate() {
+            laag[i] = laag[i].min(c);
+            hoog[i] = hoog[i].max(c);
+        }
+    }
+    let l = (0..3).map(|i| hoog[i] - laag[i]).filter(|v| v.is_finite()).fold(0.0, f64::max);
+    if !(l > 0.0) { return None; }
+    let grens_u = l / GROTE_VERPLAATSING_NOEMER;
+    let mut draai: Option<(f64, usize)> = None;
+    let mut verpl: Option<(f64, usize)> = None;
+    for d in &solved.displacements {
+        let r = (d.rx * d.rx + d.ry * d.ry + d.rz * d.rz).sqrt();
+        let u = (d.ux * d.ux + d.uy * d.uy + d.uz * d.uz).sqrt();
+        if r.is_finite() && draai.is_none_or(|(m, _)| r > m) { draai = Some((r, d.node_id)); }
+        if u.is_finite() && verpl.is_none_or(|(m, _)| u > m) { verpl = Some((u, d.node_id)); }
+    }
+    let mut delen = Vec::new();
+    if let Some((r, knoop)) = draai.filter(|(r, _)| *r > GROTE_DRAAIING_RAD) {
+        delen.push(format!(
+            "draaiing {r:.4} rad ({:.1}°) bij knoop {knoop} > {GROTE_DRAAIING_RAD} rad",
+            r.to_degrees()
+        ));
+    }
+    if let Some((u, knoop)) = verpl.filter(|(u, _)| *u > grens_u) {
+        delen.push(format!(
+            "verplaatsing {:.1} mm bij knoop {knoop} = L/{:.0} > L/{GROTE_VERPLAATSING_NOEMER:.0} \
+             (L = {:.3} m, grootste modelafmeting)",
+            u * 1000.0,
+            l / u,
+            l
+        ));
+    }
+    if delen.is_empty() { return None; }
+    Some(format!(
+        "WAARSCHUWING grote vervorming: {}. De berekening gaat uit van kleine verplaatsingen \
+         (evenwicht in de onvervormde stand); bij deze vervorming geldt dat niet meer \
+         vanzelf en zijn krachten en verplaatsingen niet betrouwbaar. Waarschijnlijk is \
+         een vrijheidsgraad (bijna) niet gesteund of is de constructie te slap. Grenzen \
+         {GROTE_DRAAIING_RAD} rad en L/{GROTE_VERPLAATSING_NOEMER:.0}: signaleringsgrenzen, \
+         geen normeis.",
+        delen.join("; ")
+    ))
+}
+
 fn max_dof_magnitude(results: &AnalysisResults3D) -> f64 {
     results.displacements.iter()
         .flat_map(|value| [value.ux, value.uy, value.uz, value.rx, value.ry, value.rz])
@@ -2255,6 +2317,7 @@ pub(crate) fn solve_fixed(
         }
     };
     solved.diagnostics.extend(schijven::koppelingen(request).1);
+    solved.diagnostics.extend(grote_vervorming(request, &solved));
     solved.diagnostics.extend(draaiing.melding(request));
     solved.diagnostics.extend(model.plaat.melding_vlak(vlakkracht));
     Ok(solved)
