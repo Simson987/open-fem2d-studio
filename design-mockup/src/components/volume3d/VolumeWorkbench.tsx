@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18next from "i18next";
 import Mixed3DWorkbench from "./Mixed3DWorkbench";
+import { metCode } from "./metCode";
 import {
   solveNativeVolume3D,
   solveNativeVolume3DJ2,
@@ -153,50 +156,45 @@ const GNL_EXAMPLE: NativeVolume3DGnlInput = {
   }],
 };
 
-const STRATEGIES: Array<{ value: TetStrategy; label: string }> = [
-  { value: "automatic", label: "Automatisch" },
-  { value: "matrixFree", label: "Matrixvrij PCG" },
-  { value: "sparse", label: "Sparse CSR PCG" },
-  { value: "sparseDirect", label: "Sparse direct LDLᵀ" },
-  { value: "frontal", label: "Frontale wavefront" },
-];
-const ELEMENT_OPTIONS: Array<{ value: ElementKind; label: string }> = [
-  { value: "tet4", label: "Tet4 — afschuifproef" },
-  { value: "hex8", label: "Hex8 — trekproef" },
-  { value: "mixed3d", label: "Gemengd 3D — Hex8, Tet4 en staaf" },
-  { value: "j2", label: "Tet4 J2-staal — trek/ontlastproef" },
-  { value: "finiteJ2", label: "Tet4 eindige-rek J2 — trek/ontlastproef" },
-  { value: "concreteDamage", label: "Tet4 betontrekschade — trek/ontlastproef" },
-  { value: "gnl", label: "Tet4 GNL — affine rekproef" },
-];
+// De labels staan in common.json onder volumeWorkbench.strategy.* en .elementOption.*.
+const STRATEGIES: TetStrategy[] = ["automatic", "matrixFree", "sparse", "sparseDirect", "frontal"];
+const ELEMENT_OPTIONS: ElementKind[] = ["tet4", "hex8", "mixed3d", "j2", "finiteJ2", "concreteDamage", "gnl"];
+const HEX8_BACKENDS: Hex8Backend[] = ["automatic", "sparse", "sparseDirect", "matrixFreeGeneral", "matrixFreeGeneralLarge", "frontalWave"];
+const J2_BACKENDS: J2Backend[] = ["sparseDirect", "sparsePcg", "automatic", "frontalWave"];
+const FINITE_J2_BACKENDS: FiniteJ2Backend[] = ["dense", "sparseGmres", "frontalWave", "matrixFreeGmres", "matrixFreeGmresLarge", "automatic"];
+const CONCRETE_BACKENDS: ConcreteBackend[] = ["denseLu", "sparseGmres"];
+const GNL_BACKENDS: GnlBackend[] = ["dense", "sparseDirect", "sparseGmres", "frontalWave", "automatic"];
+/** Validatiemeldingen buiten de component: via i18next, in de taal van de app. */
+const fout = (sleutel: string, waarden?: Record<string, unknown>) =>
+  new Error(i18next.t(`volumeWorkbench.errors.${sleutel}`, { ns: "common", ...waarden }));
 
 const PAGE_SIZE = 40;
 const number = (value: number) => Number.isFinite(value) ? value.toExponential(4) : String(value);
 
 function checkLinearModel(value: unknown): asserts value is NativeVolume3DInput | NativeVolumeHex8Input {
   if (!value || typeof value !== "object") {
-    throw new Error("JSON-invoer moet een modelobject zijn.");
+    throw fout("modelObject");
   }
   const model = value as Record<string, unknown>;
   for (const key of ["nodes", "materials", "elements", "supports"]) {
     if (!Array.isArray(model[key])) {
-      throw new Error(`JSON-invoer mist een lijst '${key}'.`);
+      throw fout("missingList", { key });
     }
   }
   if (model.loads !== undefined && !Array.isArray(model.loads)) {
-    throw new Error("'loads' moet een lijst zijn.");
+    throw fout("loadsList");
   }
 }
 
 function checkDistributedTargetLists(targets: unknown[], label: string) {
   for (const [targetIndex, target] of targets.entries()) {
     if (!target || typeof target !== "object") {
-      throw new Error(`${label} target ${targetIndex} moet een object zijn.`);
+      throw fout("targetObject", { label, index: targetIndex });
     }
     const fields = target as Record<string, unknown>;
     for (const key of ["bodyForces", "faceTractions"] as const) {
       if (fields[key] !== undefined && !Array.isArray(fields[key])) {
-        throw new Error(`${label} target ${targetIndex}: ${key} moet een lijst zijn.`);
+        throw fout("targetList", { label, index: targetIndex, key });
       }
     }
   }
@@ -204,13 +202,13 @@ function checkDistributedTargetLists(targets: unknown[], label: string) {
 
 function checkJ2Model(value: unknown): asserts value is NativeVolume3DJ2Input {
   if (!value || typeof value !== "object") {
-    throw new Error("J2 JSON-invoer moet een modelobject zijn.");
+    throw fout("j2Object");
   }
   const model = value as Record<string, unknown>;
   const mesh = model.mesh as Record<string, unknown> | undefined;
   if (!mesh || !Array.isArray(mesh.nodes) || !Array.isArray(mesh.tets)
     || !model.steel || typeof model.steel !== "object" || !Array.isArray(model.targets)) {
-    throw new Error("J2 JSON-invoer vereist mesh.nodes, mesh.tets, steel en targets.");
+    throw fout("j2Required");
   }
   if (model.elementSteels !== undefined
     && (!Array.isArray(model.elementSteels)
@@ -218,7 +216,7 @@ function checkJ2Model(value: unknown): asserts value is NativeVolume3DJ2Input {
       || model.elementSteels.some((steel) => !steel || typeof steel !== "object"
         || [steel.youngsMpa, steel.poisson, steel.yieldMpa, steel.hardeningMpa]
           .some((value) => typeof value !== "number" || !Number.isFinite(value))))) {
-    throw new Error("J2 elementSteels moet voor elk Tet4-element een volledige eindige staalwet bevatten.");
+    throw fout("j2ElementSteels");
   }
   checkDistributedTargetLists(model.targets, "J2");
 }
@@ -229,7 +227,7 @@ function checkFiniteJ2Model(value: unknown): asserts value is NativeVolume3DFini
 
 function checkConcreteModel(value: unknown): asserts value is NativeVolume3DConcreteDamageInput {
   if (!value || typeof value !== "object") {
-    throw new Error("Betonschade JSON-invoer moet een modelobject zijn.");
+    throw fout("concreteObject");
   }
   const model = value as Record<string, unknown>;
   const mesh = model.mesh as Record<string, unknown> | undefined;
@@ -237,7 +235,7 @@ function checkConcreteModel(value: unknown): asserts value is NativeVolume3DConc
     || !Array.isArray(model.targets)
     || typeof model.eMpa !== "number" || typeof model.tensileStrengthMpa !== "number"
     || typeof model.fractureEnergyNPerM !== "number" || typeof model.crackBandWidthM !== "number") {
-    throw new Error("Betonschade JSON-invoer vereist mesh.nodes, mesh.tets, materiaalwaarden en targets.");
+    throw fout("concreteRequired");
   }
   if (model.elementMaterials !== undefined
     && (!Array.isArray(model.elementMaterials)
@@ -246,35 +244,35 @@ function checkConcreteModel(value: unknown): asserts value is NativeVolume3DConc
         || [material.eMpa, material.poisson, material.tensileStrengthMpa,
           material.fractureEnergyNPerM, material.crackBandWidthM]
           .some((value) => typeof value !== "number" || !Number.isFinite(value))))) {
-    throw new Error("Betonschade elementMaterials moet per Tet4 een volledige eindige materiaalwet bevatten.");
+    throw fout("concreteElementMaterials");
   }
-  checkDistributedTargetLists(model.targets, "Betonschade");
+  checkDistributedTargetLists(model.targets, i18next.t("volumeWorkbench.errors.concreteLabel", { ns: "common" }));
 }
 
 function checkGnlModel(value: unknown): asserts value is NativeVolume3DGnlInput {
   if (!value || typeof value !== "object") {
-    throw new Error("GNL JSON-invoer moet een modelobject zijn.");
+    throw fout("gnlObject");
   }
   const model = value as Record<string, unknown>;
   const mesh = model.mesh as Record<string, unknown> | undefined;
   if (!mesh || !Array.isArray(mesh.nodes) || !Array.isArray(mesh.tets)
     || !Array.isArray(model.targets) || typeof model.eMpa !== "number"
     || typeof model.poisson !== "number") {
-    throw new Error("GNL JSON-invoer vereist mesh.nodes, mesh.tets, eMpa, poisson en targets.");
+    throw fout("gnlRequired");
   }
   if (model.elementMaterials !== undefined) {
     if (!Array.isArray(model.elementMaterials) || model.elementMaterials.length !== mesh.tets.length
       || model.elementMaterials.some((material) => !material || typeof material !== "object"
         || !Number.isFinite(material.eMpa) || material.eMpa <= 0
         || !Number.isFinite(material.poisson) || material.poisson <= -1 || material.poisson >= 0.5)) {
-      throw new Error("GNL elementMaterials moet voor elk Tet4-element een geldige eMpa en poisson bevatten.");
+      throw fout("gnlElementMaterials");
     }
   }
   if (model.elementEnergyBeta !== undefined
     && (!Array.isArray(model.elementEnergyBeta)
       || model.elementEnergyBeta.length !== mesh.tets.length
       || model.elementEnergyBeta.some((beta) => !Number.isFinite(beta)))) {
-    throw new Error("GNL elementEnergyBeta moet voor elk Tet4-element een eindige coëfficiënt bevatten.");
+    throw fout("gnlEnergyBeta");
   }
   checkDistributedTargetLists(model.targets, "GNL");
 }
@@ -308,6 +306,8 @@ function stressRows(result: WorkbenchResult, page: number): StressRow[] {
 }
 
 export default function VolumeWorkbench() {
+  const { t } = useTranslation("common");
+  const v = (sleutel: string, waarden?: Record<string, unknown>) => t(`volumeWorkbench.${sleutel}`, waarden ?? {});
   const [kind, setKind] = useState<ElementKind>("tet4");
   const [strategy, setStrategy] = useState<TetStrategy>("automatic");
   const [hex8Backend, setHex8Backend] = useState<Hex8Backend>("sparse");
@@ -432,193 +432,111 @@ export default function VolumeWorkbench() {
   const nodePageCount = Math.max(1, Math.ceil(displacements.length / PAGE_SIZE));
   const stressPageCount = Math.max(1, Math.ceil(stressCount / PAGE_SIZE));
 
-  if (kind === "mixed3d") return <section aria-label="Experimentele 3D volume-editor" style={{ padding: 16, overflow: "auto", height: "100%" }}>
-    <h2>3D volume-editor <small>experimenteel</small></h2>
-    <label>Elementtype<br /><select aria-label="Elementtype" value={kind}
+  const elementOptions = ELEMENT_OPTIONS.map((option) =>
+    <option key={option} value={option}>{v(`elementOption.${option}`)}</option>);
+  if (kind === "mixed3d") return <section aria-label={v("sectionLabel")} style={{ padding: 16, overflow: "auto", height: "100%" }}>
+    <h2>{v("heading")} <small>{v("experimental")}</small></h2>
+    <label>{v("elementType")}<br /><select aria-label={v("elementType")} value={kind}
       onChange={(event) => resetExample(event.target.value as ElementKind)}>
-      {ELEMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      {elementOptions}
     </select></label>
     <Mixed3DWorkbench />
   </section>;
 
   return (
-    <section aria-label="Experimentele 3D volume-editor" style={{ padding: 16, overflow: "auto", height: "100%" }}>
-      <h2>3D volume-editor <small>experimenteel</small></h2>
-      <p>3D volumeanalyse. Eenheden: m, kN en MPa. De voorbeelden zijn solvercontroles, geen constructieve ontwerpvalidatie.</p>
-      <p style={{ fontSize: "0.9em" }}>{kind === "tet4"
-        ? "Lineaire Tet4-controle: uₓ van knoop 3 = 1,25×10⁻⁶ m; τ𝓏ₓ = 0,006 MPa."
-        : kind === "hex8"
-          ? "Lineaire Hex8-controle: uₓ = 0,001·x m; σₓₓ = 210 MPa in alle Gauss-punten."
-          : kind === "j2"
-            ? "J2-staalcoupon: plastisch belasten tot 0,004 m en ontlasten tot 0,0035 m; plastische rek blijft aanwezig."
-            : kind === "finiteJ2"
-              ? "Eindige-rek J2-staalcoupon: multiplicatieve plastische toestand en nominale spanning bij belasten en ontlasten."
-            : kind === "gnl"
-              ? "Geometrisch niet-lineaire Tet4: 5% affine rek van een 2×2×2 kubus; Green–Lagrange Eₓₓ = 0,05125."
-            : "Betontrekcoupon: belasten tot 3,833×10⁻⁵ m en ontlasten tot 2,417×10⁻⁵ m; de maximale equivalente rek blijft als schadehistorie bewaard."}</p>
-      <p style={{ fontSize: "0.9em" }}>
-        Tet4: maximaal 2 miljoen knopen / 12 miljoen elementen; parallel tijdelijk geheugen maximaal 512 MiB.
-        Sparse assemblage maximaal 4 miljoen bijdragen; direct en frontaal maximaal 10.000 DOF,
-        frontbreedte maximaal 512. Hex8: CSR tot 4 miljoen assemblagebijdragen; expliciete
-        matrixvrije route voor exact geordende rechthoekige roosters met materiaal per element.
-        Frontaal Hex8 maximaal 2.500 elementen, 6.000 DOF en 256 actieve front-DOF.
-        J2: sparse direct en frontaal maximaal 1.800 DOF / 3.000 Tet4-elementen;
-        sparse PCG maximaal 150.000 DOF / 300.000 elementen, met positieve verharding en
-        voldoende opgelegde, via volledige vlakken verbonden elementgroepen. De J2-Newtonroute is experimenteel,
-        zonder grote vervorming, contact, scheurvorming of globale arc-length-controle.
-        Optioneel geeft <code>elementSteels</code> voor ieder Tet4 een eigen E, ν, vloeigrens en verharding.
-        De frontale J2-methode vereist een stabiele positief-definiete Newton-tangent en heeft een begrensde frontbreedte.
-        Automatisch probeert frontaal alleen als sparse LDLᵀ de ingestelde factoropslaglimiet overschrijdt.
-        J2 en betonschade accepteren per lastdoel ook vaste <code>bodyForces</code> in kN/m³
-        en nominale <code>faceTractions</code> in kN/m² op een Tet4-vlak.
-      </p>
-      {kind === "concreteDamage" && <p style={{ fontSize: "0.9em" }}>
-        Betonschade: dichte LU maximaal 180 DOF / 300 Tet4-elementen; sparse GMRES maximaal
-        12.000 DOF / 20.000 Tet4-elementen, met aparte CSR-opslaggrenzen. De opgegeven scheurbandbreedte kalibreert
-        alleen de monotone eenassige breukenergie; algemene 3D mesh-objectiviteit en constructieve
-        ontwerpvalidatie zijn niet aangetoond. Geen discrete scheuren, drukschade of postpiek-tracering
-        onder krachtsturing.
-        Optioneel geeft <code>elementMaterials</code> per Tet4 een eigen E, ν, treksterkte,
-        breukenergie en expliciete scheurbandbreedte.
-      </p>}
-      {kind === "finiteJ2" && <p style={{ fontSize: "0.9em" }}>
-        Eindige-rek J2: experimentele totale-Lagrangiaanse Tet4 Newtonroute, maximaal 120 DOF
-        en 200 elementen met dichte LU. Optionele sparse CSR-GMRES en frontale wavefront zijn
-        begrensd op 2.400 DOF en 3.600 Tet4-elementen, met aanvullende opslag-, iteratie-
-        en frontbreedtelimieten. Matrixvrije GMRES is begrensd op 24.000 DOF en 36.000 Tet4
-        met maximaal 16 rekenthreads en een begrensde elementtangentcache.
-        Voorgeschreven verplaatsingen, knooplasten en dode lichaams- en vlaklasten op de
-        referentiegeometrie kunnen per doel wisselen. Plastische geschiedenis blijft na
-        geaccepteerde stappen bewaard. Contact, meebewegende vlaklasten, onbeperkt grote modellen
-        en constructieve ontwerpvalidatie ontbreken.
-      </p>}
-      {kind === "gnl" && <p style={{ fontSize: "0.9em" }}>
-        GNL: dichte methode maximaal 180 DOF / 300 Tet4-elementen; sparse direct en frontaal
-        maximaal 900 DOF / 1.200 Tet4-elementen, met extra factor- en frontgrenzen.
-        De expliciete CSR-GMRES-route is begrensd op 2.400 DOF / 3.600 Tet4-elementen
-        en aparte opslaglimieten; het iteratieve residu bewijst geen matrixrang of stabiliteit.
-        Total-Lagrangian St Venant–Kirchhoff
-        met Green–Lagrange-rek, kleine elastische materiaalrekken en Newton-iteraties.
-        Gebruik optioneel <code>elementMaterials</code> voor E en ν per Tet4 in meshvolgorde.
-        <code>elementEnergyBeta</code> geeft per Tet4 een experimentele rekafhankelijke
-        elastische modulus via W = W₀ + βW₀²/(2E), met W₀ de St Venant–Kirchhoff-energie.
-        Per lastdoel zijn <code>bodyForces</code> (kN/m³) en <code>faceTractions</code> (kN/m²)
-        in de referentiegeometrie mogelijk; de drie <code>faceNodes</code> zijn globale knoopnummers
-        van één Tet4-vlak.
-        Sparse en frontaal assembleren elementtangenten zonder globale dichte matrix.
-        Geen plastificatie, schade, contact, grote elastische materiaalrekken of ontwerpvalidatie.
-      </p>}
+    <section aria-label={v("sectionLabel")} style={{ padding: 16, overflow: "auto", height: "100%" }}>
+      <h2>{v("heading")} <small>{v("experimental")}</small></h2>
+      <p>{v("intro")}</p>
+      <p style={{ fontSize: "0.9em" }}>{v(`check.${kind}`)}</p>
+      <p style={{ fontSize: "0.9em" }}>{metCode(v("limits.general"))}</p>
+      {kind === "concreteDamage" && <p style={{ fontSize: "0.9em" }}>{metCode(v("limits.concreteDamage"))}</p>}
+      {kind === "finiteJ2" && <p style={{ fontSize: "0.9em" }}>{metCode(v("limits.finiteJ2"))}</p>}
+      {kind === "gnl" && <p style={{ fontSize: "0.9em" }}>{metCode(v("limits.gnl"))}</p>}
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end", marginBottom: 12 }}>
-        <label>Elementtype<br />
-          <select aria-label="Elementtype" value={kind} onChange={(event) => resetExample(event.target.value as ElementKind)}>
-            {ELEMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        <label>{v("elementType")}<br />
+          <select aria-label={v("elementType")} value={kind} onChange={(event) => resetExample(event.target.value as ElementKind)}>
+            {elementOptions}
           </select>
         </label>
-        {kind === "tet4" && <label>Oplosmethode<br />
-          <select aria-label="Tet4 oplosmethode" value={strategy}
+        {kind === "tet4" && <label>{v("solveMethod")}<br />
+          <select aria-label={v("tet4MethodAria")} value={strategy}
             onChange={(event) => { requestVersion.current += 1; setStrategy(event.target.value as TetStrategy); setResult(null); setError(null); setBusy(false); }}>
-            {STRATEGIES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {STRATEGIES.map((option) => <option key={option} value={option}>{v(`strategy.${option}`)}</option>)}
           </select>
         </label>}
-        {kind === "hex8" && <label>Oplosmethode<br />
-          <select aria-label="Hex8 oplosmethode" value={hex8Backend}
+        {kind === "hex8" && <label>{v("solveMethod")}<br />
+          <select aria-label={v("hex8MethodAria")} value={hex8Backend}
             onChange={(event) => { requestVersion.current += 1; setHex8Backend(event.target.value as Hex8Backend); setResult(null); setError(null); setBusy(false); }}>
-            <option value="automatic">Automatisch met begrensde herstelpoging</option>
-            <option value="sparse">Sparse CSR of gestructureerd matrixvrij</option>
-            <option value="sparseDirect">Directe sparse LDLᵀ (begrensd)</option>
-            <option value="matrixFreeGeneral">Matrixvrij voor algemene Hex8-geometrie</option>
-            <option value="matrixFreeGeneralLarge">Matrixvrij groot (max. 1 GiB elementcache)</option>
-            <option value="frontalWave">Frontale wavefront</option>
+            {HEX8_BACKENDS.map((option) => <option key={option} value={option}>{v(`hex8Backend.${option}`)}</option>)}
           </select>
         </label>}
-        {kind === "j2" && <label>J2 Newton-matrixoplosser<br />
-          <select aria-label="J2 Tet4 matrixoplosser" value={j2Backend}
+        {kind === "j2" && <label>{v("j2Solver")}<br />
+          <select aria-label={v("j2SolverAria")} value={j2Backend}
             onChange={(event) => { requestVersion.current += 1; setJ2Backend(event.target.value as J2Backend); setResult(null); setError(null); setBusy(false); }}>
-            <option value="sparseDirect">Sparse directe LDLᵀ</option>
-            <option value="sparsePcg">Sparse CSR, parallelle PCG (positieve verharding)</option>
-            <option value="automatic">Automatisch, herstel bij sparse opslaglimiet</option>
-            <option value="frontalWave">Frontale wavefront</option>
+            {J2_BACKENDS.map((option) => <option key={option} value={option}>{v(`j2Backend.${option}`)}</option>)}
           </select>
         </label>}
-        {kind === "finiteJ2" && <label>Eindige-rek J2 Newton-matrixoplosser<br />
-          <select aria-label="Eindige-rek J2 Tet4 matrixoplosser" value={finiteJ2Backend}
+        {kind === "finiteJ2" && <label>{v("finiteJ2Solver")}<br />
+          <select aria-label={v("finiteJ2SolverAria")} value={finiteJ2Backend}
             onChange={(event) => { requestVersion.current += 1; setFiniteJ2Backend(event.target.value as FiniteJ2Backend); setResult(null); setError(null); setBusy(false); }}>
-            <option value="dense">Dichte LU (kleine modellen)</option>
-            <option value="sparseGmres">Sparse CSR-GMRES (experimenteel)</option>
-            <option value="frontalWave">Frontale wavefront (experimenteel)</option>
-            <option value="matrixFreeGmres">Matrixvrije GMRES (tot 16 threads)</option>
-            <option value="matrixFreeGmresLarge">Matrixvrije GMRES groot (max. 300.000 Tet4 / 180.000 DOF)</option>
-            <option value="automatic">Automatisch: sparse GMRES, dan begrensd frontaal herstel</option>
+            {FINITE_J2_BACKENDS.map((option) => <option key={option} value={option}>{v(`finiteJ2Backend.${option}`)}</option>)}
           </select>
         </label>}
-        {kind === "finiteJ2" && (finiteJ2Backend === "matrixFreeGmres" || finiteJ2Backend === "matrixFreeGmresLarge") && <label>Rekenthreads<br />
+        {kind === "finiteJ2" && (finiteJ2Backend === "matrixFreeGmres" || finiteJ2Backend === "matrixFreeGmresLarge") && <label>{v("threads")}<br />
           <input type="number" min={1} max={16} step={1} value={finiteJ2Threads}
-            aria-label="Eindige-rek J2 matrixvrije rekenthreads"
+            aria-label={v("threadsAria")}
             onChange={(event) => { requestVersion.current += 1; setFiniteJ2Threads(Math.min(16, Math.max(1, Number(event.target.value) || 1))); setResult(null); setError(null); setBusy(false); }} />
         </label>}
-        {kind === "concreteDamage" && <label>Beton Newton-matrixoplosser<br />
-          <select aria-label="Beton Tet4 matrixoplosser" value={concreteBackend}
+        {kind === "concreteDamage" && <label>{v("concreteSolver")}<br />
+          <select aria-label={v("concreteSolverAria")} value={concreteBackend}
             onChange={(event) => { requestVersion.current += 1; setConcreteBackend(event.target.value as ConcreteBackend); setResult(null); setError(null); setBusy(false); }}>
-            <option value="denseLu">Dichte LU (kleine modellen)</option>
-            <option value="sparseGmres">Sparse CSR-GMRES (experimenteel)</option>
+            {CONCRETE_BACKENDS.map((option) => <option key={option} value={option}>{v(`concreteBackend.${option}`)}</option>)}
           </select>
         </label>}
-        {kind === "gnl" && <label>Newton-matrixoplosser<br />
-          <select aria-label="GNL Tet4 matrixoplosser" value={gnlBackend}
+        {kind === "gnl" && <label>{v("gnlSolver")}<br />
+          <select aria-label={v("gnlSolverAria")} value={gnlBackend}
             onChange={(event) => { requestVersion.current += 1; setGnlBackend(event.target.value as GnlBackend); setResult(null); setError(null); setBusy(false); }}>
-            <option value="dense">Dichte Cholesky</option>
-            <option value="sparseDirect">Sparse directe LDLᵀ</option>
-            <option value="sparseGmres">Sparse CSR-GMRES (experimenteel)</option>
-            <option value="frontalWave">Frontale wavefront</option>
-            <option value="automatic">Automatisch, herstel bij sparse opslaglimiet</option>
+            {GNL_BACKENDS.map((option) => <option key={option} value={option}>{v(`gnlBackend.${option}`)}</option>)}
           </select>
         </label>}
-        <button type="button" onClick={() => resetExample(kind)}>Laad voorbeeld opnieuw</button>
-        <button type="button" onClick={solve} disabled={busy}>{busy ? "Oplossen…" : "Los model op"}</button>
+        <button type="button" onClick={() => resetExample(kind)}>{v("reloadExample")}</button>
+        <button type="button" onClick={solve} disabled={busy}>{busy ? v("solving") : v("solve")}</button>
       </div>
 
-      <label htmlFor="volume-workbench-json">Model-JSON</label>
-      <textarea id="volume-workbench-json" aria-label="Model-JSON" spellCheck={false} value={json}
+      <label htmlFor="volume-workbench-json">{v("modelJson")}</label>
+      <textarea id="volume-workbench-json" aria-label={v("modelJson")} spellCheck={false} value={json}
         onChange={(event) => updateJson(event.target.value)} rows={20}
         style={{ display: "block", boxSizing: "border-box", width: "100%", fontFamily: "monospace", marginTop: 6 }} />
-      {kind === "tet4" && <p style={{ fontSize: "0.85em" }}>De methodekeuze hierboven overschrijft <code>solverStrategy</code> in de JSON-invoer.</p>}
-      {kind === "hex8" && <p style={{ fontSize: "0.85em" }}>De methodekeuze hierboven overschrijft <code>linearBackend</code> in de JSON-invoer. Een geldig <code>structuredGridCells</code> kiest met de sparse instelling de snelle gestructureerde matrixvrije route. Kies voor afwijkende Hex8-geometrie de algemene matrixvrije methode.</p>}
-      {kind === "j2" && <p style={{ fontSize: "0.85em" }}>De J2-matrixoplosser hierboven overschrijft <code>options.linearBackend</code> in de JSON-invoer. PCG is experimenteel en vereist positieve verharding en voldoende opleggingen per aaneengesloten Tet4-groep.</p>}
-      {kind === "finiteJ2" && <p style={{ fontSize: "0.85em" }}>De eindige-rek J2-matrixoplosser hierboven overschrijft <code>options.linearBackend</code>. Automatisch probeert binnen de kleine modelgrens alleen bij herkende GMRES- of opslagfouten frontaal herstel. Een geslaagd GMRES-residu bewijst geen unieke evenwichtsoplossing of tangentstabiliteit.</p>}
-      {kind === "concreteDamage" && <p style={{ fontSize: "0.85em" }}>De betonmatrixoplosser hierboven overschrijft <code>options.linearBackend</code> in de JSON-invoer. CSR-GMRES is experimenteel; een geslaagd iteratief residu bewijst niet dat de beschadigde tangent een unieke evenwichtsoplossing heeft.</p>}
-      {kind === "gnl" && <p style={{ fontSize: "0.85em" }}>De matrixoplosser hierboven overschrijft <code>options.linearBackend</code> in de JSON-invoer.</p>}
-      {error && <p role="alert" style={{ color: "var(--color-danger, #b33)" }}>Solverfout: {error}</p>}
+      <p style={{ fontSize: "0.85em" }}>{metCode(v(`override.${kind}`))}</p>
+      {error && <p role="alert" style={{ color: "var(--color-danger, #b33)" }}>{v("solverError", { error })}</p>}
 
       {result && <div aria-live="polite" style={{ marginTop: 16 }}>
-        <h3>Resultaat</h3>
+        <h3>{v("result")}</h3>
         {result.kind === "j2" || result.kind === "finiteJ2" || result.kind === "concreteDamage" || result.kind === "gnl" ? <p>
-          Methode: <strong>{result.kind === "j2" ? `J2 Newton + ${result.value.linearBackendUsed}`
-            : result.kind === "finiteJ2" ? `Eindige-rek J2 Newton + ${result.value.linearBackendUsed}`
-            : result.kind === "gnl" ? `Total-Lagrangian Newton + ${result.value.linearBackendUsed}`
-              : `Betontrekschade Newton + ${result.value.linearBackendUsed}`}</strong>
-          {" · "}Vrij residu: <strong>{number(result.value.trueFreeResidualKn)} kN</strong>
-          {" · "}Geaccepteerde stappen: {result.value.acceptedSteps.length}
-          {" · "}Stapverkleiningen: {result.value.cutbacks}
-          {result.kind === "j2" && <> {" · "}Frontale herstelpogingen: {result.value.frontalFallbacks}</>}
-          {result.kind === "finiteJ2" && <> {" · "}Frontale herstelpogingen: {result.value.frontalFallbacks}</>}
-          {result.kind === "gnl" && <> {" · "}Frontale herstelpogingen: {result.value.frontalFallbacks}</>}
-          {rightFaceReactionKn !== null && <> {" · "}ΣRₓ op x<sub>max</sub>: <strong>{number(rightFaceReactionKn)} kN</strong></>}
+          {v("method")}: <strong>{v(`methodName.${result.kind}`, { backend: result.value.linearBackendUsed })}</strong>
+          {" · "}{v("freeResidual")}: <strong>{number(result.value.trueFreeResidualKn)} kN</strong>
+          {" · "}{v("acceptedSteps")}: {result.value.acceptedSteps.length}
+          {" · "}{v("cutbacks")}: {result.value.cutbacks}
+          {result.kind === "j2" && <> {" · "}{v("frontalFallbacks")}: {result.value.frontalFallbacks}</>}
+          {result.kind === "finiteJ2" && <> {" · "}{v("frontalFallbacks")}: {result.value.frontalFallbacks}</>}
+          {result.kind === "gnl" && <> {" · "}{v("frontalFallbacks")}: {result.value.frontalFallbacks}</>}
+          {rightFaceReactionKn !== null && <> {" · "}{v("sumRxAt")}<sub>max</sub>: <strong>{number(rightFaceReactionKn)} kN</strong></>}
         </p> : <p>
-          Methode: <strong>{result.kind === "tet4" ? result.value.solverUsed
-            : result.value.solverUsed === "matrixFree" ? "Matrixvrij PCG"
-              : result.value.solverUsed === "frontalWave" ? "Frontale wavefront-eliminatie" : "Sparse CSR (Jacobi-PCG)"}</strong>
-          {" · "}Relatief residu: <strong>{number(result.value.relativeResidual)}</strong>
+          {v("method")}: <strong>{result.kind === "tet4" ? result.value.solverUsed
+            : result.value.solverUsed === "matrixFree" ? v("solverUsed.matrixFree")
+              : result.value.solverUsed === "frontalWave" ? v("solverUsed.frontalWave") : v("solverUsed.sparse")}</strong>
+          {" · "}{v("relativeResidual")}: <strong>{number(result.value.relativeResidual)}</strong>
           {result.kind === "hex8" && result.value.solverUsed === "frontalWave"
-            ? ` · Piekfront: ${result.value.frontalMaximumFrontDofs ?? "—"} DOF`
-            : <>{" · "}Iteraties: {result.value.iterations}
+            ? ` · ${v("peakFront", { dofs: result.value.frontalMaximumFrontDofs ?? "—" })}`
+            : <>{" · "}{v("iterations")}: {result.value.iterations}
               {result.kind === "tet4" || result.value.solverUsed === "matrixFree"
-                ? ` · Threads: ${result.value.threads}` : ` · CSR niet-nullen: ${result.value.csrNonzeros}`}</>}
+                ? ` · ${v("threadsCount", { count: result.value.threads })}` : ` · ${v("csrNonzeros", { count: result.value.csrNonzeros })}`}</>}
         </p>}
-        <h4>Knoopverplaatsingen (m) en reacties (kN)</h4>
-        <p>{displacements.length} knopen · pagina {nodePage + 1} / {nodePageCount}</p>
+        <h4>{v("nodeTableHeading")}</h4>
+        <p>{v("nodesPage", { count: displacements.length, page: nodePage + 1, pages: nodePageCount })}</p>
         <div style={{ overflowX: "auto" }}><table>
-          <thead><tr><th>Knoop</th><th>uₓ</th><th>uᵧ</th><th>u𝓏</th><th>Rₓ</th><th>Rᵧ</th><th>R𝓏</th></tr></thead>
+          <thead><tr><th>{v("node")}</th><th>uₓ</th><th>uᵧ</th><th>u𝓏</th><th>Rₓ</th><th>Rᵧ</th><th>R𝓏</th></tr></thead>
           <tbody>{displacements.slice(nodePage * PAGE_SIZE, (nodePage + 1) * PAGE_SIZE).map((u, offset) => {
             const node = nodePage * PAGE_SIZE + offset;
             const reaction = reactions[node];
@@ -627,14 +545,14 @@ export default function VolumeWorkbench() {
           })}</tbody>
         </table></div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button type="button" disabled={nodePage === 0} onClick={() => setNodePage(nodePage - 1)}>Vorige knopen</button>
-          <button type="button" disabled={nodePage + 1 >= nodePageCount} onClick={() => setNodePage(nodePage + 1)}>Volgende knopen</button>
+          <button type="button" disabled={nodePage === 0} onClick={() => setNodePage(nodePage - 1)}>{v("prevNodes")}</button>
+          <button type="button" disabled={nodePage + 1 >= nodePageCount} onClick={() => setNodePage(nodePage + 1)}>{v("nextNodes")}</button>
         </div>
         {result.kind === "finiteJ2" ? <>
-          <h4>Plastische toestand en nominale spanning per Tet4</h4>
-          <p>{stressCount} elementen · pagina {stressPage + 1} / {stressPageCount}</p>
+          <h4>{v("finiteJ2Heading")}</h4>
+          <p>{v("elementsPage", { count: stressCount, page: stressPage + 1, pages: stressPageCount })}</p>
           <div style={{ overflowX: "auto" }}><table>
-            <thead><tr><th>Element</th><th>Equiv. plastische rek</th><th>Pₓₓ (MPa)</th><th>Pᵧᵧ (MPa)</th><th>P𝓏𝓏 (MPa)</th></tr></thead>
+            <thead><tr><th>{v("element")}</th><th>{v("equivPlasticStrain")}</th><th>Pₓₓ (MPa)</th><th>Pᵧᵧ (MPa)</th><th>P𝓏𝓏 (MPa)</th></tr></thead>
             <tbody>{result.value.elementStates.slice(stressPage * PAGE_SIZE, (stressPage + 1) * PAGE_SIZE)
               .map((state, offset) => {
                 const element = stressPage * PAGE_SIZE + offset;
@@ -644,10 +562,10 @@ export default function VolumeWorkbench() {
               })}</tbody>
           </table></div>
         </> : result.kind === "gnl" ? <>
-          <h4>Green–Lagrange-rek en nominale spanning per Tet4</h4>
-          <p>{stressCount} elementen · pagina {stressPage + 1} / {stressPageCount}</p>
+          <h4>{v("gnlHeading")}</h4>
+          <p>{v("elementsPage", { count: stressCount, page: stressPage + 1, pages: stressPageCount })}</p>
           <div style={{ overflowX: "auto" }}><table>
-            <thead><tr><th>Element</th><th>Eₓₓ</th><th>Eᵧᵧ</th><th>E𝓏𝓏</th><th>Eₓᵧ</th><th>Eᵧ𝓏</th><th>E𝓏ₓ</th><th>Pₓₓ (MPa)</th><th>E effectief (MPa)</th></tr></thead>
+            <thead><tr><th>{v("element")}</th><th>Eₓₓ</th><th>Eᵧᵧ</th><th>E𝓏𝓏</th><th>Eₓᵧ</th><th>Eᵧ𝓏</th><th>E𝓏ₓ</th><th>Pₓₓ (MPa)</th><th>{v("effectiveE")}</th></tr></thead>
             <tbody>{result.value.elementGreenStrain.slice(stressPage * PAGE_SIZE, (stressPage + 1) * PAGE_SIZE)
               .map((strain, offset) => <tr key={stressPage * PAGE_SIZE + offset}>
                 <td>{stressPage * PAGE_SIZE + offset}</td>
@@ -659,10 +577,10 @@ export default function VolumeWorkbench() {
               </tr>)}</tbody>
           </table></div>
         </> : result.kind === "concreteDamage" ? <>
-          <h4>Schadehistorie per Tet4</h4>
-          <p>{stressCount} elementen · pagina {stressPage + 1} / {stressPageCount}</p>
+          <h4>{v("damageHeading")}</h4>
+          <p>{v("elementsPage", { count: stressCount, page: stressPage + 1, pages: stressPageCount })}</p>
           <div style={{ overflowX: "auto" }}><table>
-            <thead><tr><th>Element</th><th>Maximale equivalente rek</th><th>Schade d</th><th>σₓₓ (MPa)</th></tr></thead>
+            <thead><tr><th>{v("element")}</th><th>{v("maxEquivStrain")}</th><th>{v("damage")}</th><th>σₓₓ (MPa)</th></tr></thead>
             <tbody>{result.value.elementStates.slice(stressPage * PAGE_SIZE, (stressPage + 1) * PAGE_SIZE)
               .map((state, offset) => <tr key={stressPage * PAGE_SIZE + offset}>
                 <td>{stressPage * PAGE_SIZE + offset}</td><td>{number(state.maxEquivalentStrain)}</td>
@@ -673,12 +591,12 @@ export default function VolumeWorkbench() {
               </tr>)}</tbody>
           </table></div>
         </> : <>
-          <h4>Elementspanningen (MPa)</h4>
-          <p>{stressCount} spanningspunten · pagina {stressPage + 1} / {stressPageCount}
-            {result.kind === "hex8" ? " · Gaussvolgorde volgens solver" : " · constante Tet4-spanning"}</p>
+          <h4>{v("stressHeading")}</h4>
+          <p>{v("stressPointsPage", { count: stressCount, page: stressPage + 1, pages: stressPageCount })}
+            {" · "}{result.kind === "hex8" ? v("gaussOrder") : v("constantTet4")}</p>
           <div style={{ overflowX: "auto" }}><table>
-            <thead><tr><th>Element</th><th>Gauss</th><th>σₓₓ</th><th>σᵧᵧ</th><th>σ𝓏𝓏</th><th>τₓᵧ</th><th>τᵧ𝓏</th><th>τ𝓏ₓ</th>
-              {result.kind === "j2" && <th>Equiv. plastische rek</th>}</tr></thead>
+            <thead><tr><th>{v("element")}</th><th>{v("gauss")}</th><th>σₓₓ</th><th>σᵧᵧ</th><th>σ𝓏𝓏</th><th>τₓᵧ</th><th>τᵧ𝓏</th><th>τ𝓏ₓ</th>
+              {result.kind === "j2" && <th>{v("equivPlasticStrain")}</th>}</tr></thead>
             <tbody>{visibleStresses.map((stress, offset) =>
               <tr key={`${stressPage}-${offset}`}><td>{stress.element}</td><td>{stress.point}</td>
                 {stress.values.map((value, component) => <td key={component}>{number(value)}</td>)}
@@ -686,13 +604,13 @@ export default function VolumeWorkbench() {
           </table></div>
         </>}
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button type="button" disabled={stressPage === 0} onClick={() => setStressPage(stressPage - 1)}>Vorige elementen</button>
-          <button type="button" disabled={stressPage + 1 >= stressPageCount} onClick={() => setStressPage(stressPage + 1)}>Volgende elementen</button>
+          <button type="button" disabled={stressPage === 0} onClick={() => setStressPage(stressPage - 1)}>{v("prevElements")}</button>
+          <button type="button" disabled={stressPage + 1 >= stressPageCount} onClick={() => setStressPage(stressPage + 1)}>{v("nextElements")}</button>
         </div>
         {(result.kind === "j2" || result.kind === "finiteJ2" || result.kind === "concreteDamage" || result.kind === "gnl") && <details style={{ marginTop: 12 }}>
-          <summary>Geaccepteerde stappen en Newton-residuen</summary>
+          <summary>{v("stepsSummary")}</summary>
           <div style={{ overflowX: "auto" }}><table>
-            <thead><tr><th>Doel</th><th>Fractie</th><th>Newton-iteraties</th><th>Vrij residu (kN)</th></tr></thead>
+            <thead><tr><th>{v("target")}</th><th>{v("fraction")}</th><th>{v("newtonIterations")}</th><th>{v("freeResidualKn")}</th></tr></thead>
             <tbody>{result.value.acceptedSteps.map((step, index) => <tr key={index}>
               <td>{step.targetIndex + 1}</td><td>{number(step.targetFraction)}</td>
               <td>{step.newtonIterations}</td><td>{number(step.trueFreeResidualKn)}</td>
