@@ -1014,9 +1014,9 @@ fn schema_beams() -> Value {
                 "from": { "type": "integer", "description": "Knoop-id van het staafbegin." },
                 "to":   { "type": "integer", "description": "Knoop-id van het staafeinde." },
                 "material": { "type": "string",
-                    "description": "Staalsoort (S235, S275, S355, S420, S460) of houtsterkteklasse (C14..C35, GL24h..GL36h). Default \"S235\"." },
+                    "description": "VERPLICHT voor een doorrekening. Staalsoort (S235, S275, S355, S420, S460), houtsterkteklasse (C14..C35, GL24h..GL36h), betonklasse (C12/15..C90/105) of vrij materiaal (\"VRIJ:<naam> E=<N/mm2> rho=<kg/m3> f=<N/mm2>\"). Er is GEEN standaardmateriaal: een staaf zonder (of met een onbekend) materiaal wordt geweigerd met DOORSNEDE_ONBEKEND en niet als S235 aangenomen." },
                 "profile": { "type": "string",
-                    "description": "Profielnaam uit de catalogus ('HEA160', 'IPE300') of een houtrechthoek ('96x450'). Default \"HEA160\". Bij een verlopend profiel: het profiel aan het BEGIN (knoop `from`)." },
+                    "description": "Profielnaam uit de catalogus ('HEA160', 'IPE300'), een rechthoek ('96x450' bij hout of beton) of een eigen doorsnede ('EIGEN:...'). VERPLICHT voor een doorrekening: er is GEEN standaardprofiel; een staaf zonder profiel, of met een profiel dat niet bij het materiaal hoort, wordt geweigerd met DOORSNEDE_ONBEKEND en niet als HEA160 gerekend. Bij een verlopend profiel: het profiel aan het BEGIN (knoop `from`)." },
                 "profileEnd": { "type": "string",
                     "description": "Optioneel: profiel aan het EINDE (knoop `to`) van een verlopende staaf; de maten verlopen lineair van `profile` naar `profileEnd`. Beide moeten van dezelfde doorsnedesoort zijn: rechthoek↔rechthoek (hout, '96x450' → '96x300') of I/H↔I/H uit de staalcatalogus ('IPE300' → 'IPE200', gerekend als gelast I-profiel). Kokers, buizen, hoeklijnen, U-profielen, kruislaaghout en beton kennen geen verloop; een model met platen evenmin. Een eigen doorsnede ('EIGEN:…') mag alleen als zij een gelast, dubbelsymmetrisch I-profiel uit drie platen is — zo bewaart het splitsen van een verlopende staaf de tussendoorsnede. Weggelaten of gelijk aan `profile` = prismatisch." },
                 "releases": schema_releases(),
@@ -1528,6 +1528,21 @@ mod tests {
     /// (september 2026: `profileEnd` voor verlopende profielen) valt hier op,
     /// zodat het schema nooit een veld belooft dat de poort weigert of
     /// andersom.
+    /// #247: de sidecar weigert een staaf zonder materiaal of profiel met
+    /// DOORSNEDE_ONBEKEND. Het schema mag dus geen standaardwaarde beloven,
+    /// en moet betonklassen en vrij materiaal noemen, die wél werken.
+    #[test]
+    fn schema_beams_belooft_geen_standaard_materiaal_of_profiel() {
+        let p = &schema_beams()["items"]["properties"];
+        let mat = p["material"]["description"].as_str().unwrap();
+        let prof = p["profile"]["description"].as_str().unwrap();
+        for d in [mat, prof] {
+            assert!(!d.contains("Default"), "{d}");
+            assert!(d.contains("VERPLICHT") && d.contains("DOORSNEDE_ONBEKEND"), "{d}");
+        }
+        assert!(mat.contains("betonklasse") && mat.contains("VRIJ:"), "{mat}");
+    }
+
     #[test]
     fn schema_beams_spiegelt_de_staafpoort_van_de_sidecar() {
         let pad = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

@@ -43773,9 +43773,13 @@ function valideerModel(rauw, opties = {}) {
         );
       }
     }
-    if (resolveSection(b.material, b.profile).bron === "default") {
+    const doorsnede = resolveSection(b.material, b.profile);
+    if (doorsnede.bron === "default") {
+      const geenMateriaal = b.material === void 0 || b.material.trim() === "";
+      const geenProfiel = b.profile === void 0 || b.profile.trim() === "";
+      const kop = geenMateriaal && geenProfiel ? "geen materiaal en geen profiel opgegeven" : geenMateriaal ? "geen materiaal opgegeven" : geenProfiel ? "geen profiel opgegeven" : `onbekende combinatie materiaal "${b.material}" + profiel "${b.profile}"`;
       errors.push(
-        `Staaf ${b.id}: onbekende combinatie materiaal "${b.material ?? "(leeg)"}" + profiel "${b.profile ?? "(leeg)"}". De solver zou terugvallen op HEA 160 / S235 en met een andere doorsnede rekenen dan opgegeven.`
+        `Staaf ${b.id}: ${kop}; de staaf wordt niet doorgerekend` + (doorsnede.reden ? ` (${doorsnede.reden})` : "") + ". Er wordt geen standaardmateriaal of -profiel aangenomen."
       );
     } else {
       const verloop = bepaalVerloop(b.material, b.profile, b.profileEnd);

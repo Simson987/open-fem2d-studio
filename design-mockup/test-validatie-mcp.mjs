@@ -300,9 +300,54 @@ log("\n[5] Constructieve controles");
   const u6 = valideerModel(onbekendProfiel);
   ok(
     "onbekend profiel wordt geweigerd i.p.v. stil vervangen door HEA 160",
-    u6.ok === false && noemt(u6.errors, "IPE301") && noemt(u6.errors, "HEA 160"),
+    u6.ok === false && noemt(u6.errors, "IPE301") && noemt(u6.errors, "niet doorgerekend"),
     u6.errors.find((e) => e.includes("IPE301")),
   );
+  ok(
+    "de melding belooft geen terugval op HEA 160 / S235 meer (#247)",
+    !noemt(u6.errors, "zou terugvallen") && !noemt(u6.errors, "HEA 160 / S235"),
+    u6.errors.find((e) => e.includes("IPE301")),
+  );
+
+  // #247: ligger L = 6 m, scharnier + zRoller, q = -10 kN/m in G, IPE300.
+  // Zonder materiaal of zonder profiel weigert de solver met
+  // DOORSNEDE_ONBEKEND; validate moet DAT zeggen, niet een terugval.
+  const LIGGER_247 = () => ({
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 }],
+    beams: [{ id: 1, from: 1, to: 2, material: "S235", profile: "IPE300" }],
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zRoller" }],
+    plates: [],
+    loadCases: [{ id: 1, name: "G", type: "dead" }],
+    loads: [{ id: 1, type: "lineLoad", caseId: 1, beamId: 1, q: -10 }],
+    selfWeightEnabled: false,
+    scheefstandEnabled: false,
+  });
+  for (const [naam, wijzig, kern, reden] of [
+    ["zonder materiaal", (m) => { delete m.beams[0].material; },
+      "geen materiaal opgegeven", "niet als S235 aangenomen"],
+    ["zonder profiel", (m) => { delete m.beams[0].profile; },
+      "geen profiel opgegeven", "geen profiel toegewezen"],
+  ]) {
+    const m = LIGGER_247();
+    wijzig(m);
+    const u = valideerModel(m);
+    ok(
+      `#247 ${naam}: validate weigert met "${kern}" en "niet doorgerekend"`,
+      u.ok === false && noemt(u.errors, kern) && noemt(u.errors, "niet doorgerekend")
+        && noemt(u.errors, reden) && !noemt(u.errors, "terugvallen"),
+      u.errors.join(" | "),
+    );
+    const s = verwerkVerzoek({ v: 1, id: 1, op: "solve", payload: { model: m } });
+    ok(
+      `#247 ${naam}: solve weigert met DOORSNEDE_ONBEKEND`,
+      s.ok === false && s.error?.code === "DOORSNEDE_ONBEKEND",
+      `${s.error?.code}: ${s.error?.melding}`,
+    );
+  }
+  {
+    const u = valideerModel(LIGGER_247());
+    ok("#247 dezelfde ligger mét S235/IPE300 is geldig", u.ok === true, u.errors.join(" | "));
+  }
 
   const losseKnoop = PORTAAL();
   losseKnoop.nodes.push({ id: 5, x: 3000, z: 6000 });
