@@ -1337,6 +1337,7 @@
       "providedUtilization": "Link utilization"
     },
     "masonryCheck": "Masonry wall",
+    "naturalStoneCheck": "Natural stone",
     "toolsGroup": "Design aids"
   },
   "ifc": {

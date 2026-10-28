@@ -1337,6 +1337,7 @@
       "providedUtilization": "Bügel-Ausnutzung"
     },
     "masonryCheck": "Mauerwerkswand",
+    "naturalStoneCheck": "Naturstein",
     "toolsGroup": "Rechenhilfen"
   },
   "ifc": {

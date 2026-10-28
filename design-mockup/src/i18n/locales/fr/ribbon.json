@@ -1337,6 +1337,7 @@
       "providedUtilization": "Utilisation des cadres"
     },
     "masonryCheck": "Mur en maçonnerie",
+    "naturalStoneCheck": "Pierre naturelle",
     "toolsGroup": "Aides au calcul"
   },
   "ifc": {

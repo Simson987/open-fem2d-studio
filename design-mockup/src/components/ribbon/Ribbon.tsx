@@ -63,6 +63,8 @@ interface RibbonProps {
   onOpenVolumeWorkbench?: () => void;
   /** Metselwerktoets (NEN-EN 1996-1-1, issue #98). */
   onOpenMasonryCheck?: () => void;
+  /** Natuursteentoets (elementen, issue #99). */
+  onOpenNaturalStoneCheck?: () => void;
   onFilterSelection?: () => void;
   /** Export standalone HTML report (browser + Tauri). */
   onExportHtml?: () => void;
@@ -167,7 +169,7 @@ export default function Ribbon({
   onOpenFem3DSupportPreset, onOpenFem3DSpringTool, onOpenFem3DRequestNodalLoad, onOpenFem3DRequestMemberLoad,
   onOpenFem3DRequestMemberPointLoad, onOpenFem3DRequestThermalLoad, onOpenFem3DRequestSurfaceLoad,
   onOpenFem3DConvertPlateToLoadPanel, onOpenFem3DPinBeamsToColumns, onOpenFem3DConnectNodes, onOpenFem3DMergeNodes,
-  onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench, onOpenMasonryCheck,
+  onShowInsightsMode, onExportMatrixCsv, onOpenZichtbaarheid, onOpenPrestressedBeam, onOpenVolumeWorkbench, onOpenMasonryCheck, onOpenNaturalStoneCheck,
   onFilterSelection,
   onExportHtml, scheefstandToelichting, analyseToelichting, windToelichting,
   onExportIfc, onExportIfcStructural, onValidateIfc, onOpenIfcView, onImportIfcAnalysisModel,
@@ -368,7 +370,7 @@ export default function Ribbon({
           onOpenAiAssistant={onOpenAiAssistant}
         />;
       case "insights":
-        return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} onOpenPrestressedBeam={onOpenPrestressedBeam} onOpenVolumeWorkbench={onOpenVolumeWorkbench} onOpenMasonryCheck={onOpenMasonryCheck} />;
+        return <InsightsTab onShowInsights={() => onViewChange("insights")} onShowInsightsMode={onShowInsightsMode} onExportMatrixCsv={onExportMatrixCsv} onOpenZichtbaarheid={onOpenZichtbaarheid} onOpenPrestressedBeam={onOpenPrestressedBeam} onOpenVolumeWorkbench={onOpenVolumeWorkbench} onOpenMasonryCheck={onOpenMasonryCheck} onOpenNaturalStoneCheck={onOpenNaturalStoneCheck} />;
       case "ifc":
         return <IfcTab
           onExportIfc={onExportIfc}
