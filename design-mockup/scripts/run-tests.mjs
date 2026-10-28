@@ -732,6 +732,7 @@ const ALLEEN_BRON = new Map([
   ["aluminium-solver-verificatie", "Bouwt het model met modelNaarSolverInput, buiten de sidecarbarrel."],
   ["aluminium-voorspanning-verificatie", "Aluminium- en voorspancontrole buiten de sidecarbarrel."],
   ["aluminium-check", "issue #5: EN 1999-1-1-keten. De aluminiumbouwer staat niet in de barrel, en de kern draait in de toetsbrug als apart proces."],
+  ["metselwerk-check", "issue #98: EN 1996-1-1. De metselwerkbouwer (formulier) staat niet in de barrel, en de kern draait in de toetsbrug als apart proces."],
   ["drie-lagen-beton-verificatie", "Specifieke betontoets buiten de sidecarbarrel."],
   ["ifc-3d", "3D-projectopslag en IFC-export buiten de sidecarbarrel."],
   [

@@ -1335,7 +1335,9 @@
       "shearHelp": "Code factors and cot(θ) are explicit inputs. Rust calculates required Asw/s, VRd,max and utilization of the provided links.",
       "requiredAsw": "Required Asw/s",
       "providedUtilization": "Link utilization"
-    }
+    },
+    "masonryCheck": "Masonry wall",
+    "toolsGroup": "Design aids"
   },
   "ifc": {
     "fileOps": "File",

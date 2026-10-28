@@ -1335,7 +1335,9 @@
       "shearHelp": "Les facteurs normatifs et cot(θ) sont saisis explicitement. Rust calcule Asw/s requis, VRd,max et le taux d’utilisation des cadres.",
       "requiredAsw": "Asw/s requis",
       "providedUtilization": "Utilisation des cadres"
-    }
+    },
+    "masonryCheck": "Mur en maçonnerie",
+    "toolsGroup": "Aides au calcul"
   },
   "ifc": {
     "fileOps": "Fichier",

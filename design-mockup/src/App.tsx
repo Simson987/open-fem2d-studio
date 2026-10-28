@@ -132,6 +132,7 @@ import StaalhalWizard from "./components/openFem3d/wizards/StaalhalWizard";
 import { metBelastinggevalIds, requireStaalhalWindRoute, STAALHAL_GEVAL,
   type StaalhalResultaat } from "./components/openFem3d/wizards/staalhal";
 import WaterAccumulation2DDialog from "./components/fem/WaterAccumulation2DDialog";
+import MetselwerkDialog from "./components/fem/MetselwerkDialog";
 import { resolveSection } from "./lib/sectionResolver";
 import { windUitgangspunten } from "./lib/wind/windGenerator";
 import { NEDERLANDSE_WINDROUTE, windCodeIdFromProjectInfo, type WindCodeId } from "./lib/wind/windCodeRoute";
@@ -2251,6 +2252,8 @@ function App() {
   const [windGeneratorOpen, setWindGeneratorOpen] = useState(false);
   const [envelopeLoadsOpen, setEnvelopeLoadsOpen] = useState(false);
   const [waterAccumulationOpen, setWaterAccumulationOpen] = useState(false);
+  // Metselwerktoets (NEN-EN 1996-1-1, issue #98).
+  const [metselwerkOpen, setMetselwerkOpen] = useState(false);
   const selectedWaterBeam = useMemo(() => {
     const selection = fem.selection;
     if (selection?.type !== "beam") return null;
@@ -4958,6 +4961,7 @@ function App() {
         onOpenZichtbaarheid={() => setZichtbaarheidOpen(true)}
         onOpenPrestressedBeam={() => setActiveView("prestressedBeam")}
         onOpenVolumeWorkbench={() => setActiveView("volumeWorkbench")}
+        onOpenMasonryCheck={() => setMetselwerkOpen(true)}
         onExportMatrixCsv={async () => {
           try {
             const { exportMatricesAsCsv } = await import("./io/matrixExport");
@@ -5560,6 +5564,7 @@ function App() {
       />
       <WaterAccumulation2DDialog open={waterAccumulationOpen}
         onClose={() => setWaterAccumulationOpen(false)} selectedBeam={selectedWaterBeam} />
+      <MetselwerkDialog open={metselwerkOpen} onClose={() => setMetselwerkOpen(false)} />
       {welcomeOpen && (
         <WelcomeScreen
           onClose={() => setWelcomeOpen(false)}

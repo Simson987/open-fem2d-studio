@@ -1335,7 +1335,9 @@
       "shearHelp": "De normfactoren en cot(θ) zijn expliciete invoer. De Rust-kern berekent de benodigde Asw/s, VRd,max en benutting van de opgegeven beugels.",
       "requiredAsw": "Benodigd Asw/s",
       "providedUtilization": "Benutting beugels"
-    }
+    },
+    "masonryCheck": "Metselwerkwand",
+    "toolsGroup": "Rekenhulpen"
   },
   "ifc": {
     "fileOps": "Bestand",
