@@ -3469,11 +3469,13 @@ var init_NonlinearMaterial = __esm({
 function mmTekst(v) {
   return (Math.round(v * 10) / 10).toString().replace(".", ",");
 }
-function vertaalSingulier(e, mesh, knoopVanIndex) {
+function vertaalSingulier(e, mesh, knoopVanIndex, K) {
   const origineel = e instanceof Error ? e.message : String(e);
   const treffer = /column (\d+)/.exec(origineel);
   if (!treffer) return e;
-  const kolom = Number(treffer[1]);
+  const kolomOplosser = Number(treffer[1]);
+  const vorm = K ? mechanismeVorm(K, kolomOplosser) : null;
+  const kolom = vorm ? maatgevendeKolom(vorm, kolomOplosser) : kolomOplosser;
   const index = Math.floor(kolom / 3);
   const knoopId3 = knoopVanIndex ? knoopVanIndex(index)?.id : [...mesh.nodes.values()][index]?.id;
   const knoop = knoopId3 === void 0 ? void 0 : mesh.nodes.get(knoopId3);
@@ -3501,14 +3503,69 @@ function vertaalSingulier(e, mesh, knoopVanIndex) {
     zMm: knoop.y * 1e3,
     richting: richtingen[kolom % 3],
     losseKnoop,
-    origineel
+    origineel,
+    releasesOpKnoop: releasesOp(mesh, knoop.id),
+    mechanisme: vorm !== null && kolom !== kolomOplosser
   });
+}
+function releasesOp(mesh, knoopId3) {
+  let ry = false;
+  let translatie = false;
+  for (const beam of mesh.beamElements.values()) {
+    const eind = mesh.getBeamElementNodes(beam);
+    if (!eind) continue;
+    const vrij = getReleasedLocalDofs(beam);
+    const lokaal = eind[0].id === knoopId3 ? [0, 1, 2] : eind[1].id === knoopId3 ? [3, 4, 5] : null;
+    if (!lokaal) continue;
+    if (vrij.includes(lokaal[2])) ry = true;
+    if (vrij.includes(lokaal[0]) || vrij.includes(lokaal[1])) translatie = true;
+  }
+  return { ry, translatie };
+}
+function mechanismeVorm(K, kolom) {
+  const n2 = K.rows;
+  if (n2 < 2 || n2 > 600 || kolom >= n2) return null;
+  const rest = [];
+  for (let i = 0; i < n2; i++) if (i !== kolom) rest.push(i);
+  const A = new Matrix(n2 - 1, n2 - 1);
+  const b = new Array(n2 - 1);
+  rest.forEach((i, r) => {
+    rest.forEach((j, c) => A.set(r, c, K.get(i, j)));
+    b[r] = -K.get(i, kolom);
+  });
+  try {
+    const x = solveLinearSystem(A, b);
+    if (!x.every(Number.isFinite)) return null;
+    const v = new Array(n2).fill(0);
+    v[kolom] = 1;
+    rest.forEach((i, r) => {
+      v[i] = x[r];
+    });
+    return v;
+  } catch {
+    return null;
+  }
+}
+function maatgevendeKolom(vorm, kolomOplosser) {
+  let beste = -1;
+  let grootste2 = 0;
+  for (let i = 0; i < vorm.length; i++) {
+    if (i % 3 === 2) continue;
+    const a = Math.abs(vorm[i]);
+    if (a > grootste2) {
+      grootste2 = a;
+      beste = i;
+    }
+  }
+  if (beste < 0 || grootste2 <= 1e-6) return kolomOplosser;
+  if (kolomOplosser % 3 !== 2 && Math.abs(vorm[kolomOplosser]) >= 0.999 * grootste2) return kolomOplosser;
+  return beste;
 }
 function losFrameStelselOp(K, F, mesh) {
   try {
     return solveLinearSystem2(K, F);
   } catch (e) {
-    throw vertaalSingulier(e, mesh);
+    throw vertaalSingulier(e, mesh, void 0, K);
   }
 }
 function nulElementFout(elementId, knoop) {
@@ -4135,7 +4192,7 @@ function solveNonlinear(mesh, options = {}) {
         deltaU = solveLinearSystem2(Kbc, residual);
       } catch (e) {
         if (opts.geometricNonlinear && !(step === 1 && iter === 0)) throw new Error(DIVERGENCE_MSG);
-        throw vertaalSingulier(e, mesh);
+        throw vertaalSingulier(e, mesh, void 0, Kbc);
       }
       for (let i = 0; i < numDofs; i++) {
         displacements[i] += deltaU[i];
@@ -4739,14 +4796,18 @@ function solveMixed(mesh, opts) {
     }
     return u;
   };
-  const losOp = (Kt) => {
+  const metRandvoorwaarden = (Kt) => {
     const Kmod = gecondenseerdeKloon(Kt);
-    const Fmod = [...Fc];
     const penalty = 1e20;
     for (const dof of constrainedDofs) {
       Kmod.set(dof, dof, Kmod.get(dof, dof) + penalty);
-      Fmod[dof] = 0;
     }
+    return Kmod;
+  };
+  const losOp = (Kt) => {
+    const Kmod = metRandvoorwaarden(Kt);
+    const Fmod = [...Fc];
+    for (const dof of constrainedDofs) Fmod[dof] = 0;
     return herstel(solveLinearSystem2(Kmod, Fmod));
   };
   const knoopVanIndex = /* @__PURE__ */ new Map();
@@ -4760,7 +4821,7 @@ function solveMixed(mesh, opts) {
   try {
     displacements = losOp(K);
   } catch (e) {
-    throw vertaalSingulier(e, mesh, (i) => knoopVanIndex.get(i));
+    throw vertaalSingulier(e, mesh, (i) => knoopVanIndex.get(i), metRandvoorwaarden(K));
   }
   let Kreactie = K;
   if (opts.geometricNonlinear) {
@@ -5054,6 +5115,7 @@ var init_NonlinearSolver = __esm({
     init_DKT();
     init_Assembler();
     init_LinearSolver();
+    init_GaussElimination();
     init_NonlinearMaterial();
     SingulierStelselFout = class extends Error {
       meshKnoopId;
@@ -5068,6 +5130,17 @@ var init_NonlinearSolver = __esm({
        * vastgezet, maar dat moment kan nergens heen — een echt mechanisme.
        */
       koppelOpScharnierknoop;
+      /**
+       * Welke releases er op deze knoop WERKELIJK zitten (issue #243, punt 111):
+       * `Ry` als een staafeinde hier een momentscharnier heeft, `Tx/Tz` als een
+       * normaal- of dwarskrachthuls. De melding verwijst alleen naar een release
+       * die bestaat; tot oktober 2026 stond er bij elke vrije draaiing
+       * "waarschijnlijk hebben alle staafeinden een scharnier (release Ry)", ook
+       * bij een ligger zonder enige release.
+       */
+      releasesOpKnoop;
+      /** De beweging is een mechanisme met meer knopen (uit de nulvorm van K). */
+      mechanisme;
       constructor(v) {
         super("");
         this.name = "SingulierStelselFout";
@@ -5078,12 +5151,14 @@ var init_NonlinearSolver = __esm({
         this.losseKnoop = v.losseKnoop;
         this.origineel = v.origineel;
         this.koppelOpScharnierknoop = v.koppelOpScharnierknoop === true;
+        this.releasesOpKnoop = v.releasesOpKnoop ?? { ry: false, translatie: false };
+        this.mechanisme = v.mechanisme === true;
         this.message = this.tekstVoor("een rekenknoop");
       }
       /** De melding met `knoop` als onderwerp, bijvoorbeeld "knoop 7". */
       tekstVoor(knoop) {
         const beweging = this.richting === "x" ? "horizontaal verschuiven (x)" : this.richting === "z" ? "verticaal verschuiven (z)" : "draaien";
-        const oorzaak = this.koppelOpScharnierknoop ? "Op deze knoop komen alleen scharnierende staafeinden (release Ry) samen en geen oplegging houdt de draaiing tegen, maar er werkt een koppel op: dat moment kan nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star aansluit, of maak \xE9\xE9n staafeinde op deze knoop star." : this.losseKnoop ? "Deze knoop is met geen enkele staaf verbonden (een losse knoop): verwijder hem, of verbind hem met de constructie." : this.richting === "rotatie" ? "Niets houdt die rotatie tegen: waarschijnlijk hebben alle staafeinden op deze knoop een scharnier (release Ry) terwijl de knoop zelf geen rotatiesteun heeft. Laat \xE9\xE9n staaf star aansluiten, of haal het scharnier weg op een scharnieroplegging." : "Niets houdt die verplaatsing tegen: controleer de opleggingen, of de staven daar werkelijk aan elkaar vastzitten, en of een normaalkracht- of dwarskrachthuls (release Tx/Tz) niet de enige verbinding is.";
+        const oorzaak = this.koppelOpScharnierknoop ? "Op deze knoop komen alleen scharnierende staafeinden (release Ry) samen en geen oplegging houdt de draaiing tegen, maar er werkt een koppel op: dat moment kan nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star aansluit, of maak \xE9\xE9n staafeinde op deze knoop star." : this.losseKnoop ? "Deze knoop is met geen enkele staaf verbonden (een losse knoop): verwijder hem, of verbind hem met de constructie." : this.richting === "rotatie" ? this.releasesOpKnoop.ry ? "Niets houdt die rotatie tegen: er zitten scharnierende staafeinden (release Ry) op deze knoop en de knoop zelf heeft geen rotatiesteun. Laat \xE9\xE9n staaf star aansluiten, of haal het scharnier weg op een scharnieroplegging." : "Niets houdt die rotatie tegen: controleer de opleggingen (een rotatiesteun of een tweede oplegging) en of de staven hier werkelijk aan elkaar vastzitten." : (this.mechanisme ? "Het model is een mechanisme: deze beweging kost geen vervorming. " : "") + "Niets houdt die verplaatsing tegen: controleer de opleggingen (een rol die juist in deze richting vrij is?) en of de staven daar werkelijk aan elkaar vastzitten" + (this.releasesOpKnoop.translatie ? ", en of een normaalkracht- of dwarskrachthuls (release Tx/Tz) op deze knoop niet de enige verbinding is." : ".");
         return `Het stelsel is singulier: ${knoop} op (${mmTekst(this.xMm)}, ${mmTekst(this.zMm)}) mm kan vrij ${beweging}. ${oorzaak} (Oorspronkelijke melding: ${this.origineel})`;
       }
     };

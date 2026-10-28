@@ -26,6 +26,7 @@ import { assembleGlobalStiffnessMatrix, assembleForceVector as assembleForceVect
 // welke oplosser eronder zit. Standaard is dat nog steeds de dichte
 // Gauss-eliminatie uit `GaussElimination`.
 import { solveLinearSystem } from '../math/LinearSolver';
+import { solveLinearSystem as losDichtOp } from '../math/GaussElimination';
 import {
   ISectionState,
   createSteelMaterial,
@@ -69,10 +70,23 @@ export class SingulierStelselFout extends Error {
    * vastgezet, maar dat moment kan nergens heen — een echt mechanisme.
    */
   readonly koppelOpScharnierknoop: boolean;
+  /**
+   * Welke releases er op deze knoop WERKELIJK zitten (issue #243, punt 111):
+   * `Ry` als een staafeinde hier een momentscharnier heeft, `Tx/Tz` als een
+   * normaal- of dwarskrachthuls. De melding verwijst alleen naar een release
+   * die bestaat; tot oktober 2026 stond er bij elke vrije draaiing
+   * "waarschijnlijk hebben alle staafeinden een scharnier (release Ry)", ook
+   * bij een ligger zonder enige release.
+   */
+  readonly releasesOpKnoop: { ry: boolean; translatie: boolean };
+  /** De beweging is een mechanisme met meer knopen (uit de nulvorm van K). */
+  readonly mechanisme: boolean;
   constructor(v: {
     meshKnoopId: number; xMm: number; zMm: number;
     richting: 'x' | 'z' | 'rotatie'; losseKnoop: boolean; origineel: string;
     koppelOpScharnierknoop?: boolean;
+    releasesOpKnoop?: { ry: boolean; translatie: boolean };
+    mechanisme?: boolean;
   }) {
     super('');
     this.name = 'SingulierStelselFout';
@@ -83,6 +97,8 @@ export class SingulierStelselFout extends Error {
     this.losseKnoop = v.losseKnoop;
     this.origineel = v.origineel;
     this.koppelOpScharnierknoop = v.koppelOpScharnierknoop === true;
+    this.releasesOpKnoop = v.releasesOpKnoop ?? { ry: false, translatie: false };
+    this.mechanisme = v.mechanisme === true;
     this.message = this.tekstVoor('een rekenknoop');
   }
 
@@ -101,13 +117,24 @@ export class SingulierStelselFout extends Error {
       ? 'Deze knoop is met geen enkele staaf verbonden (een losse knoop): ' +
         'verwijder hem, of verbind hem met de constructie.'
       : this.richting === 'rotatie'
-        ? 'Niets houdt die rotatie tegen: waarschijnlijk hebben alle staafeinden op ' +
-          'deze knoop een scharnier (release Ry) terwijl de knoop zelf geen ' +
-          'rotatiesteun heeft. Laat één staaf star aansluiten, of haal het ' +
-          'scharnier weg op een scharnieroplegging.'
-        : 'Niets houdt die verplaatsing tegen: controleer de opleggingen, of de ' +
-          'staven daar werkelijk aan elkaar vastzitten, en of een normaalkracht- ' +
-          'of dwarskrachthuls (release Tx/Tz) niet de enige verbinding is.';
+        ? (this.releasesOpKnoop.ry
+          ? 'Niets houdt die rotatie tegen: er zitten scharnierende staafeinden ' +
+            '(release Ry) op deze knoop en de knoop zelf heeft geen rotatiesteun. ' +
+            'Laat één staaf star aansluiten, of haal het scharnier weg op een ' +
+            'scharnieroplegging.'
+          : 'Niets houdt die rotatie tegen: controleer de opleggingen (een ' +
+            'rotatiesteun of een tweede oplegging) en of de staven hier werkelijk ' +
+            'aan elkaar vastzitten.')
+        : (this.mechanisme
+          ? 'Het model is een mechanisme: deze beweging kost geen vervorming. '
+          : '') +
+          'Niets houdt die verplaatsing tegen: controleer de opleggingen (een rol ' +
+          'die juist in deze richting vrij is?) en of de staven daar werkelijk aan ' +
+          'elkaar vastzitten' +
+          (this.releasesOpKnoop.translatie
+            ? ', en of een normaalkracht- of dwarskrachthuls (release Tx/Tz) op ' +
+              'deze knoop niet de enige verbinding is.'
+            : '.');
     return (
       `Het stelsel is singulier: ${knoop} op (${mmTekst(this.xMm)}, ${mmTekst(this.zMm)}) mm ` +
       `kan vrij ${beweging}. ${oorzaak} (Oorspronkelijke melding: ${this.origineel})`
@@ -132,11 +159,20 @@ function vertaalSingulier(
   e: unknown,
   mesh: Mesh,
   knoopVanIndex?: (index: number) => { id: number } | undefined,
+  K?: Matrix,
 ): unknown {
   const origineel = e instanceof Error ? e.message : String(e);
   const treffer = /column (\d+)/.exec(origineel);
   if (!treffer) return e;
-  const kolom = Number(treffer[1]);
+  const kolomOplosser = Number(treffer[1]);
+  // De kolom waar de oplosser stopt is de vrijheidsgraad die in ZIJN
+  // eliminatievolgorde als laatste overbleef — bij een ligger die als star
+  // lichaam om zijn scharnieroplegging kan draaien is dat de draaiing van de
+  // eindknoop, terwijl de gebruiker de verticale verschuiving moet tegenhouden
+  // (issue #243, punt 111). Met de stijfheidsmatrix erbij wordt de nulvorm
+  // bepaald en de grootste VERSCHUIVING daarin gemeld.
+  const vorm = K ? mechanismeVorm(K, kolomOplosser) : null;
+  const kolom = vorm ? maatgevendeKolom(vorm, kolomOplosser) : kolomOplosser;
   const index = Math.floor(kolom / 3);
   const knoopId = knoopVanIndex ? knoopVanIndex(index)?.id : [...mesh.nodes.values()][index]?.id;
   const knoop = knoopId === undefined ? undefined : mesh.nodes.get(knoopId);
@@ -162,7 +198,79 @@ function vertaalSingulier(
     richting: richtingen[kolom % 3],
     losseKnoop,
     origineel,
+    releasesOpKnoop: releasesOp(mesh, knoop.id),
+    mechanisme: vorm !== null && kolom !== kolomOplosser,
   });
+}
+
+/** Welke releases zitten er op de staafeinden aan deze knoop? */
+function releasesOp(mesh: Mesh, knoopId: number): { ry: boolean; translatie: boolean } {
+  let ry = false;
+  let translatie = false;
+  for (const beam of mesh.beamElements.values()) {
+    const eind = mesh.getBeamElementNodes(beam);
+    if (!eind) continue;
+    const vrij = getReleasedLocalDofs(beam);
+    const lokaal = eind[0].id === knoopId ? [0, 1, 2] : eind[1].id === knoopId ? [3, 4, 5] : null;
+    if (!lokaal) continue;
+    if (vrij.includes(lokaal[2])) ry = true;
+    if (vrij.includes(lokaal[0]) || vrij.includes(lokaal[1])) translatie = true;
+  }
+  return { ry, translatie };
+}
+
+/**
+ * De nulvorm van een singuliere K: v met v[kolom] = 1 en K·v = 0 in alle
+ * andere rijen. Alleen op de foutroute en alleen voor een klein stelsel (dicht
+ * opgelost, O(n³)); `null` als de rest van K óók singulier is (meer dan één
+ * mechanisme) of het stelsel te groot is — dan blijft de melding bij de kolom
+ * van de oplosser.
+ */
+function mechanismeVorm(K: Matrix, kolom: number): number[] | null {
+  const n = K.rows;
+  if (n < 2 || n > 600 || kolom >= n) return null;
+  const rest: number[] = [];
+  for (let i = 0; i < n; i++) if (i !== kolom) rest.push(i);
+  const A = new Matrix(n - 1, n - 1);
+  const b = new Array<number>(n - 1);
+  rest.forEach((i, r) => {
+    rest.forEach((j, c) => A.set(r, c, K.get(i, j)));
+    b[r] = -K.get(i, kolom);
+  });
+  try {
+    const x = losDichtOp(A, b);
+    if (!x.every(Number.isFinite)) return null;
+    const v = new Array<number>(n).fill(0);
+    v[kolom] = 1;
+    rest.forEach((i, r) => { v[i] = x[r]; });
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * De vrijheidsgraad die de gebruiker moet tegenhouden: de grootste
+ * VERSCHUIVING in de nulvorm (in m, bij een eenheidsdraaiing of
+ * -verschuiving), want een oplegging houdt een verschuiving tegen. Alleen als
+ * de vorm geen noemenswaardige verschuiving heeft (een zuiver vrij draaiende
+ * knoop) blijft het de kolom van de oplosser.
+ */
+function maatgevendeKolom(vorm: number[], kolomOplosser: number): number {
+  let beste = -1;
+  let grootste = 0;
+  for (let i = 0; i < vorm.length; i++) {
+    if (i % 3 === 2) continue;
+    const a = Math.abs(vorm[i]);
+    if (a > grootste) { grootste = a; beste = i; }
+  }
+  // 1 µm per eenheid: daaronder is de "verschuiving" rekenruis van de penalty.
+  if (beste < 0 || grootste <= 1e-6) return kolomOplosser;
+  // Verschuift de kolom van de oplosser zelf (vrijwel) even ver — een
+  // raam dat als parallellogram wegzakt: alle regelknopen gelijk — dan blijft
+  // het die knoop, zodat de melding niet verspringt.
+  if (kolomOplosser % 3 !== 2 && Math.abs(vorm[kolomOplosser]) >= 0.999 * grootste) return kolomOplosser;
+  return beste;
 }
 
 /** `solveLinearSystem` voor het frame-pad, met de knoopvertaling van een singulier stelsel. */
@@ -170,7 +278,7 @@ function losFrameStelselOp(K: Matrix, F: number[], mesh: Mesh): number[] {
   try {
     return solveLinearSystem(K, F);
   } catch (e) {
-    throw vertaalSingulier(e, mesh);
+    throw vertaalSingulier(e, mesh, undefined, K);
   }
 }
 
@@ -1331,7 +1439,7 @@ export function solveNonlinear(
         // (losse knoop, vrij draaiende knoop) en geen knik. Die melding
         // "belasting boven de kniklast" zou naar de verkeerde oorzaak wijzen.
         if (opts.geometricNonlinear && !(step === 1 && iter === 0)) throw new Error(DIVERGENCE_MSG);
-        throw vertaalSingulier(e, mesh);
+        throw vertaalSingulier(e, mesh, undefined, Kbc);
       }
 
       // Update displacements
@@ -2159,14 +2267,18 @@ function solveMixed(
    * iteratie opnieuw nodig heeft, met een andere K. Met randkoppelingen wordt
    * eerst gecondenseerd en daarna de slaven teruggerekend.
    */
-  const losOp = (Kt: Matrix): number[] => {
+  const metRandvoorwaarden = (Kt: Matrix): Matrix => {
     const Kmod = gecondenseerdeKloon(Kt);
-    const Fmod = [...Fc];
     const penalty = 1e20;
     for (const dof of constrainedDofs) {
       Kmod.set(dof, dof, Kmod.get(dof, dof) + penalty);
-      Fmod[dof] = 0;
     }
+    return Kmod;
+  };
+  const losOp = (Kt: Matrix): number[] => {
+    const Kmod = metRandvoorwaarden(Kt);
+    const Fmod = [...Fc];
+    for (const dof of constrainedDofs) Fmod[dof] = 0;
     return herstel(solveLinearSystem(Kmod, Fmod));
   };
 
@@ -2190,7 +2302,9 @@ function solveMixed(
   } catch (e) {
     // Dezelfde Nederlandse melding (knoop, richting, oorzaak) als het
     // frame-pad; de adapter zet het rekenknoopnummer om naar het modelnummer.
-    throw vertaalSingulier(e, mesh, (i) => knoopVanIndex.get(i));
+    // Met de matrix erbij: dezelfde nulvorm-analyse als het raamwerkpad
+    // (issue #243, punt 111), zodat beide paden dezelfde knoop noemen.
+    throw vertaalSingulier(e, mesh, (i) => knoopVanIndex.get(i), metRandvoorwaarden(K));
   }
 
   /**
