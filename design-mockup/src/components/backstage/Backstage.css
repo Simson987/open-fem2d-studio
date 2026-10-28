@@ -360,3 +360,16 @@
   font-size: 11px;
   color: var(--theme-text);
 }
+
+/* Kaarten zijn knoppen (issue #235): knopopmaak van de browser opheffen. */
+button.bs-export-card {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+button.bs-export-card:focus-visible {
+  outline: 2px solid var(--theme-focus-color);
+  outline-offset: 2px;
+}

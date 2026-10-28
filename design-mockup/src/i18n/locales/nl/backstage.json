@@ -29,7 +29,12 @@
     "fromFile": "Importeren uit bestand",
     "fromFileDesc": "Gegevens importeren uit ondersteunde bestandsindelingen",
     "fromTemplate": "Importeren uit sjabloon",
-    "fromTemplateDesc": "Laad een vooraf gemaakt sjabloon als startpunt"
+    "fromTemplateDesc": "Laad een vooraf gemaakt sjabloon als startpunt",
+    "ifc": "IFC-analysemodel importeren",
+    "ifcDesc": "Lees het analysemodel (knopen, staven, schijven, belastingen) uit een IFC4-bestand",
+    "steelHall": "Sjabloon: stalen hal",
+    "steelHallDesc": "Begin met een stalen hal uit de wizard",
+    "notAvailable": "Deze import is in deze omgeving niet beschikbaar; gebruik de desktop-app."
   },
   "extensions": "Extensies",
   "extInstalled": "Geïnstalleerd",
@@ -41,11 +46,17 @@
   "exportPanel": {
     "title": "Exporteren",
     "asPdf": "Exporteren als PDF",
-    "asPdfDesc": "Sla het huidige document op als een PDF-bestand",
+    "asPdfDesc": "Open het rapport; daar staan Rekenrapport en Afdrukken / PDF",
     "asImage": "Exporteren als afbeelding",
     "asImageDesc": "Opslaan als PNG- of JPEG-afbeeldingsbestanden",
     "asHtml": "Exporteren als HTML",
-    "asHtmlDesc": "Exporteer het document als een HTML-bestand"
+    "asHtmlDesc": "Exporteer het document als een HTML-bestand",
+    "asIfc": "Exporteren als IFC",
+    "asIfcDesc": "Het model als IFC4-bestand",
+    "asIfcStructural": "Exporteren als IFC (structureel)",
+    "asIfcStructuralDesc": "Het analysemodel als IFC4 structural analysis view",
+    "notAvailable": "Deze export is in deze omgeving niet beschikbaar; gebruik de desktop-app.",
+    "imageSoon": "Exporteren als afbeelding is nog niet beschikbaar. Gebruik het rapport (Afdrukken / PDF) of een schermafbeelding."
   },
   "openPanel": {
     "title": "Recente bestanden",

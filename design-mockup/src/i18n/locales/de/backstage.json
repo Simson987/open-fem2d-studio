@@ -29,7 +29,12 @@
     "fromFile": "Aus Datei importieren",
     "fromFileDesc": "Daten aus unterstützten Dateiformaten importieren",
     "fromTemplate": "Aus Vorlage importieren",
-    "fromTemplateDesc": "Eine vorgefertigte Vorlage als Ausgangspunkt laden"
+    "fromTemplateDesc": "Eine vorgefertigte Vorlage als Ausgangspunkt laden",
+    "ifc": "IFC-Analysemodell importieren",
+    "ifcDesc": "Analysemodell (Knoten, Stäbe, Scheiben, Lasten) aus einer IFC4-Datei lesen",
+    "steelHall": "Vorlage: Stahlhalle",
+    "steelHallDesc": "Mit einer Stahlhalle aus dem Assistenten beginnen",
+    "notAvailable": "Dieser Import ist in dieser Umgebung nicht verfügbar; verwenden Sie die Desktop-App."
   },
   "extensions": "Erweiterungen",
   "extInstalled": "Installiert",
@@ -41,11 +46,17 @@
   "exportPanel": {
     "title": "Exportieren",
     "asPdf": "Als PDF exportieren",
-    "asPdfDesc": "Das aktuelle Dokument als PDF-Datei speichern",
+    "asPdfDesc": "Öffnet den Bericht; dort finden Sie Rechenbericht und Drucken / PDF",
     "asImage": "Als Bild exportieren",
     "asImageDesc": "Als PNG- oder JPEG-Bilddateien speichern",
     "asHtml": "Als HTML exportieren",
-    "asHtmlDesc": "Das Dokument als HTML-Datei exportieren"
+    "asHtmlDesc": "Das Dokument als HTML-Datei exportieren",
+    "asIfc": "Als IFC exportieren",
+    "asIfcDesc": "Das Modell als IFC4-Datei",
+    "asIfcStructural": "Als IFC exportieren (strukturell)",
+    "asIfcStructuralDesc": "Das Analysemodell als IFC4 Structural Analysis View",
+    "notAvailable": "Dieser Export ist in dieser Umgebung nicht verfügbar; verwenden Sie die Desktop-App.",
+    "imageSoon": "Export als Bild ist noch nicht verfügbar. Verwenden Sie den Bericht (Drucken / PDF) oder einen Screenshot."
   },
   "openPanel": {
     "title": "Zuletzt verwendete Dateien",

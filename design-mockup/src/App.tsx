@@ -4653,6 +4653,11 @@ function App() {
         onSave={() => { void handleSaveProject(); }}
         onSaveAs={() => { void handleSaveProjectAs(); }}
         onImportIfcAnalysisModel={() => { void handleImportIfcAnalyse(); }}
+        onOpenSteelHall={() => setStaalhalOpen(true)}
+        onExportPdf={() => setActiveView("report")}
+        onExportHtml={() => { void handleExportHtmlReport(); }}
+        onExportIfc={() => { void handleExportIfc(false); }}
+        onExportIfcStructural={() => { void handleExportIfc(true); }}
       />
       <LoadCasesDialog
         open={loadCasesOpen}

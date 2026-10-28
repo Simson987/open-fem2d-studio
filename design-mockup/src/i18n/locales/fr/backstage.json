@@ -29,7 +29,12 @@
     "fromFile": "Importer depuis un fichier",
     "fromFileDesc": "Importer des données depuis les formats de fichier pris en charge",
     "fromTemplate": "Importer depuis un modèle",
-    "fromTemplateDesc": "Charger un modèle prédéfini comme point de départ"
+    "fromTemplateDesc": "Charger un modèle prédéfini comme point de départ",
+    "ifc": "Importer le modèle d’analyse IFC",
+    "ifcDesc": "Lire le modèle d’analyse (nœuds, barres, voiles, charges) depuis un fichier IFC4",
+    "steelHall": "Modèle : hangar en acier",
+    "steelHallDesc": "Commencer avec un hangar en acier depuis l’assistant",
+    "notAvailable": "Cette importation n’est pas disponible dans cet environnement ; utilisez l’application de bureau."
   },
   "extensions": "Extensions",
   "extInstalled": "Installées",
@@ -41,11 +46,17 @@
   "exportPanel": {
     "title": "Exporter",
     "asPdf": "Exporter en PDF",
-    "asPdfDesc": "Enregistrer le document actuel en fichier PDF",
+    "asPdfDesc": "Ouvre le rapport ; vous y trouverez Note de calcul et Imprimer / PDF",
     "asImage": "Exporter en image",
     "asImageDesc": "Enregistrer en fichiers image PNG ou JPEG",
     "asHtml": "Exporter en HTML",
-    "asHtmlDesc": "Exporter le document en fichier HTML"
+    "asHtmlDesc": "Exporter le document en fichier HTML",
+    "asIfc": "Exporter en IFC",
+    "asIfcDesc": "Le modèle en fichier IFC4",
+    "asIfcStructural": "Exporter en IFC (structurel)",
+    "asIfcStructuralDesc": "Le modèle d’analyse en IFC4 structural analysis view",
+    "notAvailable": "Cette exportation n’est pas disponible dans cet environnement ; utilisez l’application de bureau.",
+    "imageSoon": "L’export en image n’est pas encore disponible. Utilisez le rapport (Imprimer / PDF) ou une capture d’écran."
   },
   "openPanel": {
     "title": "Fichiers récents",

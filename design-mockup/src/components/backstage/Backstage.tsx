@@ -66,10 +66,17 @@ interface BackstageProps {
   onNew?: () => void;
   /** Bestand → Openen: een IFC4-analysemodel importeren als nieuw 3D-project. */
   onImportIfcAnalysisModel?: () => void;
+  /** Import- en exportkaarten (issue #235). */
+  onOpenSteelHall?: () => void;
+  onExportPdf?: () => void;
+  onExportHtml?: () => void;
+  onExportIfc?: () => void;
+  onExportIfcStructural?: () => void;
 }
 
 export default function Backstage({ open, onClose, onOpenSettings, onOpenFile,
   onSave, onSaveAs, onOpen, onNew, onImportIfcAnalysisModel,
+  onOpenSteelHall, onExportPdf, onExportHtml, onExportIfc, onExportIfcStructural,
 }: BackstageProps) {
   const { t } = useTranslation("backstage");
   const [activePanel, setActivePanel] = useState<string>("none");
@@ -221,8 +228,20 @@ export default function Backstage({ open, onClose, onOpenSettings, onOpenFile,
             />
           )}
           {activePanel === "about" && <AboutPanel />}
-          {activePanel === "import" && <ImportPanel />}
-          {activePanel === "export" && <ExportPanel />}
+          {activePanel === "import" && (
+            <ImportPanel
+              onImportIfc={onImportIfcAnalysisModel ? () => actionAndClose(onImportIfcAnalysisModel) : undefined}
+              onOpenSteelHall={onOpenSteelHall ? () => actionAndClose(onOpenSteelHall) : undefined}
+            />
+          )}
+          {activePanel === "export" && (
+            <ExportPanel
+              onPdf={onExportPdf ? () => actionAndClose(onExportPdf) : undefined}
+              onHtml={onExportHtml ? () => actionAndClose(onExportHtml) : undefined}
+              onIfc={onExportIfc ? () => actionAndClose(onExportIfc) : undefined}
+              onIfcStructural={onExportIfcStructural ? () => actionAndClose(onExportIfcStructural) : undefined}
+            />
+          )}
           {activePanel === "extensions" && <ExtensionManagerPanel />}
         </div>
       )}
@@ -322,38 +341,49 @@ function AboutPanel() {
   );
 }
 
-function ImportPanel() {
+/**
+ * Eén kaart in de panelen Importeren en Exporteren: een echte knop (issue
+ * #235: de kaarten waren platte blokken en reageerden niet). Zonder actie
+ * meldt de kaart waarom er (nog) niets gebeurt, in plaats van stil te blijven.
+ */
+function ActieKaart({ icoon, titel, tekst, onClick }: {
+  icoon: React.ReactNode; titel: string; tekst: string; onClick: () => void;
+}) {
+  return (
+    <button type="button" className="bs-export-card" onClick={onClick}>
+      <div className="bs-export-card-icon">{icoon}</div>
+      <div className="bs-export-card-info">
+        <h3>{titel}</h3>
+        <p>{tekst}</p>
+      </div>
+    </button>
+  );
+}
+
+const KAART_ICOON = {
+  ifc: <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21V10l9-6 9 6v11" /><path d="M12 9v8m-3-3 3 3 3-3" /></svg>,
+  hal: <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 20V10l9-6 9 6v10M3 10h18" /><path d="M7 20v-9.5M12 20V7M17 20v-9.5M3 20h18" /></svg>,
+  pdf: <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>,
+  afbeelding: <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>,
+  html: <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>,
+  ifcUit: <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21V10l9-6 9 6v11" /><path d="M12 17V9m-3 3 3-3 3 3" /></svg>,
+};
+
+/** Meld dat een kaart in deze omgeving niets kan doen (geen stille knop). */
+function meldNietBeschikbaar(titel: string, tekst: string) {
+  void import("../../io/notify").then(({ notifyInfo }) => notifyInfo(titel, tekst));
+}
+
+function ImportPanel({ onImportIfc, onOpenSteelHall }: { onImportIfc?: () => void; onOpenSteelHall?: () => void }) {
   const { t } = useTranslation("backstage");
   return (
     <div className="bs-export-panel">
       <h2 className="bs-export-title">{t("importPanel.title")}</h2>
       <div className="bs-export-cards">
-        <div className="bs-export-card">
-          <div className="bs-export-card-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-              <path d="M14 2v6h6" />
-              <path d="M12 18v-6m-3 3h6" />
-            </svg>
-          </div>
-          <div className="bs-export-card-info">
-            <h3>{t("importPanel.fromFile")}</h3>
-            <p>{t("importPanel.fromFileDesc")}</p>
-          </div>
-        </div>
-        <div className="bs-export-card">
-          <div className="bs-export-card-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </div>
-          <div className="bs-export-card-info">
-            <h3>{t("importPanel.fromTemplate")}</h3>
-            <p>{t("importPanel.fromTemplateDesc")}</p>
-          </div>
-        </div>
+        <ActieKaart icoon={KAART_ICOON.ifc} titel={t("importPanel.ifc")} tekst={t("importPanel.ifcDesc")}
+          onClick={onImportIfc ?? (() => meldNietBeschikbaar(t("importPanel.ifc"), t("importPanel.notAvailable")))} />
+        <ActieKaart icoon={KAART_ICOON.hal} titel={t("importPanel.steelHall")} tekst={t("importPanel.steelHallDesc")}
+          onClick={onOpenSteelHall ?? (() => meldNietBeschikbaar(t("importPanel.steelHall"), t("importPanel.notAvailable")))} />
       </div>
     </div>
   );
@@ -540,50 +570,21 @@ function OpenPanel({
   );
 }
 
-function ExportPanel() {
+function ExportPanel({ onPdf, onHtml, onIfc, onIfcStructural }: {
+  onPdf?: () => void; onHtml?: () => void; onIfc?: () => void; onIfcStructural?: () => void;
+}) {
   const { t } = useTranslation("backstage");
+  const niet = (titel: string) => () => meldNietBeschikbaar(titel, t("exportPanel.notAvailable"));
   return (
     <div className="bs-export-panel">
       <h2 className="bs-export-title">{t("exportPanel.title")}</h2>
       <div className="bs-export-cards">
-        <div className="bs-export-card">
-          <div className="bs-export-card-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-              <path d="M14 2v6h6" />
-            </svg>
-          </div>
-          <div className="bs-export-card-info">
-            <h3>{t("exportPanel.asPdf")}</h3>
-            <p>{t("exportPanel.asPdfDesc")}</p>
-          </div>
-        </div>
-        <div className="bs-export-card">
-          <div className="bs-export-card-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-          </div>
-          <div className="bs-export-card-info">
-            <h3>{t("exportPanel.asImage")}</h3>
-            <p>{t("exportPanel.asImageDesc")}</p>
-          </div>
-        </div>
-        <div className="bs-export-card">
-          <div className="bs-export-card-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-          </div>
-          <div className="bs-export-card-info">
-            <h3>{t("exportPanel.asHtml")}</h3>
-            <p>{t("exportPanel.asHtmlDesc")}</p>
-          </div>
-        </div>
+        <ActieKaart icoon={KAART_ICOON.pdf} titel={t("exportPanel.asPdf")} tekst={t("exportPanel.asPdfDesc")} onClick={onPdf ?? niet(t("exportPanel.asPdf"))} />
+        <ActieKaart icoon={KAART_ICOON.html} titel={t("exportPanel.asHtml")} tekst={t("exportPanel.asHtmlDesc")} onClick={onHtml ?? niet(t("exportPanel.asHtml"))} />
+        <ActieKaart icoon={KAART_ICOON.ifcUit} titel={t("exportPanel.asIfc")} tekst={t("exportPanel.asIfcDesc")} onClick={onIfc ?? niet(t("exportPanel.asIfc"))} />
+        <ActieKaart icoon={KAART_ICOON.ifcUit} titel={t("exportPanel.asIfcStructural")} tekst={t("exportPanel.asIfcStructuralDesc")} onClick={onIfcStructural ?? niet(t("exportPanel.asIfcStructural"))} />
+        <ActieKaart icoon={KAART_ICOON.afbeelding} titel={t("exportPanel.asImage")} tekst={t("exportPanel.asImageDesc")}
+          onClick={() => meldNietBeschikbaar(t("exportPanel.asImage"), t("exportPanel.imageSoon"))} />
       </div>
     </div>
   );
