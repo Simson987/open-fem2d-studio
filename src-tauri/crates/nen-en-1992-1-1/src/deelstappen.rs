@@ -971,7 +971,8 @@ fn x_u_grens_notitie(g: &Betongegevens, x: f64, d: f64) -> String {
     };
     let verhouding = x / d;
     let mut t = String::from(
-        "EEN NORMGRENS DIE DEZE TOETS NIET CONTROLEERT. Art. 6.1(9) eist dat bij buiging \
+        "Een normgrens die DEZE STAP niet controleert; de aparte toets \
+         6.1(9)_drukzonehoogte doet dat wel, bij M_Ed. Art. 6.1(9) eist dat bij buiging \
          zonder normaalkracht — en ook bij een normaaldrukkracht kleiner dan 0,1·f_cd·A_c — de \
          hoogte van de betondrukzone begrensd is: x_u/d ≤ ε_cu·10⁶/(ε_cu·10⁶ + 7f), met f de \
          naar oppervlak gewogen sterkte van de trekwapening. ",
@@ -1000,8 +1001,8 @@ fn x_u_grens_notitie(g: &Betongegevens, x: f64, d: f64) -> String {
          gedefinieerd als de drukzonehoogte \"bij dat deel van de wapening dat nodig is voor \
          het opnemen van de voorgeschreven belasting\" — dus bij M_Ed — en de x hierboven hoort \
          bij de volle weerstand M_Rd. Dat zijn verschillende grootheden, en ze vergelijken zou \
-         een toets suggereren die hier niet is uitgevoerd. Wie de ductiliteitseis van 6.1(9) \
-         wil aantonen, moet dat apart doen.",
+         een toets suggereren die hier niet is uitgevoerd. De ductiliteitseis van 6.1(9) is \
+         getoetst in de aparte toets 6.1(9)_drukzonehoogte, met x_u bij M_Ed.",
     );
     t
 }
@@ -1922,12 +1923,29 @@ fn bezwijkcriterium_stap(g: &Betongegevens, diagram: &MnKappaDiagram) -> Deelsta
         FailureMode::ConcreteCrushing => format!(
             "Maatgevend is hier grens B/C: het BETON bereikt zijn grensstuik. ε_c = {} ‰ aan de \
              gedrukte rand, bij κ_u = {}·10⁻³/m. Het staal was op dat moment nog niet aan zijn \
-             rekgrens (ε_s = {} ‰ tegen ε_ud = {} ‰). Dit is bros bezwijken: de doorsnede geeft \
-             vooraf weinig vervorming te zien.",
+             rekgrens (ε_s = {} ‰ tegen ε_ud = {} ‰). {}",
             nl(diagram.eps_c_u * 1e3, 2),
             nl(diagram.kappa_u_per_m * 1e3, 2),
             nl(diagram.eps_s_u * 1e3, 1),
-            nl(s.eps_ud * 1e3, 1)
+            nl(s.eps_ud * 1e3, 1),
+            // Bros of taai hangt af van het VLOEIEN van het trekstaal, niet
+            // van het bereiken van ε_ud (issue #250).
+            if diagram.eps_s_u >= s.eps_yd {
+                format!(
+                    "Het trekstaal vloeit wel ruim (ε_s = {} ‰ > ε_yd = {} ‰): dit is TAAI \
+                     bezwijken door betonstuik na vloeien van de wapening, met zichtbare \
+                     vervorming vooraf. Dat ε_ud niet wordt bereikt maakt het niet bros.",
+                    nl(diagram.eps_s_u * 1e3, 1),
+                    nl(s.eps_yd * 1e3, 2)
+                )
+            } else {
+                format!(
+                    "Het trekstaal vloeit niet (ε_s = {} ‰ < ε_yd = {} ‰): dit is bros \
+                     bezwijken, de doorsnede geeft vooraf weinig vervorming te zien.",
+                    nl(diagram.eps_s_u * 1e3, 1),
+                    nl(s.eps_yd * 1e3, 2)
+                )
+            }
         ),
         FailureMode::SteelRupture => format!(
             "Maatgevend is grens A: het STAAL bereikt de rekgrens ε_ud = {} ‰ bij κ_u = \

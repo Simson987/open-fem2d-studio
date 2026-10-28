@@ -240,6 +240,131 @@ pub fn stress_block(
     })
 }
 
+/// Uitkomst van [`drukzonehoogte_bij_m_ed`]: x_u van 6.1(9).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Drukzonehoogte {
+    /// x_u in mm, gemeten vanaf de gedrukte rand. Bij `boven_d` is dit d.
+    pub x_u_mm: f64,
+    /// Nuttige hoogte d van de trekwapening, mm.
+    pub d_mm: f64,
+    /// x_u/d.
+    pub verhouding: f64,
+    /// Het moment om de trekwapening waarvoor x_u is bepaald, kNm:
+    /// |M_Ed| + N_druk·(d − h/2).
+    pub m_s_knm: f64,
+    /// Bijdrage van de overige wapeningslagen (druk positief), kN, bij x_u.
+    pub f_overig_kn: f64,
+    /// Betondrukkracht bij x_u, kN.
+    pub f_c_kn: f64,
+    /// `true` als het moment zelfs bij x = d niet is op te nemen: de
+    /// drukzone loopt tot voorbij de trekwapening.
+    pub boven_d: bool,
+}
+
+/// x_u van NEN-EN 1992-1-1 6.1(9) (NB): de drukzonehoogte bij dat deel van de
+/// wapening dat nodig is voor M_Ed — niet bij de volle M_Rd (issue #250).
+///
+/// Model: rechthoekige spanningsverdeling (3.1.7(3)) met ε_cu3 aan de gedrukte
+/// rand. De trekwapening is de buitenste laag aan de getrokken zijde; haar
+/// oppervlak is de ONBEKENDE ("het deel dat nodig is"), dus zij valt uit het
+/// momentenevenwicht om haar eigen as:
+///
+///   F_c(x)·(d − a_c(x)) + Σ F_si(x)·(d − d_i) = |M_Ed| + N_druk·(d − h/2)
+///
+/// met F_si uit de rek ε_cu3·(1 − d_i/x) van elke overige laag (aanwezige
+/// drukwapening, zijstaven) en het bilineaire staaldiagram. Het linkerlid
+/// stijgt monotoon in x op (0; d], dus bisectie. `n_ed_kn` is trek positief.
+///
+/// `None` als er geen wapeningslaag is.
+pub fn drukzonehoogte_bij_m_ed(
+    section: &RectConcreteSection,
+    layers: &[RebarLayer],
+    mat: &DesignMaterial,
+    n_ed_kn: f64,
+    m_ed_knm: f64,
+) -> Option<Drukzonehoogte> {
+    if layers.is_empty() {
+        return None;
+    }
+    let sign = if m_ed_knm < 0.0 { -1.0 } else { 1.0 };
+    let h = section.h_mm;
+    let gespiegeld: ConcreteSection;
+    let section: &ConcreteSection = if sign < 0.0 {
+        gespiegeld = section.mirrored();
+        &gespiegeld
+    } else {
+        section
+    };
+    let depths: Vec<(f64, f64)> = layers
+        .iter()
+        .map(|l| {
+            let depth = if sign > 0.0 { h - l.z_mm } else { l.z_mm };
+            (depth, l.area_mm2)
+        })
+        .collect();
+    // De trekwapening: de laag het verst van de gedrukte rand.
+    let (i_trek, &(d, _)) = depths
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1 .0.total_cmp(&b.1 .0))?;
+    if d <= 0.0 {
+        return None;
+    }
+    let n_druk_n = -n_ed_kn * 1e3;
+    let m_s = m_ed_knm.abs() * 1e6 + n_druk_n * (d - h / 2.0); // N·mm
+    let moment = |x: f64| -> (f64, f64, f64) {
+        let (f_c, arm) = concrete_block(section, mat, x);
+        let mut m = f_c * (d - arm);
+        let mut f_overig = 0.0;
+        for (i, &(depth, area)) in depths.iter().enumerate() {
+            if i == i_trek {
+                continue;
+            }
+            let eps = mat.eps_cu3 * (1.0 - depth / x);
+            let f = area * mat.steel.sigma(eps);
+            f_overig += f;
+            m += f * (d - depth);
+        }
+        (m, f_c, f_overig)
+    };
+    let (m_d, f_c_d, f_o_d) = moment(d);
+    if m_d < m_s {
+        return Some(Drukzonehoogte {
+            x_u_mm: d,
+            d_mm: d,
+            verhouding: 1.0,
+            m_s_knm: m_s * 1e-6,
+            f_overig_kn: f_o_d * 1e-3,
+            f_c_kn: f_c_d * 1e-3,
+            boven_d: true,
+        });
+    }
+    let mut lo = 1e-9 * d;
+    let mut hi = d;
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if moment(mid).0 < m_s {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+        if hi - lo < 1e-10 * d {
+            break;
+        }
+    }
+    let x = 0.5 * (lo + hi);
+    let (_, f_c, f_o) = moment(x);
+    Some(Drukzonehoogte {
+        x_u_mm: x,
+        d_mm: d,
+        verhouding: x / d,
+        m_s_knm: m_s * 1e-6,
+        f_overig_kn: f_o * 1e-3,
+        f_c_kn: f_c * 1e-3,
+        boven_d: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

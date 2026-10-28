@@ -147,7 +147,7 @@ use std::collections::HashMap;
 
 use mechanics::{ForcePoint, ForceStateSnapshot, InternalForces, Staafstand};
 use nen_en_1992_1_1::bending::stress_block;
-use nen_en_1992_1_1::checks::{check_bending_stress_block, check_mn_kappa};
+use nen_en_1992_1_1::checks::{check_bending_stress_block, check_drukzonehoogte, check_mn_kappa};
 // De negen detailleringseisen worden hier STUK VOOR STUK aangeroepen en niet
 // meer als één `detailleringstoetsen(&inv)`. Reden: acht van de negen lezen de
 // KORF, en die verschilt sinds de wapeningszones per stuk staaf; alleen de
@@ -1729,6 +1729,29 @@ pub fn check_concrete_beam(input: ConcreteBeamCheckInput) -> ConcreteBeamCheckRe
     }
     checks.push(make_resistance(blok));
 
+    // 1b. Art. 6.1(9) + NB: begrenzing van x_u/d bij M_Ed (issue #250). Over
+    //     ALLE sneden van de omhullende, met de korf ter plaatse; de zwaarste
+    //     unity check wint.
+    let mut xu_beste: Zwaarste<(ResistanceCalc, ForcePoint)> = Zwaarste::nieuw();
+    for s in &ugt_sneden {
+        let kandidaat = check_drukzonehoogte(
+            &section,
+            &s.korf,
+            &mat,
+            ForceStateSnapshot::from_point(&s.punt),
+        );
+        let zwaarte = zwaarte_van(&kandidaat, s.punt.forces.my_ed.abs());
+        xu_beste.bied(zwaarte, (kandidaat, s.punt));
+    }
+    if let Some((mut xu, punt)) = xu_beste.uitkomst() {
+        xu.notes.push(snedemelding(
+            "De maatgevende snede is gezocht op de UNITY CHECK.",
+            &punt,
+            ugt_sneden.len(),
+        ));
+        checks.push(make_resistance(xu));
+    }
+
     // 2. M-N-κ. Eén afgevaardigde per (teken van M_Ed; N_Ed; korf) — zie
     //    `sneden_mn_kappa` voor waarom dat exact is en niet benaderend.
     let (mn_sneden, mn_voorgeselecteerd) = sneden_mn_kappa(&section, &mat, &ugt_sneden);
@@ -2557,8 +2580,9 @@ pub fn check_all_concrete_beams(
 /// De test `staafstand_zijden.rs` legt vast dat élke toets wiens tekst een
 /// zijde noemt in deze lijst staat; een nieuwe toets die een zijde kiest valt
 /// daar op.
-pub(crate) const KIEZEN_EEN_TREKZIJDE: [&str; 8] = [
+pub(crate) const KIEZEN_EEN_TREKZIJDE: [&str; 9] = [
     "6.1_bending_stress_block",
+    "6.1(9)_drukzonehoogte",
     "6.1_mn_kappa",
     "6.2_shear",
     "7.3.2_minimumwapening",
