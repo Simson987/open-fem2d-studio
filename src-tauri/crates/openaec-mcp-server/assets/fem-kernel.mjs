@@ -36049,6 +36049,10 @@ var STAALHAL_STANDAARD = {
   projectnaam: ""
 };
 var STAALHAL_STANDAARD_SPANTAFSTAND_MM = 6e3;
+var STAALHAL_WIZARD_BEGINSTAND = {
+  ...STAALHAL_STANDAARD,
+  verbanden: { ...STAALHAL_STANDAARD.verbanden, trekAlleen: true }
+};
 var STAALHAL_LEVEL = { peil: "peil", goot: "goot", nok: "nok", fundering: "fundering" };
 var STAALHAL_GEVAL = { permanent: 1, sneeuw: 2, windDwars: 3, windLangs: 4, eigenGewicht: 5, dakgebruik: 6 };
 var HANDMATIGE_GEVALLEN = [
@@ -54734,6 +54738,7 @@ export {
   STAALHAL_VERBAND_VELDEN,
   STAALHAL_VERLOOP_GROEPEN,
   STAALHAL_WIND_VELDEN,
+  STAALHAL_WIZARD_BEGINSTAND,
   STANDAARD_ACTIEF_GEVAL_ID,
   STANDAARD_BELASTINGGEVALLEN,
   STANDAARD_BIJLAGE,
