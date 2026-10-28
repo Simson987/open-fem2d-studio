@@ -228,7 +228,10 @@ if (!existsSync(MCP_SERVER)) {
   check("MCP 028-a: R_A = 43,5 kN", c?.reactions?.["1"]?.fz, 43.5);
   check("MCP 028-a: R_B = 24,5 kN", c?.reactions?.["2"]?.fz, 24.5);
   check("MCP 028-a: M_max", a[0].uit?.envelope?.elements?.["1"]?.M_max, M028);
-  ok("MCP 028-a: geen waarschuwing", (a[0].uit?.warnings ?? []).length === 0, JSON.stringify(a[0].uit?.warnings));
+  // Alleen de melding dat het eigen gewicht uitstaat (#231) mag er staan: dit
+  // model rekent bewust zonder, de handwaarden hierboven ook.
+  const overig028 = (a[0].uit?.warnings ?? []).filter((w) => !w.startsWith("Eigen gewicht staat UIT"));
+  ok("MCP 028-a: geen waarschuwing", overig028.length === 0, JSON.stringify(a[0].uit?.warnings));
   const b = a[1].uit?.combinations;
   check("MCP 028-b A (zonder q): R_A = 6 kN", b?.["1"]?.reactions?.["1"]?.fz, 6);
   check("MCP 028-b A: R_B = 12 kN", b?.["1"]?.reactions?.["2"]?.fz, 12);
