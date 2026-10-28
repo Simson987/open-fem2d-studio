@@ -585,6 +585,11 @@ log("[7] model_hash is modelspecifiek, bundle_hash niet (issue #244, punt 063)")
   ok("ander model → andere model_hash", a.model_hash !== b.model_hash, `${a.model_hash} / ${b.model_hash}`);
   ok("zelfde model, andere sleutelvolgorde → zelfde model_hash", a.model_hash === c.model_hash, `${a.model_hash} / ${c.model_hash}`);
   ok("bundle_hash is voor beide modellen gelijk (het is de bundel)", a.bundle_hash === b.bundle_hash, `${a.bundle_hash} / ${b.bundle_hash}`);
+  // Issue #244, punt 053: de momentafspraak staat in het antwoord, met de
+  // verwijzing naar de afwijkende afspraak van de 3D-kern.
+  const tm = String(a.units?.teken_momenten ?? "");
+  ok("units.teken_momenten noemt de 2D-afspraak en de 3D-afwijking",
+    /tegen de klok in/.test(tm) && /M positief = trek aan de -y-zijde/.test(tm) && /solve_open_fem_3d/.test(tm) && /rechterhandregel/.test(tm), tm);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

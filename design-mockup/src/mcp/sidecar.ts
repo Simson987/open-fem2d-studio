@@ -167,6 +167,12 @@ const EENHEDEN = {
   verplaatsing: "mm",
   rotatie: "rad",
   teken: "N positief = trek; z positief omhoog",
+  // Issue #244 (punt 053): de momentafspraak, en dat de 3D-kern een andere
+  // heeft. Eén afspraak voor 2D en 3D zou alle uitvoer, rapporten en toetsen
+  // van één van beide raken; de controle laat ook "een expliciete vermelding
+  // van de toegepaste afspraak" toe, en dat is deze.
+  teken_momenten:
+    "Knoop- en reactiemomenten en rotaties (my, ry): positief tegen de klok in, gezien met x naar rechts en z omhoog. Staafkrachten in lokale staafassen (x van begin- naar eindknoop, +y 90 graden tegen de klok in): M positief = trek aan de -y-zijde (een ligger van links naar rechts: trek onder), V = dM/dx. Let op: solve_open_fem_3d volgt de rechterhandregel om de globale assen (X, Y, Z rechtshandig, Z omhoog); daar heeft M_y van een model in het XZ-vlak het tegengestelde teken (reacties en rotaties om Y), en de staafmomenten volgen de lokale assen van de 3D-kern.",
 } as const;
 
 // ── Zelf-hash ──────────────────────────────────────────────────────────────
