@@ -67,5 +67,25 @@ console.log("\n[2] model3d.beam.update");
   check("hout 100x200 / C24 wordt geaccepteerd", model().beams[0].material === "C24");
 }
 
+console.log("\n[3] model3d.get meldt een onbekende doorsnede in een geopend project");
+{
+  // Een projectbestand dat buiten de API om (met de hand, of door een oudere
+  // versie) een staaf IPE 9999 in S999 kreeg: zoals bij het openen in de app.
+  const { metModel3d } = await import("./src/api/projectDocument.ts");
+  const m = model();
+  check("zonder onbekende staaf geen veld onbekendeDoorsneden", doe("model3d.get", {}).onbekendeDoorsneden === undefined);
+  doc = metModel3d(doc, { ...m, beams: [...m.beams, { ...m.beams[0], id: 2, profileName: "IPE 9999", material: "S999" }] });
+  const u = doe("model3d.get", {});
+  check("model3d.get noemt staaf 2 met profiel, materiaal en reden",
+    u.onbekendeDoorsneden?.length === 1 && u.onbekendeDoorsneden[0].beamId === 2 &&
+    u.onbekendeDoorsneden[0].profileName === "IPE 9999" && u.onbekendeDoorsneden[0].material === "S999" &&
+    /S999/.test(u.onbekendeDoorsneden[0].reden), JSON.stringify(u.onbekendeDoorsneden));
+  const bron = (await import("node:fs")).readFileSync(new URL("./src/App.tsx", import.meta.url), "utf8");
+  // Het openen in de app (App.pasProjectToe) gebruikt dezelfde keuring
+  // (onbekendeOpenFem3DDoorsneden) als model3d.get hierboven.
+  check("App.pasProjectToe meldt onbekende 3D-doorsneden bij het openen",
+    /onbekendeOpenFem3DDoorsneden\(parsed\.model3d/.test(bron) && bron.includes("common:app.file.unknownSections3dBody"));
+}
+
 console.log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);
 process.exit(gefaald > 0 ? 1 : 0);

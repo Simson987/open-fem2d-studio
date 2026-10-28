@@ -209,3 +209,30 @@ fn metadata_titel_zonder_beschadigd_streepje_en_elk_lettertype_een_keer() {
         .count();
     assert_eq!(bestanden, 4, "ingebedde lettertypebestanden");
 }
+
+/// #227: de lettertypes worden gesubset. Het rapport uit de controle was
+/// 2 161 172 bytes met vijf volledig ingebedde Liberation Sans-bestanden
+/// (elk ~410 kB); dit proefrapport was na het ontdubbelen van de alias nog
+/// 1 831 674 bytes (vier lettertypes, samen 1 642 012 bytes). Gesubset:
+/// 226 269 bytes, lettertypes samen ~164 kB. Elk ingebed bestand bevat alleen
+/// de omtrekken en cmap-regels van de gebruikte tekens (glyph-nummers
+/// ongewijzigd) en blijft te lezen.
+#[test]
+fn lettertypes_zijn_gesubset() {
+    let bytes = generate_report_pdf(invoer());
+    let doc = lopdf::Document::load_mem(&bytes).expect("PDF");
+    let mut totaal = 0usize;
+    for o in doc.objects.values() {
+        let Ok(d) = o.as_dict() else { continue };
+        let Ok(r) = d.get(b"FontFile2").and_then(|f| f.as_reference()) else { continue };
+        let stroom = doc.get_object(r).unwrap().as_stream().unwrap();
+        let font = stroom.decompressed_content().unwrap_or_else(|_| stroom.content.clone());
+        let face = ttf_parser::Face::parse(&font, 0).expect("het ingebedde lettertype moet te lezen zijn");
+        assert!(face.number_of_glyphs() > 2000, "glyph-nummers horen gelijk te blijven");
+        assert!(font.len() < 120_000, "ingebed lettertype {} bytes: niet gesubset", font.len());
+        assert!(face.glyph_index('S').is_some() && face.glyph_index('≤').is_some());
+        totaal += font.len();
+    }
+    eprintln!("PDF {} bytes, lettertypes samen {} bytes (ongecomprimeerd)", bytes.len(), totaal);
+    assert!(bytes.len() < 400_000, "PDF {} bytes", bytes.len());
+}

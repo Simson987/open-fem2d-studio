@@ -1012,8 +1012,16 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
             )
         }
         "gui_solve" => {
+            // `detail: "samenvatting"` (#229): standaard het volledige antwoord.
+            let mut args = args;
+            let samenvatting = crate::samenvatting::neem_detail(&mut args)
+                .map_err(|e| RpcError::invalid_params(format!("{naam}: {e}")))?;
             let _: Leeg = lees(naam, args)?;
-            roep("rekenen", json!({}), 120)
+            let mut uit = roep("rekenen", json!({}), 120)?;
+            if samenvatting {
+                crate::samenvatting::samenvat_gui_solve(&mut uit);
+            }
+            Ok(uit)
         }
         "gui_run_checks" => {
             let _: Leeg = lees(naam, args)?;
@@ -1098,7 +1106,7 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_build_3d_model",
-            "description": format!("{vooraf}Replaces the active project with a 3D frame model and opens its 3D workspace. Coordinates are metres; from/to/node are 1-based indices into nodes. Member profile_name, profile_name_end (tapered member), material, roll_angle_deg, local end releases, tension_only, bedding (member on an elastic foundation) and optional check_config are retained and feed the 3D view, solver, IFC and EN 1992/EN 1993 checks. Optional diaphragms couple X, Y and the rotation about Z of nodes at one height as a rigid horizontal plane. The model settings tension_only_fit_after_permanent (tension-only members fitted after the permanent load) and tension_only_cross_rule (of two crossing tension-only members one always stays active) go with the model. For concrete, check_config uses the same BeamCheckConfig fields as the properties panel (including betonKorf and optional betonKolom). Optional levels (horizontal structural-grid axes: label and height in metres) replace the levels of the structural grid; a node or plate with `level` (1-based index into levels) is linked to that level, so it moves along when the level height changes in the app. A linked node's z must equal the level height; a linked plate lies horizontally on the level with all its nodes. A plate with bedding lies on an elastic (Winkler) foundation, e.g. a ground floor slab on sand. Optional load_panels carry a surface load (kN/m²) without stiffness to the beams in their plane; the app converts them into member and nodal loads before the frame kernel and reports per panel which members carry and any warning."),
+            "description": format!("{vooraf}Replaces the active project with a 3D frame model and opens its 3D workspace. Coordinates are metres; from/to/node are 1-based indices into nodes. Member profile_name, profile_name_end (tapered member), material, roll_angle_deg, local end releases, tension_only, bedding (member on an elastic foundation) and optional check_config are retained and feed the 3D view, solver, IFC and EN 1992/EN 1993 checks. A member whose profile or material the solver does not know, or whose combination does not fit (\"IPE 9999\", \"S999\", \"IPE 300\" in C24), refuses the whole model with every such member number and the reason; the open project stays as it was. Optional diaphragms couple X, Y and the rotation about Z of nodes at one height as a rigid horizontal plane. The model settings tension_only_fit_after_permanent (tension-only members fitted after the permanent load) and tension_only_cross_rule (of two crossing tension-only members one always stays active) go with the model. For concrete, check_config uses the same BeamCheckConfig fields as the properties panel (including betonKorf and optional betonKolom). Optional levels (horizontal structural-grid axes: label and height in metres) replace the levels of the structural grid; a node or plate with `level` (1-based index into levels) is linked to that level, so it moves along when the level height changes in the app. A linked node's z must equal the level height; a linked plate lies horizontally on the level with all its nodes. A plate with bedding lies on an elastic (Winkler) foundation, e.g. a ground floor slab on sand. Optional load_panels carry a surface load (kN/m²) without stiffness to the beams in their plane; the app converts them into member and nodal loads before the frame kernel and reports per panel which members carry and any warning."),
             "inputSchema": { "type": "object", "additionalProperties": false,
                 "properties": {
                     "levels": { "type": "array", "description": "Levels: horizontal structural-grid axes with a label and a height in metres (e.g. Ground 0, First floor 3). A label that already exists in the app keeps its identity.",
@@ -1289,8 +1297,9 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_solve",
-            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so."),
-            "inputSchema": leeg_schema()
+            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so. With detail \"samenvatting\" a 3D answer stays a few kB: per-node, per-member and per-shell-element lists become counts (`result.weggelaten`) plus their extremes (`result.uitersten`, `reactieSomKn`), checks keep only id, title, article, UC, status and combination; the 2D answer is already compact and unchanged."),
+            "inputSchema": { "type": "object", "additionalProperties": false,
+                "properties": { "detail": crate::samenvatting::schema_detail() } }
         }),
         json!({
             "name": "gui_run_checks",

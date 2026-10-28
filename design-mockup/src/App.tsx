@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
+import { beschrijfOnbekendeDoorsnede, onbekendeOpenFem3DDoorsneden } from "./components/openFem3d/openFem3dDoorsnedeKeuring";
 import { zonderResultaten } from "./lib/weergaveModel";
 import { undoRoute, moetEerstVastleggen } from "./lib/undoRoute";
 import { useTranslation } from "react-i18next";
@@ -1526,6 +1527,20 @@ function App() {
       // referentiebestanden zichzelf documenteren, is na openen-en-opslaan weg.
       // Niet blokkerend (het bestand rekent gewoon), wel zichtbaar, want stil
       // verlies van gegevens van de gebruiker hoort niemand te overkomen.
+      // #230: staven met een profiel of materiaal dat Berekenen weigert,
+      // direct bij het openen melden in plaats van pas bij Berekenen.
+      const onbekendeDoorsneden = onbekendeOpenFem3DDoorsneden(parsed.model3d ?? { beams: [] });
+      if (onbekendeDoorsneden.length > 0) {
+        void import("./io/notify").then(({ notifyWarning }) => {
+          notifyWarning(
+            i18next.t("common:app.file.unknownSections3dTitle"),
+            i18next.t("common:app.file.unknownSections3dBody", {
+              staven: onbekendeDoorsneden.map(beschrijfOnbekendeDoorsnede).join("; "),
+            }),
+            { duur: 30000 },
+          );
+        });
+      }
       const onbekend = onbekendeTopVelden(parsed);
       if (onbekend.length > 0) {
         void import("./io/notify").then(({ notifyWarning }) => {

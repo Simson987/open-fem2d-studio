@@ -39088,11 +39088,40 @@ function connectOpenFem3DNodesToBeams(model, options = {}) {
   return knipOp(model, findOpenFem3DNodesOnBeams(model, toleranceMm, options), toleranceMm / 1e3);
 }
 
-// src/api/commands/model3dGeometrie.ts
+// src/components/openFem3d/openFem3dDoorsnedeKeuring.ts
 init_sectionResolver();
 init_steelGrades();
 init_steelSections_generated();
 init_eigenDoorsnedenStore();
+function lijkendeProfielen(profiel) {
+  const sleutel = profiel.replace(/[\s\-.]/g, "").toUpperCase();
+  const m = /^([A-Z]+)(\d+)?/.exec(sleutel);
+  if (!m) return [];
+  const [, reeks, getal5] = m;
+  const doel = getal5 ? Number(getal5) : 0;
+  return Object.keys(STEEL_SECTIONS).filter((k) => k.startsWith(reeks) && /^\d/.test(k.slice(reeks.length))).map((k) => ({ k, n: Number(/^\d+/.exec(k.slice(reeks.length))[0]) })).sort((a, b) => Math.abs(a.n - doel) - Math.abs(b.n - doel) || a.k.localeCompare(b.k)).slice(0, 5).map((x) => x.k);
+}
+function keurOpenFem3DStaafdoorsnede(beam) {
+  const materiaal = beam.material?.trim() ?? "";
+  const profiel = beam.profileName?.trim() ?? "";
+  if (isEigenProfiel(profiel)) return null;
+  const r = resolveSection(materiaal, profiel);
+  if (r.bron !== "default") return null;
+  const materiaalBekend = STEEL_GRADES.includes(materiaal) || materiaal in TIMBER_E_MEAN || materiaal in CONCRETE_E_CM || /^(VRIJ|ALU)/i.test(materiaal);
+  const suggestie = !materiaalBekend ? ` Bekende materialen: ${[...STEEL_GRADES].join(", ")}; hout ${Object.keys(TIMBER_E_MEAN).slice(0, 4).join(", ")} \u2026; beton ${Object.keys(CONCRETE_E_CM).slice(0, 3).join(", ")} \u2026; of vrij materiaal "VRIJ:<naam> E=<N/mm2> rho=<kg/m3> f=<N/mm2>".` : STEEL_GRADES.includes(materiaal) && lijkendeProfielen(profiel).length > 0 ? ` Bekende profielen in deze reeks: ${lijkendeProfielen(profiel).join(", ")}.` : "";
+  return {
+    beamId: beam.id,
+    profileName: profiel || null,
+    material: materiaal || null,
+    reden: r.reden ?? "doorsnede onbekend",
+    suggestie
+  };
+}
+function onbekendeOpenFem3DDoorsneden(model) {
+  return model.beams.map(keurOpenFem3DStaafdoorsnede).filter((x) => x !== null).sort((a, b) => a.beamId - b.beamId);
+}
+
+// src/api/commands/model3dGeometrie.ts
 var RAD_PER_GRAAD = Math.PI / 180;
 function vindKnoop(model, nodeId) {
   const node = model.nodes.find((item) => item.id === nodeId);
@@ -39104,26 +39133,13 @@ function vindStaaf(model, beamId) {
   if (!beam) throw nietGevonden("3D-staaf", beamId);
   return beam;
 }
-function lijkendeProfielen(profiel) {
-  const sleutel = profiel.replace(/[\s\-.]/g, "").toUpperCase();
-  const m = /^([A-Z]+)(\d+)?/.exec(sleutel);
-  if (!m) return [];
-  const [, reeks, getal5] = m;
-  const doel = getal5 ? Number(getal5) : 0;
-  return Object.keys(STEEL_SECTIONS).filter((k) => k.startsWith(reeks) && /^\d/.test(k.slice(reeks.length))).map((k) => ({ k, n: Number(/^\d+/.exec(k.slice(reeks.length))[0]) })).sort((a, b) => Math.abs(a.n - doel) - Math.abs(b.n - doel) || a.k.localeCompare(b.k)).slice(0, 5).map((x) => x.k);
-}
 function keurStaafdoorsnede(beam) {
-  const materiaal = beam.material?.trim() ?? "";
-  const profiel = beam.profileName?.trim() ?? "";
-  if (isEigenProfiel(profiel)) return;
-  const r = resolveSection(materiaal, profiel);
-  if (r.bron !== "default") return;
-  const materiaalBekend = STEEL_GRADES.includes(materiaal) || materiaal in TIMBER_E_MEAN || materiaal in CONCRETE_E_CM || /^(VRIJ|ALU)/i.test(materiaal);
-  const suggestie = !materiaalBekend ? ` Bekende materialen: ${[...STEEL_GRADES].join(", ")}; hout ${Object.keys(TIMBER_E_MEAN).slice(0, 4).join(", ")} \u2026; beton ${Object.keys(CONCRETE_E_CM).slice(0, 3).join(", ")} \u2026; of vrij materiaal "VRIJ:<naam> E=<N/mm2> rho=<kg/m3> f=<N/mm2>".` : STEEL_GRADES.includes(materiaal) && lijkendeProfielen(profiel).length > 0 ? ` Bekende profielen in deze reeks: ${lijkendeProfielen(profiel).join(", ")}.` : "";
+  const fout = keurOpenFem3DStaafdoorsnede(beam);
+  if (!fout) return;
   throw new ApiFout(
     "INVOER_ONGELDIG",
-    `3D-staaf ${beam.id}: ${r.reden ?? "doorsnede onbekend"}. De staaf is niet opgeslagen.${suggestie}`,
-    { beamId: beam.id, profileName: profiel || null, material: materiaal || null }
+    `3D-staaf ${beam.id}: ${fout.reden}. De staaf is niet opgeslagen.${fout.suggestie}`,
+    { beamId: beam.id, profileName: fout.profileName, material: fout.material }
   );
 }
 function vindPlaat(model, plateId) {
@@ -39203,7 +39219,7 @@ function naarPatch(invoer) {
 }
 var modelLezen = documentCommando({
   naam: "model3d.get",
-  beschrijving: "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen.",
+  beschrijving: "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen. Staan er staven in met een profiel of materiaal dat Berekenen weigert (bijvoorbeeld uit een met de hand bewerkt projectbestand), dan noemt onbekendeDoorsneden ze met staafnummer, namen en reden.",
   invoer: obj({}),
   uitvoeren: (_invoer, document2) => {
     const model = model3dVan(document2);
@@ -39218,7 +39234,13 @@ var modelLezen = documentCommando({
           loadPanels: (model.loadPanels ?? []).length,
           diaphragms: (model.diaphragms ?? []).length
         },
-        model
+        model,
+        // #230: staven met een profiel of materiaal dat Berekenen weigert,
+        // al bij het lezen gemeld (alleen als er zulke staven zijn).
+        ...(() => {
+          const onbekend2 = onbekendeOpenFem3DDoorsneden(model);
+          return onbekend2.length > 0 ? { onbekendeDoorsneden: onbekend2.map(({ suggestie: _s, ...rest }) => rest) } : {};
+        })()
       }
     };
   }

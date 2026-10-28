@@ -832,7 +832,7 @@
     },
     {
       "name": "model3d.get",
-      "description": "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen.",
+      "description": "Het 3D-model lezen: knopen, staven, platen, opleggingen, lasten, belastingvlakken en schijven, met de aantallen. Staan er staven in met een profiel of materiaal dat Berekenen weigert (bijvoorbeeld uit een met de hand bewerkt projectbestand), dan noemt onbekendeDoorsneden ze met staafnummer, namen en reden.",
       "inputSchema": {
         "type": "object",
         "properties": {},

@@ -42,6 +42,7 @@ pub mod image_flowable;
 pub mod page_template;
 pub mod paragraph;
 pub mod spacer;
+pub mod subset;
 pub mod table;
 pub mod tekstruns;
 pub mod types;

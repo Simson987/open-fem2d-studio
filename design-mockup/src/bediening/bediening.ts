@@ -33,6 +33,7 @@
  * zodra de schakelaar Instellingen → AI-assistent (MCP) het kanaal aanzet
  * (event `gui-control:status`, issue #109).
  */
+import { beschrijfOnbekendeDoorsnede, onbekendeOpenFem3DDoorsneden } from "../components/openFem3d/openFem3dDoorsnedeKeuring";
 import { useEffect, useRef, useState } from "react";
 import { useCheckStore } from "../stores/checkStore";
 import { useDekkingslijnStore } from "../stores/dekkingslijnStore";
@@ -834,6 +835,17 @@ export async function voerUit(
         if (beam.profileNameEnd === undefined) continue;
         const verloop = openFem3DBeamVerloop(beam);
         if (verloop.status === "fout") throw new Error(`3D-staaf ${beam.id}: ${verloop.reden}`);
+      }
+      // #230: een onbekend profiel of materiaal (of een combinatie die niet
+      // bij elkaar past) weigert Berekenen later toch; dan nu al, met ALLE
+      // staven die het betreft, en het huidige model blijft staan. Een staaf
+      // ZONDER materiaal valt hier buiten (zoals voorheen: Berekenen meldt
+      // dat); het gaat om een opgegeven naam die niet bestaat of niet past.
+      const onbekend = onbekendeOpenFem3DDoorsneden({
+        beams: gelezen.beams.filter((beam) => (beam.material?.trim() ?? "") !== ""),
+      });
+      if (onbekend.length > 0) {
+        throw new Error(`${onbekend.map(beschrijfOnbekendeDoorsnede).join("; ")}. Het model is niet geopend.${onbekend[0].suggestie}`);
       }
       let model = gelezen;
       if (levels) {

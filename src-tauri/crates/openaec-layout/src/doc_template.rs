@@ -349,6 +349,27 @@ impl DocTemplate {
             "Content",
         );
 
+        // Alle tekens die het document zet, zoals ze gezet worden (ook de
+        // stukken van `tekstruns`), voor de subset van de lettertypes (#227).
+        let mut tekens: std::collections::BTreeSet<char> = std::collections::BTreeSet::new();
+        for page in pages {
+            let mut font_name = String::new();
+            for op in &page.draw_list.ops {
+                match op {
+                    DrawOp::SetFont { name, .. } => font_name = name.clone(),
+                    DrawOp::DrawText { text, .. }
+                    | DrawOp::DrawTextCenter { text, .. }
+                    | DrawOp::DrawTextRight { text, .. } => {
+                        tekens.extend(text.chars());
+                        for (_, stuk) in self.tekstruns(&font_name, text) {
+                            tekens.extend(stuk.chars());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // Register fonts with printpdf
         let fonts_guard = self.fonts.lock().unwrap();
         let mut pdf_fonts: std::collections::HashMap<String, printpdf::IndirectFontRef> =
@@ -367,7 +388,11 @@ impl DocTemplate {
                 pdf_fonts.insert(name.to_string(), font_ref.clone());
                 continue;
             }
+            // Alleen de gebruikte glyphs (#227); lukt de subset niet, dan
+            // het hele lettertype, zoals voorheen.
             let font_data = fonts_guard.font_data(font_id);
+            let subset = crate::subset::subset_ttf(font_data, &tekens);
+            let font_data: &[u8] = subset.as_deref().unwrap_or(font_data);
             match doc.add_external_font(font_data) {
                 Ok(font_ref) => {
                     per_font.insert(font_id.0, font_ref.clone());

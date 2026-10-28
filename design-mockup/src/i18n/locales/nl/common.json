@@ -535,6 +535,8 @@
       "combosNoticeTitle": "Melding bij het openen: combinaties",
       "unknownFieldsTitle": "Dit bestand bevat velden die deze versie niet kent",
       "unknownFieldsBody": "{{velden}} — ze worden niet geladen en verdwijnen bij het volgende Opslaan. Bewaar een kopie van het bestand als je ze nodig hebt.",
+      "unknownSections3dTitle": "Onbekend profiel of materiaal in het 3D-model",
+      "unknownSections3dBody": "{{staven}}. Berekenen weigert deze staven; kies een bekend profiel en materiaal in de eigenschappen.",
       "projectOpened": "Project geopend",
       "libraryUpdated": "Bibliotheek bijgewerkt door dit project",
       "openFailed": "Kan bestand niet openen",

@@ -259,7 +259,10 @@ a_net_mm2?: number,
  * Een drukkracht in de omhullende is bij zo'n staaf speling of
  * voorspanning (de kruisregel laat één diagonaal per kruis een kleine
  * druk houden), geen druksterkte; zij wordt niet getoetst, maar wel met de
- * grootste waarde in een eigen regel van het resultaat gemeld.
+ * grootste waarde in een eigen regel van het resultaat gemeld. Is die
+ * druk groter dan [`TREK_ALLEEN_DRUKGRENS`]·N_pl,Rd, dan is zij geen
+ * speling meer: de toetsing is dan "niet volledig getoetst" met de
+ * drukcombinatie als reden (#244).
  *
  * `None` of `false` = een gewone staaf, het gedrag van vóór dit veld.
  */

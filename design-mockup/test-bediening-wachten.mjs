@@ -233,6 +233,19 @@ async function binnenGrens(naam, args, acties) {
     u?.aantalOpgelegdeVerplaatsingen === 1 && a.openFem3d.model.supports[0]?.prescribed?.uxM === 0.001 &&
     a.openFem3d.model.supports[1]?.springs?.kzKnPerM === 370,
     JSON.stringify(u));
+  // #230: een onbekend profiel of materiaal weigert het hele model, met alle
+  // staven die het betreft; het geopende model blijft staan.
+  const voor = a.openFem3d.model;
+  const fout = await binnenGrens("model_3d_bouwen", {
+    nodes: [{ x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, { x: 5, y: 0, z: 3 }],
+    beams: [{ from: 1, to: 2, profile_name: "IPE 9999", material: "S999" },
+      { from: 2, to: 3, profile_name: "IPE 300", material: "S235" },
+      { from: 1, to: 3, profile_name: "IPE 9999", material: "S235" }],
+  }, a);
+  check("model_3d_bouwen weigert IPE 9999/S999 en IPE 9999/S235 met staafnummers",
+    typeof fout?.fout === "string" && fout.fout.includes("3D-staaf 1:") && fout.fout.includes("S999") &&
+    fout.fout.includes("3D-staaf 3:") && !fout.fout.includes("3D-staaf 2:") && a.openFem3d.model === voor,
+    JSON.stringify(fout));
   check("model_3d_bouwen bewaart een revolute Y als alleen Ry vrij",
     a.openFem3d.model.supports[0]?.ux === true && a.openFem3d.model.supports[0]?.uy === true &&
     a.openFem3d.model.supports[0]?.uz === true && a.openFem3d.model.supports[0]?.rx === true &&
