@@ -486,6 +486,7 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["model-bouwen-lasten", "#215: de React-hook useFemStore (latestRef, pushHistory) rendert via react-dom/server; de hook en de bediening (`model_bouwen`) staan buiten de headless sidecarbundel"],
   ["open-fem3d-leeg-geval", "#245: de keuze van het getoonde 3D-resultaat (lib/openFem3dResultaatKeuze) en bronscans van App.tsx en de bediening (React/app-laag), plus i18next; niets uit de sidecarbundel"],
   ["oplegging-app", "#223/#222: de modelcontrole en rekenpoort van de app (lib/modelControle, lib/rekenPoort), de vertaling via i18next en de Rust-raamwerkroute (nativeFrame2DRoute); geen van die modules staat in de barrel. De MCP-kant staat in dubbele-oplegging en veer-stijfheid, die wél tegen de bundel draaien"],
   ["categorie-h-combinaties", "#237: leest alleen de combinatiegenerator (normcombinaties.ts) rechtstreeks; geen sidecarpad"],
