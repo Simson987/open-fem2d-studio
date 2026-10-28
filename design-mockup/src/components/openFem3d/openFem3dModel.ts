@@ -9,6 +9,10 @@ import { splitsVerlopendProfiel, tussenProfielVoorSplitsing } from "../../lib/ve
 import { readOpenFem3DAnalysisMaterials, type OpenFem3DAnalysisMaterials } from "./openFem3dAnalysisMaterial";
 import type { AfleidingsRegel } from "../../lib/wind/windEurocode";
 import { parseWindSurfacePressurePlan, type WindSurfacePressurePlan } from "../../lib/wind/windSurfacePressurePlan";
+import {
+  attachOpenFem3DNativeFields, isFrame3DEdgeSupportTuple, legacyFrame3DEdgeSupportsToOpenFem3D,
+  type OpenFem3DNativeBeamFields, type OpenFem3DNativeModelFields, type OpenFem3DNativePlateFields,
+} from "./openFem3dNativeModel";
 
 /** Geometry for the 3D workspace. Coordinates are metres; Z is vertical, like 2D. */
 export interface OpenFem3DNode {
@@ -29,7 +33,8 @@ export interface OpenFem3DNode {
   name?: string;
 }
 
-export interface OpenFem3DBeam {
+/** Native-routevelden (axiale staaf, materiaalwet): zie openFem3dNativeModel. */
+export interface OpenFem3DBeam extends OpenFem3DNativeBeamFields {
   id: number;
   layerId?: number;
   startNodeId: number;
@@ -312,7 +317,8 @@ export type OpenFem3DPlateBoundarySegment =
   | { kind: "line"; startNodeId: number; endNodeId: number }
   | { kind: "arc"; startNodeId: number; controlNodeId: number; endNodeId: number };
 
-export interface OpenFem3DPlate {
+/** Native-routevelden (membraan, wapening, materiaalwet): zie openFem3dNativeModel. */
+export interface OpenFem3DPlate extends OpenFem3DNativePlateFields {
   id: number;
   layerId?: number;
   /** Knoopvolgorde rond de buitenrand, minimaal drie. */
@@ -482,7 +488,11 @@ export interface OpenFem3DEnvelopePanel {
   name?: string;
 }
 
-export interface OpenFem3DModel {
+/**
+ * Native-routevelden (volumes Tet4/Hex8, volumelasten, plaatrandlasten,
+ * FNL-lastpad): zie openFem3dNativeModel. Alleen Open FEM Rust rekent ze.
+ */
+export interface OpenFem3DModel extends OpenFem3DNativeModelFields {
   nodes: OpenFem3DNode[];
   beams: OpenFem3DBeam[];
   /** Optional so older project files keep their exact geometry and semantics. */
@@ -1197,7 +1207,13 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
       throw new Error(`3D-plaat ${id} bevat geen geldige lijst randopleggingen.`);
     }
     const edgeSupports: OpenFem3DPlateEdgeSupport[] = [];
-    for (const rawSupport of (plate.edgeSupports ?? []) as unknown[]) {
+    // Het ontwikkelspoor `frame3d` schreef vier randtypen in plaatassen
+    // ("free" | "simplySupported" | "clamped"); zet die om naar de globale vorm.
+    const rawEdgeSupports = Array.isArray(plate.edgeSupports) && plate.edgeSupports.length > 0
+      && isFrame3DEdgeSupportTuple(plate.edgeSupports)
+      ? legacyFrame3DEdgeSupportsToOpenFem3D(plate.edgeSupports, loop, nodeIndex, `3D-plaat ${id}`)
+      : plate.edgeSupports;
+    for (const rawSupport of (rawEdgeSupports ?? []) as unknown[]) {
       if (!rawSupport || typeof rawSupport !== "object" || Array.isArray(rawSupport)) {
         throw new Error(`3D-plaat ${id} bevat een ongeldige randoplegging.`);
       }
@@ -1457,6 +1473,7 @@ export function parseOpenFem3DModel(value: unknown): OpenFem3DModel {
       if (layerId !== undefined) item.layerId = layerId;
     }
   }
+  attachOpenFem3DNativeFields(raw, model);
   return model;
 }
 

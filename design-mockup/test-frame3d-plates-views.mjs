@@ -174,7 +174,7 @@ const loadedWithCurve = updateFrame3DPlate(loaded, 1, { modulusCurve, reinforcem
 const projectText = serializeProject({
   nodes: [], beams: [], supports: [], plates: [], loads: [], loadCases: [{ id: 1, name: "Permanent", type: "permanent" }],
   activeLoadCaseId: 1, selfWeightEnabled: false, nonlinearEnabled: true,
-  modelDimension: "3d", model3d: loadedWithCurve, frame3dViewSets: [modernView],
+  modelDimension: "3d", model3d: loadedWithCurve, openFem3dViewSets: [modernView],
 });
 const reopened = deserializeProject(projectText);
 assert.equal(reopened.model3d.plates[0].cornerRadiusM, 0.35);
@@ -183,12 +183,20 @@ assert.deepEqual(reopened.model3d.plates[0].modulusCurve, modulusCurve,
   "de ingevoerde E-rekcurve blijft in het 3D-projectbestand behouden");
 assert.deepEqual(reopened.model3d.plates[0].reinforcement, reinforcement,
   "de ingevoerde plaatwapening en scheurgrens blijven in het projectbestand behouden");
-assert.deepEqual(reopened.model3d.plates[0].edgeSupports, edgeSupports,
-  "de plaatrandopleggingen blijven in het projectbestand behouden");
+// Het projectbestand bewaart het Open FEM 3D-model; de frame3d-randtypen (in
+// plaatassen) worden bij het lezen omgezet naar globale opleggingen. Deze
+// plaat ligt in het XY-vlak: scharnier = uz vast, inklemming = uz, rx en ry
+// vast (openFem3dNativeModel, legacyFrame3DEdgeSupportsToOpenFem3D).
+const edge = (index, clamped) => ({ edge: index, ux: false, uy: false, uz: true, rx: clamped, ry: clamped, rz: false });
+assert.deepEqual(reopened.model3d.plates[0].edgeSupports, [edge(0, false), edge(1, true), edge(3, false)],
+  "de plaatrandopleggingen blijven (omgezet naar globale assen) in het projectbestand behouden");
 assert.equal(reopened.model3d.plates[0].maxCellSizeM, 0.4);
 assert.throws(() => updateFrame3DPlate(withPlate, 1, { edgeSupports: ["free", "clamped"] }), /vier plaatranden/);
 assert.throws(() => updateFrame3DPlate(withPlate, 1, { maxCellSizeM: 0 }), /maximale roostermaat/);
-assert.equal(reopened.frame3dViewSets[0].name, "UGT momentbeeld");
-assert.equal(reopened.frame3dViewSets[0].mode, "results", "de resultaat-tabstand overleeft projectopslag");
+// Sinds de samenvoeging met Open FEM 3D heten de weergaven `openFem3dViewSets`
+// (een oud bestand met `frame3dViewSets` wordt bij openen daarheen omgezet).
+assert.equal(reopened.frame3dViewSets, undefined);
+assert.equal(reopened.openFem3dViewSets[0].name, "UGT momentbeeld");
+assert.equal(reopened.openFem3dViewSets[0].mode, "results", "de resultaat-tabstand overleeft projectopslag");
 
 console.log("3D-platen, openingen, ronde randen, oppervlaktebelasting en opgeslagen views: geslaagd");
