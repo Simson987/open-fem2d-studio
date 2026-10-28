@@ -882,6 +882,7 @@
         "openingEdgeZero": "le bord {{rand}} de l'ouverture {{opening}} a une longueur de {{lengte}} mm et ne peut pas porter de charge."
       },
       "support": {
+        "springStiffness": "L'appui du nœud {{knoop}} est un ressort ({{type}}) sans raideur positive (k = {{k}}). Un tel ressort n'est pas calculé comme un appui rigide. Saisissez la raideur positive voulue, choisissez un appui rigide ou supprimez l'appui.",
         "conflict": "Le nœud {{knoop}} a des appuis contradictoires ({{eerste}} et {{tweede}}) dans la même direction. Gardez un seul appui par direction ; pour deux ressorts parallèles, un seul ressort avec la raideur additionnée.",
         "merged": "Le nœud {{knoop}} a plus d'un appui ({{typen}}) ; ils sont combinés par direction. Vérifiez que c'est voulu."
       },

@@ -176,8 +176,10 @@ export interface SolverSupportInput {
   /**
    * Spring stiffness — required for `zSpring` / `xSpring` (N/mm) and
    * `rotSpring` (N·mm/rad). Ignored for rigid support types.
-   * If omitted or non-positive on a spring type, the solver treats the
-   * support as fully constrained ("rigid") to keep the system non-singular.
+   * Must be positive and finite on a spring type: omitted, zero, negative or
+   * non-finite stiffness is REFUSED by the engine (issue #222, see
+   * `opleggingen.ts`). It used to be treated as a rigid support, which
+   * silently changed the structure on a sign error.
    */
   k?: number;
 }

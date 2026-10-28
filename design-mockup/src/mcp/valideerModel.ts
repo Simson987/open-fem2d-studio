@@ -1544,14 +1544,10 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
       else errors.push(melding);
       continue;
     }
-    if ((s.type === "zSpring" || s.type === "xSpring" || s.type === "rotSpring")) {
-      if (s.k === undefined || s.k <= 0) {
-        warnings.push(
-          `Oplegging op knoop ${s.nodeId} is een veer zonder positieve ` +
-            "stijfheid (`k`) en rekent daarom als een starre oplegging.",
-        );
-      }
-    }
+    // Een veer zonder positieve, eindige stijfheid (k <= 0, ontbrekend):
+    // tot issue #222 een waarschuwing "rekent als een starre oplegging", en
+    // de solve rekende daarna zonder melding met een star steunpunt. Nu een
+    // fout uit `combineerOpleggingen` hieronder — dezelfde regel als de engine.
     gesteund.add(s.nodeId);
     const knoop = knoopById.get(s.nodeId)!;
     for (const richting of VASTGEZET[s.type] ?? []) {
@@ -1561,7 +1557,8 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
     }
   }
 
-  // Meerdere opleggingen op één knoop (issue #223): de engine voegt ze per
+  // Meerdere opleggingen op één knoop (issue #223) en veren zonder positieve
+  // stijfheid (issue #222): de engine voegt opleggingen per
   // vrijheidsgraad samen en weigert star én verend (of twee veren) in
   // dezelfde richting. Vroeger telde alleen de laatste oplegging, en de
   // reactietabel las de eerste — met een fictief veermoment als gevolg. Hier

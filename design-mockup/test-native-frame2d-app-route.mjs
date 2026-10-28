@@ -935,7 +935,12 @@ try {
   const hingeInput = { nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 3000, z: 0 }],
     beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 10_000, I: 8e6,
       endConnection: "hinge" }],
-    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 2, type: "rotSpring", k: 0 }],
+    // Geen `rotSpring` met k = 0 meer op de scharnierende tip: die rekende tot
+    // issue #222 stil als starre rotatiesteun en wordt nu geweigerd. De tip-
+    // draaiing hangt alleen aan het scharnier en wordt door de kern als
+    // onbepaalde knoopdraaiing vastgezet (`vrijeKnoopdraaiingen`); er werkt
+    // geen koppel op, dus aan de translaties en krachten verandert niets.
+    supports: [{ nodeId: 1, type: "fixed" }],
     loads: [], pointLoads: [{ nodeId: 2, caseId: 1, fz: -10_000 }],
     cases: [{ id: 1, name: "scharnier" }] };
   const hingeNative = (await solveAllCasesNativeFrame2D(hingeInput)).get(1);
@@ -984,7 +989,12 @@ try {
     beams: [{ id: 1, from: 1, to: 2, E: 210_000, A: 10_000, I: 8e6,
       releases: { endRy: true },
       axialMaterialLaw: { kind: "steelBilinear", yieldMpa: 250, hardeningRatio: 0.01 } }],
-    supports: [{ nodeId: 1, type: "fixed" }, { nodeId: 2, type: "rotSpring", k: 0 }],
+    // Geen `rotSpring` met k = 0 meer op de scharnierende tip: die rekende tot
+    // issue #222 stil als starre rotatiesteun en wordt nu geweigerd. De tip-
+    // draaiing hangt alleen aan het scharnier en wordt door de kern als
+    // onbepaalde knoopdraaiing vastgezet (`vrijeKnoopdraaiingen`); er werkt
+    // geen koppel op, dus aan de translaties en krachten verandert niets.
+    supports: [{ nodeId: 1, type: "fixed" }],
     cases: [{ id: 1, name: "staal-FNL met momentvrijgave" }], loads: [],
     pointLoads: [{ nodeId: 2, caseId: 1, fz: -20_000 }],
   };

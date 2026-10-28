@@ -882,6 +882,7 @@
         "openingEdgeZero": "rand {{rand}} van opening {{opening}} heeft lengte {{lengte}} mm en kan geen last dragen."
       },
       "support": {
+        "springStiffness": "Oplegging op knoop {{knoop}} is een veer ({{type}}) zonder positieve stijfheid (k = {{k}}). Zo'n veer wordt niet als starre oplegging gerekend. Vul de bedoelde positieve stijfheid in, kies een starre oplegging, of verwijder de oplegging.",
         "conflict": "Knoop {{knoop}} heeft tegenstrijdige opleggingen ({{eerste}} en {{tweede}}) in dezelfde richting. Houd per richting één steun aan; bij twee parallelle veren één veer met de opgetelde stijfheid.",
         "merged": "Knoop {{knoop}} heeft meer dan één oplegging ({{typen}}); ze worden per richting samengevoegd. Controleer of dat de bedoeling is."
       },

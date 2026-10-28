@@ -1,7 +1,8 @@
 /**
- * opleggingen.ts — opleggingen per knoop samenvoegen per vrijheidsgraad.
+ * opleggingen.ts — opleggingen per knoop samenvoegen per vrijheidsgraad, en
+ * veren zonder positieve stijfheid weigeren.
  *
- * WAAROM DIT BESTAAT (controle 26 oktober 2026, issue #223)
+ * WAAROM DIT BESTAAT (controle 26 oktober 2026, issues #223 en #222)
  *
  * #223 — Twee opleggingen op één knoop (bijvoorbeeld `pinned` + `rotSpring`
  *   voor een verend ingeklemde voet) werden niet per vrijheidsgraad
@@ -12,6 +13,10 @@
  *   opgelegde ligger, maar de reactietabel nam de eerste oplegging en toonde
  *   −k·θ als fictief veermoment (44,98 kNm waar 22,50 kNm hoort).
  *
+ * #222 — Een veer met k ≤ 0 (of zonder k) werd stil als STAR steunpunt
+ *   gerekend. Een tekenfout (k = −5 in plaats van +5 kN/mm) veranderde zo de
+ *   constructie: veerzakking 6 mm werd 0 mm, zonder melding.
+ *
  * DE REGEL, voor alle wegen naar de kern (TS-engine, Rust-raamwerkroute,
  * validatie van de MCP en de modelcontrole van de app):
  *  - Per knoop en per richting (x, z, rotatie) één steun: vrij, star of veer.
@@ -19,8 +24,11 @@
  *    Star + star in dezelfde richting is onschuldig (zelfde steun). Star +
  *    veer of veer + veer in dezelfde richting is tegenstrijdig of dubbelzinnig
  *    en wordt GEWEIGERD met knoop en richting.
- *  - Een veer zonder positieve stijfheid telt (nog) als starre steun in
- *    die richting, zoals het contract in types.ts zegt.
+ *  - Een veer moet een positieve, eindige stijfheid hebben. k ≤ 0, NaN,
+ *    oneindig of ontbrekend wordt GEWEIGERD — niet star gemaakt en ook niet
+ *    stil als vrij gelezen. Ook k = 0 ("geen veer") wordt geweigerd: wie de
+ *    richting vrij wil, laat de oplegging weg; dat is expliciet en een
+ *    eventueel mechanisme wordt dan als zodanig gemeld.
  *
  * Puur: geen React, geen kern. De meldingen zijn Nederlands; de app vertaalt
  * via de bevinding in `lib/modelControle.ts`.
@@ -73,6 +81,12 @@ const RICHTING_NAAM: Record<SteunRichting, string> = {
   x: "horizontale richting (x)",
   z: "verticale richting (z)",
   ry: "rotatie (ry)",
+};
+
+const VEER_NAAM: Record<string, string> = {
+  xSpring: "horizontale veer (xSpring)",
+  zSpring: "verticale veer (zSpring)",
+  rotSpring: "rotatieveer (rotSpring)",
 };
 
 /**
@@ -135,11 +149,28 @@ export function combineerOpleggingen(
 
     const veerRichting = VEER[s.type];
     if (veerRichting !== undefined) {
-      // Veer zonder positieve stijfheid: (nog) als starre steun in die
-      // richting, zoals het contract in types.ts tot nu toe zegt.
-      const effectief: RichtingSteun = isGeldigeVeerstijfheid(s.k)
-        ? { soort: "veer", k: s.k, door: s.type }
-        : { soort: "star", door: s.type };
+      if (!isGeldigeVeerstijfheid(s.k)) {
+        metFout.add(s.nodeId);
+        const ontbreekt = s.k === undefined || s.k === null;
+        const reden = ontbreekt
+          ? "zonder stijfheid (`k` ontbreekt)"
+          : `met stijfheid k = ${kTekst(s.type, s.k, eenheden)}`;
+        const waarom = ontbreekt || (typeof s.k === "number" && !Number.isFinite(s.k))
+          ? "Een veer heeft een positieve, eindige stijfheid nodig."
+          : s.k === 0
+            ? "k = 0 is geen veer: de richting zou vrij zijn."
+            : "Een negatieve stijfheid bestaat niet; vermoedelijk een tekenfout.";
+        bevindingen.push({
+          nodeId: s.nodeId, ernst: "fout", soort: "veerStijfheid",
+          tekst:
+            `Oplegging op knoop ${s.nodeId} is een ${VEER_NAAM[s.type]} ${reden}. ${waarom} ` +
+            "Zo'n veer wordt niet als starre oplegging gerekend (dat zou de constructie stil " +
+            "veranderen) en ook niet weggelaten. Vul de bedoelde positieve stijfheid in, kies " +
+            "een starre oplegging, of verwijder de oplegging als de richting vrij hoort te zijn.",
+          waarden: { knoop: s.nodeId, type: s.type, k: kTekst(s.type, s.k, eenheden) },
+        });
+        continue;
+      }
       const huidig = knoop[veerRichting];
       if (huidig.soort !== "vrij") {
         metFout.add(s.nodeId);
@@ -147,8 +178,7 @@ export function combineerOpleggingen(
           nodeId: s.nodeId, ernst: "fout", soort: "tegenstrijdig",
           tekst:
             `Knoop ${s.nodeId} heeft twee opleggingen in de ${RICHTING_NAAM[veerRichting]}: ` +
-            `${huidig.door} (${huidig.soort === "star" ? "star" : "verend"}) en ${s.type} ` +
-            `(${effectief.soort === "star" ? "star" : "verend"}). ` +
+            `${huidig.door} (${huidig.soort === "star" ? "star" : "verend"}) en ${s.type} (verend). ` +
             "Dat is tegenstrijdig of dubbelzinnig; er wordt niet gegokt welke bedoeld is. " +
             "Houd per richting één steun aan (bij twee parallelle veren één veer met de " +
             "opgetelde stijfheid).",
@@ -156,7 +186,7 @@ export function combineerOpleggingen(
         });
         continue;
       }
-      knoop[veerRichting] = effectief;
+      knoop[veerRichting] = { soort: "veer", k: s.k, door: s.type };
       continue;
     }
 

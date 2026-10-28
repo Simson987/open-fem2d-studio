@@ -882,6 +882,7 @@
         "openingEdgeZero": "Rand {{rand}} der Öffnung {{opening}} hat die Länge {{lengte}} mm und kann keine Last tragen."
       },
       "support": {
+        "springStiffness": "Das Auflager an Knoten {{knoop}} ist eine Feder ({{type}}) ohne positive Steifigkeit (k = {{k}}). Eine solche Feder wird nicht als starres Auflager gerechnet. Geben Sie die beabsichtigte positive Steifigkeit ein, wählen Sie ein starres Auflager oder entfernen Sie das Auflager.",
         "conflict": "Knoten {{knoop}} hat widersprüchliche Auflager ({{eerste}} und {{tweede}}) in derselben Richtung. Behalten Sie je Richtung ein Auflager; bei zwei parallelen Federn eine Feder mit der aufsummierten Steifigkeit.",
         "merged": "Knoten {{knoop}} hat mehr als ein Auflager ({{typen}}); sie werden je Richtung zusammengefasst. Prüfen Sie, ob dies beabsichtigt ist."
       },

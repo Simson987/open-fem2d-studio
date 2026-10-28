@@ -313,6 +313,13 @@ const AFBEELDINGEN: Afbeelding[] = [
     nl: (m) => m.input,
   },
   {
+    // engine.ts (buildMesh) en nativeFrame2DRoute.ts via opleggingen.ts: een
+    // veer zonder positieve, eindige stijfheid (issue #222).
+    patroon: /^Oplegging op knoop \d+ is een (?:horizontale |verticale |rotatie)/,
+    code: "MODEL_ONOPLOSBAAR",
+    nl: (m) => m.input,
+  },
+  {
     // engine.ts (eisEindigeUitkomst): NaN of oneindig in het resultaat.
     patroon: /^De berekening leverde een ongeldig getal/,
     code: "MODEL_ONOPLOSBAAR",

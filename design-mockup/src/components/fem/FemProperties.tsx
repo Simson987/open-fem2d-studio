@@ -393,9 +393,32 @@ function NodeProperties({ node, supports, updateNode, addSupport, removeSupport,
 
   const reaction = results?.reactions.get(node.id);
 
+  // Een veer zonder positieve stijfheid wordt geweigerd (issue #222); tot
+  // dan maakte dit keuzemenu een veer zonder `k`, die stil star rekende. Bij
+  // het wisselen naar een veertype blijft een bestaande stijfheid van
+  // hetzelfde type staan; anders de beginwaarde van het plaatsingsvenster
+  // (10), zichtbaar en bewerkbaar in het veld eronder.
+  const isVeer = (type: string | undefined) =>
+    type === "zSpring" || type === "xSpring" || type === "rotSpring";
   const onChangeSupport = (val: string) => {
     if (val === "none") removeSupport(node.id);
-    else addSupport(node.id, val as SupportType);
+    else if (isVeer(val)) {
+      const k = support?.type === val && support.k !== undefined && support.k > 0 ? support.k : 10;
+      addSupport(node.id, val as SupportType, k);
+    } else addSupport(node.id, val as SupportType);
+  };
+  const [kStr, setKStr] = useState(support?.k !== undefined ? String(support.k) : "");
+  useEffect(() => {
+    setKStr(support?.k !== undefined ? String(support.k) : "");
+  }, [node.id, support?.k]);
+  const commitK = () => {
+    const v = Number(kStr);
+    // Alleen een positieve, eindige stijfheid; anders terug naar de oude waarde.
+    if (support && isVeer(support.type) && Number.isFinite(v) && v > 0 && v !== support.k) {
+      addSupport(node.id, support.type, v);
+    } else {
+      setKStr(support?.k !== undefined ? String(support.k) : "");
+    }
   };
 
   return (
@@ -444,7 +467,17 @@ function NodeProperties({ node, supports, updateNode, addSupport, removeSupport,
               <option value="rotSpring">{t("props.node.supportRotSpring")}</option>
             </select>
           </Row>
-          {support?.k !== undefined && (
+          {support && isVeer(support.type) ? (
+            <Row label={support.type === "rotSpring" ? "kθ (kNm/rad)" : "k (kN/mm)"}>
+              <input
+                type="number" min="0" step="any" className="fem-prop-input fem-prop-input-mono"
+                value={kStr}
+                onChange={e => setKStr(e.target.value)}
+                onBlur={commitK}
+                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              />
+            </Row>
+          ) : support?.k !== undefined && (
             <Row label="k">
               <code>{support.k}</code>
             </Row>

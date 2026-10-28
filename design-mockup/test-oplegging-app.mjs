@@ -1,5 +1,5 @@
 // De app-kant van de opleggingscontrole (controle 26 oktober 2026):
-// issue #223 (dubbele oplegging).
+// issue #223 (dubbele oplegging) en issue #222 (veer met k <= 0).
 //
 // WAT DEZE TEST VASTLEGT
 //  [1] De modelcontrole van de app (`controleerModel`, en daarmee de
@@ -8,8 +8,11 @@
 //      waarschuwing — dezelfde regel als de engine (`opleggingen.ts`).
 //  [2] De vertaalbare tekst: de Nederlandse vertaling van de sleutel is
 //      letterlijk de Nederlandse tekst; en/de/fr bestaan en zijn vertaald.
+//  [1b] Een veer met k <= 0 of zonder k is een FOUT in de modelcontrole
+//      (#222); de rekenpoort weigert hem, in plaats van hem star te rekenen.
 //  [3] De Rust-raamwerkroute van de app (`buildNativeFrame2DRequest`) voegt
-//      met dezelfde regel samen en weigert dezelfde tegenstrijdigheid.
+//      met dezelfde regel samen en weigert dezelfde tegenstrijdigheid, en een
+//      veer met k <= 0 (was: star, `else entry.uy = true`).
 //
 // Draaien met: npx tsx test-oplegging-app.mjs  (alleen tegen de bron)
 
@@ -59,15 +62,33 @@ ok("één oplegging per knoop: geen bevinding",
   !controleerModel(model([{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zRoller" }])).some((b) => b.soort === "oplegging"));
 
 // ─────────────────────────────────────────────────────────────────────────
+log("\n[1b] Veer met k <= 0: fout in de modelcontrole van de app (#222)");
+// ─────────────────────────────────────────────────────────────────────────
+const veerFouten = [];
+for (const k of [-5, 0, undefined]) {
+  const bev = controleerModel(model([{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zSpring", k }]));
+  const f = bev.find((b) => b.soort === "oplegging" && b.ernst === "fout");
+  ok(`zSpring k = ${k}: fout op knoop 2`, f?.nodeIds?.[0] === 2 && f.tekst.includes("zonder positieve stijfheid"),
+    JSON.stringify(bev));
+  if (f) veerFouten.push(f);
+  let melding = "";
+  try { controleerVoorRekenen(model([{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zSpring", k }])); }
+  catch (e) { melding = e.message; }
+  ok(`zSpring k = ${k}: de rekenpoort weigert`, melding.includes("Oplegging op knoop 2 is een veer (zSpring)"), melding);
+}
+ok("zSpring k = 5: geen bevinding",
+  !controleerModel(model([{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zSpring", k: 5 }])).some((b) => b.soort === "oplegging"));
+
+// ─────────────────────────────────────────────────────────────────────────
 log("\n[2] Vertaalbare tekst: nl = tekst, en/de/fr vertaald");
 // ─────────────────────────────────────────────────────────────────────────
-for (const b of [fout, waarsch].filter(Boolean)) {
+for (const b of [fout, waarsch, veerFouten[0]].filter(Boolean)) {
   await zetTaal("nl");
   ok(`nl: ${b.tekstVertaalbaar.sleutel} = de Nederlandse tekst`, vertaal(t("nl"), b.tekstVertaalbaar) === b.tekst,
     vertaal(t("nl"), b.tekstVertaalbaar));
   for (const taal of ["en", "de", "fr"]) {
     const v = vertaal(t(taal), b.tekstVertaalbaar);
-    ok(`${taal}: ${b.tekstVertaalbaar.sleutel} vertaald`, v !== b.tekst && !v.includes("canvas.modelCheck") && v.includes("1"), v);
+    ok(`${taal}: ${b.tekstVertaalbaar.sleutel} vertaald`, v !== b.tekst && !v.includes("canvas.modelCheck") && v.includes(String(b.nodeIds[0])), v);
   }
 }
 
@@ -98,6 +119,13 @@ const invoer = (supports) => ({
   } catch (e) { melding = e.message; }
   ok("twee rotSpring op één knoop: geweigerd (was: de tweede overschreef de eerste stil)",
     melding.includes("Knoop 1 heeft twee opleggingen in de rotatie (ry)"), melding);
+  let veer = "";
+  try {
+    buildNativeFrame2DRequest(invoer([{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zSpring", k: -5000 }]),
+      () => 1, "linear");
+  } catch (e) { veer = e.message; }
+  ok("zSpring k = −5 kN/mm: geweigerd (was: star)",
+    veer.startsWith("Oplegging op knoop 2 is een verticale veer (zSpring) met stijfheid k = −5 kN/mm"), veer);
 }
 
 log(`\n${passed} geslaagd, ${failed} mislukt`);

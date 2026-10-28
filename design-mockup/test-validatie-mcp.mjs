@@ -332,10 +332,13 @@ log("\n[5] Constructieve controles");
   const veerZonderK = PORTAAL();
   veerZonderK.supports[1] = { nodeId: 4, type: "zSpring" };
   const u9 = valideerModel(veerZonderK);
+  // Tot issue #222 een waarschuwing ("rekent als een starre oplegging"),
+  // waarna de solve zonder melding met een star steunpunt rekende. Nu een fout.
   ok(
-    "veer zonder stijfheid: waarschuwing dat hij star rekent",
-    noemt(u9.warnings, "starre oplegging"),
-    u9.warnings.join(" | "),
+    "veer zonder stijfheid: fout, niet stil star",
+    u9.ok === false && noemt(u9.errors, "Oplegging op knoop 4 is een verticale veer (zSpring) zonder stijfheid")
+      && !noemt(u9.warnings, "starre oplegging"),
+    [...u9.errors, ...u9.warnings].join(" | "),
   );
 }
 

@@ -205,7 +205,7 @@ export type BevindingSoort =
   | "stilleLast"
   /** Staafknoop tussen 1 en 50 mm van een plaatrand (omtrek of opening): niet gekoppeld. */
   | "staafeindeBijPlaatrand"
-  /** Opleggingen op één knoop die tegenstrijdig zijn of zijn samengevoegd (issue #223). */
+  /** Opleggingen op één knoop die tegenstrijdig zijn of zijn samengevoegd (issue #223), of een veer zonder positieve stijfheid (#222). */
   | "oplegging";
 
 /**
@@ -710,7 +710,8 @@ export function zoekLosseKnopen(model: ControleModel): Bevinding[] {
 }
 
 /**
- * Opleggingen per knoop (issue #223): meerdere opleggingen op één knoop
+ * Opleggingen per knoop (issues #223 en #222): een veer zonder positieve,
+ * eindige stijfheid is een FOUT. Meerdere opleggingen op één knoop
  * worden per vrijheidsgraad samengevoegd; star én verend, of twee veren in
  * dezelfde richting, is tegenstrijdig en een FOUT (de engine weigert het met
  * dezelfde regel, `opleggingen.ts`). Een samenvoeging zonder tegenspraak is
@@ -732,6 +733,21 @@ export function zoekOpleggingFouten(model: ControleModel): Bevinding[] {
       uit.push({
         soort: "oplegging", ernst: "fout", nodeIds: [b.nodeId], tekst,
         tekstVertaalbaar: vt("common:canvas.modelCheck.support.conflict", tekst, waarden),
+      });
+    } else if (b.soort === "veerStijfheid") {
+      // Issue #222: een veer met k <= 0 of zonder k rekende stil als STAR
+      // steunpunt. De engine weigert hem nu; hier staat het al bij het tekenen.
+      const steun = steunen.find((s) => s.nodeId === b.nodeId && s.type === b.waarden.type);
+      const eenheid = b.waarden.type === "rotSpring" ? "kNm/rad" : "kN/mm";
+      const k = typeof steun?.k === "number" ? `${steun.k} ${eenheid}` : "—";
+      const waarden = { knoop: b.nodeId, type: String(b.waarden.type), k };
+      const tekst =
+        `Oplegging op knoop ${waarden.knoop} is een veer (${waarden.type}) zonder positieve ` +
+        `stijfheid (k = ${waarden.k}). Zo'n veer wordt niet als starre oplegging gerekend. ` +
+        "Vul de bedoelde positieve stijfheid in, kies een starre oplegging, of verwijder de oplegging.";
+      uit.push({
+        soort: "oplegging", ernst: "fout", nodeIds: [b.nodeId], tekst,
+        tekstVertaalbaar: vt("common:canvas.modelCheck.support.springStiffness", tekst, waarden),
       });
     } else if (b.soort === "samengevoegd") {
       const waarden = { knoop: b.nodeId, typen: String(b.waarden.typen) };

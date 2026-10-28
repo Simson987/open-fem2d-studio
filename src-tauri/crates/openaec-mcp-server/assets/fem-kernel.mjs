@@ -19526,7 +19526,20 @@ function combineerOpleggingen(supports, eenheden = "model") {
     knoop.typen.push(s.type);
     const veerRichting = VEER[s.type];
     if (veerRichting !== void 0) {
-      const effectief = isGeldigeVeerstijfheid(s.k) ? { soort: "veer", k: s.k, door: s.type } : { soort: "star", door: s.type };
+      if (!isGeldigeVeerstijfheid(s.k)) {
+        metFout.add(s.nodeId);
+        const ontbreekt = s.k === void 0 || s.k === null;
+        const reden = ontbreekt ? "zonder stijfheid (`k` ontbreekt)" : `met stijfheid k = ${kTekst(s.type, s.k, eenheden)}`;
+        const waarom = ontbreekt || typeof s.k === "number" && !Number.isFinite(s.k) ? "Een veer heeft een positieve, eindige stijfheid nodig." : s.k === 0 ? "k = 0 is geen veer: de richting zou vrij zijn." : "Een negatieve stijfheid bestaat niet; vermoedelijk een tekenfout.";
+        bevindingen.push({
+          nodeId: s.nodeId,
+          ernst: "fout",
+          soort: "veerStijfheid",
+          tekst: `Oplegging op knoop ${s.nodeId} is een ${VEER_NAAM[s.type]} ${reden}. ${waarom} Zo'n veer wordt niet als starre oplegging gerekend (dat zou de constructie stil veranderen) en ook niet weggelaten. Vul de bedoelde positieve stijfheid in, kies een starre oplegging, of verwijder de oplegging als de richting vrij hoort te zijn.`,
+          waarden: { knoop: s.nodeId, type: s.type, k: kTekst(s.type, s.k, eenheden) }
+        });
+        continue;
+      }
       const huidig = knoop[veerRichting];
       if (huidig.soort !== "vrij") {
         metFout.add(s.nodeId);
@@ -19534,12 +19547,12 @@ function combineerOpleggingen(supports, eenheden = "model") {
           nodeId: s.nodeId,
           ernst: "fout",
           soort: "tegenstrijdig",
-          tekst: `Knoop ${s.nodeId} heeft twee opleggingen in de ${RICHTING_NAAM[veerRichting]}: ${huidig.door} (${huidig.soort === "star" ? "star" : "verend"}) en ${s.type} (${effectief.soort === "star" ? "star" : "verend"}). Dat is tegenstrijdig of dubbelzinnig; er wordt niet gegokt welke bedoeld is. Houd per richting \xE9\xE9n steun aan (bij twee parallelle veren \xE9\xE9n veer met de opgetelde stijfheid).`,
+          tekst: `Knoop ${s.nodeId} heeft twee opleggingen in de ${RICHTING_NAAM[veerRichting]}: ${huidig.door} (${huidig.soort === "star" ? "star" : "verend"}) en ${s.type} (verend). Dat is tegenstrijdig of dubbelzinnig; er wordt niet gegokt welke bedoeld is. Houd per richting \xE9\xE9n steun aan (bij twee parallelle veren \xE9\xE9n veer met de opgetelde stijfheid).`,
           waarden: { knoop: s.nodeId, richting: veerRichting, eerste: huidig.door, tweede: s.type }
         });
         continue;
       }
-      knoop[veerRichting] = effectief;
+      knoop[veerRichting] = { soort: "veer", k: s.k, door: s.type };
       continue;
     }
     for (const r of STAR[s.type] ?? []) {
@@ -19575,7 +19588,7 @@ function combineerOpleggingen(supports, eenheden = "model") {
   }
   return { perKnoop, bevindingen };
 }
-var STAR, VEER, RICHTING_NAAM;
+var STAR, VEER, RICHTING_NAAM, VEER_NAAM;
 var init_opleggingen = __esm({
   "src/components/fem/solver/opleggingen.ts"() {
     "use strict";
@@ -19594,6 +19607,11 @@ var init_opleggingen = __esm({
       x: "horizontale richting (x)",
       z: "verticale richting (z)",
       ry: "rotatie (ry)"
+    };
+    VEER_NAAM = {
+      xSpring: "horizontale veer (xSpring)",
+      zSpring: "verticale veer (zSpring)",
+      rotSpring: "rotatieveer (rotSpring)"
     };
   }
 });
@@ -28928,6 +28946,13 @@ var AFBEELDINGEN = [
     // engine.ts (buildMesh) en nativeFrame2DRoute.ts via opleggingen.ts:
     // tegenstrijdige opleggingen op één knoop (issue #223).
     patroon: /^Knoop \d+ heeft twee opleggingen in de /,
+    code: "MODEL_ONOPLOSBAAR",
+    nl: (m) => m.input
+  },
+  {
+    // engine.ts (buildMesh) en nativeFrame2DRoute.ts via opleggingen.ts: een
+    // veer zonder positieve, eindige stijfheid (issue #222).
+    patroon: /^Oplegging op knoop \d+ is een (?:horizontale |verticale |rotatie)/,
     code: "MODEL_ONOPLOSBAAR",
     nl: (m) => m.input
   },
@@ -43735,13 +43760,6 @@ function valideerModel(rauw, opties = {}) {
       if (heeftPlaten) warnings.push(melding);
       else errors.push(melding);
       continue;
-    }
-    if (s.type === "zSpring" || s.type === "xSpring" || s.type === "rotSpring") {
-      if (s.k === void 0 || s.k <= 0) {
-        warnings.push(
-          `Oplegging op knoop ${s.nodeId} is een veer zonder positieve stijfheid (\`k\`) en rekent daarom als een starre oplegging.`
-        );
-      }
     }
     gesteund.add(s.nodeId);
     const knoop = knoopById.get(s.nodeId);
