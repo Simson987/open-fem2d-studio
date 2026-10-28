@@ -970,7 +970,11 @@ fn schema_checkconfig() -> Value {
             "betonKolom": crate::concrete_tools::schema_kolom(),
             "spanningSigmaZ": { "type": "number",
                 "description": "Dwarsspanning σ_z in N/mm² voor de vergelijkspanning van een vrij materiaal; weglaten = 0 (een staafelement kent alleen N, V en M)." },
-            "betonZones": crate::concrete_tools::schema_wapeningszones()
+            "betonZones": crate::concrete_tools::schema_wapeningszones(),
+            "aluLasstatus": { "type": "string", "enum": ["geen", "gelast"],
+                "description": "Aluminium (NEN-EN 1999-1-1): 'geen' = bevestigd ongelast, 'gelast' = hele doorsnede in de HAZ. Weglaten = onbekend: de app rekent veilig als gelast en geeft nooit 'voldoet'." },
+            "aluZijdelingsGesteund": { "type": "boolean",
+                "description": "Aluminium: verklaring dat kip (§6.3.2) niet kan optreden. Weglaten = nee; kip blijft dan niet getoetst." }
         }
     })
 }

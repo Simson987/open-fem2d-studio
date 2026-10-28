@@ -29,6 +29,9 @@ use steel_check::{BeamCheckInput, BeamCheckResult};
 use steel_profiles::SteelProfile;
 use timber_check::clt::{CltBeamCheckInput, CltBeamCheckResult};
 use timber_check::{TimberBeamCheckInput, TimberBeamCheckResult};
+// Aluminium (NEN-EN 1999-1-1, issue #5). Eigen `use`-regel.
+use aluminium_check::{AluminiumBeamCheckInput, AluminiumBeamCheckResult};
+use nen_en_1999_1_1::AluminiumLegering;
 
 /// Het bedieningskanaal van de app — alleen actief met de instelling
 /// "Bediening door een AI-assistent toestaan (MCP)" of `OPENAEC_GUI_CONTROL=1`.
@@ -277,6 +280,23 @@ async fn concrete_creep_coefficient(
     inputs: CreepCoefficientRequest,
 ) -> Result<CreepCoefficientResponse, String> {
     nen_en_1992_1_1::kruip::creep_coefficient_request(inputs)
+}
+
+/// Aluminium (NEN-EN 1999-1-1): de ondersteunde legeringen uit tabel 3.2b.
+/// Dezelfde lijst als de toetsbrug-opdracht en het MCP-gereedschap van
+/// dezelfde naam (`aluminium_check::list_aluminium_alloys`).
+#[tauri::command]
+fn list_aluminium_alloys() -> Vec<AluminiumLegering> {
+    aluminium_check::list_aluminium_alloys()
+}
+
+/// Aluminium (NEN-EN 1999-1-1, issue #5): de staaftoets. Zelfde typen en
+/// dezelfde functie als de toetsbrug en de MCP-tool.
+#[tauri::command]
+async fn check_aluminium_beams(
+    inputs: Vec<AluminiumBeamCheckInput>,
+) -> Result<Vec<AluminiumBeamCheckResult>, String> {
+    Ok(aluminium_check::check_all_aluminium_beams(inputs))
 }
 
 /// Vrije spanningstoets (geen norm): een doorsnede plus een toelaatbare
@@ -538,6 +558,8 @@ pub fn run() {
             concrete_cover_check,
             concrete_creep_coefficient,
             check_stress_beams,
+            list_aluminium_alloys,
+            check_aluminium_beams,
             check_plates,
             check_fillet_welds,
             bereken_doorsneden,

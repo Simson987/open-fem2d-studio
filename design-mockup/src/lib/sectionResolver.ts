@@ -59,6 +59,7 @@ import {
 import { parseConcreteSection } from "./betonCheckBuilder";
 import { parseVrijMateriaal } from "./vrijMateriaal";
 import { isAluminiumMateriaal, parseAluminiumMateriaal } from "./aluminiumMateriaal";
+import { aluminiumGrootheden, parseAluminiumProfiel } from "./aluminiumProfiel";
 import { STEEL_GRADES } from "./steelGrades";
 import { profielSleutel } from "./strip";
 
@@ -178,6 +179,8 @@ export interface ResolvedSection {
     | "aluminium-bxh"
     /** Aluminium, geometrie uit de profielcatalogus. */
     | "aluminium-catalogus"
+    /** Aluminium extrusieprofiel uit de profielnaam ("ALU-I …", "ALU-K …"). */
+    | "aluminium-profiel"
     | "vrij"
     | "default";
   /**
@@ -315,7 +318,7 @@ function voorbeeldProfiel(soort: Materiaalsoort): string {
     case "beton": return 'een rechthoek als "300x500", een T of L als "T 400x450 bw=200 hf=50", of een eigen doorsnede uit de profieleditor';
     case "vrij":  return 'een rechthoek als "100x200", een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
     case "staal": return 'een catalogusprofiel als "HEA 200" of een eigen doorsnede uit de profieleditor';
-    case "aluminium": return 'een rechthoek als "100x200" of een eigen doorsnede uit de profieleditor';
+    case "aluminium": return 'een extrusieprofiel als "ALU-I 200x100x6x10" of "ALU-K 120x60x4", een rechthoek als "100x200" of een eigen doorsnede uit de profieleditor';
     case "onbekend": return "een herkend constructiemateriaal";
   }
 }
@@ -374,6 +377,13 @@ export function resolveSection(material: string | undefined, profile: string | u
 
   // ── 2. Doorsnede uit de profielnaam, per materiaalsoort ───────────────
   if (soort === "vrij" || soort === "aluminium") {
+    // Aluminium extrusieprofiel ("ALU-I …", "ALU-K …"): dezelfde A en I_y
+    // (zonder afrondingsstralen) als de EN 1999-toetskern gebruikt.
+    const alu = soort === "aluminium" ? parseAluminiumProfiel(profile) : null;
+    if (alu) {
+      const g = aluminiumGrootheden(alu);
+      return { E, A: g.A, I: g.Iy, bron: "aluminium-profiel" };
+    }
     // Vrij materiaal: de doorsnede mag een rechthoek zijn of een
     // catalogusprofiel — "even staal op spanning toetsen" is dezelfde route
     // als natuursteen, alleen met een andere f_toel.

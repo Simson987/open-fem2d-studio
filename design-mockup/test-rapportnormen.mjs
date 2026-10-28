@@ -398,7 +398,8 @@ log("\n[12] Elk toetsresultaat krijgt de norm van zijn eigen rekenkern");
   checkGelijk("vrije spanningstoets", checkSoort(spanningToets), "spanning");
   checkGelijk("een onbekende vorm", checkSoort(nieuweSoort), null);
 
-  const geen = { steel: false, timber: false, concrete: false, vrij: false };
+  // Issue #5: de aluminiumvlag (EN 1999-1-1) hoort bij elke uitkomst.
+  const geen = { steel: false, timber: false, concrete: false, vrij: false, aluminium: false };
   checkGelijk("staal zet de staalvlag", usedNorms([staalToets]), { ...geen, steel: true });
   checkGelijk("hout zet de houtvlag", usedNorms([houtToets]), { ...geen, timber: true });
   checkGelijk("kruislaaghout deelt de houtvlag",
@@ -409,7 +410,9 @@ log("\n[12] Elk toetsresultaat krijgt de norm van zijn eigen rekenkern");
   checkGelijk("een nieuwe resultaatsoort valt niet in de laatste emmer",
     usedNorms([nieuweSoort]), geen);
   checkGelijk("alles door elkaar", usedNorms(ALLE_TOETSEN),
-    { steel: true, timber: true, concrete: true, vrij: true });
+    { steel: true, timber: true, concrete: true, vrij: true, aluminium: false });
+  checkGelijk("aluminium zet de aluminiumvlag (EN 1999-1-1)",
+    usedNorms([{ beam_id: 99, legering: "EN AW-6063 T6", checks: [] }]), { ...geen, aluminium: true });
 
   // De gemelde fout, van toetsresultaat tot in de rapportkop: één staaf van
   // een vrij materiaal, geen enkele stand aangeraakt.

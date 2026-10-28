@@ -57,6 +57,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "aluminium-check"
+version = "2026.44.0"
+dependencies = [
+ "approx",
+ "mechanics",
+ "nen-en-1993-1-1-section",
+ "nen-en-1999-1-1",
+ "serde",
+ "serde_json",
+ "steel-check",
+ "ts-rs",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2722,6 +2736,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nen-en-1999-1-1"
+version = "2026.44.0"
+dependencies = [
+ "approx",
+ "serde",
+ "ts-rs",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3086,6 +3109,7 @@ dependencies = [
 name = "open-fem-studio"
 version = "2026.44.0"
 dependencies = [
+ "aluminium-check",
  "appdata-migratie",
  "concrete-check",
  "embed-resource",
@@ -3094,6 +3118,7 @@ dependencies = [
  "nen-en-1993-1-1-section",
  "nen-en-1993-1-8-las",
  "nen-en-1995-1-1",
+ "nen-en-1999-1-1",
  "open-fem-3d",
  "openaec-native-fem",
  "plaat-check",
@@ -3139,6 +3164,7 @@ dependencies = [
 name = "openaec-mcp-server"
 version = "2026.44.0"
 dependencies = [
+ "aluminium-check",
  "base64 0.22.1",
  "concrete-check",
  "frame3d-solver",
@@ -3146,6 +3172,7 @@ dependencies = [
  "nen-en-1992-1-1",
  "nen-en-1993-1-1-section",
  "nen-en-1995-1-1",
+ "nen-en-1999-1-1",
  "open-fem-3d",
  "openaec-native-fem",
  "plaat-check",
@@ -5155,6 +5182,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "toetsbrug"
 version = "2026.44.0"
 dependencies = [
+ "aluminium-check",
  "concrete-check",
  "nationale-bijlage",
  "nen-en-1990",

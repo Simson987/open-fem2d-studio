@@ -127,6 +127,19 @@ const KRUISTABEL: &[Rij] = &[
         mcp: Some("check_clt_beams"),
         reden: "",
     },
+    // Aluminium (NEN-EN 1999-1-1, issue #5): meervoud langs alle drie de wegen.
+    Rij {
+        tauri: Some("list_aluminium_alloys"),
+        toetsbrug: Some("list_aluminium_alloys"),
+        mcp: Some("list_aluminium_alloys"),
+        reden: "",
+    },
+    Rij {
+        tauri: Some("check_aluminium_beams"),
+        toetsbrug: Some("check_aluminium_beams"),
+        mcp: Some("check_aluminium_beams"),
+        reden: "",
+    },
     Rij {
         tauri: Some("list_concrete_classes"),
         toetsbrug: Some("list_concrete_classes"),

@@ -85,7 +85,15 @@
     "cltFvRolLeeg": "non vérifié",
     "cltFvRolBron": "Source de f_v,rol,k",
     "cltFvRolHint": "L'EN 1995-1-1 et l'EN 338 ne donnent pas de résistance au cisaillement roulant pour le bois lamellé-croisé. Saisissez la valeur déclarée f_v,rol,k et sa source (ETE ou déclaration de produit) ; chaque couche transversale est alors vérifiée avec f_v,rol,d = k_mod·f_v,rol,k/γ_M. Vide = cisaillement roulant non vérifié, avec mention dans la note de calcul.",
-    "cltKdefHint": "Le tableau 3.2 de l'EN 1995-1-1 ne donne pas de k_def pour le bois lamellé-croisé, et l'annexe nationale n'en ajoute pas. Aucune valeur n'est donc supposée : saisissez k_def et sa source (ETE ou déclaration de produit du panneau, pour cette classe de service). Si l'un des deux manque, w_fin et w_add ne sont pas vérifiés et cette raison figure dans la note de calcul."
+    "cltKdefHint": "Le tableau 3.2 de l'EN 1995-1-1 ne donne pas de k_def pour le bois lamellé-croisé, et l'annexe nationale n'en ajoute pas. Aucune valeur n'est donc supposée : saisissez k_def et sa source (ETE ou déclaration de produit du panneau, pour cette classe de service). Si l'un des deux manque, w_fin et w_add ne sont pas vérifiés et cette raison figure dans la note de calcul.",
+    "aluTitle": "Aluminium (EN 1999-1-1)",
+    "aluLasstatus": "Soudures",
+    "aluLasstatusHint": "Inconnu : la vérification suppose par sécurité une soudure (section entière en ZAT) et n'indique jamais « vérifié ». Soudé : section entière en ZAT (MIG) ; le flambement n'est alors pas vérifié.",
+    "aluLasOnbekend": "Inconnu",
+    "aluLasGeen": "Pas de soudure",
+    "aluLasGelast": "Soudé (MIG)",
+    "aluZijdelings": "Maintenu latéralement (pas de déversement)",
+    "aluZijdelingsHint": "Le déversement (§6.3.2) n'est pas encore implémenté. Cochez uniquement si le bord comprimé est maintenu latéralement sur toute la longueur ; sinon il reste « non vérifié »."
   },
   "profilePicker": {
     "titleChooseMaterial": "Affecter un profilé — choisir le matériau",
@@ -109,12 +117,25 @@
       },
       "aluminium": {
         "label": "Aluminium",
-        "hint": "À venir — pas encore de base de profilés ni de vérification"
+        "hint": "Profilé filé (I, tube rectangulaire, rectangle) + alliage du tableau 3.2b (EN 1999)"
       },
       "overig": {
         "label": "Autre",
         "hint": "Matériau libre : nom, E, ρ et contrainte admissible ; vérifié sur la contrainte équivalente (von Mises), sans norme"
       }
+    },
+    "alu": {
+      "vorm": {
+        "IProfiel": "Profil en I",
+        "Koker": "Tube rectangulaire",
+        "Rechthoek": "Rectangle (plein)"
+      },
+      "tw": "Épaisseur d'âme t_w (mm)",
+      "tf": "Épaisseur de semelle t_f (mm)",
+      "t": "Épaisseur de paroi t (mm)",
+      "alloy": "Alliage",
+      "hint": "E = 70 000 N/mm², ρ = 2 700 kg/m³ (EN 1999-1-1 §3.2.5). Résistances et classe de flambement du tableau 3.2b, selon l'épaisseur de paroi. Calculé sans rayons d'angle (sécuritaire). Indiquez dans les propriétés de la barre si elle est soudée.",
+      "invalid": "Saisissez des dimensions valides (h > 2·t, b > t_w)"
     },
     "inProject": "Dans ce projet",
     "inUseTitle_one": "{{profiel}} en {{materiaal}}, actuellement sur {{count}} barre",

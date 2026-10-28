@@ -61,6 +61,9 @@ mod gui_tools;
 /// `timber_check_results` accepteert — de rapportweg beloofde dus hout dat
 /// langs deze weg niet te maken was. Zie `timber_tools.rs`.
 mod timber_tools;
+/// Aluminium (NEN-EN 1999-1-1, issue #5): legeringen en staaftoets. Zie
+/// `aluminium_tools.rs`.
+mod aluminium_tools;
 
 /// De plaattoets (wandschijven, belast in het vlak): `check_plates`. Roept
 /// dezelfde `plaat_check::check_all_plates` aan als het Tauri-command en de
@@ -542,6 +545,7 @@ fn tool_definitions() -> Value {
     lijst.extend(extensie_tools::tool_definitions());
     lijst.extend(concrete_tools::tool_definitions());
     lijst.extend(timber_tools::tool_definitions());
+    lijst.extend(aluminium_tools::tool_definitions());
     lijst.extend(plate_tools::tool_definitions());
     lijst.extend(gui_tools::tool_definitions());
     lijst.extend(api_tools::tool_definitions());
@@ -648,6 +652,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
         // staven houdt. Zie `timber_tools.rs` en
         // `tests/drie_wegen_kruistabel.rs`.
         hout if timber_tools::is_timber_tool(hout) => timber_tools::dispatch(hout, args).await,
+        // Aluminium: `aluminium_check::check_all_aluminium_beams`, dezelfde
+        // functie als het Tauri-command en de toetsbrug.
+        alu if aluminium_tools::is_aluminium_tool(alu) => aluminium_tools::dispatch(alu, args).await,
         // De plaattoets: `plaat_check::check_all_plates`, dezelfde functie als
         // het Tauri-command en de toetsbrug. Zie `plate_tools.rs`.
         plaat if plate_tools::is_plate_tool(plaat) => plate_tools::dispatch(plaat, args).await,

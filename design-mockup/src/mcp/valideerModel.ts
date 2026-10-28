@@ -193,6 +193,9 @@ const CHECKCONFIG_VELDEN = [
   "cltKdef", "cltKdefBron",
   // Issue #232: de gedeclareerde rolschuifsterkte van kruislaaghout met bron.
   "cltFvRolK", "cltFvRolKBron",
+  // Aluminium (NEN-EN 1999-1-1, issue #5): lasstatus en de verklaring dat
+  // kip niet kan optreden. `aluminiumCheckBuilder` leest ze.
+  "aluLasstatus", "aluZijdelingsGesteund",
 ] as const;
 
 /** De drie aangrijpingspunten van tabel 6.1, in de spelling van `checkConfig`. */
@@ -819,6 +822,10 @@ export function keurCheckConfig(waarde: unknown, cpad: string): string[] {
   keurEnum(cc.betonStaaltak, STAALTAKKEN, `${cpad}.betonStaaltak`, fouten);
   keurGetal(cc.betonStroken, `${cpad}.betonStroken`, fouten, { positief: true });
   keurGetal(cc.spanningSigmaZ, `${cpad}.spanningSigmaZ`, fouten);
+  keurEnum(cc.aluLasstatus, ["geen", "gelast"], `${cpad}.aluLasstatus`, fouten);
+  if (cc.aluZijdelingsGesteund !== undefined && typeof cc.aluZijdelingsGesteund !== "boolean") {
+    fouten.push(`${cpad}.aluZijdelingsGesteund: moet true of false zijn.`);
+  }
   keurKorf(cc.betonKorf, `${cpad}.betonKorf`, fouten);
   keurZones(cc.betonZones, `${cpad}.betonZones`, fouten);
   keurKolom(cc.betonKolom, `${cpad}.betonKolom`, fouten);

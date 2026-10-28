@@ -67,6 +67,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   isConcreteCheckResult,
   isStressCheckResult,
+  isAluminiumCheckResult,
   isSteelCheckResult,
   type CheckSkip,
   type MemberCheckResult,
@@ -239,6 +240,8 @@ function isHoutResultaat(r: MemberCheckResult): r is TimberBeamCheckResult {
     !isSteelCheckResult(r) &&
     !isConcreteCheckResult(r) &&
     !isStressCheckResult(r) &&
+    // Aluminium (EN 1999) gaat (nog) niet naar de PDF-kern: geen hout.
+    !isAluminiumCheckResult(r) &&
     !isCltCheckResult(r)
   );
 }

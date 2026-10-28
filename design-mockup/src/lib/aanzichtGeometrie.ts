@@ -92,6 +92,7 @@ import {
 import { parseConcreteSection } from "./betonCheckBuilder";
 import { cltMechanica, isCltProfiel, parseCltProfiel } from "./cltCheckBuilder";
 import { zoekEigenDoorsnede } from "./profieleditor/eigenDoorsnedenStore";
+import { parseAluminiumProfiel } from "./aluminiumProfiel";
 import { matchSupportedTimberGrade } from "./timberCheckBuilder";
 import { referentieVanStaaf, staafInReferentierichting } from "./referentierichting";
 import { zoneGrenzenMm, ZONE_TOLERANTIE_MM } from "./betonZoneSneden";
@@ -385,6 +386,18 @@ export function aanzichtDoorsnede(material: string | undefined, profile: string 
       if (!d) return null;
       const delen = catalogusDelen(d.kind, d.h, d.b, d.tw, d.tf);
       return { delen, zc: zwaartepuntVanDelen(delen).z, naden: [] };
+    }
+    case "aluminium-profiel": {
+      const alu = parseAluminiumProfiel(profile);
+      if (!alu) return null;
+      if (alu.vorm === "IProfiel") {
+        return iDoorsnede({ h: alu.h_mm, b: alu.b_mm, tw: alu.tw_mm, tf: alu.tf_mm });
+      }
+      if (alu.vorm === "Koker") {
+        const delen = catalogusDelen("Rhs", alu.h_mm, alu.b_mm, alu.t_mm, alu.t_mm);
+        return { delen, zc: alu.h_mm / 2, naden: [] };
+      }
+      return rechthoekDoorsnede(alu.b_mm, alu.h_mm);
     }
     case "hout-bxh": {
       const rect = parseRechthoek(profile);

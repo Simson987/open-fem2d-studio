@@ -354,6 +354,17 @@ export interface BeamCheckConfig {
    * σ_z niet zelf, dus die waarde kan alleen van de gebruiker komen.
    */
   spanningSigmaZ?: number;
+  // Aluminium (NEN-EN 1999-1-1, issue #5)
+  /**
+   * Of de aluminium staaf gelast is. Leeg = onbekend: de toets rekent dan
+   * veilig alsof gelast (hele doorsnede in de HAZ) en geeft nooit "voldoet".
+   */
+  aluLasstatus?: "geen" | "gelast";
+  /**
+   * Verklaring dat kip (§6.3.2) niet kan optreden: de gedrukte rand is over de
+   * hele lengte zijdelings gesteund. Leeg = nee; kip blijft dan niet getoetst.
+   */
+  aluZijdelingsGesteund?: boolean;
 }
 
 /**

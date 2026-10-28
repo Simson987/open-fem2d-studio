@@ -85,7 +85,15 @@
     "cltFvRolLeeg": "niet getoetst",
     "cltFvRolBron": "Bron f_v,rol,k",
     "cltFvRolHint": "NEN-EN 1995-1-1 en EN 338 kennen geen rolschuifsterkte voor kruislaaghout. Vul de gedeclareerde f_v,rol,k én de bron in (ETA of productverklaring); dan wordt elke dwarslaag getoetst met f_v,rol,d = k_mod·f_v,rol,k/γ_M. Leeg = rolschuif niet getoetst, met die melding in het rapport.",
-    "cltKdefHint": "Tabel 3.2 van EN 1995-1-1 kent geen k_def voor kruislaaghout, en de nationale bijlage voegt er geen toe. Er wordt daarom geen waarde aangenomen: vul k_def én de bron in (ETA of productverklaring van de plaat, bij deze klimaatklasse). Ontbreekt een van beide, dan worden w_fin en w_add niet getoetst en staat die reden in het rapport."
+    "cltKdefHint": "Tabel 3.2 van EN 1995-1-1 kent geen k_def voor kruislaaghout, en de nationale bijlage voegt er geen toe. Er wordt daarom geen waarde aangenomen: vul k_def én de bron in (ETA of productverklaring van de plaat, bij deze klimaatklasse). Ontbreekt een van beide, dan worden w_fin en w_add niet getoetst en staat die reden in het rapport.",
+    "aluTitle": "Aluminium (EN 1999-1-1)",
+    "aluLasstatus": "Lassen",
+    "aluLasstatusHint": "Onbekend: de toets rekent veilig alsof gelast (hele doorsnede in de HAZ) en geeft nooit 'voldoet'. Gelast: hele doorsnede in de HAZ (MIG), knik wordt dan niet getoetst.",
+    "aluLasOnbekend": "Onbekend",
+    "aluLasGeen": "Geen lassen",
+    "aluLasGelast": "Gelast (MIG)",
+    "aluZijdelings": "Zijdelings gesteund (geen kip)",
+    "aluZijdelingsHint": "Kip (§6.3.2) is nog niet geïmplementeerd. Vink dit alleen aan als de gedrukte rand over de hele lengte zijdelings gesteund is; anders blijft kip 'niet getoetst'."
   },
   "profilePicker": {
     "titleChooseMaterial": "Profiel toewijzen — kies materiaal",
@@ -109,12 +117,25 @@
       },
       "aluminium": {
         "label": "Aluminium",
-        "hint": "Volgt later — nog geen profieldatabase en toetsing"
+        "hint": "Extrusieprofiel (I, koker, rechthoek) + legering uit tabel 3.2b (EN 1999)"
       },
       "overig": {
         "label": "Overig",
         "hint": "Vrij materiaal: eigen naam, E, ρ en toelaatbare spanning; getoetst op de vergelijkspanning (von Mises), zonder norm"
       }
+    },
+    "alu": {
+      "vorm": {
+        "IProfiel": "I-profiel",
+        "Koker": "Koker",
+        "Rechthoek": "Rechthoek (massief)"
+      },
+      "tw": "Lijfdikte t_w (mm)",
+      "tf": "Flensdikte t_f (mm)",
+      "t": "Wanddikte t (mm)",
+      "alloy": "Legering",
+      "hint": "E = 70 000 N/mm², ρ = 2 700 kg/m³ (EN 1999-1-1 §3.2.5). Sterkten en knikklasse uit tabel 3.2b, afhankelijk van de wanddikte. Zonder afrondingsstralen gerekend (veilig). Geef bij de staafeigenschappen op of de staaf gelast is.",
+      "invalid": "Vul geldige maten in (h > 2·t, b > t_w)"
     },
     "inProject": "In dit project",
     "inUseTitle_one": "{{profiel}} in {{materiaal}}, nu op {{count}} staaf",

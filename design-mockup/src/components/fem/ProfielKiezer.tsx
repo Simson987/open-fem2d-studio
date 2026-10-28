@@ -2,7 +2,8 @@
  * ProfielKiezer — tweestaps profieldialoog voor een staaf.
  *
  * Stap 1: materiaalsoort (Staal / Hout / Beton / Aluminium / Overig —
- *         aluminium is zichtbaar maar eerlijk uitgeschakeld tot het bestaat).
+ *         aluminium: legering uit EN 1999-1-1 tabel 3.2b + extrusieprofiel
+ *         ALU-I / ALU-K of een rechthoek, getoetst door `aluminium-check`).
  * Stap 2: het profiel BINNEN die soort, samen met de materiaalklasse:
  *         - staal: reeks (IPE/HEA/HEB/HEM/UNP/koker/buis) → maat → staalklasse;
  *         - hout: sterkteklasse (C/GL) → massief b×h, óf kruislaaghout als
@@ -160,6 +161,9 @@ import ProfielMiniatuur from "../shared/ProfielMiniatuur";
 import MateriaalIcoon, { type MateriaalIcoonSoort } from "../shared/MateriaalIcoon";
 import { shapeVanProfiel } from "../shared/profielVorm";
 import "./ProfielKiezer.css";
+import { ALUMINIUM_LEGERINGEN, aluminiumMateriaalNaam, parseAluminiumMateriaal } from "../../lib/aluminiumMateriaal";
+import { aluminiumGrootheden, aluminiumProfielNaam, parseAluminiumProfiel } from "../../lib/aluminiumProfiel";
+import type { AluDoorsnede } from "../../lib/types/aluminium/AluDoorsnede";
 // Klik op een rijlabel in de doorsnedetekening → aantal en diameter invullen,
 // dezelfde invoer als in het betonvenster.
 import RijBewerker from "../beton/RijBewerker";
@@ -255,7 +259,7 @@ const SOORTEN: Array<{ id: MateriaalSoort; beschikbaar: boolean }> = [
   { id: "eigen", beschikbaar: true },
   { id: "hout", beschikbaar: true },
   { id: "beton", beschikbaar: true },
-  { id: "aluminium", beschikbaar: false },
+  { id: "aluminium", beschikbaar: true },
   { id: "overig", beschikbaar: true },
 ];
 
@@ -354,6 +358,7 @@ export default function ProfielKiezer({
   const { t } = useTranslation("check");
   const { t: tCommon } = useTranslation("common");
   const huidigVrij = parseVrijMateriaal(huidig?.material);
+  const huidigAlu = parseAluminiumMateriaal(huidig?.material);
   const huidigIsBeton = !huidigVrij && matchSupportedConcreteClass(huidig?.material) !== null;
   const huidigIsHout =
     !huidigVrij && !huidigIsBeton && !!huidig?.material && (huidig.material in TIMBER_E_MEAN);
@@ -374,6 +379,7 @@ export default function ProfielKiezer({
   const [soort, setSoort] = useState<MateriaalSoort | null>(
     huidig?.material
       ? huidigVrij ? "overig"
+        : huidigAlu ? "aluminium"
         : huidigIsBeton ? "beton"
         : huidigIsHout ? "hout"
         : huidigIsEigen ? "eigen"
@@ -400,8 +406,35 @@ export default function ProfielKiezer({
   const [reeks, setReeks] = useState(eersteReeks);
   const [staalProfiel, setStaalProfiel] = useState(huidig?.profile ?? "");
   const [staalKlasse, setStaalKlasse] = useState(
-    huidig?.material && !huidigIsHout && !huidigIsBeton ? huidig.material : "S235",
+    huidig?.material && !huidigIsHout && !huidigIsBeton && !huidigAlu ? huidig.material : "S235",
   );
+
+  // ── Aluminium-stap (NEN-EN 1999-1-1, issue #5) ───────────────────────────
+  // Geen standaardprofiel uit een catalogus: de maten zijn invoer. De
+  // startwaarden zijn een gangbare maat, geen normwaarde.
+  const huidigAluDoorsnede: AluDoorsnede | null = huidigAlu
+    ? parseAluminiumProfiel(huidig?.profile) ?? (() => {
+        const r = parseRechthoek(huidig?.profile);
+        return r ? { vorm: "Rechthoek" as const, b_mm: r.b, h_mm: r.h } : null;
+      })()
+    : null;
+  const [aluLegering, setAluLegering] = useState<string>(huidigAlu?.aanduiding ?? "EN AW-6063 T6");
+  const [aluVorm, setAluVorm] = useState<AluDoorsnede["vorm"]>(huidigAluDoorsnede?.vorm ?? "IProfiel");
+  const [aluH, setAluH] = useState<number>(huidigAluDoorsnede?.h_mm ?? 200);
+  const [aluB, setAluB] = useState<number>(huidigAluDoorsnede?.b_mm ?? 100);
+  const [aluTw, setAluTw] = useState<number>(huidigAluDoorsnede?.vorm === "IProfiel" ? huidigAluDoorsnede.tw_mm : 6);
+  const [aluTf, setAluTf] = useState<number>(huidigAluDoorsnede?.vorm === "IProfiel" ? huidigAluDoorsnede.tf_mm : 10);
+  const [aluT, setAluT] = useState<number>(huidigAluDoorsnede?.vorm === "Koker" ? huidigAluDoorsnede.t_mm : 4);
+  const aluDoorsnede: AluDoorsnede =
+    aluVorm === "IProfiel" ? { vorm: "IProfiel", h_mm: aluH, b_mm: aluB, tw_mm: aluTw, tf_mm: aluTf }
+    : aluVorm === "Koker" ? { vorm: "Koker", h_mm: aluH, b_mm: aluB, t_mm: aluT }
+    : { vorm: "Rechthoek", b_mm: aluB, h_mm: aluH };
+  const aluProfielnaam = aluminiumProfielNaam(aluDoorsnede);
+  const aluGeldig =
+    aluVorm === "Rechthoek"
+      ? aluB > 0 && aluH > 0
+      : parseAluminiumProfiel(aluProfielnaam) !== null;
+  const aluEigenschappen = aluGeldig ? aluminiumGrootheden(aluDoorsnede) : null;
 
   // ── Verlopend profiel (ontwerp 15-09-2026, §6) ───────────────────────────
   //
@@ -959,6 +992,13 @@ export default function ProfielKiezer({
         },
       });
       onClose();
+    } else if (soort === "aluminium" && aluGeldig) {
+      onApply({
+        material: aluminiumMateriaalNaam(aluLegering),
+        profile: aluProfielnaam,
+        profileEnd: undefined,
+      });
+      onClose();
     } else if (soort === "overig" && overigGeldig) {
       // Het vrije materiaal reist als NAAM mee (zie vrijMateriaal.ts): zo
       // staat het in het projectbestand, de undo-historie en het rapport
@@ -977,6 +1017,7 @@ export default function ProfielKiezer({
     : soort === "hout" ? !houtGeldig || !verloopGeldig
     : soort === "beton" ? !betonGeldig
     : soort === "overig" ? !overigGeldig
+    : soort === "aluminium" ? !aluGeldig
     : true;
 
   // ── Toetsen in het zoekveld (issue #39) ──────────────────────────────────
@@ -2104,6 +2145,78 @@ export default function ProfielKiezer({
                 : !overigDoorsnedeGeldig
                   ? t("profilePicker.chooseOrEnterSection")
                   : t("profilePicker.enterFreeMaterial")}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {soort === "aluminium" && (
+        <div className="pk-stap2">
+          <div className="pk-kolom pk-kolom-reeks">
+            <div className="pk-kolom-kop">{t("profilePicker.crossSection")}</div>
+            {(["IProfiel", "Koker", "Rechthoek"] as const).map((v) => (
+              <button
+                key={v}
+                className={`pk-rij${aluVorm === v ? " actief" : ""}`}
+                onClick={() => setAluVorm(v)}
+              >
+                {t(`profilePicker.alu.vorm.${v}`)}
+              </button>
+            ))}
+          </div>
+
+          <div className="pk-kolom pk-kolom-maat">
+            <div className="pk-kolom-kop">{t("profilePicker.dimensions")}</div>
+            <label className="pk-veld">
+              <span>{t("profilePicker.heightH")}</span>
+              <input type="number" min={1} step={1} value={aluH} onChange={(e) => setAluH(Number(e.target.value))} />
+            </label>
+            <label className="pk-veld">
+              <span>{t("profilePicker.widthB")}</span>
+              <input type="number" min={1} step={1} value={aluB} onChange={(e) => setAluB(Number(e.target.value))} />
+            </label>
+            {aluVorm === "IProfiel" && (
+              <>
+                <label className="pk-veld">
+                  <span>{t("profilePicker.alu.tw")}</span>
+                  <input type="number" min={0.5} step={0.5} value={aluTw} onChange={(e) => setAluTw(Number(e.target.value))} />
+                </label>
+                <label className="pk-veld">
+                  <span>{t("profilePicker.alu.tf")}</span>
+                  <input type="number" min={0.5} step={0.5} value={aluTf} onChange={(e) => setAluTf(Number(e.target.value))} />
+                </label>
+              </>
+            )}
+            {aluVorm === "Koker" && (
+              <label className="pk-veld">
+                <span>{t("profilePicker.alu.t")}</span>
+                <input type="number" min={0.5} step={0.5} value={aluT} onChange={(e) => setAluT(Number(e.target.value))} />
+              </label>
+            )}
+          </div>
+
+          <div className="pk-kolom pk-kolom-detail">
+            <div className="pk-kolom-kop">{t("profilePicker.alu.alloy")}</div>
+            <div className="pk-kolom-body">
+              <label className="pk-veld">
+                <span>{t("profilePicker.alu.alloy")}</span>
+                <select value={aluLegering} onChange={(e) => setAluLegering(e.target.value)}>
+                  {ALUMINIUM_LEGERINGEN.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </label>
+              <div className="pk-hint">{t("profilePicker.alu.hint")}</div>
+              {aluEigenschappen && (
+                <div className="pk-eigenschappen">
+                  <div className="pk-eig-rij"><span>A</span><code>{nlGetal(aluEigenschappen.A)} mm²</code></div>
+                  <div className="pk-eig-rij"><span>I_y</span><code>{nlGetal(aluEigenschappen.Iy / 1e4)} cm⁴</code></div>
+                  <div className="pk-eig-rij"><span>E</span><code>70 000 N/mm²</code></div>
+                </div>
+              )}
+            </div>
+            <div className="pk-samenvatting">
+              {aluGeldig
+                ? <>{t("profilePicker.choice")} <strong>{aluProfielnaam} — {aluLegering}</strong></>
+                : t("profilePicker.alu.invalid")}
             </div>
           </div>
         </div>

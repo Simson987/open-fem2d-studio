@@ -72,6 +72,10 @@ nen-en-1995-1-1 = { path = "../nen-en-1995-1-1" }
 # Platen (wandschijven): `check_plates` en de plaattoets binnen
 # `check_fem_model`. Dezelfde functie als het Tauri-command en de toetsbrug.
 plaat-check = { path = "../plaat-check" }
+# Aluminium (NEN-EN 1999-1-1, issue #5): `check_aluminium_beams` en
+# `list_aluminium_alloys`, dezelfde functies als het Tauri-command en de toetsbrug.
+aluminium-check = { path = "../aluminium-check" }
+nen-en-1999-1-1 = { path = "../nen-en-1999-1-1" }
 # Ruimtelijke raamwerken: exact dezelfde neutrale adapter en vastgezette
 # externe 3D-kern als het Tauri-command `solve_open_fem_3d`.
 open-fem-3d = { path = "../open-fem-3d" }
