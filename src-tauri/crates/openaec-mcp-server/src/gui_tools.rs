@@ -1012,8 +1012,16 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
             )
         }
         "gui_solve" => {
+            // `detail: "samenvatting"` (#229): standaard het volledige antwoord.
+            let mut args = args;
+            let samenvatting = crate::samenvatting::neem_detail(&mut args)
+                .map_err(|e| RpcError::invalid_params(format!("{naam}: {e}")))?;
             let _: Leeg = lees(naam, args)?;
-            roep("rekenen", json!({}), 120)
+            let mut uit = roep("rekenen", json!({}), 120)?;
+            if samenvatting {
+                crate::samenvatting::samenvat_gui_solve(&mut uit);
+            }
+            Ok(uit)
         }
         "gui_run_checks" => {
             let _: Leeg = lees(naam, args)?;
@@ -1289,8 +1297,9 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_solve",
-            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so."),
-            "inputSchema": leeg_schema()
+            "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations and the physically non-linear concrete round when selected. For 3D it runs the P-Delta frame analysis, eigenvalue buckling, all six local member-force components, reactions, and EN 1992/EN 1993 checks. A 3D answer contains the complete result plus steel/concrete results and explicit skipped reasons. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so. With detail \"samenvatting\" a 3D answer stays a few kB: per-node, per-member and per-shell-element lists become counts (`result.weggelaten`) plus their extremes (`result.uitersten`, `reactieSomKn`), checks keep only id, title, article, UC, status and combination; the 2D answer is already compact and unchanged."),
+            "inputSchema": { "type": "object", "additionalProperties": false,
+                "properties": { "detail": crate::samenvatting::schema_detail() } }
         }),
         json!({
             "name": "gui_run_checks",
