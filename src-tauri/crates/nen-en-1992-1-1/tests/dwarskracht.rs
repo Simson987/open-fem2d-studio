@@ -511,13 +511,16 @@ fn de_afleiding_noemt_welk_bewijs_de_weerstand_levert() {
 // ── De keuze van θ ───────────────────────────────────────────────────────────
 
 #[test]
-fn theta_wordt_zo_groot_mogelijk_gekozen_binnen_de_nb_grenzen() {
-    // V_Ed = 500 kN. K = teller/V_Ed = 1 294 444,8/500 000 = 2,5888896.
-    // cot θ + tan θ = K → c² − K·c + 1 = 0 → c = (K + √(K² − 4))/2
-    //   K² = 6,7023487; K² − 4 = 2,7023487; √ = 1,6438822
-    //   c = (2,5888896 + 1,6438822)/2 = 2,1163859  (binnen 1,0…2,5)
-    // Bij die cot θ is V_Rd,max per constructie precies 500 kN, en
-    //   V_Rd,s = 119 063,63 · 2,1163859 = 251 985 N = 251,985 kN.
+fn theta_geeft_het_maximum_van_min_vrds_vrdmax_ook_als_dat_bij_2_5_ligt() {
+    // V_Ed = 500 kN, Ø8-150 tweesnedig, d = 454 mm, z = 408,6 mm.
+    //   T = 1·300·408,6·0,528·20 = 1 294 444,8 N
+    //   S = (A_sw/s)·z·f_ywd = 0,6702064·408,6·434,782609 = 119 063,63 N
+    //   snijpunt c = √(T/S − 1) = √(10,872 − 1) = 3,142 > 2,5 → cot θ = 2,5
+    //   V_Rd,s = 119 063,63·2,5 = 297 659 N; V_Rd,max = T/2,9 = 446 360 N
+    //   V_Rd = max over cot θ van min(...) = 297,659 kN → UC = 500/297,659 > 1.
+    //
+    // Vóór issue #251 koos de toets de grootste cot θ waarbij (6.9) V_Ed nog
+    // haalt (2,1164) en kwam op V_Rd = 251,985 kN uit: lager dan het maximum.
     let (s, k, m) = ligger(Some((150.0, 2)));
     let r = shear_resistance(
         &s,
@@ -528,15 +531,71 @@ fn theta_wordt_zo_groot_mogelijk_gekozen_binnen_de_nb_grenzen() {
     );
     let v = r.vakwerk.as_ref().unwrap();
     assert_eq!(v.cot_theta_keuze, CotThetaKeuze::Automatisch);
-    dichtbij(v.cot_theta, 2.1163859, 1e-6, "cot θ");
-    dichtbij(
-        v.v_rd_max_kn,
-        500.0,
-        1e-3,
-        "V_Rd,max = V_Ed bij de gekozen θ",
+    dichtbij(v.cot_theta, 2.5, 1e-12, "cot θ");
+    dichtbij(v.v_rd_max_kn, 446.360, 1e-2, "V_Rd,max");
+    dichtbij(v.v_rd_s_kn.unwrap(), 297.659, 1e-2, "V_Rd,s");
+    dichtbij(r.v_rd_kn.unwrap(), 297.659, 1e-2, "V_Rd");
+    assert_eq!(v.tak, Some(VakwerkTak::WapeningVloeit));
+}
+
+#[test]
+fn issue_251_weerstand_is_het_snijpunt_van_6_8_en_6_9_niet_v_ed() {
+    // Issue #251 (N9): 300 × 500 mm, C30/37, B500B, dekking 30 mm, onder 3Ø16,
+    // boven 2Ø10, tweesnedige beugels Ø10-100. d = 500 − 30 − 10 − 8 = 452 mm,
+    // z = 0,9·d = 406,8 mm, V_Ed = 450 kN, N = M = 0.
+    //   ν₁ = ν = 0,6·(1 − 30/250) = 0,528  (NB bij 6.2.3(3))
+    //   T = 1·300·406,8·0,528·20 = 1 288 742,4 N
+    //   S = 1,5707963·406,8·434,782609 = 277 826,06 N
+    //   cot θ = √(T/S − 1) = √(4,638679 − 1) = 1,907529
+    //   V_Rd = S·cot θ = 529,96 kN = V_Rd,max(cot θ); UC = 450/529,96 = 0,8491
+    // Handberekening in het issue: cot θ 1,908; V_Rd 530,0 kN; UC 0,849.
+    let mut korf = ReinforcementCage {
+        cover_mm: 30.0,
+        stirrup_diameter_mm: 10.0,
+        top: RebarRow {
+            count: 2,
+            diameter_mm: 10.0,
+        },
+        bottom: RebarRow {
+            count: 3,
+            diameter_mm: 16.0,
+        },
+        ..ReinforcementCage::default()
+    };
+    korf.stirrup_spacing_mm = Some(100.0);
+    korf.stirrup_legs = Some(2);
+    let doorsnede = ConcreteSection::new(300.0, 500.0);
+    let mat = materiaal("C30/37");
+    let r = shear_resistance(
+        &doorsnede,
+        &korf,
+        &mat,
+        &snap(0.0, 450.0, 0.0),
+        &ShearOptions::default(),
     );
-    dichtbij(v.v_rd_s_kn.unwrap(), 251.985, 2e-2, "V_Rd,s");
-    dichtbij(r.v_rd_kn.unwrap(), 251.985, 2e-2, "V_Rd");
+    let v = r.vakwerk.as_ref().unwrap();
+    dichtbij(v.z_mm, 406.8, 1e-6, "z");
+    assert_eq!(v.cot_theta_keuze, CotThetaKeuze::Automatisch);
+    dichtbij(v.cot_theta, 1.907529, 1e-5, "cot θ");
+    dichtbij(v.v_rd_s_kn.unwrap(), 529.961, 1e-2, "V_Rd,s");
+    dichtbij(v.v_rd_max_kn, 529.961, 1e-2, "V_Rd,max");
+    dichtbij(r.v_rd_kn.unwrap(), 529.961, 1e-2, "V_Rd");
+    dichtbij(r.uc.unwrap(), 0.84912, 1e-4, "UC");
+    assert_eq!(v.tak, Some(VakwerkTak::WapeningVloeit));
+    // De tekst "méér beugels helpen niet" hoort hier NIET: cot θ > 1.
+    assert!(!r.notes.iter().any(|n| n.contains("helpt hier niet")));
+    let calc = check_shear(
+        &doorsnede,
+        &korf,
+        &mat,
+        snap(0.0, 450.0, 0.0),
+        &ShearOptions::default(),
+    );
+    assert!(!calc
+        .deelstappen
+        .iter()
+        .flat_map(|d| d.notes.iter())
+        .any(|n| n.contains("helpen niet")));
 }
 
 #[test]
