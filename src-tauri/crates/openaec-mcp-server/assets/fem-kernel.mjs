@@ -30816,7 +30816,10 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
           areaM2: doorsnede.areaMm2 * 1e-6,
           iyM4: doorsnede.iyMm4 * 1e-12,
           izM4: doorsnede.izMm4 * 1e-12,
-          torsionJM4: doorsnede.itMm4 * 1e-12
+          torsionJM4: doorsnede.itMm4 * 1e-12,
+          // Werkelijke maten voor een temperatuurverschil over de doorsnede (#221).
+          heightM: doorsnede.maten.h * 1e-3,
+          widthM: doorsnede.maten.b * 1e-3
         });
       }
       return id2;
@@ -30830,7 +30833,10 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
       let torsionJMm4;
       let shearAreaYMm2;
       let shearAreaZMm2;
-      const catalogue = STEEL_SECTION_DIMS[profileKey(profile)]?.props;
+      let heightMm;
+      let widthMm;
+      const catalogueDims = STEEL_SECTION_DIMS[profileKey(profile)];
+      const catalogue = catalogueDims?.props;
       const rectangle = parseRechthoek(profile);
       const eigen = isEigenProfiel(profile) ? zoekEigenDoorsnede(profile) : void 0;
       if (eigen) {
@@ -30840,15 +30846,23 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
         torsionJMm4 = props.it_mm4;
         shearAreaYMm2 = props.av_y_mm2;
         shearAreaZMm2 = props.av_z_mm2;
+        if (!principal) {
+          heightMm = props.h_mm;
+          widthMm = props.b_mm;
+        }
       } else if (catalogue) {
         izMm4 = catalogue.iz;
         torsionJMm4 = catalogue.it;
         shearAreaYMm2 = catalogue.avY;
         shearAreaZMm2 = catalogue.avZ;
+        heightMm = catalogueDims.h;
+        widthMm = catalogueDims.b;
       } else if (rectangle) {
         izMm4 = rectangle.h * rectangle.b ** 3 / 12;
         torsionJMm4 = rechthoekTorsieconstante(rectangle.b, rectangle.h);
         shearAreaYMm2 = shearAreaZMm2 = 5 / 6 * rectangle.b * rectangle.h;
+        heightMm = rectangle.h;
+        widthMm = rectangle.b;
       } else {
         throw new Error(
           `Staaf ${beam.id}: profiel "${profile}" mist Iz en J voor een ruimtelijke berekening. Kies een bewaarde eigen doorsnede, catalogusprofiel of rechthoek b\xD7h.`
@@ -30869,6 +30883,8 @@ function buildOpenFem3DSolveRequest(input, analysis = "p-delta", loadSelection, 
         iyM4: iyMm4 * 1e-12,
         izM4: izMm4 * 1e-12,
         torsionJM4: torsionJMm4 * 1e-12,
+        ...heightMm !== void 0 && Number.isFinite(heightMm) && heightMm > 0 ? { heightM: heightMm * 1e-3 } : {},
+        ...widthMm !== void 0 && Number.isFinite(widthMm) && widthMm > 0 ? { widthM: widthMm * 1e-3 } : {},
         ...beam.shearDeformation ? {
           shearAreaYM2: shearAreaYMm2 * 1e-6,
           shearAreaZM2: shearAreaZMm2 * 1e-6

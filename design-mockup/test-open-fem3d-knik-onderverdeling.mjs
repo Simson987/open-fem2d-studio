@@ -175,6 +175,9 @@ if (!existsSync(MCP_SERVER)) {
 } else {
   const namen = ["021", "038", "045", "061", "062"];
   const aanroepen = namen.map((n) => JSON.parse(readFileSync(join(DATA, `invoer-${n}.json`), "utf8")));
+  // 038 heeft een temperatuurverschil over de hoogte; sinds #221 vraagt de kern
+  // de werkelijke profielhoogte (IPE300: 300 mm) in plaats van √(12I/A).
+  aanroepen[namen.indexOf("038")].arguments.sections[0].heightM = 0.3;
   const antwoorden = await mcp(aanroepen);
   const uitkomst = Object.fromEntries(namen.map((n, i) => {
     const a = antwoorden[i];

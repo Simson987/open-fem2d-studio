@@ -26,7 +26,7 @@ const IZ: f64 = 12e-6;
 
 fn doorsnede() -> Section3D {
     Section3D { id: 1, name: "referentie".into(), area_m2: A, iy_m4: IY, iz_m4: IZ, torsion_j_m4: 5e-6,
-        shear_area_y_m2: None, shear_area_z_m2: None }
+        shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
 }
 
 fn knoop(id: usize, x: f64, y: f64, z: f64) -> Node3D { Node3D { id, x, y, z } }

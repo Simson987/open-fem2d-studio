@@ -84,7 +84,7 @@ fn member_point_loads_schema() -> Value {
 fn thermal_loads_schema() -> Value {
     json!({
         "type": "array", "default": [],
-        "description": "Member temperature loads in K. Gradients are differences over the local y/z section dimensions.",
+        "description": "Member temperature loads in K. Gradients are differences between the outer fibres over the local y/z section dimensions (EN 1991-1-5): deltaTGradientZK requires sections[].heightM, deltaTGradientYK requires sections[].widthM; the curvature is alpha*deltaT/heightM (or widthM).",
         "items": {
             "type": "object", "additionalProperties": false,
             "required": ["id", "memberId", "deltaTUniformK"],
@@ -201,7 +201,9 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                             "izM4": { "type": "number", "exclusiveMinimum": 0 },
                             "torsionJM4": { "type": "number", "exclusiveMinimum": 0 },
                             "shearAreaYM2": { "type": ["number", "null"], "exclusiveMinimum": 0 },
-                            "shearAreaZM2": { "type": ["number", "null"], "exclusiveMinimum": 0 }
+                            "shearAreaZM2": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+                            "heightM": { "type": ["number", "null"], "exclusiveMinimum": 0, "description": "Real section depth along local z in m (e.g. 0.300 for IPE300); required for a temperature gradient deltaTGradientZK." },
+                            "widthM": { "type": ["number", "null"], "exclusiveMinimum": 0, "description": "Real section width along local y in m; required for a temperature gradient deltaTGradientYK." }
                         }
                     }
                 },

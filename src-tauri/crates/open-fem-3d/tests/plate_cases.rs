@@ -407,7 +407,7 @@ fn plate_on_edge_beams_is_in_equilibrium_and_shares_nodes() {
     let mut input = request(nodes, 30_000.0, 0.2, t, quads(&g, 1, 1));
     input.sections.push(Section3D {
         id: 1, name: "300x600".into(), area_m2: 0.18, iy_m4: 0.3 * 0.6_f64.powi(3) / 12.0,
-        iz_m4: 0.6 * 0.3_f64.powi(3) / 12.0, torsion_j_m4: 0.0037, shear_area_y_m2: None, shear_area_z_m2: None,
+        iz_m4: 0.6 * 0.3_f64.powi(3) / 12.0, torsion_j_m4: 0.0037, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None,
     });
     let edges = [
         ((0, 0), (n, 0)), ((n, 0), (n, n)), ((n, n), (0, n)), ((0, n), (0, 0)),
@@ -470,7 +470,7 @@ fn plate_on_bedded_edge_beams_carries_the_load_into_the_ground() {
     let mut input = request(nodes, 30_000.0, 0.2, t, quads(&g, 1, 1));
     input.sections.push(Section3D {
         id: 1, name: "300x600".into(), area_m2: 0.18, iy_m4: 0.3 * 0.6_f64.powi(3) / 12.0,
-        iz_m4: 0.6 * 0.3_f64.powi(3) / 12.0, torsion_j_m4: 0.0037, shear_area_y_m2: None, shear_area_z_m2: None,
+        iz_m4: 0.6 * 0.3_f64.powi(3) / 12.0, torsion_j_m4: 0.0037, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None,
     });
     let edges = [((0, 0), (n, 0)), ((n, 0), (n, n)), ((n, n), (0, n)), ((0, n), (0, 0))];
     for (index, (start, end)) in edges.iter().enumerate() {
@@ -528,7 +528,7 @@ fn split_member_equals_unsplit_member() {
         schema_version: 2, analysis: AnalysisKind::Linear, nodes,
         materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![Section3D { id: 1, name: "ref".into(), area_m2: 0.01, iy_m4: 8e-5, iz_m4: 1e-5,
-            torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None }],
+            torsion_j_m4: 1e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
         members: vec![Member3D { id: 7, start_node_id: 1, end_node_id: 2, material_id: 1, section_id: 1,
             releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false, bedding: None, part_section_ids: None }],
         supports: vec![

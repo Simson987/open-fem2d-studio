@@ -720,7 +720,7 @@ mod tests {
             schema_version: 2, analysis: AnalysisKind::Linear, nodes,
             materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
             sections: vec![Section3D { id: 1, name: "s".into(), area_m2: 0.01, iy_m4: iy, iz_m4: iz,
-                torsion_j_m4: 1e-5, shear_area_y_m2: None, shear_area_z_m2: None }],
+                torsion_j_m4: 1e-5, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
             members: vec![Member3D { id: 1, start_node_id: 1, end_node_id: 2, material_id: 1, section_id: 1,
                 releases: Default::default(), roll_angle_rad: rol, intermediate_node_ids: tussenknopen,
                 tension_only: false, bedding: Some(bedding), part_section_ids: None }],

@@ -48,6 +48,15 @@ fn verzoek(json: &str) -> SolveRequest3D {
     serde_json::from_value(aanroep["arguments"].clone()).expect("geldig 3D-verzoek")
 }
 
+/// 038 zoals vastgelegd, plus de werkelijke profielhoogte h = 300 mm (IPE300,
+/// I_y = 8356·10⁴ mm⁴) die een temperatuurverschil over de doorsnede sinds
+/// #221 vraagt; de vastgelegde aanroep kende dat veld nog niet.
+fn verzoek_038() -> SolveRequest3D {
+    let mut r = verzoek(INVOER_038);
+    r.sections[0].height_m = Some(0.300);
+    r
+}
+
 fn knikfactor(r: &SolveResult3D) -> f64 {
     match &r.buckling {
         BucklingSummary::Available { modes, .. } => modes[0].load_factor,
@@ -189,12 +198,19 @@ fn k4_038_ingeklemde_staaf_onder_temperatuur() {
     let (a, i_z, l) = (0.005, 6.04e-6, 5.0);
     let n = E * a * 12e-6 * 30.0;
     let hand = 4.0 * PI * PI * E * i_z / (l * l) / n;
-    let lineair = solve(verzoek(INVOER_038)).unwrap();
+    // De vastgelegde aanroep zonder hoogte: geen stille aanname h = √(12I/A).
+    let fout = solve(verzoek(INVOER_038)).unwrap_err();
+    assert!(fout.contains("mist de hoogte (heightM)"), "{fout}");
+    let lineair = solve(verzoek_038()).unwrap();
+    // #221, staaf 2 (uitkraging 4 m, ΔT_z = 20 K): θ_tip = α·ΔT/h·L =
+    // 12e-6·20/0,300·4 = 3,20·10⁻³ rad (met h = √(12I/A) = 448 mm was het 2,1437·10⁻³).
+    let tip = lineair.displacements.iter().find(|d| d.node_id == 4).unwrap();
+    assert!(relatief(tip.ry.abs(), 3.2e-3).abs() < 1e-9, "θ_tip = {}", tip.ry);
     let n_staaf = lineair.member_forces.iter().find(|f| f.member_id == 1).unwrap().n_start_kn;
     assert!(relatief(n_staaf.abs(), n).abs() < 1e-9, "N = E·A·α·ΔT: {n_staaf}");
     boven_en_dichtbij(knikfactor(&lineair), hand, 1e-2, "038 α_cr lineair");
 
-    let mut p_delta = verzoek(INVOER_038);
+    let mut p_delta = verzoek_038();
     p_delta.analysis = AnalysisKind::PDelta;
     let tweede = solve(p_delta).expect("tweede orde wordt niet meer geblokkeerd");
     boven_en_dichtbij(knikfactor(&tweede), hand, 1e-2, "038 α_cr tweede orde");
@@ -209,7 +225,7 @@ fn k4_038_ingeklemde_staaf_onder_temperatuur() {
 #[test]
 fn k4_lineaire_uitkomst_bitgelijk_met_en_zonder_knikanalyse() {
     for invoer in [INVOER_021, INVOER_038, INVOER_045, INVOER_061] {
-        let mut zonder = verzoek(invoer);
+        let mut zonder = if invoer == INVOER_038 { verzoek_038() } else { verzoek(invoer) };
         zonder.analysis = AnalysisKind::Linear;
         zonder.buckling_modes = 0;
         let mut met = zonder.clone();
@@ -246,7 +262,7 @@ fn k4_tweede_orde_moment_met_lijnlast_langs_de_as() {
         nodes: vec![Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 0.0, y: 0.0, z: h }],
         materials: vec![Material3D { id: 1, name: "staal".into(), e_mpa: 210_000.0, nu: 0.3, g_mpa: None, alpha_per_k: None }],
         sections: vec![Section3D { id: 1, name: "kolom".into(), area_m2: 5.38e-3, iy_m4: 3.69e-5, iz_m4: 1.34e-5,
-            torsion_j_m4: 2.1e-7, shear_area_y_m2: None, shear_area_z_m2: None }],
+            torsion_j_m4: 2.1e-7, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }],
         members: vec![Member3D { id: 1, start_node_id: 1, end_node_id: 2, material_id: 1, section_id: 1,
             releases: Default::default(), roll_angle_rad: None, intermediate_node_ids: vec![], tension_only: false,
             bedding: None, part_section_ids: None }],

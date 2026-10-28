@@ -21,7 +21,7 @@ const E_KN_M2: f64 = 210_000.0 * 1000.0;
 
 fn doorsnede(id: usize, area: f64, iy: f64, iz: f64, j: f64) -> Section3D {
     Section3D { id, name: format!("doorsnede {id}"), area_m2: area, iy_m4: iy, iz_m4: iz,
-        torsion_j_m4: j, shear_area_y_m2: None, shear_area_z_m2: None }
+        torsion_j_m4: j, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
 }
 
 fn knoop(id: usize, x: f64, y: f64, z: f64) -> Node3D { Node3D { id, x, y, z } }

@@ -120,6 +120,14 @@ pub struct Section3D {
     pub shear_area_y_m2: Option<f64>,
     #[serde(default)]
     pub shear_area_z_m2: Option<f64>,
+    /// Werkelijke doorsnedehoogte in m langs lokaal z: de afstand tussen de
+    /// vezels waartussen `deltaTGradientZK` werkt (EN 1991-1-5 §4(3), ΔT_M
+    /// tussen boven- en onderkant). Verplicht bij een gradiënt in z (#221).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height_m: Option<f64>,
+    /// Werkelijke doorsnedebreedte in m langs lokaal y, voor `deltaTGradientYK`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width_m: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -866,6 +874,8 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
         positive(section.iy_m4, &format!("Iy van doorsnede {}", section.id))?;
         positive(section.iz_m4, &format!("Iz van doorsnede {}", section.id))?;
         positive(section.torsion_j_m4, &format!("J van doorsnede {}", section.id))?;
+        if let Some(h) = section.height_m { positive(h, &format!("hoogte van doorsnede {}", section.id))?; }
+        if let Some(b) = section.width_m { positive(b, &format!("breedte van doorsnede {}", section.id))?; }
     }
     let node_by_id: HashMap<_, _> = request.nodes.iter().map(|node| (node.id, node)).collect();
     for member in &request.members {
@@ -983,6 +993,31 @@ fn validate(request: &SolveRequest3D) -> Result<HashMap<usize, shell::PlateGeome
         let values = [load.delta_t_uniform_k, load.delta_t_gradient_y_k, load.delta_t_gradient_z_k];
         if values.iter().any(|value| !value.is_finite()) || values.iter().all(|value| *value == 0.0) {
             return Err(format!("temperatuurbelasting {} bevat geen geldige niet-nulwaarde", load.id));
+        }
+        // κ = α·ΔT/h met de werkelijke hoogte (of breedte) over welke het
+        // temperatuurverschil werkt (#221). Zonder die maat geen stille
+        // aanname h = √(12I/A): die is alleen voor een massieve rechthoek juist
+        // en geeft bij een I-profiel circa 30 % te weinig kromming.
+        let member = request.members.iter().find(|member| member.id == load.member_id)
+            .expect("staaf bestaat, net gecontroleerd");
+        let section_ids: Vec<usize> = std::iter::once(member.section_id)
+            .chain(member.part_section_ids.iter().flatten().copied()).collect();
+        for section_id in section_ids {
+            let Some(section) = request.sections.iter().find(|section| section.id == section_id) else { continue };
+            if load.delta_t_gradient_z_k != 0.0 && section.height_m.is_none() {
+                return Err(format!(
+                    "temperatuurbelasting {}: doorsnede {} (\"{}\") mist de hoogte (heightM) langs lokaal z; \
+                     een temperatuurverschil over de doorsnede vraagt de werkelijke profielhoogte (EN 1991-1-5)",
+                    load.id, section.id, section.name,
+                ));
+            }
+            if load.delta_t_gradient_y_k != 0.0 && section.width_m.is_none() {
+                return Err(format!(
+                    "temperatuurbelasting {}: doorsnede {} (\"{}\") mist de breedte (widthM) langs lokaal y; \
+                     een temperatuurverschil over de doorsnede vraagt de werkelijke profielbreedte (EN 1991-1-5)",
+                    load.id, section.id, section.name,
+                ));
+            }
         }
     }
     let coordinates: HashMap<usize, [f64; 3]> = request.nodes.iter()
@@ -1426,12 +1461,26 @@ fn to_engine_input(
             .and_then(|material| material.alpha_per_k)
             .unwrap_or(12e-6);
         let scale = alpha / 12e-6;
-        for part in &parts_by_member[&load.member_id].parts {
+        let member = request.members.iter().find(|member| member.id == load.member_id)
+            .expect("staaf bestaat, gecontroleerd in validate");
+        let member_parts = &parts_by_member[&load.member_id];
+        for part in &member_parts.parts {
+            // De kern zet een gradiënt om met h = √(12I/A) (en b = √(12Iz/A)).
+            // Schaal ΔT zo dat de kromming α·ΔT/h met de werkelijke maat
+            // ontstaat: ΔT_kern = ΔT · h_kern / h (#221, EN 1991-1-5 §4).
+            let section_id = verloop::doorsnede(member, part.start_m, part.end_m, member_parts.length_m);
+            let section = request.sections.iter().find(|section| section.id == section_id)
+                .expect("doorsnede bestaat, gecontroleerd in validate");
+            let maat = |gradient: f64, werkelijk: Option<f64>, traagheid: f64| {
+                if gradient == 0.0 { return 0.0; }
+                let kern = (12.0 * traagheid / section.area_m2).sqrt();
+                gradient * kern / werkelijk.expect("maat gecontroleerd in validate")
+            };
             loads.push(SolverLoad3D::Thermal(SolverThermalLoad3D {
                 element_id: part.engine_id,
                 dt_uniform: load.delta_t_uniform_k * scale,
-                dt_gradient_y: load.delta_t_gradient_y_k * scale,
-                dt_gradient_z: load.delta_t_gradient_z_k * scale,
+                dt_gradient_y: maat(load.delta_t_gradient_y_k, section.width_m, section.iz_m4) * scale,
+                dt_gradient_z: maat(load.delta_t_gradient_z_k, section.height_m, section.iy_m4) * scale,
             }));
         }
     }

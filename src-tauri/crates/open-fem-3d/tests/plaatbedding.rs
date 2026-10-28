@@ -483,7 +483,7 @@ fn staaf(id: usize, begin: usize, eind: usize, sectie: usize) -> Member3D {
 
 fn doorsnede(id: usize, area: f64, iy: f64, iz: f64, j: f64) -> Section3D {
     Section3D { id, name: format!("doorsnede {id}"), area_m2: area, iy_m4: iy, iz_m4: iz,
-        torsion_j_m4: j, shear_area_y_m2: None, shear_area_z_m2: None }
+        torsion_j_m4: j, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
 }
 
 /// (f1) Plaat op bedding samen met een randbalk op bedding (#106) langs de

@@ -13,7 +13,7 @@ const G_KN_M2: f64 = E_KN_M2 / (2.0 * 1.3);
 
 fn doorsnede(id: usize, area: f64, i: f64, j: f64) -> Section3D {
     Section3D { id, name: format!("doorsnede {id}"), area_m2: area, iy_m4: i, iz_m4: i,
-        torsion_j_m4: j, shear_area_y_m2: None, shear_area_z_m2: None }
+        torsion_j_m4: j, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
 }
 
 fn staaf(id: usize, begin: usize, eind: usize, sectie: usize) -> Member3D {

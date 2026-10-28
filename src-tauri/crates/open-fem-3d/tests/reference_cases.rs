@@ -6,7 +6,7 @@ use open_fem_3d::{
 
 fn section() -> Section3D {
     Section3D { id: 1, name: "reference".into(), area_m2: 0.01, iy_m4: 8e-6,
-        iz_m4: 12e-6, torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None }
+        iz_m4: 12e-6, torsion_j_m4: 5e-6, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None }
 }
 
 #[test]
@@ -879,7 +879,7 @@ fn rigid_diaphragm_on_four_columns_reports_the_reduced_residual_not_a_false_alar
         vec![NodalLoad3D { id: 1, node_id: 5, fx: 20.0, fy: 0.0, fz: 0.0, mx: 0.0, my: 0.0, mz: 0.0 }]);
     input.materials[0].nu = 0.3;
     input.sections[0] = Section3D { id: 1, name: "CHS 219.1x8".into(), area_m2: a, iy_m4: i, iz_m4: i,
-        torsion_j_m4: 2.0 * i, shear_area_y_m2: None, shear_area_z_m2: None };
+        torsion_j_m4: 2.0 * i, shear_area_y_m2: None, shear_area_z_m2: None, height_m: None, width_m: None };
     input.diaphragms.push(Diaphragm3D { id: 1, node_ids: vec![5, 6, 7, 8] });
     let result = solve(input).unwrap();
 
@@ -900,4 +900,60 @@ fn rigid_diaphragm_on_four_columns_reports_the_reduced_residual_not_a_false_alar
     if let Some(melding) = residu {
         assert!(melding.contains("gereduceerd"), "{melding}");
     }
+}
+
+#[test]
+fn thermal_gradient_uses_the_real_section_height_not_sqrt_12i_over_a() {
+    // #221: IPE300 (catalogus A = 5381 mm², I_y = 8356·10⁴ mm⁴, h = 300 mm),
+    // ΔT over lokaal z = 20 K, α = 12·10⁻⁶/K. EN 1991-1-5 §4: ΔT_M werkt
+    // tussen boven- en onderkant, dus κ = α·ΔT/h met h = 300 mm, niet
+    // √(12I/A) = 431,7 mm.
+    //   κ = 12e-6 · 20 / 0,300 = 8,0·10⁻⁴ /m
+    //   uitkraging L = 4 m: θ_tip = κL = 3,20·10⁻³ rad, w_tip = κL²/2 = 6,40 mm
+    //   tweezijdig ingeklemd: M = E·I·κ = 210e6 · 8,356e-5 · 8e-4 = 14,04 kNm
+    let ipe300 = Section3D { id: 1, name: "IPE300".into(), area_m2: 5381e-6, iy_m4: 8356e-8, iz_m4: 604e-8,
+        torsion_j_m4: 20.1e-8, shear_area_y_m2: None, shear_area_z_m2: None,
+        height_m: Some(0.300), width_m: Some(0.150) };
+    let gradient = ThermalLoad3D { id: 1, member_id: 1, delta_t_uniform_k: 0.0,
+        delta_t_gradient_y_k: 0.0, delta_t_gradient_z_k: 20.0 };
+    let kappa = 12e-6 * 20.0 / 0.300;
+    let nodes = vec![Node3D { id: 1, x: 0.0, y: 0.0, z: 0.0 }, Node3D { id: 2, x: 4.0, y: 0.0, z: 0.0 }];
+
+    let mut console = request(nodes.clone(), vec![member(1, 1, 2)], vec![fixed(1)], vec![]);
+    console.sections[0] = ipe300.clone();
+    console.materials[0].alpha_per_k = Some(12e-6);
+    console.thermal_loads.push(gradient.clone());
+    let result = solve(console.clone()).unwrap();
+    let tip = result.displacements.iter().find(|d| d.node_id == 2).unwrap();
+    close(tip.ry.abs(), kappa * 4.0, 1e-9, 0.0);
+    close(tip.uz.abs(), kappa * 16.0 / 2.0, 1e-9, 0.0);
+    close(tip.uz.abs() * 1000.0, 6.40, 1e-9, 0.0);
+
+    let mut clamped = request(nodes.clone(), vec![member(1, 1, 2)], vec![fixed(1), fixed(2)], vec![]);
+    clamped.sections[0] = ipe300.clone();
+    clamped.materials[0].alpha_per_k = Some(12e-6);
+    clamped.thermal_loads.push(gradient.clone());
+    let result = solve(clamped).unwrap();
+    let moment = result.diagrams.moment_y.iter().find(|d| d.member_id == 1).unwrap();
+    close(moment.max_abs_value, 210e6 * 8356e-8 * kappa, 1e-9, 0.0);
+    close(moment.max_abs_value, 14.04, 1e-3, 0.0);
+
+    // Breedte voor een gradiënt in lokaal y: κ = α·ΔT/b, b = 150 mm.
+    let mut sideways = console.clone();
+    sideways.thermal_loads[0].delta_t_gradient_z_k = 0.0;
+    sideways.thermal_loads[0].delta_t_gradient_y_k = 20.0;
+    let result = solve(sideways).unwrap();
+    let tip = result.displacements.iter().find(|d| d.node_id == 2).unwrap();
+    close(tip.rz.abs(), 12e-6 * 20.0 / 0.150 * 4.0, 1e-9, 0.0);
+
+    // Zonder hoogte geen stille aanname: een duidelijke weigering.
+    let mut missing = console.clone();
+    missing.sections[0].height_m = None;
+    let error = solve(missing).unwrap_err();
+    assert!(error.contains("mist de hoogte (heightM)"), "{error}");
+    let mut missing = console;
+    missing.thermal_loads[0].delta_t_gradient_y_k = 5.0;
+    missing.sections[0].width_m = None;
+    let error = solve(missing).unwrap_err();
+    assert!(error.contains("mist de breedte (widthM)"), "{error}");
 }
