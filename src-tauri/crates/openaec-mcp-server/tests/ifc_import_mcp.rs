@@ -185,3 +185,48 @@ async fn een_ontbrekend_bestand_wordt_gemeld() {
     assert_eq!(uit["structuredContent"]["error_code"], json!("BESTAND_ONLEESBAAR"));
     assert!(uit["content"][0]["text"].as_str().unwrap().contains("bestaat-niet.ifc"));
 }
+
+/// #233: met `uitvoerpad` schrijft de tool het .ifcfem-projectbestand (zoals
+/// Opslaan in de app) en geeft het pad terug; zonder `uitvoerpad` schrijft hij
+/// niets, en een bestaand bestand wordt alleen met `overschrijven` vervangen.
+#[tokio::test]
+async fn uitvoerpad_schrijft_het_projectbestand() {
+    eis_node().await;
+    let map = std::env::temp_dir().join(format!("ifc-import-mcp-{}", std::process::id()));
+    std::fs::create_dir_all(&map).unwrap();
+    let doel = map.join("hal.ifcfem");
+    let doel_s = doel.to_string_lossy().into_owned();
+
+    let zonder = importeer(json!({ "pad": fixture("ifc-analyse-m-n.ifc"), "analysemodel": "Hal" })).await;
+    assert_eq!(zonder["projectbestand"], Value::Null, "zonder uitvoerpad geen bestand");
+    assert!(!doel.exists());
+
+    let met = importeer(json!({
+        "pad": fixture("ifc-analyse-m-n.ifc"), "analysemodel": "Hal", "uitvoerpad": doel_s,
+    })).await;
+    assert_eq!(met["projectbestand"]["pad"], json!(doel_s), "{}", met["projectbestand"]);
+    assert_eq!(met["projectbestand"]["geschreven"], json!(true));
+    let tekst = std::fs::read_to_string(&doel).expect("het projectbestand is geschreven");
+    let bestand: Value = serde_json::from_str(&tekst).unwrap();
+    assert_eq!(bestand["format"], json!("open-fem-studio-v2"));
+    assert!(bestand["version"].is_u64() && bestand["savedAt"].is_string());
+    assert_eq!(bestand["modelDimension"], json!("3d"));
+    let aantal = |v: &Value, k: &str| v["model3d"][k].as_array().map(|a| a.len()).unwrap_or(0);
+    for k in ["nodes", "beams", "supports"] {
+        assert_eq!(aantal(&bestand, k), aantal(&met["project"], k), "aantal {k}");
+    }
+    assert!(aantal(&bestand, "nodes") > 0 && aantal(&bestand, "beams") > 0);
+
+    // Een tweede keer zonder `overschrijven`: geweigerd, het bestand blijft.
+    let nogmaals = roep(json!({
+        "pad": fixture("ifc-analyse-m-n.ifc"), "analysemodel": "Hal", "uitvoerpad": doel_s,
+    })).await;
+    assert_eq!(nogmaals["isError"], json!(true), "{nogmaals}");
+    assert!(nogmaals["content"][0]["text"].as_str().unwrap_or_default().contains("overschrijven"), "{nogmaals}");
+    assert_eq!(std::fs::read_to_string(&doel).unwrap(), tekst);
+    let vervangen = importeer(json!({
+        "pad": fixture("ifc-analyse-m-n.ifc"), "analysemodel": "Hal", "uitvoerpad": doel_s, "overschrijven": true,
+    })).await;
+    assert_eq!(vervangen["projectbestand"]["geschreven"], json!(true));
+    let _ = std::fs::remove_dir_all(&map);
+}

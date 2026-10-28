@@ -36032,7 +36032,7 @@ function ifcAnalyseProject(imp, projectInfo = {}) {
 }
 
 // src/mcp/ifcImportSidecar.ts
-var IMPORTEREN_VELDEN = ["inhoud", "pad", "analysemodel", "reken"];
+var IMPORTEREN_VELDEN = ["inhoud", "pad", "analysemodel", "reken", "projectbestand"];
 var UITWERKEN_VELDEN2 = ["inhoud", "analysemodel", "reken", "resultaten"];
 var REKEN_VELDEN2 = ["analyse", "gevolgklasse"];
 var IfcSidecarInvoerFout = class extends Error {
@@ -36131,6 +36131,9 @@ function opIfcImporteren(payload) {
   if (payload.pad !== void 0 && typeof payload.pad !== "string") {
     throw new IfcSidecarInvoerFout("pad", "`pad` moet tekst zijn.");
   }
+  if (payload.projectbestand !== void 0 && typeof payload.projectbestand !== "boolean") {
+    throw new IfcSidecarInvoerFout("projectbestand", "`projectbestand` moet true of false zijn.");
+  }
   const bestand = leesIfcAnalyseBestand(leesInhoud(payload));
   const keuze2 = leesModelKeuze(payload);
   const reken = leesReken2(payload.reken);
@@ -36138,11 +36141,16 @@ function opIfcImporteren(payload) {
   const imp = importeerIfcAnalyseModel(bestand, { model: keuze2 });
   const gekozen = modellen.find((m) => m.naam === imp.verslag.model) ?? modellen[0];
   const opzet = reken ? rekenopzet2(imp, reken) : null;
+  const project = ifcAnalyseProject(imp);
   return {
     pad: typeof payload.pad === "string" ? payload.pad : null,
     modellen,
     analysemodel: { nummer: gekozen.nummer, naam: gekozen.naam },
-    project: ifcAnalyseProject(imp),
+    project,
+    // De tekst van het .ifcfem-bestand, met `format`, `version` en `savedAt`:
+    // precies wat Opslaan in de app schrijft (`serializeProject`). Alleen op
+    // verzoek — de MCP-server schrijft hem naar `uitvoerpad` (#233).
+    ...payload.projectbestand === true ? { projectTekst: serializeProject(project) } : {},
     verslag: imp.verslag,
     groepen: groepen(imp),
     ...reken && opzet ? opzet.mogelijk ? {

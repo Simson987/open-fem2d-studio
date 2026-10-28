@@ -18,6 +18,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   verwerkVerzoek, importeerIfcAnalyseModel, buildOpenFem3DSolveRequest, withOpenFem3DSelfWeight,
+  deserializeProject,
 } from "./src/mcp/kernel-exports.ts";
 
 let geslaagd = 0;
@@ -74,6 +75,31 @@ const inhoud = readFileSync(fileURLToPath(new URL("../docs/verificatie/ifc-analy
   assert.deepEqual(r.groepen, { Kolom: [1], Luifelligger: [2] });
   assert.equal(r.rekenverzoeken, undefined, "zonder `reken` geen rekenverzoeken");
   ok("ifc_importeren: projectbestand, verslag en modellen; het model is dat van de app");
+}
+
+// ── #233: de tekst van het .ifcfem-bestand, voor `uitvoerpad` ─────────────────
+{
+  const zonder = vraag("ifc_importeren", { inhoud, analysemodel: "Hal" });
+  assert.equal(zonder.ok, true, JSON.stringify(zonder.error));
+  assert.equal(zonder.result.projectTekst, undefined, "zonder `projectbestand` geen bestandstekst");
+  const met = vraag("ifc_importeren", { inhoud, analysemodel: "Hal", projectbestand: true });
+  assert.equal(met.ok, true, JSON.stringify(met.error));
+  assert.equal(typeof met.result.projectTekst, "string");
+  const bestand = JSON.parse(met.result.projectTekst);
+  assert.equal(bestand.format, "open-fem-studio-v2", JSON.stringify(bestand.format));
+  assert.ok(Number.isInteger(bestand.version) && bestand.version >= 1, String(bestand.version));
+  assert.ok(!Number.isNaN(Date.parse(bestand.savedAt)), "savedAt is een datum");
+  // Dezelfde lezer als Openen in de app (`deserializeProject`) leest het terug,
+  // met het model van de import.
+  const terug = deserializeProject(met.result.projectTekst);
+  assert.equal(terug.modelDimension, "3d");
+  assert.deepEqual(terug.model3d.nodes.length, met.result.project.model3d.nodes.length);
+  assert.deepEqual(terug.model3d.beams.length, met.result.project.model3d.beams.length);
+  assert.equal(terug.loadCases.length, met.result.project.loadCases.length);
+  const fout = vraag("ifc_importeren", { inhoud, analysemodel: "Hal", projectbestand: "ja" });
+  assert.equal(fout.ok, false);
+  assert.equal(fout.error.detail.veld, "projectbestand");
+  ok(`projectbestand: true geeft de .ifcfem-tekst (${terug.model3d.nodes.length} knopen, ${terug.model3d.beams.length} staven) die deserializeProject terugleest`);
 }
 
 // ── Een model dat de kern (nog) niet kan rekenen: reden, geen stil weglaten ──
