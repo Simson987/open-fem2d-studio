@@ -48,7 +48,11 @@ const model = {
 
 const plateRequest = { schemaVersion: 1, dimension: "3d", analysis: "linear", elementFamilies: ["plate"] };
 assert.equal(resolveSolver("openaec-native-fem", plateRequest).id, "openaec-native-fem");
-assert.throws(() => resolveSolver("automatic", plateRequest), /Kies.*Open FEM Rust/);
+// Open FEM 3D (release 2026.42, ex-"dedaliano") rekent platen lineair met
+// MITC4; automatisch kiest dus die kern in plaats van de vroegere weigering.
+// Alleen materiaal-FNL op platen blijft een expliciete Rust-keuze.
+assert.equal(resolveSolver("automatic", plateRequest).id, "open-fem-3d");
+assert.throws(() => resolveSolver("automatic", { ...plateRequest, analysis: "material-nonlinear" }), /Kies.*Open FEM Rust/);
 assert.throws(() => resolveSolver("openaec-native-fem", { ...plateRequest, elementFamilies: ["frame", "plate"] }), /does not support/);
 assert.equal(resolveSolver("openaec-native-fem", { ...plateRequest, analysis: "p-delta" }).id,
   "openaec-native-fem");

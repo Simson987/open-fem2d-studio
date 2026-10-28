@@ -359,8 +359,14 @@ try {
     1e-8, "opgeslagen vier-families-ontlastproject via app-route");
   assert.ok(savedUnloadResult.volume3D.elements.every(element =>
     element.equivalentPlasticStrain > 0));
+  // Sinds de gekoppelde XY-DKT-buigplaten (frame3dVolumeSolver,
+  // bendingPlateTriangles) rekent de lineaire volumeroute een buigplaat wél
+  // mee; de weigering geldt nog voor een niet-lineaire analyse buiten de
+  // eindige-rek J2-route (hier: materiaal-FNL zonder eindige rek). Vroeger
+  // stond hier "linear", wat nu een echte
+  // mixed3d-berekening start in plaats van de bedoelde weigering.
   await assert.rejects(solveFrame3D({ ...model, plates: [{ ...model.plates[0], membraneOnly: false }] },
-    1, "linear", "openaec-native-fem"), /buigplaten/i);
+    1, "material", "openaec-native-fem"), /buigplaten/i);
   console.log("Gedeelde Tri3/Tet4/Hex8/3D-staaf-app-route: analytische stijfheid, plastische volumes, J2/GNL, backend-pariteit en opgeslagen projecten geslaagd."
     + ` Ontlastrest u_tip=${unloadedCombined.displacements.find(node => node.nodeId === 9).ux.toExponential(6)} m.`);
 } finally {
