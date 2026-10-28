@@ -471,6 +471,7 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["staal-wringing", "#249: wringing 6.2.7 langs de 3D-staalbouwer (openFem3dSteelCheck, buiten de barrel) en de toetsbrug als apart proces; de toets zelf staat in steel-check/tests/wringing.rs"],
   ["vrij-eind-tweede-orde", "vrij staafeind, 2·L of L bij P-Δ met scheefstand: de 3D-houtbouwer (openFem3dTimberCheck) staat buiten de barrel; de MCP-weg (check_fem_model) rekent in deze test al met de bundel, via de MCP-server"],
   ["niet-getoetst-weergave", "B7: de weergave van een niet getoetste staaf zit in het HTML-rapport, de React-panelen en het 3D-rapport; die staan buiten de headless sidecarbundel (de MCP-kant toetst drie_wegen_controle_2026_10.rs)"],
   ["controle-2026-10-3d", "K5 in 3D: de houttoets en de verplaatsingsstations van de 3D-staaf (openFem3dTimberCheck, openFem3dDisplacement) staan buiten de barrel; de staaltoets in 3D en de 2D-bouwers lopen in de bundelstand mee via test-controle-2026-10"],
