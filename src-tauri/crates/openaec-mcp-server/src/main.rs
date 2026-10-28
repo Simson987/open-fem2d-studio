@@ -367,7 +367,7 @@ fn tool_definitions() -> Value {
     let mut tools = json!([
         {
             "name": "list_steel_profiles",
-            "description": "List all steel cross-section profiles in the OpenAEC database (HEA, HEB, IPE, HEM, UNP, RHS, SHS, CHS). Each profile includes geometry, section properties, and EN 1993-1-1 buckling curves.",
+            "description": "List all steel cross-section profiles in the OpenAEC database (HEA, HEB, IPE, HEM, UNP, RHS, SHS, CHS). Each profile includes geometry, section properties, and EN 1993-1-1 buckling curves. 'bronnen' says per group which properties come from a published profile table and which are computed: for IPE/HEA/HEB/HEM A, I, W, i, A_v and I_t are EN 10365 table values while I_w comes from the section engine (the table I_w is an upper bound).",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
         },
         {
@@ -479,7 +479,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "compute_section_properties",
-            "description": "Herberekent de doorsnedegrootheden (A, Iy, Iz, Wel, Wpl, Av, It, Iw, traagheidsstralen, zwaartepunt, schuifmiddelpunt, plastische neutrale lijn) van een catalogusprofiel uit zijn genormeerde maten met de exacte doorsnedemotor van section-properties: contourintegralen voor de meetkundige grootheden, een numerieke torsieoplossing (met insluiting van It) voor It en Iw. Dezelfde motor die de catalogus vult; flenshelling van UNP en INP, walsuitrondingen en de EN 10210-hoekstralen van kokers zitten erin. Het antwoord is plat (area_mm2, iy_mm4, ...) plus diagnostiek (a_mesh_afwijking, it_onzekerheid, meldingen, tijd_ms). Voor de opgeslagen cataloguswaarden zelf: list_steel_profiles.",
+            "description": "Herberekent de doorsnedegrootheden (A, Iy, Iz, Wel, Wpl, Av, It, Iw, traagheidsstralen, zwaartepunt, schuifmiddelpunt, plastische neutrale lijn) van een catalogusprofiel uit zijn genormeerde maten met de exacte doorsnedemotor van section-properties: contourintegralen voor de meetkundige grootheden, een numerieke torsieoplossing (met insluiting van It) voor It en Iw. Dezelfde motor die de catalogus vult; flenshelling van UNP en INP, walsuitrondingen en de EN 10210-hoekstralen van kokers zitten erin. Het antwoord is plat (area_mm2, iy_mm4, ...) plus diagnostiek (a_mesh_afwijking, it_onzekerheid, meldingen, tijd_ms). 'catalogus_vergelijking' zet de cataloguswaarden van I_t en I_w ernaast, met hun bron en het verschil: bij IPE/HEA/HEB/HEM is de catalogus-I_t de EN 10365-tabelwaarde en de catalogus-I_w de motorwaarde; de it-onzekerheidsband is de numerieke insluiting voor de geïdealiseerde contour, geen band rond de tabel. De toetsing rekent met de cataloguswaarden (list_steel_profiles).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -553,7 +553,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
             let profiles = tokio::task::spawn_blocking(|| steel_profiles::db().all().to_vec())
                 .await
                 .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
-            Ok(json!({ "profiles": profiles }))
+            // Issue #241: de catalogus mengt tabel- en motorwaarden; per
+            // groep staat hier welke grootheid waarvandaan komt.
+            Ok(json!({ "profiles": profiles, "bronnen": steel_profiles::herkomst_groepen() }))
         }
         "list_steel_grades" => {
             use nen_en_1993_1_1_section::{S235, S275, S355, S420, S460};
@@ -575,11 +577,14 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
                 .and_then(Value::as_str)
                 .ok_or_else(|| RpcError::invalid_params("missing string field 'profile_name'"))?
                 .to_owned();
+            let naam = profile_name.clone();
             let result = tokio::task::spawn_blocking(move || compute_section_props(&profile_name))
                 .await
                 .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))??;
-            serde_json::to_value(result)
-                .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))
+            let mut v = serde_json::to_value(result)
+                .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))?;
+            voeg_catalogusvergelijking_toe(&naam, &mut v);
+            Ok(v)
         }
         "generate_steel_report_pdf" => {
             let input: report::ReportInput = serde_json::from_value(args)
@@ -671,6 +676,40 @@ fn compute_section_props(
     .map_err(|e| RpcError::tool_exec(format!("doorsnedemotor-invoer: {e}")))?;
     section_properties::opdracht::reken(&invoer)
         .map_err(|e| RpcError::tool_exec(format!("doorsnedemotor: {e}")))
+}
+
+/// Issue #241: zet naast de motoruitkomst van `compute_section_properties` de
+/// cataloguswaarden van I_t en I_w, met hun bron en het verschil, en de
+/// toelichting op de herkomst. Zo staat de menging van tabel- en motorwaarden
+/// in de catalogus niet ongemeld naast elkaar.
+fn voeg_catalogusvergelijking_toe(profile_name: &str, v: &mut Value) {
+    let Some(p) = steel_profiles::db().find(profile_name) else { return };
+    let h = steel_profiles::herkomst(p);
+    let bron = |veld: &str| {
+        if h.tabel.contains(&veld) {
+            "profieltabel (EN 10365)"
+        } else {
+            "berekend (doorsnedemotor of gesloten formule)"
+        }
+    };
+    let vergelijk = |veld: &str, catalogus: f64| {
+        let motor = v[veld].as_f64().unwrap_or(f64::NAN);
+        let verschil = if catalogus != 0.0 { (motor - catalogus) / catalogus * 100.0 } else { f64::NAN };
+        json!({
+            "catalogus": catalogus,
+            "bron_catalogus": bron(veld),
+            "motor": motor,
+            "verschil_motor_pct": if verschil.is_finite() { json!(verschil) } else { Value::Null },
+        })
+    };
+    let it = vergelijk("it_mm4", p.properties.it_mm4);
+    let iw = vergelijk("iw_mm6", p.properties.iw_mm6);
+    if let Value::Object(m) = v {
+        m.insert(
+            "catalogus_vergelijking".to_owned(),
+            json!({ "it_mm4": it, "iw_mm6": iw, "toelichting": h.toelichting }),
+        );
+    }
 }
 
 // ── JSON-RPC method dispatch ────────────────────────────────────────────────

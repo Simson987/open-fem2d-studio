@@ -294,3 +294,94 @@ pub fn db() -> &'static SteelProfileDb {
     static DB: OnceLock<SteelProfileDb> = OnceLock::new();
     DB.get_or_init(SteelProfileDb::load)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Herkomst van de cataloguswaarden (issue #241)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Waar de grootheden van een groep catalogusprofielen vandaan komen.
+///
+/// De catalogus is niet uit één bron: bij de gewalste I-profielen van EN 10365
+/// staan A, I, W, i, A_v en I_t zoals de gepubliceerde profieltabel ze geeft
+/// (afgerond), terwijl I_w uit de doorsnedemotor komt (`scripts/
+/// genereer-profieldata.mjs`, `MOTOR_OVERNAME`): de tabelwaarde is de
+/// bovengrens I_z·h_s²/4 van een doorsnede met haar hele I_z in de
+/// flensmiddenvlakken, en een te hoge I_w is onveilig voor kip. Tot oktober
+/// 2026 stond die menging nergens vermeld (issue #241).
+#[derive(Clone, Debug, Serialize)]
+pub struct Herkomst {
+    /// Om welke profielen het gaat.
+    pub profielen: &'static str,
+    /// Grootheden uit een gepubliceerde profieltabel.
+    pub tabel: Vec<&'static str>,
+    /// Grootheden uit de doorsnedemotor of gesloten formules van de
+    /// genormeerde maten.
+    pub berekend: Vec<&'static str>,
+    pub toelichting: &'static str,
+}
+
+/// De reeksen waarvan de catalogus de tabelwaarden van EN 10365 draagt.
+const EN10365_REEKSEN: [&str; 4] = ["IPE", "HEA", "HEB", "HEM"];
+
+/// Toelichting bij de EN 10365-reeksen.
+const TOELICHTING_EN10365: &str = "A, I_y, I_z, W_el, W_pl, i, A_v en I_t zijn de (afgeronde) waarden \
+    van de profieltabel volgens EN 10365; W_pl is alleen vervangen door de exacte contourwaarde \
+    waar de tabel meer dan 0,5 % afweek (HEM, HEB/HEM 220). I_w komt uit de doorsnedemotor: de \
+    tabelwaarde (≈ t_f·b³/12·(h − t_f)²/2, ook I_z·h_s²/4) neemt alle buigstijfheid om z in de \
+    flensmiddenvlakken aan en is een bovengrens; de motor rekent de welvingsfunctie op de \
+    werkelijke contour met lijf en uitrondingen en ligt 1–2,5 % lager (veilige kant voor kip; de \
+    kipketen van NB.NB.13/NB.148 gebruikt I_w overigens niet). De motor-I_t van \
+    compute_section_properties (met onder- en bovengrens) ligt 2–3 % onder de tabel-I_t: de band \
+    is de numerieke insluiting voor de geïdealiseerde contour (rechte flenzen, kwartcirkels r), \
+    niet een betrouwbaarheidsband rond de tabel; gepubliceerde tabellen verschillen onderling in \
+    dezelfde orde (IPE 300: 19,9 tegen 20,12 cm⁴). De toetsing rekent met de cataloguswaarde.";
+
+/// Toelichting bij alle andere reeksen.
+const TOELICHTING_BEREKEND: &str = "Alle grootheden zijn afgeleid uit de genormeerde maten (h, b, t_w, \
+    t_f, r of d, t): gesloten formules van de generatiescripts (scripts/genereer-*.mjs) en, voor \
+    I_t en I_w waar die formules tekortschieten (U-profielen), de doorsnedemotor. Bij kokers en \
+    buizen is I_w = 0 (gesloten doorsnede).";
+
+/// De herkomst van de grootheden van één catalogusprofiel.
+pub fn herkomst(p: &SteelProfile) -> Herkomst {
+    let reeks: String = p
+        .name
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_uppercase();
+    if p.kind == ProfileKind::ISection && EN10365_REEKSEN.contains(&reeks.as_str()) {
+        herkomst_en10365()
+    } else {
+        herkomst_berekend()
+    }
+}
+
+fn herkomst_en10365() -> Herkomst {
+    Herkomst {
+        profielen: "IPE, HEA, HEB, HEM (EN 10365)",
+        tabel: vec![
+            "area_mm2", "iy_mm4", "iz_mm4", "wel_y_mm3", "wel_z_mm3", "wpl_y_mm3", "wpl_z_mm3",
+            "av_y_mm2", "av_z_mm2", "it_mm4", "iy_radius_mm", "iz_radius_mm",
+        ],
+        berekend: vec!["iw_mm6"],
+        toelichting: TOELICHTING_EN10365,
+    }
+}
+
+fn herkomst_berekend() -> Herkomst {
+    Herkomst {
+        profielen: "alle overige reeksen (INP, DIE/DIL/DIN, UNP, UPE, SHS, RHS, CHS, L, RD, Strip)",
+        tabel: vec![],
+        berekend: vec![
+            "area_mm2", "iy_mm4", "iz_mm4", "wel_y_mm3", "wel_z_mm3", "wpl_y_mm3", "wpl_z_mm3",
+            "av_y_mm2", "av_z_mm2", "it_mm4", "iw_mm6", "iy_radius_mm", "iz_radius_mm",
+        ],
+        toelichting: TOELICHTING_BEREKEND,
+    }
+}
+
+/// De twee herkomstgroepen van de catalogus, voor `list_steel_profiles`.
+pub fn herkomst_groepen() -> Vec<Herkomst> {
+    vec![herkomst_en10365(), herkomst_berekend()]
+}
