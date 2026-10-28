@@ -1378,7 +1378,13 @@ fn draadeind_als_informatie(mut r: BeamCheckResult) -> BeamCheckResult {
     r
 }
 
-pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
+pub fn check_beam(mut input: BeamCheckInput) -> BeamCheckResult {
+    // Issue #243 (punt 084): de staalsoort is hoofdletterongevoelig, net als
+    // de profielnaam. Het resultaat (en dus het rapport) draagt de naam zoals
+    // tabel 3.1 hem schrijft, niet "s355".
+    if let Some(g) = grade_by_name(&input.steel_grade) {
+        input.steel_grade = g.name.to_string();
+    }
     let als_informatie = input.draadeind.is_none();
     let r = check_beam_kern(input);
     if als_informatie {
@@ -1451,7 +1457,8 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
     //    dezelfde manier (`timber_check::check_timber_beam`): geen toetsen,
     //    status NotApplicable en de reden in `governing_check_id`. De vijf
     //    namen zijn de staalsoorten van NEN-EN 1993-1-1 tabel 3.1 die
-    //    `grade_by_name` kent; er wordt hier niets geraden of genormaliseerd.
+    //    `grade_by_name` kent; behalve hoofdletters (#243) wordt er niets
+    //    geraden of genormaliseerd.
     let grade: SteelGrade = match grade_by_name(&input.steel_grade) {
         Some(g) => g,
         None => {

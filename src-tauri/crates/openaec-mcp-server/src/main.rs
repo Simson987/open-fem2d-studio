@@ -388,7 +388,7 @@ fn tool_definitions() -> Value {
                     "profile_name": { "type": "string",
                         "description": "Profielnaam uit de catalogus, bijvoorbeeld 'HEA200' of 'IPE300'. Wordt genegeerd als 'custom_section' is ingevuld." },
                     "steel_grade": { "type": "string", "enum": ["S235", "S275", "S355", "S420", "S460"],
-                        "description": "Staalsoort. Alleen deze vijf worden herkend; een andere waarde valt in de kern stilzwijgend terug op S235." },
+                        "description": "Staalsoort volgens NEN-EN 1993-1-1 tabel 3.1. Alleen deze vijf worden herkend, hoofdletterongevoelig ('s355' = 'S355', zoals bij de profielnaam). Elke andere waarde (bijv. 'S690' of 'S355J2') wordt GEWEIGERD: geen toetsen, status NotApplicable en 'governing_check_id' = \"ERROR: staalsoort … onbekend …\". Er wordt nooit op S235 teruggevallen." },
                     "length_m": { "type": "number",
                         "description": "Staaflengte in m." },
                     "forces_envelope": schema_krachtenomhullende(),
