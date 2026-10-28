@@ -40,7 +40,7 @@ import type { ConcreteSectionInput } from "./types/concrete/ConcreteSectionInput
 import type { ReinforcementCage } from "./types/concrete/ReinforcementCage";
 import type { SteelProfile } from "./types/steel/SteelProfile";
 import { isEigenProfiel } from "./profieleditor/eigenDoorsnedenStore";
-import { profielAliasSleutel } from "./strip";
+import { profielSleutel } from "./strip";
 import { formatConcreteSection } from "./betonCheckBuilder";
 import { banden } from "../components/beton/wapeningskorf";
 
@@ -179,7 +179,7 @@ export function staalVarianten(
 
   // Zelfde sleutel als de kern: "Ø24" vindt "RD 24" en "FL 80x10" vindt
   // "Strip 80x10" (`lib/strip.ts`).
-  const sleutel = (n: string) => profielAliasSleutel(n.replace(/[\s\-.]/g, "").toUpperCase());
+  const sleutel = profielSleutel;
   const huidigProfiel = profielen.find((p) => sleutel(p.name) === sleutel(profielnaam));
   if (!huidigProfiel) {
     return leeg(`profiel "${profielnaam}" staat niet in de EN 1993-profieldatabase`);

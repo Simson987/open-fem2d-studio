@@ -9,9 +9,9 @@ use crate::input::{
     MELDING_DOORSNEDE_STRIP, MELDING_INTERACTIE_RONDSTAAL, MELDING_INTERACTIE_STRIP,
     MELDING_KNIK_HOOFDASSEN, MELDING_KNIK_RONDSTAAL, MELDING_KNIK_STRIP,
     MELDING_KOKER_WARMVERVAARDIGD, MELDING_TREK_ALLEEN, MELDING_TREK_RONDSTAAL, MELDING_TREK_STRIP,
-    MELDING_VORM_NIET_CONTROLEERBAAR, NIET_VOLLEDIG_GETOETST, REDEN_GESLOTEN_CEL_NIET_GEDECLAREERD,
+    Draadeind, MELDING_VORM_NIET_CONTROLEERBAAR, NIET_VOLLEDIG_GETOETST, REDEN_GESLOTEN_CEL_NIET_GEDECLAREERD,
     REDEN_INTERACTIE_GEEN_DRUK, REDEN_INTERACTIE_ZONDER_KIP, REDEN_KIP_HOEKPROFIEL,
-    REDEN_KIP_NIET_DUBBELSYMMETRISCH, REDEN_KIP_NVT_RONDSTAAL, REDEN_KIP_NVT_STRIP,
+    REDEN_KIP_NIET_DUBBELSYMMETRISCH, REDEN_KIP_NVT_CHS, REDEN_KIP_NVT_RONDSTAAL, REDEN_KIP_NVT_STRIP,
     REDEN_KIP_STRIP_STERKE_AS, REDEN_KLASSE_4, TOETS_TREK_ALLEEN,
 };
 use crate::result::{BeamCheckResult, CheckKind, NamedCheck};
@@ -32,6 +32,7 @@ use nen_en_1993_1_1_section::{
     rond::{combinatie_rond, RondCombinatie},
     shear::{v_y_c_rd, v_z_c_rd},
     trek::{n_t_rd, n_t_rd_draadeind, TOETS_DRAADEIND, TOETS_TREK},
+    wringing::{self, TOETS_WRINGING, TOETS_WRINGING_NM},
     CheckStatus, NamedValue, ResistanceCalc, SteelGrade,
 };
 use nen_en_1993_1_1_stability::{
@@ -244,6 +245,271 @@ struct Doorsnede {
     /// Welke regel van §6.2.9 bij deze doorsnede hoort (6.2.9 en 6.2.10; niet
     /// voor massief rond, dat zijn eigen uitwerking heeft).
     interactievorm: Interactievorm,
+    /// Hoe 6.2.7 (wringing) bij deze doorsnede getoetst wordt; zie
+    /// [`Wringingvorm`].
+    wringing: Wringingvorm,
+}
+
+/// Hoe de wringing van NEN-EN 1993-1-1 6.2.7 bij een doorsnede getoetst wordt.
+///
+/// Issue #249: tot oktober 2026 kende de staaltoets 6.2.7 niet, en een CHS
+/// 88,9×4 met |T_Ed| = 6,75 kNm (UC 1,15) kreeg status Ok met UC 0.
+enum Wringingvorm {
+    /// Saint-Venant-wringing, τ_t,Ed = T_Ed/W_t: gesloten doorsneden (welving
+    /// verwaarloosbaar, 6.2.7(7)) en massieve of dunwandige doorsneden zonder
+    /// noemenswaardige welving (rond, strip, hoeklijn). Met (6.23),
+    /// V_pl,T,Rd volgens (6.28) in 6.2.6, 6.2.8 en 6.2.10, en de vloeigrens
+    /// naast τ_t,Ed volgens 6.2.1(5) in een eigen toets op buiging en
+    /// normaalkracht.
+    SaintVenant { w_t_mm3: f64, toelichting: String },
+    /// Niet te toetsen, met de reden: een open doorsnede waarin de welving de
+    /// wringing draagt (I, U) of een doorsnede zonder bekende W_t. Bij
+    /// T_Ed ≠ 0 is de staaf dan NIET VOLLEDIG GETOETST.
+    Niet(String),
+}
+
+/// Een wringend moment tot deze grootte (kNm) telt als nul (rekenruis).
+const T_NUL_KNM: f64 = 1e-6;
+
+/// De reden waarom 6.2.7 bij een open I- of U-doorsnede niet getoetst wordt.
+const REDEN_WRINGING_OPEN: &str = "Wringing (NEN-EN 1993-1-1 6.2.7) niet getoetst: in een open \
+     I- of U-doorsnede wordt het wringend moment volgens 6.2.7(7) hoofdzakelijk door welving \
+     gedragen, en het bimoment B_Ed met de welvingsspanningen σ_w,Ed en τ_w,Ed (6.2.7(4)) komt \
+     niet uit een staafanalyse met zes vrijheidsgraden per knoop. Ook de vermindering van de \
+     dwarskrachtweerstand tot V_pl,T,Rd (6.26)/(6.27) is daarom niet toegepast. Toets de wringing \
+     apart of voorkom haar constructief.";
+
+impl Wringingvorm {
+    /// De vorm voor een catalogusprofiel.
+    fn catalogus(kind: ProfileKind, p: &SectionProperties, g: &steel_profiles::ProfileGeometry) -> Self {
+        let it = p.it_mm4;
+        if !(it.is_finite() && it > 0.0) {
+            return Wringingvorm::Niet(
+                "Wringing (6.2.7) niet getoetst: de catalogus geeft voor dit profiel geen I_t."
+                    .to_string(),
+            );
+        }
+        match kind {
+            ProfileKind::Chs => Wringingvorm::SaintVenant {
+                w_t_mm3: wringing::w_t_rond(it, p.h_mm),
+                toelichting: format!(
+                    "Ronde buis: W_t = 2·I_t/D = 2·{}/{} (τ_t = T·r/I_t; EN 10210-2 bijlage B, \
+                     C_t = 2·W_el). Gesloten doorsnede: welving verwaarloosd (6.2.7(7)).",
+                    nl_getal(it),
+                    nl_getal(p.h_mm)
+                ),
+            },
+            ProfileKind::RoundBar => Wringingvorm::SaintVenant {
+                w_t_mm3: wringing::w_t_rond(it, p.h_mm),
+                toelichting: format!(
+                    "Massief rond: W_t = 2·I_t/d = π·d³/16 met I_t = {} mm⁴ en d = {} mm; een \
+                     cirkel welft niet.",
+                    nl_getal(it),
+                    nl_getal(p.h_mm)
+                ),
+            },
+            ProfileKind::Shs | ProfileKind::Rhs => {
+                let t = g.t.max(p.tw_mm);
+                Wringingvorm::SaintVenant {
+                    w_t_mm3: wringing::w_t_koker(it, p.h_mm, p.b_mm, t, 1.25 * t),
+                    toelichting: format!(
+                        "Koker: W_t = C_t = I_t/(t + K/t) volgens EN 10210-2 bijlage B, met \
+                         R_c = 1,25·t (r_o = 1,5·t, r_i = 1,0·t) en I_t = {} mm⁴. Gesloten \
+                         doorsnede: welving verwaarloosd (6.2.7(7)).",
+                        nl_getal(it)
+                    ),
+                }
+            }
+            ProfileKind::FlatBar | ProfileKind::Angle => {
+                let t = if matches!(kind, ProfileKind::FlatBar) {
+                    p.h_mm.min(p.b_mm)
+                } else {
+                    g.t.max(g.tw).max(g.tf)
+                };
+                Wringingvorm::SaintVenant {
+                    w_t_mm3: wringing::w_t_open(it, t),
+                    toelichting: format!(
+                        "{}: W_t = I_t/t = {}/{} (τ_max ≤ T·t/I_t, veilige kant). De welving \
+                         van deze doorsnede is verwaarloosbaar; alleen Saint-Venant-wringing.",
+                        if matches!(kind, ProfileKind::FlatBar) { "Platstaal" } else { "Hoekprofiel" },
+                        nl_getal(it),
+                        nl_getal(t)
+                    ),
+                }
+            }
+            ProfileKind::ISection | ProfileKind::Channel => {
+                Wringingvorm::Niet(REDEN_WRINGING_OPEN.to_string())
+            }
+        }
+    }
+
+    fn w_t(&self) -> Option<f64> {
+        match self {
+            Wringingvorm::SaintVenant { w_t_mm3, .. } => Some(*w_t_mm3),
+            Wringingvorm::Niet(_) => None,
+        }
+    }
+}
+
+/// Zit er een wringend moment in de omhullende?
+fn heeft_wringing(env: &[ForcePoint]) -> bool {
+    env.iter().any(|fp| fp.forces.mt_ed.abs() > T_NUL_KNM)
+}
+
+/// V_pl,T,Rd/V_pl,Rd volgens (6.28) op één punt; 1 zonder wringing of als
+/// de wringing niet getoetst kan worden. Nooit nul: een V_pl,T,Rd van nul zou
+/// in de schuiftoets UC 0 geven; 10⁻³ geeft een UC die "voldoet niet" zegt.
+fn factor_v_pl_t(w_t: Option<f64>, grade: &SteelGrade, s: &ForceStateSnapshot) -> f64 {
+    match w_t {
+        Some(w) if s.forces.mt_ed.abs() > T_NUL_KNM => {
+            wringing::factor_v_pl_t_hol(wringing::tau_t_ed_mpa(s.forces.mt_ed, w), grade).max(1e-3)
+        }
+        _ => 1.0,
+    }
+}
+
+/// De doorsnede met het afschuifoppervlak maal `k`: V_pl,Rd wordt zo
+/// V_pl,T,Rd = k·V_pl,Rd (6.28) in elke toets die V_pl,Rd uit A_v haalt.
+fn met_factor_av(p: &SectionProperties, k: f64) -> SectionProperties {
+    let mut q = *p;
+    q.av_y_mm2 *= k;
+    q.av_z_mm2 *= k;
+    q
+}
+
+/// De tekst bij een toets die met V_pl,T,Rd rekent.
+const NOTITIE_V_PL_T: &str = "Wringing: op elk punt met T_Ed ≠ 0 is V_pl,Rd verminderd tot \
+     V_pl,T,Rd = (1 − τ_t,Ed/(f_y/(√3·γ_M0)))·V_pl,Rd volgens 6.2.7(9), (6.28); bij 6.2.8 en \
+     6.2.10 komt ρ daarmee uit V_pl,T,Rd (6.2.8(4)).";
+
+/// De schuiftoets (`toets` is `v_z_c_rd` of `v_y_c_rd`) met wringing: op elk
+/// punt van de omhullende tegen V_pl,T,Rd (6.25)/(6.28). Op het maatgevende
+/// punt staat A_v weer bruto in de variabelen, met de factor ernaast.
+fn schuif_met_wringing(
+    p: &SectionProperties,
+    grade: &SteelGrade,
+    w_t: f64,
+    env: &[ForcePoint],
+    terugval: ForceStateSnapshot,
+    toets: fn(&SectionProperties, &SteelGrade, ForceStateSnapshot) -> ResistanceCalc,
+) -> ResistanceCalc {
+    let mut r = maatgevend_over_omhullende(
+        env,
+        terugval,
+        "telkens met V_Ed en T_Ed van dat punt",
+        |s| {
+            let k = factor_v_pl_t(Some(w_t), grade, &s);
+            let mut r = toets(&met_factor_av(p, k), grade, s);
+            if k < 1.0 {
+                for v in r.variables.iter_mut().filter(|v| v.symbol == "A_v") {
+                    v.value /= k;
+                }
+                r.variables.push(NamedValue {
+                    symbol: r"1 - \tau_{t,Ed}/\tau_{Rd}".to_string(),
+                    value: k,
+                    unit: "-".to_string(),
+                });
+                r.article = format!("{} met 6.2.7(9) (6.25), (6.28)", r.article);
+                r.formula_latex = r"V_{pl,T,Rd} = \left(1 - \frac{\tau_{t,Ed}}{f_y/(\sqrt{3} \cdot \gamma_{M0})}\right) \cdot \frac{A_v \cdot (f_y/\sqrt{3})}{\gamma_{M0}}".to_string();
+            }
+            r
+        },
+    );
+    r.notes.push(NOTITIE_V_PL_T.to_string());
+    r
+}
+
+/// De wringtoets (6.23) over de hele omhullende, of de weigering met reden.
+/// Zonder wringend moment in de omhullende: niets (de toets komt dan niet in
+/// de lijst, en een staaf zonder wringing houdt precies zijn oude uitkomst).
+fn wringtoets(
+    vorm: &Wringingvorm,
+    grade: &SteelGrade,
+    env: &[ForcePoint],
+    state: ForceStateSnapshot,
+) -> Option<NamedCheck> {
+    if !heeft_wringing(env) {
+        return None;
+    }
+    Some(match vorm {
+        Wringingvorm::SaintVenant { w_t_mm3, toelichting } => {
+            let mut r = maatgevend_over_omhullende(env, state, "telkens met T_Ed van dat punt", |s| {
+                wringing::t_rd(*w_t_mm3, toelichting, grade, s)
+            });
+            r.notes.push(
+                "Wringing in de stabiliteitstoetsen (6.3) is niet meegenomen; bij een gesloten of \
+                 massieve doorsnede is de staaf niet gevoelig voor torsievervorming (bijlage B). \
+                 De samenwerking van τ_t,Ed met de normaalspanning uit N en M staat in toets \
+                 6.2.7_combined_nmt, met de dwarskracht via V_pl,T,Rd in 6.2.6, 6.2.8 en 6.2.10."
+                    .to_string(),
+            );
+            make_resistance(r)
+        }
+        Wringingvorm::Niet(reden) => weigering(
+            TOETS_WRINGING,
+            "Wringing",
+            "art. 6.2.7",
+            false,
+            vec![reden.clone()],
+            state,
+        ),
+    })
+}
+
+/// Buiging en normaalkracht naast de wringschuifspanning: de vloeigrens
+/// f_y,T = f_y·√(1 − (τ_t,Ed/τ_Rd)²) volgens het vloeicriterium van 6.2.1(5)
+/// (6.2.7(5)), op elk punt met T_Ed ≠ 0, in de toets `toets` (6.2.9 of het
+/// eigen van massief rond). Bij een gesloten doorsnede met constante
+/// wanddikte is τ_t over de wand gelijk, en is dit de exacte plastische
+/// ondergrens; bij massief rond, strip en hoek staat τ_max overal: veilige
+/// kant. `None` zonder punt met wringing én normaalkracht of moment.
+fn buiging_normaal_met_wringing(
+    w_t: f64,
+    grade: &SteelGrade,
+    env: &[ForcePoint],
+    toets: impl Fn(&SteelGrade, ForceStateSnapshot) -> ResistanceCalc,
+) -> Option<NamedCheck> {
+    let punten: Vec<ForcePoint> = env
+        .iter()
+        .filter(|fp| {
+            let f = &fp.forces;
+            f.mt_ed.abs() > T_NUL_KNM
+                && (f.n_ed.abs() > N_NUL_KN || f.my_ed.abs() > M_NUL_KNM || f.mz_ed.abs() > M_NUL_KNM)
+        })
+        .cloned()
+        .collect();
+    let eerste = punten.first()?;
+    let terugval = ForceStateSnapshot {
+        combination_id: eerste.combination_id,
+        position_mm: eerste.position_mm,
+        forces: eerste.forces,
+    };
+    let mut r = maatgevend_over_omhullende(
+        &punten,
+        terugval,
+        "op elk punt met T_Ed ≠ 0, telkens met N, M_y, M_z en T_Ed van dat punt",
+        |s| {
+            let tau = wringing::tau_t_ed_mpa(s.forces.mt_ed, w_t);
+            let fy_t = wringing::fy_onder_wringing(tau, grade).max(1e-3 * grade.fy_mpa);
+            let g = SteelGrade { fy_mpa: fy_t, ..*grade };
+            let mut r = toets(&g, s);
+            r.notes.push(format!(
+                "Wringing: τ_t,Ed = {} N/mm², dus f_y,T = f_y·√(1 − (τ_t,Ed/τ_Rd)²) = {}·√(1 − ({}/{})²) \
+                 = {} N/mm² voor de normaalspanning (vloeicriterium 6.2.1(5), 6.2.7(5)). De f_y in \
+                 deze toets is f_y,T.",
+                nl_getal_2(tau),
+                nl_getal(grade.fy_mpa),
+                nl_getal_2(tau),
+                nl_getal_2(wringing::tau_rd_mpa(grade)),
+                nl_getal_2(fy_t)
+            ));
+            r
+        },
+    );
+    r.id = TOETS_WRINGING_NM.to_string();
+    r.title = "Buiging en normaalkracht met wringing".to_string();
+    r.article = format!("art. 6.2.7(5) met 6.2.1(5); {}", r.article);
+    Some(make_resistance(r))
 }
 
 /// Plakt een notitie achter de notities van één toets.
@@ -285,8 +551,9 @@ fn klasse4_toelichting(e: &EffectieveDoorsnede, p: &SectionProperties) -> String
 
 /// De toetsen waarin f_y (of f_u) rechtstreeks in de formule staat; daar
 /// hoort de dikteklasse van tabel 3.1 bij vermeld te worden.
-const TOETSEN_MET_F_Y: [&str; 9] = [
+const TOETSEN_MET_F_Y: [&str; 10] = [
     TOETS_TREK,
+    TOETS_WRINGING,
     TOETS_DRAADEIND,
     "6.2.4_compression",
     "6.2.5_bending_y",
@@ -483,7 +750,25 @@ fn resolveer_doorsnede(
     let Some(custom) = input.custom_section.as_ref() else {
         let profile = match db().find(&input.profile_name) {
             Some(p) => p,
-            None => return Err(format!("ERROR: profile {} not found", input.profile_name)),
+            None => {
+                // Met suggesties uit dezelfde reeks (issue #240): een tikfout
+                // in de maat hoort de lezer meteen de bedoelde naam te geven.
+                let suggesties = db().suggesties(&input.profile_name, 3);
+                return Err(if suggesties.is_empty() {
+                    format!("ERROR: profile {} not found", input.profile_name)
+                } else {
+                    format!(
+                        "ERROR: profile {} not found; er is niet getoetst. Bedoeld: {}? (zie \
+                         list_steel_profiles)",
+                        input.profile_name,
+                        suggesties
+                            .iter()
+                            .map(|n| format!("\"{n}\""))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                });
+            }
         };
         let p = &profile.properties;
         // De vorm bepaalt welk blad van tabel 5.2 geldt: kokerwanden zijn
@@ -652,6 +937,10 @@ fn resolveer_doorsnede(
             },
             kip_nvt: if is_rond {
                 Some(REDEN_KIP_NVT_RONDSTAAL.to_string())
+            } else if matches!(profile.kind, ProfileKind::Chs) {
+                // Issue #240: een ronde buis kipt niet (6.3.2.1(2)); tot
+                // oktober 2026 draaide hier de kiptoets met flensteksten.
+                Some(REDEN_KIP_NVT_CHS.to_string())
             } else if is_strip && !strip_buigt_om_sterke_as {
                 Some(REDEN_KIP_NVT_STRIP.to_string())
             } else {
@@ -659,6 +948,7 @@ fn resolveer_doorsnede(
             },
             rond_d_mm: is_rond.then_some(profile.geometry.h),
             interactievorm,
+            wringing: Wringingvorm::catalogus(profile.kind, p, &profile.geometry),
             schuif_weigering: None,
             // Klasse 4 wordt in `check_beam` afgehandeld: met de effectieve
             // doorsnede volgens NEN-EN 1993-1-5 4.4 waar die voor de vorm
@@ -869,6 +1159,56 @@ fn doorsnede_uit_custom(
         r: 0.0,
     });
 
+    // Wringing (6.2.7): alleen voor een ronde buis of koker die met haar
+    // eigenschappen is opgegeven (Saint-Venant, welving verwaarloosd volgens
+    // 6.2.7(7)). Een doorsnede uit lamellen of een gelaste I: niet getoetst.
+    let wringing = if !custom.lamellen.is_empty() {
+        Wringingvorm::Niet(
+            "Wringing (NEN-EN 1993-1-1 6.2.7) niet getoetst: voor een uit platen samengestelde \
+             doorsnede bepaalt de kern geen wringweerstandsmoment W_t en geen welvingsspanningen."
+                .to_string(),
+        )
+    } else {
+        let ok = |v: f64| v.is_finite() && v > 0.0;
+        match custom.vorm {
+            CustomDoorsnedevorm::RondeBuis if ok(props.it_mm4) && ok(props.h_mm) => {
+                Wringingvorm::SaintVenant {
+                    w_t_mm3: wringing::w_t_rond(props.it_mm4, props.h_mm),
+                    toelichting: format!(
+                        "Ronde buis: W_t = 2·I_t/D = 2·{}/{} (τ_t = T·r/I_t), I_t uit de opgegeven \
+                         eigenschappen. Gesloten doorsnede: welving verwaarloosd (6.2.7(7)).",
+                        nl_getal(props.it_mm4),
+                        nl_getal(props.h_mm)
+                    ),
+                }
+            }
+            CustomDoorsnedevorm::Koker
+                if ok(props.h_mm)
+                    && ok(props.b_mm)
+                    && ok(props.tf_mm)
+                    && ok(props.tw_mm)
+                    && props.b_mm > props.tw_mm
+                    && props.h_mm > props.tf_mm =>
+            {
+                Wringingvorm::SaintVenant {
+                    w_t_mm3: wringing::w_t_bredt(props.h_mm, props.b_mm, props.tf_mm, props.tw_mm),
+                    toelichting: "Koker: W_t = 2·A_m·t_min met A_m = (b − t_w)·(h − t_f) (Bredt, \
+                         scherpe hoeken). Gesloten doorsnede: welving verwaarloosd (6.2.7(7))."
+                        .to_string(),
+                }
+            }
+            CustomDoorsnedevorm::GelasteIDubbelsymmetrisch
+            | CustomDoorsnedevorm::GelasteIMonosymmetrisch => {
+                Wringingvorm::Niet(REDEN_WRINGING_OPEN.to_string())
+            }
+            _ => Wringingvorm::Niet(
+                "Wringing (NEN-EN 1993-1-1 6.2.7) niet getoetst: uit de opgegeven eigenschappen \
+                 volgt geen wringweerstandsmoment W_t (I_t, D of de wanddikten ontbreken)."
+                    .to_string(),
+            ),
+        }
+    };
+
     // Knikkrommen: tabel 6.2, **gelaste** I-doorsnede. t_f ≤ 40 mm → b (y-y) en
     // c (z-z); t_f > 40 mm → c (y-y) en d (z-z). Een inline doorsnede erft
     // nooit stilzwijgend de gunstiger gewalste kromme.
@@ -916,6 +1256,7 @@ fn doorsnede_uit_custom(
         kip_nvt: None,
         rond_d_mm: None,
         interactievorm,
+        wringing,
     })
 }
 
@@ -937,7 +1278,117 @@ pub(crate) fn uc_of(c: &NamedCheck) -> f64 {
     }
 }
 
+/// Het draadeind van een staaf van massief rond staal, naar de opgegeven
+/// eindafwerking (issue #226). Gesneden: de toets van NEN-EN 1993-1-8 tabel
+/// 3.4 telt gewoon mee. Opgestuikt, gelast of geen draad: geen draadeindtoets,
+/// wel een notitie bij de trektoets (al in `checks`). Niet opgegeven: de toets
+/// als AANNAME van een gesneden draad, met een notitie; zij telt niet mee in
+/// de maatgevende UC (zie [`check_beam`], `draadeind_als_informatie`).
+fn draadeind_toets(
+    input: &BeamCheckInput,
+    d_mm: f64,
+    grade: &SteelGrade,
+    trek_state: ForceStateSnapshot,
+    checks: &mut [NamedCheck],
+) -> Option<NamedCheck> {
+    let tekst = match input.draadeind {
+        Some(Draadeind::Gesneden) => {
+            return Some(make_resistance(n_t_rd_draadeind(d_mm, grade, trek_state)))
+        }
+        None => {
+            let mut c = n_t_rd_draadeind(d_mm, grade, trek_state);
+            c.notes.insert(
+                0,
+                format!(
+                    "AANNAME: de eindafwerking is niet opgegeven (veld 'draadeind'); gerekend is een \
+                     in de staaf gesneden draad M{}. Deze toets is informatie en telt niet mee in \
+                     de maatgevende unity check. Voldoet zij niet, dan is de staaf niet volledig \
+                     getoetst: geef de eindafwerking op (gesneden, opgestuikt, gelast of geen \
+                     draad).",
+                    nl_getal(d_mm)
+                ),
+            );
+            return Some(make_resistance(c));
+        }
+        Some(Draadeind::Opgestuikt) => {
+            "Eindafwerking opgestuikte draad: de draad is groter dan de staaf, dus de \
+             spanningsdoorsnede verzwakt de staaf niet en de brutodoorsnede (6.6) is de \
+             trektoets van de staaf. De draad en de moer horen bij de aansluiting (NEN-EN \
+             1993-1-8 tabel 3.4) en zijn hier niet getoetst."
+        }
+        Some(Draadeind::Gelast) => {
+            "Eindafwerking gelast, zonder draad: geen draadeindtoets; de brutodoorsnede (6.6) is \
+             de trektoets van de staaf. De las hoort bij de aansluiting (NEN-EN 1993-1-8 4.5) en \
+             is hier niet getoetst."
+        }
+        Some(Draadeind::Geen) => {
+            "Geen draad aan de staafeinden: geen draadeindtoets; de brutodoorsnede (6.6) is de \
+             trektoets van de staaf."
+        }
+    };
+    for c in checks.iter_mut().filter(|c| c.id == TOETS_TREK) {
+        plak_notitie(c, tekst);
+    }
+    None
+}
+
+/// De reden bij een staaf die alleen op het AANGENOMEN draadeind niet zou
+/// voldoen (zie [`draadeind_toets`]).
+fn reden_draadeind_aanname(uc: f64) -> String {
+    format!(
+        "het draadeind is niet opgegeven (veld 'draadeind'); bij een in de staaf gesneden draad \
+         voldoet het niet (UC {}, NEN-EN 1993-1-8 tabel 3.4). Geef de eindafwerking op",
+        nl_getal_3(uc)
+    )
+}
+
+/// Bij massief rond zonder opgegeven eindafwerking is het draadeind
+/// informatie (issue #226): uc_max en de maatgevende toets zonder die toets,
+/// en een overschrijding daarvan maakt de staaf NIET VOLLEDIG GETOETST — geen
+/// Ok, en geen NotOk die alleen op de aanname rust.
+fn draadeind_als_informatie(mut r: BeamCheckResult) -> BeamCheckResult {
+    let Some(draad) = r.checks.iter().find(|c| c.id == TOETS_DRAADEIND) else {
+        return r;
+    };
+    let uc_draad = uc_of(draad);
+    let mut uc_max = 0.0_f64;
+    let mut maatgevend = String::new();
+    for c in r.checks.iter().filter(|c| c.id != TOETS_DRAADEIND) {
+        let uc = uc_of(c);
+        if uc > uc_max {
+            uc_max = uc;
+            maatgevend = c.id.clone();
+        }
+    }
+    if r.governing_check_id == TOETS_DRAADEIND {
+        r.governing_check_id = maatgevend;
+    }
+    r.uc_max = uc_max;
+    if uc_max > 1.0 {
+        r.status = CheckStatus::NotOk;
+    } else if uc_draad > 1.0 {
+        let reden = reden_draadeind_aanname(uc_draad);
+        r.governing_check_id = if r.governing_check_id.starts_with(NIET_VOLLEDIG_GETOETST) {
+            format!("{}; {reden}", r.governing_check_id)
+        } else {
+            format!("{NIET_VOLLEDIG_GETOETST}: {reden}")
+        };
+        r.status = CheckStatus::NotApplicable;
+    }
+    r
+}
+
 pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
+    let als_informatie = input.draadeind.is_none();
+    let r = check_beam_kern(input);
+    if als_informatie {
+        draadeind_als_informatie(r)
+    } else {
+        r
+    }
+}
+
+fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
     // 0. DE DOORBUIGINGSNOEMERS. Een noemer van 0 of kleiner geeft geen grens
     //    L/n; tot september 2026 werd dat bij klasse 'Custom' een oneindige
     //    grens met UC 0 en status Ok. Het is een invoerfout, dus de staaf
@@ -1086,6 +1537,9 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     let gov_trek = governing_for(env, |f| f.n_ed);
 
     let comp_state = snap(gov_compression);
+    // Wringing (6.2.7): het punt met het grootste |T_Ed|, als terugval en voor
+    // een geweigerde wringtoets.
+    let torsie_state = snap(governing_for(env, |f| f.mt_ed.abs()));
     let bend_state = snap(gov_bending);
     let shear_state = snap(gov_shear);
     let trek_state = snap(gov_trek);
@@ -1226,6 +1680,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             a_net,
             trek_state,
             comp_state,
+            torsie_state,
             &dikte_notitie,
         );
     }
@@ -1341,6 +1796,13 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
             };
             checks.push(weigering(id, titel, artikel, stabiliteit, redenen, state));
         }
+        // Wringing (6.2.7) op de brutodoorsnede; de plooi van de wanden onder
+        // de wringschuifspanning is bij klasse 4 niet getoetst, maar de staaf
+        // staat hier toch al op "niet toetsbaar". Een overschreden T_Rd maakt
+        // haar wél "voldoet niet".
+        if let Some(c) = wringtoets(&doorsnede.wringing, &grade, env, torsie_state) {
+            checks.push(c);
+        }
         let (defl_fin, defl_add) = doorbuigingstoetsen(&input);
         checks.push(make_resistance(met_invoernotities(defl_fin, &input)));
         checks.push(make_resistance(defl_add));
@@ -1395,7 +1857,9 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     //    daarnaast het draadeind (NEN-EN 1993-1-8 tabel 3.4).
     checks.push(make_resistance(n_t_rd(p, &grade, a_net, trek_state)));
     if let Some(d_mm) = doorsnede.rond_d_mm {
-        checks.push(make_resistance(n_t_rd_draadeind(d_mm, &grade, trek_state)));
+        if let Some(c) = draadeind_toets(&input, d_mm, &grade, trek_state, &mut checks) {
+            checks.push(c);
+        }
     }
 
     // Klasse 4 met effectieve doorsnede: vanaf hier rekenen de toetsen die van
@@ -1496,6 +1960,16 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     }
     checks.push(make_resistance(bend_z));
 
+    // Wringing (6.2.7): W_t als er een wringend moment is en de doorsnede
+    // Saint-Venant getoetst wordt. Dan rekenen 6.2.6, 6.2.8 en 6.2.10 op elk
+    // punt met V_pl,T,Rd (6.28); zonder wringing verandert er niets.
+    let w_t_v: Option<f64> = if heeft_wringing(env) {
+        doorsnede.wringing.w_t()
+    } else {
+        None
+    };
+    let k_t = |s: &ForceStateSnapshot| factor_v_pl_t(w_t_v, &grade, s);
+
     // Lijfplooi (weigering 3): boven 72ε/η draagt het lijf niet meer de volle
     // V_pl,Rd. Dan vervallen de schuiftoets om de z-as en alles wat V_pl,Rd
     // als weerstand gebruikt.
@@ -1523,13 +1997,19 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
         ));
         0.0 // wordt niet gebruikt: elke afnemer van V_pl,Rd is hieronder geweigerd
     } else {
-        let shear_z = v_z_c_rd(p, &grade, shear_state);
-        let v = shear_z.value;
+        let shear_z = match w_t_v {
+            Some(w) => schuif_met_wringing(p, &grade, w, env, shear_state, v_z_c_rd),
+            None => v_z_c_rd(p, &grade, shear_state),
+        };
         checks.push(make_resistance(shear_z));
-        v
+        // V_pl,z,Rd zonder wringing; 6.2.8 vermindert hem per punt.
+        v_z_c_rd(p, &grade, shear_state).value
     };
 
-    let shear_y = v_y_c_rd(p, &grade, shear_y_state);
+    let shear_y = match w_t_v {
+        Some(w) => schuif_met_wringing(p, &grade, w, env, shear_y_state, v_y_c_rd),
+        None => v_y_c_rd(p, &grade, shear_y_state),
+    };
     checks.push(make_resistance(shear_y));
 
     // De combinaties. 6.2.8, 6.2.9 en 6.2.10 gaan over V, N en M samen, en het
@@ -1548,12 +2028,16 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
                 RondCombinatie::BuigingNormaalkracht => "het resulterende moment",
                 _ => "het resulterende moment en de resulterende dwarskracht",
             };
-            checks.push(make_resistance(maatgevend_over_omhullende(
+            let mut r = maatgevend_over_omhullende(
                 env,
                 bend_state,
                 &format!("telkens met {resultanten}"),
-                |s| combinatie_rond(p, &grade, soort, s),
-            )));
+                |s| combinatie_rond(&met_factor_av(p, k_t(&s)), &grade, soort, s),
+            );
+            if w_t_v.is_some() && soort != RondCombinatie::BuigingNormaalkracht {
+                r.notes.push(NOTITIE_V_PL_T.to_string());
+            }
+            checks.push(make_resistance(r));
         }
     } else {
         match schuif_weigering {
@@ -1565,7 +2049,7 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
                 // (naast een zware puntlast bij een oplegging) kan maatgevend
                 // zijn. Tot oktober 2026 stond 6.2.8 alleen op het buigpunt
                 // (grootste |M_y|), waar V_z vaak nul is.
-                checks.push(make_resistance(maatgevend_over_omhullende(
+                let mut r = maatgevend_over_omhullende(
                     env,
                     bend_state,
                     "telkens met V_z,Ed en M_y,Ed van dat punt",
@@ -1575,12 +2059,17 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
                             &grade,
                             classification,
                             &doorsnede.interactievorm,
-                            v_z_pl_rd,
+                            // V_pl,T,Rd (6.28) bij wringing, 6.2.8(4).
+                            v_z_pl_rd * k_t(&s),
                             m_y_c_rd_knm,
                             s,
                         )
                     },
-                )));
+                );
+                if w_t_v.is_some() {
+                    r.notes.push(NOTITIE_V_PL_T.to_string());
+                }
+                checks.push(make_resistance(r));
             }
         }
 
@@ -1603,13 +2092,14 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
         match schuif_weigering {
             Some(_) => checks.push(geweigerd_v("6.2.10_combined_mnv", bend_state)),
             None => {
-                checks.push(make_resistance(maatgevend_over_omhullende(
+                let mut r = maatgevend_over_omhullende(
                     env,
                     bend_state,
                     "telkens met N, V_y, V_z, M_y en M_z van dat punt",
                     |s| {
                         buiging_en_normaalkracht(
-                            p_reken,
+                            // V_pl,T,Rd (6.28) bij wringing, 6.2.8(4).
+                            &met_factor_av(p_reken, k_t(&s)),
                             &grade,
                             klasse_reken,
                             &doorsnede.interactievorm,
@@ -1617,8 +2107,41 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
                             s,
                         )
                     },
-                )));
+                );
+                if w_t_v.is_some() {
+                    r.notes.push(NOTITIE_V_PL_T.to_string());
+                }
+                checks.push(make_resistance(r));
             }
+        }
+    }
+
+    // 5b. Wringing (6.2.7). Zonder wringend moment in de omhullende komt hier
+    //     niets bij. Met: de wringtoets (6.23) — of de weigering met reden bij
+    //     een open I of U — en bij Saint-Venant de toets op buiging en
+    //     normaalkracht met f_y,T volgens 6.2.1(5).
+    if let Some(c) = wringtoets(&doorsnede.wringing, &grade, env, torsie_state) {
+        checks.push(c);
+    }
+    if let Some(w) = w_t_v {
+        let nmt = if doorsnede.rond_d_mm.is_some() {
+            buiging_normaal_met_wringing(w, &grade, env, |g, s| {
+                combinatie_rond(p, g, RondCombinatie::BuigingNormaalkracht, s)
+            })
+        } else {
+            buiging_normaal_met_wringing(w, &grade, env, |g, s| {
+                buiging_en_normaalkracht(
+                    p_reken,
+                    g,
+                    klasse_reken,
+                    &doorsnede.interactievorm,
+                    Interactiesoort::BuigingNormaal,
+                    s,
+                )
+            })
+        };
+        if let Some(c) = nmt {
+            checks.push(c);
         }
     }
 
@@ -2715,9 +3238,30 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     let kip_ontbreekt = doorlopend_geweigerd
         && kip_weigering.is_some()
         && env.iter().any(|fp| fp.forces.my_ed.abs() > M_NUL_KNM);
+    // Wringing (6.2.7) die niet getoetst kon worden terwijl T_Ed ≠ 0 (open I
+    // of U, doorsnede zonder W_t), of een klasse 4-doorsnede onder wringing
+    // (de plooi van de wanden onder τ_t,Ed, NEN-EN 1993-1-5, is niet
+    // getoetst): de staaf is NIET VOLLEDIG GETOETST, nooit "voldoet" (#249).
+    let wringing_ontbreekt: Option<String> = if !heeft_wringing(env) {
+        None
+    } else {
+        match &doorsnede.wringing {
+            Wringingvorm::Niet(reden) => Some(reden.clone()),
+            Wringingvorm::SaintVenant { .. } if klasse4.is_some() => Some(
+                "Wringing bij een doorsnede in klasse 4: de plooi van de wanden onder de \
+                 wringschuifspanning (NEN-EN 1993-1-5) is niet getoetst"
+                    .to_string(),
+            ),
+            Wringingvorm::SaintVenant { .. } => None,
+        }
+    };
     let status = if uc_max > 1.0 {
         CheckStatus::NotOk
-    } else if onvolledig.is_some() || knik_ontbreekt || kip_ontbreekt {
+    } else if onvolledig.is_some()
+        || knik_ontbreekt
+        || kip_ontbreekt
+        || wringing_ontbreekt.is_some()
+    {
         CheckStatus::NotApplicable
     } else {
         CheckStatus::Ok
@@ -2725,6 +3269,9 @@ pub fn check_beam(input: BeamCheckInput) -> BeamCheckResult {
     if status == CheckStatus::NotApplicable {
         let mut redenen: Vec<String> = Vec::new();
         if let Some(reden) = onvolledig {
+            redenen.push(reden.clone());
+        }
+        if let Some(reden) = &wringing_ontbreekt {
             redenen.push(reden.clone());
         }
         let ontbreekt: Vec<&str> = [
@@ -2778,6 +3325,7 @@ fn trek_alleen_staaf(
     a_net: Option<f64>,
     trek_state: ForceStateSnapshot,
     comp_state: ForceStateSnapshot,
+    torsie_state: ForceStateSnapshot,
     dikte_notitie: &str,
 ) -> BeamCheckResult {
     let p = &doorsnede.props;
@@ -2790,7 +3338,9 @@ fn trek_alleen_staaf(
     );
     checks.push(make_resistance(trek));
     if let Some(d_mm) = doorsnede.rond_d_mm {
-        checks.push(make_resistance(n_t_rd_draadeind(d_mm, grade, trek_state)));
+        if let Some(c) = draadeind_toets(input, d_mm, grade, trek_state, &mut checks) {
+            checks.push(c);
+        }
     }
     // De informatieve regel: de grootste drukkracht, niet getoetst.
     let druk = comp_state.forces.n_ed < 0.0;
@@ -2813,6 +3363,23 @@ fn trek_alleen_staaf(
         vec![tekst],
         comp_state,
     ));
+    // Wringing (6.2.7), ook bij een trek-alleen staaf: de wringtoets en, bij
+    // Saint-Venant, de trek naast τ_t,Ed met f_y,T volgens 6.2.1(5) (#249).
+    let env = &input.forces_envelope;
+    if let Some(c) = wringtoets(&doorsnede.wringing, grade, env, torsie_state) {
+        checks.push(c);
+    }
+    if let (true, Some(w)) = (heeft_wringing(env), doorsnede.wringing.w_t()) {
+        if let Some(c) =
+            buiging_normaal_met_wringing(w, grade, env, |g, s| n_t_rd(p, g, None, s))
+        {
+            checks.push(c);
+        }
+    }
+    let wringing_ontbreekt = match &doorsnede.wringing {
+        Wringingvorm::Niet(reden) if heeft_wringing(env) => Some(reden.clone()),
+        _ => None,
+    };
     hang_toets_notities(&mut checks, &doorsnede.toets_notities);
     hang_dikte_notitie(&mut checks, dikte_notitie);
 
@@ -2832,12 +3399,17 @@ fn trek_alleen_staaf(
         classification: doorsnede.klasse,
         checks,
         uc_max,
-        status: if uc_max <= 1.0 {
-            CheckStatus::Ok
-        } else {
+        status: if uc_max > 1.0 {
             CheckStatus::NotOk
+        } else if wringing_ontbreekt.is_some() {
+            CheckStatus::NotApplicable
+        } else {
+            CheckStatus::Ok
         },
-        governing_check_id,
+        governing_check_id: match (&wringing_ontbreekt, uc_max > 1.0) {
+            (Some(reden), false) => format!("{NIET_VOLLEDIG_GETOETST}: {reden}"),
+            _ => governing_check_id,
+        },
         verloop: None,
     }
 }

@@ -3,7 +3,7 @@ import type { OpenFem3DDiagramPoint, OpenFem3DDisplacement, OpenFem3DSolveResult
 import { CONCRETE_E_CM, NU_BETON, NU_STAAL, parseRechthoek, resolveSection } from "../../lib/sectionResolver";
 import { STEEL_SECTION_DIMS } from "../../lib/steelSectionDims.generated";
 import { isEigenProfiel, zoekEigenDoorsnede } from "../../lib/profieleditor/eigenDoorsnedenStore";
-import { profielAliasSleutel } from "../../lib/strip";
+import { profielSleutel } from "../../lib/strip";
 import { openFem3DBeddingResultOf, openFem3DBeddingSettlementAt } from "./openFem3dBedding";
 import { openFem3DVerloopDelen } from "./openFem3dVerloop";
 import { resolveOpenFem3DAnalysisMaterial } from "./openFem3dAnalysisMaterial";
@@ -14,9 +14,7 @@ const dot = (a: Vector3, b: Vector3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 /** Sleutel van de profieltabellen; "Ø24" wordt "RD24" en "FL 80x10" "STRIP80X10" (`lib/strip.ts`). */
 function profileKey(value: string): string {
-  return profielAliasSleutel(
-    value.toUpperCase().split("").filter((character) => ![" ", "-", "."].includes(character)).join(""),
-  );
+  return profielSleutel(value);
 }
 
 /**

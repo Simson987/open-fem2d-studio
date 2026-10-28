@@ -92,6 +92,7 @@ fn invoer(profiel: &str, l_m: f64, q: f64, steunen: Vec<f64>, z_a_mm: f64) -> Be
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     }
 }
 

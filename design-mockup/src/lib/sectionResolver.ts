@@ -60,7 +60,7 @@ import { parseConcreteSection } from "./betonCheckBuilder";
 import { parseVrijMateriaal } from "./vrijMateriaal";
 import { isAluminiumMateriaal, parseAluminiumMateriaal } from "./aluminiumMateriaal";
 import { STEEL_GRADES } from "./steelGrades";
-import { profielAliasSleutel } from "./strip";
+import { profielSleutel } from "./strip";
 
 /** E_0,mean in N/mm² per sterkteklasse — EN 338 (C) en EN 14080 (GL). */
 export const TIMBER_E_MEAN: Record<string, number> = {
@@ -234,9 +234,7 @@ export function parseRechthoek(profiel: string | undefined): { b: number; h: num
  * spiegel van de opzoekregel in de Rust-kern.
  */
 function normaliseer(naam: string): string {
-  return profielAliasSleutel(
-    naam.toUpperCase().split("").filter(c => c !== " " && c !== "-" && c !== ".").join(""),
-  );
+  return profielSleutel(naam);
 }
 
 /**

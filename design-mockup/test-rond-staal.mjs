@@ -225,8 +225,15 @@ if (!KERN_AANWEZIG) {
     draad && dichtbij(draad.value, 91.369, 1e-4), `${draad?.value}`);
   ok("UC draadeind = 80/91,37 = 0,876", draad?.uc && dichtbij(draad.uc.uc, 80 / 91.369, 1e-4),
     `${draad?.uc?.uc}`);
-  ok("het draadeind is maatgevend (kleinste trekweerstand)", r.governing_check_id === "6.2.3_threaded_end",
-    r.governing_check_id);
+  // #226: zonder opgegeven eindafwerking is het draadeind een AANNAME en
+  // alleen informatie; maatgevend is de brutodoorsnede, UC 80/106,31 = 0,753.
+  ok("zonder eindafwerking: draadeind is informatie, trek maatgevend",
+    r.governing_check_id === "6.2.3_tension" && dichtbij(r.uc_max, 80 / 106.311, 1e-4)
+    && draad?.notes?.[0]?.startsWith("AANNAME"), `${r.governing_check_id} ${r.uc_max}`);
+  const [g] = kern("check_steel_beams", [{ ...gebouwd.inputs[0], draadeind: "Gesneden" }]);
+  ok("met draadeind \"Gesneden\" is het draadeind maatgevend (kleinste trekweerstand)",
+    g.governing_check_id === "6.2.3_threaded_end" && dichtbij(g.uc_max, 80 / 91.369, 1e-4),
+    g.governing_check_id);
   const kip = toets(r, "6.3.2_ltb");
   ok("kip: n.v.t. met reden, geen unity check",
     kip?.status === "NotApplicable" && kip.uc === null && kip.notes[0].startsWith("Niet van toepassing"),

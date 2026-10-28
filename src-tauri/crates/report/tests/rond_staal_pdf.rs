@@ -69,7 +69,10 @@ fn de_pdf_toont_het_draadeind_en_kip_als_niet_van_toepassing() {
         "deflection_limit_numerator": 300,
         "deflection_actual_max_mm": 0.0,
         "is_cantilever": false,
-        "consequence_class": "CC2"
+        "consequence_class": "CC2",
+        // Een gesneden draad (#226): zonder opgave is het draadeind alleen
+        // informatie en niet maatgevend.
+        "draadeind": "Gesneden"
     }))
     .expect("geldige invoer");
     let resultaat = check_beam(invoer);

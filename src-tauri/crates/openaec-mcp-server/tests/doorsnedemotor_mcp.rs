@@ -164,3 +164,21 @@ async fn unp_200_en_inp_200_binnen_een_half_procent_van_de_catalogus() {
         fouten.join("\n")
     );
 }
+
+/// Issue #241: naast de motoruitkomst staan de cataloguswaarden van I_t en
+/// I_w met hun bron. IPE 300: catalogus-I_t = 201 000 mm⁴ uit de EN
+/// 10365-tabel, motor 197,3·10³ (−1,85 %); catalogus-I_w is de motorwaarde
+/// (verschil 0), onder de dunwandige tabelformule 125,93·10⁹ mm⁶.
+#[tokio::test]
+async fn ipe_300_catalogusvergelijking_met_bronnen() {
+    let uit = roep(&["IPE 300"]).await;
+    let v = &uit[0]["catalogus_vergelijking"];
+    assert_eq!(v["it_mm4"]["catalogus"], json!(201000.0), "{v}");
+    assert!(v["it_mm4"]["bron_catalogus"].as_str().unwrap().contains("EN 10365"));
+    let d = v["it_mm4"]["verschil_motor_pct"].as_f64().unwrap();
+    assert!((-3.0..-1.0).contains(&d), "I_t-verschil {d} %");
+    assert!(v["iw_mm6"]["bron_catalogus"].as_str().unwrap().starts_with("berekend"));
+    assert!(v["iw_mm6"]["verschil_motor_pct"].as_f64().unwrap().abs() < 0.1, "{v}");
+    assert!(v["iw_mm6"]["catalogus"].as_f64().unwrap() < 125.93e9);
+    assert!(v["toelichting"].as_str().unwrap().contains("bovengrens"));
+}

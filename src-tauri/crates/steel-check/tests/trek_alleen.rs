@@ -73,6 +73,7 @@ fn windverband(naam: &str, trek_kn: f64, druk_kn: f64, tension_only: Option<bool
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     }
 }
 
@@ -119,10 +120,13 @@ fn strip_alleen_trek_met_de_juiste_uc() {
 
 /// RD 24 S235, 80 kN trek en een kleine druk: de trektoets op de
 /// brutodoorsnede (106,31 kN) én het draadeind (M24, A_s = 352,50 mm²,
-/// 0,9·360·352,50/1,25 = 91,37 kN → UC = 80/91,37 = 0,87557, maatgevend).
+/// 0,9·360·352,50/1,25 = 91,37 kN → UC = 80/91,37 = 0,87557, maatgevend bij
+/// een gesneden draad, #226).
 #[test]
 fn rond_staal_trek_en_draadeind() {
-    let r = check_beam(windverband("RD 24", 80.0, -0.2, Some(true)));
+    let mut invoer = windverband("RD 24", 80.0, -0.2, Some(true));
+    invoer.draadeind = Some(Draadeind::Gesneden);
+    let r = check_beam(invoer);
     assert_eq!(ids(&r), vec!["6.2.3_tension", "6.2.3_threaded_end", TOETS_TREK_ALLEEN]);
     assert_relative_eq!(weerstand(&r, "6.2.3_tension").value, 106.311, max_relative = 1e-4);
     assert_relative_eq!(weerstand(&r, "6.2.3_threaded_end").value, 91.369, max_relative = 1e-4);

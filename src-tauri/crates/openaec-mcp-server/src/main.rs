@@ -367,7 +367,7 @@ fn tool_definitions() -> Value {
     let mut tools = json!([
         {
             "name": "list_steel_profiles",
-            "description": "List all steel cross-section profiles in the OpenAEC database (HEA, HEB, IPE, HEM, UNP, RHS, SHS, CHS). Each profile includes geometry, section properties, and EN 1993-1-1 buckling curves.",
+            "description": "List all steel cross-section profiles in the OpenAEC database (HEA, HEB, IPE, HEM, UNP, RHS, SHS, CHS). Each profile includes geometry, section properties, and EN 1993-1-1 buckling curves. 'bronnen' says per group which properties come from a published profile table and which are computed: for IPE/HEA/HEB/HEM A, I, W, i, A_v and I_t are EN 10365 table values while I_w comes from the section engine (the table I_w is an upper bound).",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
         },
         {
@@ -452,6 +452,8 @@ fn tool_definitions() -> Value {
                         "description": "Nettodoorsnede A_net (mm²) voor de trektoets 6.2.3: de doorsnede ter plaatse van gaten of een andere verzwakking. Met A_net is N_t,Rd = min(A·f_y/γ_M0; 0,9·A_net·f_u/γ_M2), vergelijking (6.6) en (6.7); zonder rekent de kern N_t,Rd = A·f_y/γ_M0 en zegt de toets dat er geen A_net is opgegeven. Weglaten of 0 = niet opgegeven; een A_net groter dan A is een invoerfout en de staaf wordt dan met reden geweigerd." },
                     "tension_only": { "type": "boolean", "default": false,
                         "description": "Trek-alleen staaf (windverband van strip of rond staal, trekstang): de staaf doet in de berekening alleen mee zolang zij op trek staat. Dan toetst de kern alleen trek (6.2.3, en bij massief rond het draadeind); druk, buiging, dwarskracht en hun combinaties, knik, kip, 6.3.3 en de doorbuiging vallen weg. Een drukkracht in de omhullende geldt als speling of voorspanning en wordt niet getoetst; de grootste staat als informatieve regel ('trek_alleen') in het resultaat. Weglaten of false = een gewone staaf." },
+                    "draadeind": { "type": "string", "enum": ["Gesneden", "Opgestuikt", "Gelast", "Geen"],
+                        "description": "Eindafwerking van een staaf van massief rond staal (RD …); bij elk ander profiel zonder betekenis. 'Gesneden' = draad in de staaf gesneden: het draadeind (NEN-EN 1993-1-8 tabel 3.4, A_s van M<d>) telt mee als trektoets. 'Opgestuikt', 'Gelast' of 'Geen' = geen draadeindtoets; de brutodoorsnede (6.6) is de trektoets en de aansluiting zelf valt buiten deze toets. Weglaten = niet opgegeven: het draadeind wordt als AANNAME van een gesneden draad gerekend en als informatie getoond; het telt niet mee in 'uc_max', en voldoet het niet, dan is de status NotApplicable ('NIET VOLLEDIG GETOETST') in plaats van Ok of NotOk." },
                     "deflection_add_mm": { "type": "number",
                         "description": "De bijkomende zakking w_add = w2 + w3 in mm (met teken, negatief = omlaag), als de aanroeper haar per BGT-combinatie heeft bepaald: het grootste verschil |w_c − w1| met w1 = 'deflection_permanent_mm' (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1). Weglaten = w_add = 'deflection_actual_max_mm' − 'deflection_permanent_mm'; dat klopt alleen als de combinatie met de grootste |w| ook het grootste verschil met w1 geeft (niet bij een overstek dat onder de blijvende last omhoog en onder de veranderlijke omlaag gaat). `check_fem_model` en de app vullen het veld alleen als het verschilt." },
                     "deflection_length_m": { "type": "number", "exclusiveMinimum": 0,
@@ -477,7 +479,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "compute_section_properties",
-            "description": "Herberekent de doorsnedegrootheden (A, Iy, Iz, Wel, Wpl, Av, It, Iw, traagheidsstralen, zwaartepunt, schuifmiddelpunt, plastische neutrale lijn) van een catalogusprofiel uit zijn genormeerde maten met de exacte doorsnedemotor van section-properties: contourintegralen voor de meetkundige grootheden, een numerieke torsieoplossing (met insluiting van It) voor It en Iw. Dezelfde motor die de catalogus vult; flenshelling van UNP en INP, walsuitrondingen en de EN 10210-hoekstralen van kokers zitten erin. Het antwoord is plat (area_mm2, iy_mm4, ...) plus diagnostiek (a_mesh_afwijking, it_onzekerheid, meldingen, tijd_ms). Voor de opgeslagen cataloguswaarden zelf: list_steel_profiles.",
+            "description": "Herberekent de doorsnedegrootheden (A, Iy, Iz, Wel, Wpl, Av, It, Iw, traagheidsstralen, zwaartepunt, schuifmiddelpunt, plastische neutrale lijn) van een catalogusprofiel uit zijn genormeerde maten met de exacte doorsnedemotor van section-properties: contourintegralen voor de meetkundige grootheden, een numerieke torsieoplossing (met insluiting van It) voor It en Iw. Dezelfde motor die de catalogus vult; flenshelling van UNP en INP, walsuitrondingen en de EN 10210-hoekstralen van kokers zitten erin. Het antwoord is plat (area_mm2, iy_mm4, ...) plus diagnostiek (a_mesh_afwijking, it_onzekerheid, meldingen, tijd_ms). 'catalogus_vergelijking' zet de cataloguswaarden van I_t en I_w ernaast, met hun bron en het verschil: bij IPE/HEA/HEB/HEM is de catalogus-I_t de EN 10365-tabelwaarde en de catalogus-I_w de motorwaarde; de it-onzekerheidsband is de numerieke insluiting voor de geïdealiseerde contour, geen band rond de tabel. De toetsing rekent met de cataloguswaarden (list_steel_profiles).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -551,7 +553,9 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
             let profiles = tokio::task::spawn_blocking(|| steel_profiles::db().all().to_vec())
                 .await
                 .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))?;
-            Ok(json!({ "profiles": profiles }))
+            // Issue #241: de catalogus mengt tabel- en motorwaarden; per
+            // groep staat hier welke grootheid waarvandaan komt.
+            Ok(json!({ "profiles": profiles, "bronnen": steel_profiles::herkomst_groepen() }))
         }
         "list_steel_grades" => {
             use nen_en_1993_1_1_section::{S235, S275, S355, S420, S460};
@@ -573,11 +577,14 @@ async fn dispatch_tool(name: &str, args: Value) -> Result<Value, RpcError> {
                 .and_then(Value::as_str)
                 .ok_or_else(|| RpcError::invalid_params("missing string field 'profile_name'"))?
                 .to_owned();
+            let naam = profile_name.clone();
             let result = tokio::task::spawn_blocking(move || compute_section_props(&profile_name))
                 .await
                 .map_err(|e| RpcError::tool_exec(format!("join error: {e}")))??;
-            serde_json::to_value(result)
-                .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))
+            let mut v = serde_json::to_value(result)
+                .map_err(|e| RpcError::tool_exec(format!("serialize result: {e}")))?;
+            voeg_catalogusvergelijking_toe(&naam, &mut v);
+            Ok(v)
         }
         "generate_steel_report_pdf" => {
             let input: report::ReportInput = serde_json::from_value(args)
@@ -669,6 +676,40 @@ fn compute_section_props(
     .map_err(|e| RpcError::tool_exec(format!("doorsnedemotor-invoer: {e}")))?;
     section_properties::opdracht::reken(&invoer)
         .map_err(|e| RpcError::tool_exec(format!("doorsnedemotor: {e}")))
+}
+
+/// Issue #241: zet naast de motoruitkomst van `compute_section_properties` de
+/// cataloguswaarden van I_t en I_w, met hun bron en het verschil, en de
+/// toelichting op de herkomst. Zo staat de menging van tabel- en motorwaarden
+/// in de catalogus niet ongemeld naast elkaar.
+fn voeg_catalogusvergelijking_toe(profile_name: &str, v: &mut Value) {
+    let Some(p) = steel_profiles::db().find(profile_name) else { return };
+    let h = steel_profiles::herkomst(p);
+    let bron = |veld: &str| {
+        if h.tabel.contains(&veld) {
+            "profieltabel (EN 10365)"
+        } else {
+            "berekend (doorsnedemotor of gesloten formule)"
+        }
+    };
+    let vergelijk = |veld: &str, catalogus: f64| {
+        let motor = v[veld].as_f64().unwrap_or(f64::NAN);
+        let verschil = if catalogus != 0.0 { (motor - catalogus) / catalogus * 100.0 } else { f64::NAN };
+        json!({
+            "catalogus": catalogus,
+            "bron_catalogus": bron(veld),
+            "motor": motor,
+            "verschil_motor_pct": if verschil.is_finite() { json!(verschil) } else { Value::Null },
+        })
+    };
+    let it = vergelijk("it_mm4", p.properties.it_mm4);
+    let iw = vergelijk("iw_mm6", p.properties.iw_mm6);
+    if let Value::Object(m) = v {
+        m.insert(
+            "catalogus_vergelijking".to_owned(),
+            json!({ "it_mm4": it, "iw_mm6": iw, "toelichting": h.toelichting }),
+        );
+    }
 }
 
 // ── JSON-RPC method dispatch ────────────────────────────────────────────────

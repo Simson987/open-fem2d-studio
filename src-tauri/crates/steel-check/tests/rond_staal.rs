@@ -31,6 +31,17 @@ use steel_profiles::ProfileKind;
 
 /// Een staaf `naam` van `l_m` meter met overal dezelfde krachten (11 punten).
 fn staaf(naam: &str, grade: &str, l_m: f64, krachten: InternalForces) -> BeamCheckResult {
+    staaf_met_draad(naam, grade, l_m, krachten, None)
+}
+
+/// Als [`staaf`], met een opgegeven eindafwerking (#226).
+fn staaf_met_draad(
+    naam: &str,
+    grade: &str,
+    l_m: f64,
+    krachten: InternalForces,
+    draadeind: Option<Draadeind>,
+) -> BeamCheckResult {
     let envelop: Vec<ForcePoint> = (0..11)
         .map(|i| ForcePoint {
             combination_id: 1,
@@ -74,6 +85,7 @@ fn staaf(naam: &str, grade: &str, l_m: f64, krachten: InternalForces) -> BeamChe
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind,
     })
 }
 
@@ -207,12 +219,13 @@ fn aliassen_vinden_rd24() {
 ///                        A_s = π/4·(24 − 0,9382·3)² = π/4·21,1854² = 352,50 mm²
 ///                        N_t,Rd,draad = 0,9·360·352,50/1,25 = 91 369 N
 ///                        = 91,37 kN → UC = 80/91,37 = 0,8756.
-/// Het draadeind is maatgevend. (Met de afgeronde tabelwaarde A_s = 353 mm²
+/// Met een in de staaf gesneden draad (#226: `draadeind: Gesneden`) is het
+/// draadeind maatgevend. (Met de afgeronde tabelwaarde A_s = 353 mm²
 /// uit ISO 898-1 zou het 0,9·360·353/1,25 = 91,50 kN zijn; de kern rekent met
 /// de formule, 0,14 % lager.)
 #[test]
 fn trek_rd24_draadeind_is_maatgevend() {
-    let r = staaf("RD 24", "S235", 6.0, n(80.0));
+    let r = staaf_met_draad("RD 24", "S235", 6.0, n(80.0), Some(Draadeind::Gesneden));
     assert_eq!(r.classification, CrossSectionClass::Class1);
     assert_relative_eq!(waarde(&r, "6.2.3_tension"), 106.311, max_relative = 1e-4);
     assert_relative_eq!(uc(&r, "6.2.3_tension").unwrap(), 0.75251, max_relative = 1e-4);
@@ -236,7 +249,7 @@ fn trek_rd24_draadeind_is_maatgevend() {
 ///   N_t,Rd,draad = 0,9·360·560,59/1,25 = 145,30 kN.
 #[test]
 fn trek_rd30() {
-    let r = staaf("RD 30", "S235", 6.0, n(120.0));
+    let r = staaf_met_draad("RD 30", "S235", 6.0, n(120.0), Some(Draadeind::Gesneden));
     assert_relative_eq!(waarde(&r, "6.2.3_tension"), 166.112, max_relative = 1e-4);
     assert_relative_eq!(deelstap(&r, "6.2.3_threaded_end", "a_s"), 560.586, max_relative = 1e-5);
     assert_relative_eq!(waarde(&r, "6.2.3_threaded_end"), 145.304, max_relative = 1e-4);

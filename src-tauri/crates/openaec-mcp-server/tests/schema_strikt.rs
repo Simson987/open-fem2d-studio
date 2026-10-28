@@ -234,6 +234,8 @@ async fn schema_van_check_steel_beam_is_volledig_en_strikt() {
         // De nettodoorsnede voor 6.2.3 (6.7); zonder dit veld in het schema
         // kan een client geen gaten in de aansluiting opgeven.
         "a_net_mm2",
+        // De eindafwerking van massief rond (#226).
+        "draadeind",
         // De bijkomende zakking per combinatie bepaald en de lengte van het
         // getoetste deel (een doorgaande lijn met een overstek); zonder deze
         // velden in het schema weigert `additionalProperties: false` de invoer

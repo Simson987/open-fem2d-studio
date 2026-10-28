@@ -72,6 +72,7 @@ fn staaf_met(naam: &str, l_m: f64, krachten: InternalForces, a_net_mm2: Option<f
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
         tension_only: None,
     })
 }
@@ -324,6 +325,7 @@ fn trek_en_druk_elk_op_hun_eigen_punt() {
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
         tension_only: None,
     };
     let r = check_beam(invoer.clone());

@@ -395,6 +395,39 @@ pub struct BeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub zijdelingse_knik_in_analyse: Option<ZijdelingseKnikInAnalyse>,
+    /// De eindafwerking van een staaf van massief rond staal (zie
+    /// [`Draadeind`]); bij elke andere doorsnede zonder betekenis.
+    ///
+    /// `None` of weglaten = niet opgegeven: de kern rekent het draadeind dan
+    /// als AANNAME van een gesneden draad, als informatie. Die toets telt
+    /// niet mee in de maatgevende unity check; voldoet zij niet, dan is de
+    /// staaf NIET VOLLEDIG GETOETST (nooit Ok, maar ook geen onvoorwaardelijke
+    /// NotOk). Tot oktober 2026 was het draadeind altijd maatgevend, ook bij
+    /// een staaf zonder gesneden draad (issue #226).
+    #[serde(default)]
+    #[ts(optional)]
+    pub draadeind: Option<Draadeind>,
+}
+
+/// De eindafwerking van een trekstaaf van massief rond staal (issue #226).
+///
+/// Alleen een in de staaf GESNEDEN draad verzwakt de staaf: dan is de
+/// spanningsdoorsnede A_s de nettodoorsnede van NEN-EN 1993-1-1 6.2.3(2)(b),
+/// uitgewerkt met NEN-EN 1993-1-8 tabel 3.4. Bij een opgestuikte draad (de
+/// draad is groter dan de staaf), een gelast eind of een staaf zonder draad
+/// is de brutodoorsnede (6.6) de trektoets van de staaf; de aansluiting zelf
+/// (moer, las) hoort bij NEN-EN 1993-1-8 en valt buiten deze staaftoets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../../design-mockup/src/lib/types/steel/")]
+pub enum Draadeind {
+    /// Draad gesneden in de staaf zelf, met de staafdiameter als draadmaat.
+    Gesneden,
+    /// Opgestuikte draad: de draad is groter dan de staaf.
+    Opgestuikt,
+    /// Gelast eind, zonder draad.
+    Gelast,
+    /// Geen draad.
+    Geen,
 }
 
 /// Het id van de informatieve regel bij een trek-alleen staaf (zie
@@ -548,6 +581,14 @@ pub const REDEN_KIP_NVT_RONDSTAAL: &str =
      uitwijken, en de torsiestijfheid I_t = πd⁴/32 is die van een volle cirkel. NEN-EN 1993-1-1 \
      6.3.2.1(2) noemt al vierkante en ronde buisprofielen als niet gevoelig voor kip; een massieve \
      cirkel is dat a fortiori. In 6.3.3 geldt daarom χ_LT = 1,0, dus M_b,Rd = W_pl·f_y/γ_M1.";
+
+/// Kip 6.3.2 bij een ronde buis (CHS): niet van toepassing, mét reden. Geen
+/// weigering: 6.3.3 wordt gewoon getoetst, met χ_LT = 1,0 (issue #240).
+pub const REDEN_KIP_NVT_CHS: &str =
+    "Niet van toepassing: een ronde buis is niet gevoelig voor kip. NEN-EN 1993-1-1 6.3.2.1(2) \
+     noemt ronde buisprofielen uitdrukkelijk als niet kipgevoelig: de doorsnede is \
+     rotatiesymmetrisch (I_y = I_z) en gesloten, met een grote torsiestijfheid I_t = 2·I. In 6.3.3 \
+     geldt daarom χ_LT = 1,0, dus M_b,Rd = M_y,Rk/γ_M1.";
 
 /// Melding bij de trektoets 6.2.3 van massief rond.
 pub const MELDING_TREK_RONDSTAAL: &str =

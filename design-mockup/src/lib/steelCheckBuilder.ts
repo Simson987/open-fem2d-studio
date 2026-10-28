@@ -51,7 +51,7 @@ import {
   type StabiliteitVoorToets,
 } from "../components/fem/solver/alphaCr";
 import { STEEL_SECTIONS } from "./steelSections.generated";
-import { profielAliasSleutel } from "./strip";
+import { profielSleutel } from "./strip";
 import { bepaalVerloop } from "./sectionResolver";
 import { STEEL_GRADES } from "./steelGrades";
 import { STANDAARD_BIJLAGE, type NationaleBijlageCode } from "./normAanduidingen";
@@ -135,7 +135,7 @@ export function isSteelProfile(profileName: string | undefined): boolean {
  * van "Strip 80x10" (zie `lib/strip.ts`), net als in de kern.
  */
 export function profileLookupKey(name: string): string {
-  return profielAliasSleutel(name.replace(/[\s\-.]/g, "").toUpperCase());
+  return profielSleutel(name);
 }
 
 // ── Doorgeknipte staven ────────────────────────────────────────────────────

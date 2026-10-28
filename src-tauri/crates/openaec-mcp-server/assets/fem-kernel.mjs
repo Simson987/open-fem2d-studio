@@ -17086,12 +17086,32 @@ function stripSleutel(sleutel) {
 function profielAliasSleutel(sleutel) {
   return stripSleutel(rondStaalSleutel(sleutel));
 }
-var VOORVOEGSELS2;
+function zonderNulDecimalen(naam) {
+  return naam.replace(/(\d)\.(\d*?)0+(?!\d)/g, (_m, a, b) => b ? `${a}.${b}` : a);
+}
+function nulAliassen() {
+  if (!nulAlias) {
+    nulAlias = /* @__PURE__ */ new Map();
+    for (const [sleutel, d] of Object.entries(STEEL_SECTION_DIMS)) {
+      const k = kaleSleutel(zonderNulDecimalen(d.naam));
+      if (k !== sleutel && !nulAlias.has(k) && !(k in STEEL_SECTION_DIMS)) nulAlias.set(k, sleutel);
+    }
+  }
+  return nulAlias;
+}
+function profielSleutel(naam) {
+  const k = kaleSleutel(naam);
+  if (k in STEEL_SECTION_DIMS) return k;
+  return nulAliassen().get(kaleSleutel(zonderNulDecimalen(naam))) ?? k;
+}
+var VOORVOEGSELS2, kaleSleutel, nulAlias;
 var init_strip = __esm({
   "src/lib/strip.ts"() {
     "use strict";
     init_rondStaal();
+    init_steelSectionDims_generated();
     VOORVOEGSELS2 = ["STRIP", "PLATSTAAL", "FL"];
+    kaleSleutel = (naam) => profielAliasSleutel(naam.replace(/[\s\-.]/g, "").toUpperCase());
   }
 });
 
@@ -17276,7 +17296,7 @@ function isSteelProfile(profileName) {
   return profileLookupKey(profileName) in STEEL_SECTIONS;
 }
 function profileLookupKey(name) {
-  return profielAliasSleutel(name.replace(/[\s\-.]/g, "").toUpperCase());
+  return profielSleutel(name);
 }
 function beamDirection(beam, nodes) {
   const a = nodes.find((n2) => n2.id === beam.from);
@@ -18614,9 +18634,7 @@ function parseRechthoek(profiel) {
   return { b, h };
 }
 function normaliseer(naam) {
-  return profielAliasSleutel(
-    naam.toUpperCase().split("").filter((c) => c !== " " && c !== "-" && c !== ".").join("")
-  );
+  return profielSleutel(naam);
 }
 function betonDoorsnede(profile) {
   const uit = parseConcreteSection(profile);
@@ -30144,9 +30162,7 @@ function factorForLoad(selection, caseId) {
   return factor;
 }
 function profileKey(value) {
-  return profielAliasSleutel(
-    value.toUpperCase().split("").filter((character) => ![" ", "-", "."].includes(character)).join("")
-  );
+  return profielSleutel(value);
 }
 function timberGMean(material) {
   const grade = Object.keys(TIMBER_G_MEAN).find((name) => name.toLowerCase() === material.toLowerCase());
@@ -30545,9 +30561,7 @@ init_eigenDoorsnedenStore();
 init_strip();
 var dot4 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 function profileKey2(value) {
-  return profielAliasSleutel(
-    value.toUpperCase().split("").filter((character) => ![" ", "-", "."].includes(character)).join("")
-  );
+  return profielSleutel(value);
 }
 function bendingStiffness(model, beam, lengthM) {
   const material = beam.material?.trim() ?? "";

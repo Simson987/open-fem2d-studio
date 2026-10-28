@@ -74,6 +74,7 @@ fn koker(l_m: f64, q_n_per_mm: f64) -> BeamCheckResult {
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     })
 }
 

@@ -84,6 +84,7 @@ fn staaf_met_a_net(
         deflection_add_mm: None,
         deflection_length_m: None,
         zijdelingse_knik_in_analyse: None,
+        draadeind: None,
     })
 }
 
