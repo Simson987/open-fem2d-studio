@@ -1043,9 +1043,9 @@ fn schema_supports() -> Value {
                 "nodeId": { "type": "integer" },
                 "type": { "type": "string",
                     "enum": ["pinned", "fixed", "xRoller", "zRoller", "zSpring", "xSpring", "rotSpring"],
-                    "description": "fixed = inklemming; pinned = scharnier; xRoller/zRoller = rol die alleen die richting vasthoudt; de drie veertypen vragen `k`." },
+                    "description": "fixed = inklemming; pinned = scharnier; xRoller/zRoller = rol die alleen die richting vasthoudt; de drie veertypen vragen `k`. Meerdere opleggingen op een knoop worden per richting samengevoegd; star en verend (of twee veren) in dezelfde richting wordt geweigerd." },
                 "k": { "type": "number",
-                    "description": "Veerstijfheid: kN/mm bij xSpring/zSpring, kNm/rad bij rotSpring. Wordt genegeerd bij een starre oplegging." }
+                    "description": "Veerstijfheid: kN/mm bij xSpring/zSpring, kNm/rad bij rotSpring; moet bij een veer positief en eindig zijn (k <= 0 of ontbrekend wordt geweigerd, niet als star gerekend). Wordt genegeerd bij een starre oplegging." }
             }
         }
     })

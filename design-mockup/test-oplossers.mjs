@@ -552,9 +552,14 @@ log("\n[3] Mechanisme: portaal op een doorgaande ligger, vóór herstel");
   // eerst op nul uitkomt, hangt af van de eliminatievolgorde (Gauss pivoteert
   // rijen, skyline nummert om) — beide antwoorden zijn juist. De eis blijft
   // dat beide oplossers dat mechanisme aanwijzen, met knoop en richting.
-  const mechanisme = /knoop [68] op \(6500, 2500\) mm kan vrij (horizontaal|verticaal) verschuiven/;
+  // Sinds issue #248 is de dwarsstijfheid van een pendelstaaf (scharnier aan
+  // beide einden) na de condensatie exact nul in plaats van een
+  // afrondingsrest; de eliminatie kan het mechanisme dan ook eerder vinden bij
+  // de losse kolomvoet 4 op (3500, 0), die aan niets anders hangt dan aan die
+  // pendelkolom. Ook dat is een vrijheidsgraad van hetzelfde mechanisme.
+  const mechanisme = /knoop (?:[68] op \(6500, 2500\)|4 op \(3500, 0\)) mm kan vrij (horizontaal|verticaal) verschuiven/;
   check(
-    "beide oplossers wijzen het mechanisme bij de losse knopen 6/8 op (6500, 2500) aan",
+    "beide oplossers wijzen het mechanisme bij de losse knopen 6/8 (of de losse kolomvoet 4) aan",
     mechanisme.test(uitslagen.gauss.fout ?? "") && mechanisme.test(uitslagen.skyline.fout ?? ""),
     `${uitslagen.gauss.fout} | ${uitslagen.skyline.fout}`,
   );

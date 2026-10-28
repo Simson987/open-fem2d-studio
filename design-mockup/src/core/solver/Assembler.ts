@@ -605,6 +605,10 @@ export function applyEndReleases(Ke: Matrix, releasedDofs: number[], F?: number[
   // De oude variant behandelde K_cc als diagonaal en gaf een pendelstaaf
   // daardoor NEGATIEVE dwarsstijfheid (−6EI/L³ i.p.v. exact 0).
   const eliminated = new Set<number>();
+  // Schaal van de matrix vóór de condensatie, voor het opruimen van
+  // afrondingsresten hieronder.
+  let schaal = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) schaal = Math.max(schaal, Math.abs(Ke.get(i, j)));
   for (const c of releasedDofs) {
     const kcc = Ke.get(c, c);
     if (Math.abs(kcc) < 1e-20) {
@@ -648,6 +652,29 @@ export function applyEndReleases(Ke: Matrix, releasedDofs: number[], F?: number[
       Ke.set(c, i, 0);
     }
     eliminated.add(c);
+  }
+
+  // AFRONDINGSRESTEN OPRUIMEN (issue #248). Bij een staaf met aan beide
+  // einden een scharnier is de dwarsstijfheid na condensatie in exacte
+  // rekenkunde precies nul (12EI/L³ − 2·(6EI/L²)²/(4EI/L) + … = 0), maar in
+  // drijvende komma blijft er een rest van de orde 1e-18 × EA/L over. Hangt
+  // aan zo'n pendelstaaf een knoop die verder nergens dwars aan vastzit (een
+  // pendelkolom met een vrije kop), dan is dat een mechanisme, maar de
+  // stelseloplosser zag een pivot boven zijn drempel en "rekende" een
+  // verplaatsing van 1e16 mm — gemeten, zonder melding. Een term onder
+  // 1e-13 van de grootste term van deze elementmatrix is geen stijfheid maar
+  // afronding; op nul gezet meldt de oplosser het mechanisme met knoop en
+  // richting, in de solve én in de validatie (`zoekFrameMechanisme`). Echte
+  // termen liggen vele ordes hoger (12EI/L³ : EA/L = 12I/(AL²), ook voor een
+  // slanke trekstaaf ≫ 1e-10), dus aan een correct model verandert niets.
+  if (releasedDofs.length > 0 && schaal > 0) {
+    const drempel = 1e-13 * schaal;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const v = Ke.get(i, j);
+        if (v !== 0 && Math.abs(v) < drempel) Ke.set(i, j, 0);
+      }
+    }
   }
 }
 

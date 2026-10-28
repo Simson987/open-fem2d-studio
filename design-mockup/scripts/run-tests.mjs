@@ -421,6 +421,16 @@ const BUNDEL_TESTS = new Set([
   "vakwerk-scharnieren",
   "veldmaximum",
   "veldzakking",
+  // Modelcontrole, invoer en rekenroute (controle 26 oktober 2026): de
+  // mechanismecontrole van `validate` vraagt de kern (#248), opleggingen per
+  // vrijheidsgraad samenvoegen (#223), veren met k <= 0 weigeren (#222) en
+  // bedding als steun (#246). Praten met `sidecar`, `valideerModel` en
+  // `engine` — alles in de barrel. Horen óók tegen de bundel: de MCP-weg
+  // valideert en rekent met de bundel.
+  "mechanisme-raam",
+  "dubbele-oplegging",
+  "veer-stijfheid",
+  "bedding-mechanisme",
   // Veldsgewijze plaatsing van veranderlijke vloerbelasting (#219): splitsen,
   // veldpatronen, omhullende en staalbouwer — alles in de barrel — en de
   // gebouwde MCP-server. Hoort ook tegen de bundel: de sidecar maakt de
@@ -476,6 +486,8 @@ const BUNDEL_TESTS = new Set([
  * vergeten regel.
  */
 const ALLEEN_BRON = new Map([
+  ["open-fem3d-leeg-geval", "#245: de keuze van het getoonde 3D-resultaat (lib/openFem3dResultaatKeuze) en bronscans van App.tsx en de bediening (React/app-laag), plus i18next; niets uit de sidecarbundel"],
+  ["oplegging-app", "#223/#222: de modelcontrole en rekenpoort van de app (lib/modelControle, lib/rekenPoort), de vertaling via i18next en de Rust-raamwerkroute (nativeFrame2DRoute); geen van die modules staat in de barrel. De MCP-kant staat in dubbele-oplegging en veer-stijfheid, die wél tegen de bundel draaien"],
   ["categorie-h-combinaties", "#237: leest alleen de combinatiegenerator (normcombinaties.ts) rechtstreeks; geen sidecarpad"],
   ["backstage-import-export", "#235: leest de bron van Backstage.tsx en App.tsx (React-UI), niets uit de sidecarbundel"],
   ["chs-profielnaam", "#240: de profielsleutel (lib/strip.ts) en de CHS-toets via de 3D-staalbouwer (openFem3dSteelCheck, buiten de barrel) en de toetsbrug als apart proces; de kern zelf staat in steel-check/tests/chs_naam_en_kip.rs"],

@@ -168,6 +168,7 @@ import {
 } from "./lib/betonStijfheid";
 import { bepaalKruipPerStaaf, kruipWaardenPerStaaf, modelHeeftBetonstaaf } from "./lib/kruipcoefficient";
 import { bepaalOnbepaaldheid } from "./lib/statischeOnbepaaldheid";
+import { kiesOpenFem3DResultaat } from "./lib/openFem3dResultaatKeuze";
 import { losEindtoestandOp, losEindtoestandNativeOp } from "./lib/houtEindstijfheid";
 import { splitsVeldgevallen, veldpatronenUitkomst, voegVeldpatronenIn } from "./components/fem/solver/veldpatronen";
 import { DEFAULT_DISPLAY_FLAGS, type DisplayFlags } from "./components/fem/FemResultsOverlay";
@@ -770,18 +771,29 @@ function App() {
   });
   useEffect(() => {
     if (modelDimension !== "3d") return;
-    setOpenFem3dActiveCombinationId(null);
-    const result = openFem3dCaseResults.get(fem.activeLoadCaseId) ?? null;
-    setOpenFem3dResult(result);
+    // Issue #245: een LEEG actief geval (geen last, dus niet berekend) gaf hier
+    // `null`, ook direct na een geslaagde rekengang — het resultatenpaneel bleef
+    // op "Klik op Berekenen" en `gui_solve` meldde "geen resultaat". Dezelfde
+    // keuze als `handleSolve` (`kiesOpenFem3DResultaat`): de eerste berekende
+    // combinatie, zichtbaar als actieve combinatie, of anders een berekend geval
+    // als actief geval.
+    const keuze = kiesOpenFem3DResultaat(openFem3dCaseResults, openFem3dCombinationResults,
+      fem.activeLoadCaseId, openFem3dSolvedCombinations);
+    if (keuze.wisselNaarGeval !== null) {
+      fem.setActiveLoadCaseId(keuze.wisselNaarGeval);
+      return;
+    }
+    setOpenFem3dActiveCombinationId(keuze.combinationId);
+    setOpenFem3dResult(keuze.result);
     // Een mislukte rekengang maakt de resultaatmap leeg en zet daarna de
     // concrete solverfout. Die lege map mag de fout niet in dezelfde commit
     // weer wissen. Alleen een werkelijk gevulde, geldige resultatenset mag de
     // oude foutstatus vervangen wanneer de gebruiker van belastinggeval wisselt.
-    if (openFem3dCaseResults.size > 0) {
+    if (openFem3dCaseResults.size > 0 || openFem3dCombinationResults.size > 0) {
       setOpenFem3dSolveError(null);
-      setSolverStatus(result ? { kind: "solved", at: Date.now() } : { kind: "ready" });
+      setSolverStatus(keuze.result ? { kind: "solved", at: Date.now() } : { kind: "ready" });
     }
-  }, [fem.activeLoadCaseId, modelDimension, openFem3dCaseResults]);
+  }, [fem.activeLoadCaseId, modelDimension, openFem3dCaseResults, openFem3dCombinationResults]);
   useEffect(() => {
     if (modelDimension !== "3d") return;
     openFem3dSolveGenerationRef.current += 1;
@@ -1031,6 +1043,11 @@ function App() {
     : { uitkomst: scheefstandUitkomst, geometrie: scheefstandGeometrie, richtingen: "2d" as const };
   /** De combinaties voor de 3D-weergave: zoals gerekend, of anders die van het project. */
   const openFem3dCombinaties = openFem3dSolvedCombinations.length > 0 ? openFem3dSolvedCombinations : fem.combinations;
+  // Er is gerekend, maar het actieve belastinggeval heeft geen eigen resultaat
+  // (geen last): de verkenner zegt dat, en wat er in plaats daarvan staat (#245).
+  const openFem3dActiefGevalLeeg = modelDimension === "3d"
+    && (openFem3dCaseResults.size > 0 || openFem3dCombinationResults.size > 0)
+    && !openFem3dCaseResults.has(fem.activeLoadCaseId);
 
   /**
    * Diezelfde afleiding als tekstblok, voor de drie plaatsen die hem tonen:
@@ -3033,12 +3050,18 @@ function App() {
         }
         const caseResults = new Map(casePairs);
         const combinationResults = new Map(combinationPairs);
-        const result = caseResults.get(fem.activeLoadCaseId) ?? casePairs[0]?.[1] ?? combinationPairs[0]?.[1];
+        // Leeg actief geval (issue #245): niet stil het resultaat van een ánder
+        // geval onder deze naam, maar de eerste berekende combinatie als actieve
+        // combinatie, of een berekend geval als actief geval. Dezelfde keuze
+        // als het effect dat op een gewijzigde resultaatset reageert.
+        const keuze = kiesOpenFem3DResultaat(caseResults, combinationResults, fem.activeLoadCaseId, combinations);
+        const result = keuze.result;
         if (!result) throw new Error("De 3D-rekenkern leverde geen resultaat voor de aanwezige belastingen.");
         setOpenFem3dCaseResults(caseResults);
         setOpenFem3dCombinationResults(combinationResults);
         setOpenFem3dSolvedCombinations(combinations);
-        setOpenFem3dActiveCombinationId(null);
+        if (keuze.wisselNaarGeval !== null) fem.setActiveLoadCaseId(keuze.wisselNaarGeval);
+        setOpenFem3dActiveCombinationId(keuze.combinationId);
         setOpenFem3dResult(result);
         setSolverErrorText(null);
         setSolverStatus({ kind: "solved", at: Date.now() });
@@ -4277,6 +4300,7 @@ function App() {
                     structuralGrid={fem.structuralGrid}
                     setStructuralGridEnabled={(enabled) => fem.setStructuralGrid((current) => ({ ...current, enabled }))}
                     activeLoadCaseId={fem.activeLoadCaseId}
+                    activeCaseEmpty={openFem3dActiefGevalLeeg}
                     combinations={openFem3dCombinaties}
                     combinationResults={openFem3dCombinationResults}
                     activeCombinationId={openFem3dActiveCombinationId}

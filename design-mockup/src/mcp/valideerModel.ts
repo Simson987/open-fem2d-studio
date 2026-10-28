@@ -32,12 +32,15 @@
  *
  * WAT DEZE VALIDATIE NIET CLAIMT
  * `ok: true` betekent "geen van de bekende valkuilen aangetroffen", niet "dit
- * model is oplosbaar". De mechanismecontrole toetst NOODZAKELIJKE voorwaarden
- * (er moet in x én z gesteund zijn, rotatie moet verhinderd zijn, elk
- * losstaand constructiedeel moet ergens steunen). Dat een stelsel niet
- * singulier is, bewijst alleen de ontbinding zelf — en die hoort in de solver,
- * niet hier. Een tweede, benaderende stelselcontrole zou een tweede antwoord
- * op dezelfde vraag zijn, en dat is precies wat dit ontwerp vermijdt.
+ * model is oplosbaar". De mechanismecontrole toetst eerst NOODZAKELIJKE
+ * voorwaarden (er moet in x én z gesteund zijn, rotatie moet verhinderd zijn,
+ * elk losstaand constructiedeel moet ergens steunen). Dat een stelsel niet
+ * singulier is, bewijst alleen de ontbinding zelf. Die wordt daarom niet
+ * benaderend nageschreven, maar sinds issue #248 voor modellen zonder platen
+ * aan de rekenkern zelf gevraagd (`zoekMechanisme`: dezelfde mesh, matrix,
+ * randvoorwaarden en oplosser als de berekening, zonder last). Een tweede,
+ * eigen stelselcontrole zou een tweede antwoord op dezelfde vraag zijn, en dat
+ * is precies wat dit ontwerp vermijdt.
  *
  * GEEN TWEEDE WAARHEID
  * De controle "valt deze last stilzwijgend weg?" wordt niet nageschreven maar
@@ -64,6 +67,8 @@ import {
   lastWaardeFout, zoekDubbeleKnopen, zoekStaafeindenBijPlaatrand, type LastWaardeVelden,
 } from "../lib/modelControle";
 import { bouwMultiInput, type FemModelInvoer } from "../lib/modelNaarSolverInput";
+import { zoekMechanisme } from "../components/fem/solver/engine";
+import { combineerOpleggingen } from "../components/fem/solver/opleggingen";
 import { bepaalVerloop, resolveSection } from "../lib/sectionResolver";
 import { keurPlaatMateriaal, plaatMateriaalSoort } from "../lib/plaatMateriaal";
 import { plaatPlooiGeometrieFout } from "../lib/plaatPlooi";
@@ -1379,6 +1384,7 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
     checkConfig?: { betonKorf?: unknown };
     profileEnd?: string;
     releases?: { startRy?: boolean; endRy?: boolean };
+    bedding?: { k?: number; b?: number };
   }[];
   const supports = (m.supports ?? []) as { nodeId: number; type: string; k?: number }[];
   const plates = (m.plates ?? []) as {
@@ -1557,14 +1563,10 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
       else errors.push(melding);
       continue;
     }
-    if ((s.type === "zSpring" || s.type === "xSpring" || s.type === "rotSpring")) {
-      if (s.k === undefined || s.k <= 0) {
-        warnings.push(
-          `Oplegging op knoop ${s.nodeId} is een veer zonder positieve ` +
-            "stijfheid (`k`) en rekent daarom als een starre oplegging.",
-        );
-      }
-    }
+    // Een veer zonder positieve, eindige stijfheid (k <= 0, ontbrekend):
+    // tot issue #222 een waarschuwing "rekent als een starre oplegging", en
+    // de solve rekende daarna zonder melding met een star steunpunt. Nu een
+    // fout uit `combineerOpleggingen` hieronder — dezelfde regel als de engine.
     gesteund.add(s.nodeId);
     const knoop = knoopById.get(s.nodeId)!;
     for (const richting of VASTGEZET[s.type] ?? []) {
@@ -1574,14 +1576,56 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
     }
   }
 
+  // Meerdere opleggingen op één knoop (issue #223) en veren zonder positieve
+  // stijfheid (issue #222): de engine voegt opleggingen per
+  // vrijheidsgraad samen en weigert star én verend (of twee veren) in
+  // dezelfde richting. Vroeger telde alleen de laatste oplegging, en de
+  // reactietabel las de eerste — met een fictief veermoment als gevolg. Hier
+  // dezelfde regel (`opleggingen.ts`): de tegenstrijdigheid is een fout, een
+  // samenvoeging een waarschuwing.
+  for (const b of combineerOpleggingen(
+    supports.filter((s) => knoopById.has(s.nodeId) && actief.has(s.nodeId)), "model",
+  ).bevindingen) {
+    (b.ernst === "fout" ? errors : warnings).push(b.tekst);
+  }
+
+  // BEDDING ALS STEUN (issue #246). Een staaf op bedding (Winkler, k·b > 0)
+  // wordt over zijn hele lengte verticaal gedragen; de kern telt die
+  // stijfheid op de verticale vrijheidsgraden van zijn eindknopen (globaal z,
+  // zie `assembleGlobalStiffnessWithGeometric`). Voor de noodzakelijke
+  // voorwaarden hieronder telt zo'n staaf dus als verticale steun op de plaats
+  // van beide eindknopen — en daarmee, als die op verschillende x liggen, ook
+  // tegen rotatie van het geheel. Tot oktober 2026 telde alleen een oplegging,
+  // en werd een ligger die alleen op bedding rust (met één xRoller) als
+  // mechanisme geweigerd (Hetényi: w = Pβ/(2kb) = 3,77 mm, M = P/(4β) = 33,2 kNm).
+  // HORIZONTAAL telt de bedding niet: de kleine wrijvingsstijfheid die de kern
+  // daar toevoegt (0,1 % van k·b·L) is een numeriek hulpmiddel tegen een
+  // singulier stelsel, geen constructieve steun.
+  const beddingKnopen = new Set<number>();
+  for (const b of beams) {
+    const kb = b.bedding;
+    if (!kb || !(typeof kb.k === "number" && kb.k > 0) || !(typeof kb.b === "number" && kb.b > 0)) continue;
+    for (const id of [b.from, b.to]) {
+      const knoop = knoopById.get(id);
+      if (!knoop || beddingKnopen.has(id)) continue;
+      beddingKnopen.add(id);
+      vastgezetteRichtingen.z.push(knoop.x);
+    }
+  }
+
   // Mechanismecontrole — noodzakelijke voorwaarden voor een vlak raamwerk:
   // verplaatsing in x en in z moet ergens verhinderd zijn, en rotatie van het
   // geheel ook (door een inklemming/rotatieveer, of door twee steunpunten die
   // dezelfde richting op verschillende plaatsen vasthouden).
   if (supports.length === 0) {
     errors.push(
-      "Het model heeft geen opleggingen — voeg randvoorwaarden toe. Zonder " +
-        "opleggingen is de constructie een mechanisme.",
+      beddingKnopen.size > 0
+        ? "Het model heeft geen opleggingen. De bedding draagt de staven verticaal en " +
+          "tegen draaien, maar niet horizontaal (de kleine wrijvingsstijfheid in de " +
+          "rekenkern is alleen een numeriek hulpmiddel). Voeg ten minste één oplegging " +
+          "toe die de horizontale richting vasthoudt, bijvoorbeeld een xRoller."
+        : "Het model heeft geen opleggingen — voeg randvoorwaarden toe. Zonder " +
+          "opleggingen is de constructie een mechanisme.",
     );
   } else {
     if (vastgezetteRichtingen.x.length === 0) {
@@ -1624,7 +1668,9 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
       }),
     ];
     for (const deel of samenhangendeDelen([...actief], verbindingen)) {
-      if (!deel.some((id) => gesteund.has(id))) {
+      // Een deel op bedding is verticaal gesteund (issue #246); of het als
+      // geheel stabiel is, toetst de kinematische controle verderop.
+      if (!deel.some((id) => gesteund.has(id) || beddingKnopen.has(id))) {
         errors.push(
           `Het constructiedeel met knopen ${deel.slice(0, 6).join(", ")}` +
             `${deel.length > 6 ? ", …" : ""} heeft geen enkele oplegging en ` +
@@ -1837,6 +1883,35 @@ export function valideerModel(rauw: unknown, opties: ValidatieOpties = {}): Vali
           "staafeinden samen en geen oplegging houdt de draaiing tegen. Een koppel kan daar " +
           "nergens heen (mechanisme). Zet het koppel op een knoop waar een staaf star " +
           "aansluit, of maak één staafeinde op deze knoop star.",
+      );
+    }
+  }
+
+  // KINEMATISCHE CONTROLE (issue #248). De voorwaarden hierboven zijn
+  // noodzakelijk, niet voldoende: een rechthoekig raam met alle staafeinden
+  // scharnierend is gesteund in x, z en tegen rotatie van het geheel, en kan
+  // toch als parallellogram scheefvallen. Of het stelsel singulier is, vraagt
+  // deze controle aan de rekenkern zelf (`zoekMechanisme` in engine.ts:
+  // dezelfde mesh, stijfheidsmatrix, randvoorwaarden en stelseloplosser als de
+  // berekening, met een nul-lastvector). Het oordeel sluit zo aan op de
+  // berekening: wat hier als mechanisme gemeld wordt, weigert de solve met
+  // dezelfde melding, en een stabiel model (bedding, veren, scharnierend
+  // vakwerk met diagonaal) wordt niet onterecht geweigerd.
+  //
+  // Alleen als het model verder klopt (anders is de mesh niet betrouwbaar op
+  // te bouwen) en zonder platen (het gemengde pad wordt niet nagebootst).
+  // Niet in de poort vóór `solve`/`check` (`alleenModel`): daar doet de
+  // rekenkern dezelfde controle zelf, met dezelfde melding.
+  if (errors.length === 0 && !opties.alleenModel && plates.length === 0 && supports.length > 0) {
+    let melding: string | null;
+    try {
+      melding = zoekMechanisme(bouwMultiInput(alsModelInvoer(m)));
+    } catch (e) {
+      melding = `Het rekenmodel is niet op te bouwen: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    if (melding) {
+      errors.push(
+        `Het model is een mechanisme en wordt niet doorgerekend. ${melding}`,
       );
     }
   }

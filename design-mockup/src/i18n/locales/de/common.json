@@ -881,6 +881,11 @@
         "openingIndexMissing": "Randindex {{i}} existiert an Öffnung {{opening}} nicht: Diese Öffnung hat {{n}} Ränder (edgeIndex 0 bis {{max}}).",
         "openingEdgeZero": "Rand {{rand}} der Öffnung {{opening}} hat die Länge {{lengte}} mm und kann keine Last tragen."
       },
+      "support": {
+        "springStiffness": "Das Auflager an Knoten {{knoop}} ist eine Feder ({{type}}) ohne positive Steifigkeit (k = {{k}}). Eine solche Feder wird nicht als starres Auflager gerechnet. Geben Sie die beabsichtigte positive Steifigkeit ein, wählen Sie ein starres Auflager oder entfernen Sie das Auflager.",
+        "conflict": "Knoten {{knoop}} hat widersprüchliche Auflager ({{eerste}} und {{tweede}}) in derselben Richtung. Behalten Sie je Richtung ein Auflager; bei zwei parallelen Federn eine Feder mit der aufsummierten Steifigkeit.",
+        "merged": "Knoten {{knoop}} hat mehr als ein Auflager ({{typen}}); sie werden je Richtung zusammengefasst. Prüfen Sie, ob dies beabsichtigt ist."
+      },
       "plateLoad": {
         "edgeLoad": "Randlast",
         "pointLoad": "Punktlast",
@@ -1227,6 +1232,8 @@
     "clickCalculateBefore": "Klicken Sie auf",
     "calculate": "Berechnen",
     "clickCalculateAfter": "in der Registerkarte 2D, um Diagramme anzuzeigen.",
+    "activeCaseEmpty3d": "Der aktive Lastfall hat keine Lasten und daher kein eigenes Ergebnis. Angezeigt: {{getoond}}. Wählen Sie einen anderen Lastfall oder eine Kombination.",
+    "activeCaseEmpty3dNothing": "kein Ergebnis",
     "support": {
       "pinned": "Gelenkig",
       "fixed": "Einspannung",

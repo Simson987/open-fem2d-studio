@@ -881,6 +881,11 @@
         "openingIndexMissing": "l'indice de bord {{i}} n'existe pas sur l'ouverture {{opening}} : cette ouverture a {{n}} bords (edgeIndex 0 à {{max}}).",
         "openingEdgeZero": "le bord {{rand}} de l'ouverture {{opening}} a une longueur de {{lengte}} mm et ne peut pas porter de charge."
       },
+      "support": {
+        "springStiffness": "L'appui du nœud {{knoop}} est un ressort ({{type}}) sans raideur positive (k = {{k}}). Un tel ressort n'est pas calculé comme un appui rigide. Saisissez la raideur positive voulue, choisissez un appui rigide ou supprimez l'appui.",
+        "conflict": "Le nœud {{knoop}} a des appuis contradictoires ({{eerste}} et {{tweede}}) dans la même direction. Gardez un seul appui par direction ; pour deux ressorts parallèles, un seul ressort avec la raideur additionnée.",
+        "merged": "Le nœud {{knoop}} a plus d'un appui ({{typen}}) ; ils sont combinés par direction. Vérifiez que c'est voulu."
+      },
       "plateLoad": {
         "edgeLoad": "Charge de bord",
         "pointLoad": "Charge ponctuelle",
@@ -1227,6 +1232,8 @@
     "clickCalculateBefore": "Cliquez sur",
     "calculate": "Calculer",
     "clickCalculateAfter": "dans l'onglet 2D pour afficher les diagrammes.",
+    "activeCaseEmpty3d": "Le cas de charge actif n'a pas de charges et donc pas de résultat propre. Affiché : {{getoond}}. Choisissez un autre cas de charge ou une combinaison.",
+    "activeCaseEmpty3dNothing": "aucun résultat",
     "support": {
       "pinned": "Articulation",
       "fixed": "Encastrement",

@@ -120,6 +120,8 @@ export interface BedieningActies {
     /** Staat het automatische eigen gewicht aan? (issue #42) */
     selfWeightEnabled?: boolean;
     combinations: readonly { id: number; name: string }[];
+    /** Het actieve belastinggeval (3D-uitlezing: leeg actief geval, issue #245). */
+    activeLoadCaseId?: number;
     /** De combinaties van de laatste rekengang, met de veldpatroonvarianten (#219). */
     rekenCombinaties?: readonly { id: number; name: string }[];
     combinationResults: Map<number, SolverResult> | null;
@@ -1124,7 +1126,10 @@ export async function voerUit(
         await a().openFem3d.solve();
         await wachtOpOpenFem3DRender(a, verseRender);
         const state = a().openFem3d;
-        if (!state.result || state.solveError) {
+        // Issue #245: alleen falen bij een echte rekenfout of als er helemaal
+        // niets berekend is. Een leeg ACTIEF geval is geen rekenfout; de
+        // uitlezing noemt het in `melding` en geeft de berekende resultaten.
+        if (state.solveError || (!state.result && state.caseResults.size === 0 && state.combinationResults.size === 0)) {
           throw new Error(`3D doorrekenen mislukt: ${state.solveError ?? "de rekengang leverde geen resultaat"}`);
         }
         return openFem3dUitlezen(a());
@@ -1167,7 +1172,10 @@ export async function voerUit(
         await a().openFem3d.solve();
         await wachtOpOpenFem3DRender(a, verseRender);
         const state = a().openFem3d;
-        if (!state.result || state.solveError) {
+        // Issue #245: alleen falen bij een echte rekenfout of als er helemaal
+        // niets berekend is. Een leeg ACTIEF geval is geen rekenfout; de
+        // uitlezing noemt het in `melding` en geeft de berekende resultaten.
+        if (state.solveError || (!state.result && state.caseResults.size === 0 && state.combinationResults.size === 0)) {
           throw new Error(`3D doorrekenen mislukt: ${state.solveError ?? "de rekengang leverde geen resultaat"}`);
         }
         return openFem3dUitlezen(a());
@@ -1284,8 +1292,29 @@ function toetsenUitlezen() {
 
 /** Volledige 3D-kernuitvoer plus dezelfde EN 1992/EN 1993-resultaten als de GUI. */
 function openFem3dUitlezen(a: BedieningActies) {
+  // Het actieve belastinggeval zonder eigen resultaat (geen last, issue #245):
+  // geen rekenfout, maar wél te melden — met wat er in `result` staat.
+  const actief = a.fem.activeLoadCaseId;
+  const o = a.openFem3d;
+  const heeftIets = o.caseResults.size > 0 || o.combinationResults.size > 0;
+  const actiefLeeg = actief !== undefined && heeftIets && !o.caseResults.has(actief);
+  const gevalNaam = (id: number) => a.fem.loadCases.find((lc) => lc.id === id)?.name ?? String(id);
+  const getoondeCombinatie = o.activeCombinationId === null ? undefined
+    : a.fem.combinations.find((c) => c.id === o.activeCombinationId);
+  const melding = actiefLeeg
+    ? `Belastinggeval ${actief} ("${gevalNaam(actief!)}") heeft geen belasting en dus geen eigen resultaat. ` +
+      (o.activeCombinationId !== null
+        ? `In \`result\` staat combinatie ${o.activeCombinationId}` +
+          `${getoondeCombinatie ? ` ("${getoondeCombinatie.name}")` : ""}. `
+        : "") +
+      `Berekend: ${o.caseResults.size} belastinggeval(len) en ${o.combinationResults.size} combinatie(s); ` +
+      "zie `combinatieResultaten`."
+    : null;
   return {
     dimension: "3d",
+    actiefBelastinggeval: actief === undefined ? null
+      : { id: actief, naam: gevalNaam(actief), heeftResultaat: o.caseResults.has(actief) },
+    melding,
     result: a.openFem3d.result,
     maxVerplaatsingMm: a.openFem3d.result
       ? openFem3DMaximumDisplacementM(a.openFem3d.model, a.openFem3d.result) * 1000

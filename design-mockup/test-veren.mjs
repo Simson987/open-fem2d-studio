@@ -11,8 +11,9 @@
 //   [3] ligger 4 m, links ingeklemd, rechts rotatieveer (translatie vrij);
 //       k zeer stijf -> geleid uiteinde: |M_veer| -> qL^2/6, en per definitie
 //       M_veer = -k*phi.
-//   [4] Z-veer met k=0 -> contract types.ts: behandel als STAR (geen
-//       singulariteit), reactie via het gewone core-pad.
+//   [4] Z-veer met k=0 of k<0 -> GEWEIGERD met knoop en reden (issue #222).
+//       Tot oktober 2026 rekende zo'n veer stil als STAR steunpunt: een
+//       tekenfout (k = -5 i.p.v. +5 kN/mm) gaf 0 mm zakking waar 6 mm hoort.
 const { solveAllCases } = await import("./src/components/fem/solver/engine.ts");
 
 const E0 = 210000, A0 = 3877, I0 = 1.673e7;
@@ -80,21 +81,23 @@ log("\n[3] Ligger 4 m ingeklemd + zeer stijve rotatieveer rechts → geleid uite
   check("R1z = |q|·L (kN)", r.reactions.get(1).fz / 1e3, Math.abs(q) * L / 1e3);
 }
 
-log("\n[4] Z-veer met k=0 → star gedrag (geen singulariteit, reactie via core)");
-{
+log("\n[4] Z-veer met k=0 of k<0 → geweigerd (issue #222), niet stil star");
+for (const k of [0, -5000]) {
   const L = 6000, q = -10;
+  let melding = "";
   try {
-    const r = solveAllCases({
+    solveAllCases({
       nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: L, z: 0 }],
       beams: [{ id: 1, from: 1, to: 2, E: E0, A: A0, I: I0 }],
-      supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zSpring", k: 0 }],
+      supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "zSpring", k }],
       cases: [{ id: 1, name: "G" }],
       loads: [{ beamId: 1, q, caseId: 1 }],
-    }).perCase.get(1);
-    check("star: zakking knoop 2 = 0 (mm)", r.displacements.get(2).uz, 0, 0.001);
-    check("star: R2 = qL/2 (kN)", r.reactions.get(2).fz / 1e3, Math.abs(q) * L / 2 / 1e3);
-  } catch (e) {
-    failed++; log(`  ✗ exceptie (singulier?): ${e.message}`);
+    });
+  } catch (e) { melding = e.message; }
+  if (melding.startsWith("Oplegging op knoop 2 is een verticale veer (zSpring) met stijfheid k =")) {
+    passed++; log(`  ✓ k = ${k} N/mm: geweigerd — ${melding.slice(0, 90)}…`);
+  } else {
+    failed++; log(`  ✗ k = ${k} N/mm: niet geweigerd — ${melding || "rekende door"}`);
   }
 }
 

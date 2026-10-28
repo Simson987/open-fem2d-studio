@@ -19,7 +19,7 @@
  * NO FEM math itself — that all sits in `src/core/`.
  */
 import { Mesh } from "../../../core/fem/Mesh";
-import { solveNonlinear, SingulierStelselFout, type NonlinearSolverOptions } from "../../../core/solver/NonlinearSolver";
+import { solveNonlinear, SingulierStelselFout, zoekFrameMechanisme, type NonlinearSolverOptions } from "../../../core/solver/NonlinearSolver";
 import { assembleGlobalStiffnessMatrix, buildNodeIdToIndex, getDofsPerNode, PlaatElementFout } from "../../../core/solver/Assembler";
 import { calculateBeamLength, calculateBeamAngle, calculateBeamLocalStiffness } from "../../../core/fem/Beam";
 import { generatePlateRegionMesh } from "../../../core/fem/PlateRegion";
@@ -57,6 +57,7 @@ import type {
 } from "./types";
 import { grootsteVerplaatsing } from "./grootsteVerplaatsing";
 import { VELD_GEVAL_OFFSET } from "./types";
+import { combineerOpleggingen, type KnoopSteun } from "./opleggingen";
 
 type AnyMesh = any; // structural typing — Mesh shape from core/fem/Mesh
 
@@ -300,42 +301,26 @@ function berekenPlaatrandSplitsFracties(
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function applySupportToMesh(mesh: AnyMesh, meshNodeId: number, support: SolverInput["supports"][number]): void {
-  const k = support.k ?? 0;
-  switch (support.type) {
-    case "pinned":
-      mesh.updateNode(meshNodeId, { constraints: { x: true, y: true, rotation: false } });
-      break;
-    case "fixed":
-      mesh.updateNode(meshNodeId, { constraints: { x: true, y: true, rotation: true } });
-      break;
-    case "xRoller":
-      mesh.updateNode(meshNodeId, { constraints: { x: true, y: false, rotation: false } });
-      break;
-    case "zRoller":
-      mesh.updateNode(meshNodeId, { constraints: { x: false, y: true, rotation: false } });
-      break;
-    // Veren: k ≤ 0 of ontbrekend → star (contract in types.ts) — een veer met
-    // stijfheid 0 zou het DOF vrij én onverend laten en het stelsel singulier
-    // maken. springY/X/Rot alleen zetten bij k > 0.
-    case "zSpring":
-      // canonical k (N/mm) → mesh (N/m): × 1000
-      mesh.updateNode(meshNodeId, k > 0
-        ? { constraints: { x: false, y: true, rotation: false, springY: k * 1000 } }
-        : { constraints: { x: false, y: true, rotation: false } });
-      break;
-    case "xSpring":
-      mesh.updateNode(meshNodeId, k > 0
-        ? { constraints: { x: true, y: false, rotation: false, springX: k * 1000 } }
-        : { constraints: { x: true, y: false, rotation: false } });
-      break;
-    case "rotSpring":
-      // canonical k (N·mm/rad) → mesh (N·m/rad): / 1000
-      mesh.updateNode(meshNodeId, k > 0
-        ? { constraints: { x: false, y: false, rotation: true, springRot: k / 1000 } }
-        : { constraints: { x: false, y: false, rotation: true } });
-      break;
-  }
+/**
+ * Zet de SAMENGEVOEGDE steun van één knoop op de mesh (issue #223). Vroeger
+ * zette elke oplegging alle drie de vrijheidsgraden opnieuw, zodat bij twee
+ * opleggingen op één knoop alleen de laatste telde. Nu één aanroep per knoop,
+ * met per richting vrij, star of veer — zie `opleggingen.ts`.
+ *
+ * Eenheden: veren in de solverinvoer zijn N/mm resp. N·mm/rad; de mesh rekent
+ * in N/m resp. N·m/rad (× 1000 resp. / 1000).
+ */
+function applySupportToMesh(mesh: AnyMesh, meshNodeId: number, steun: KnoopSteun): void {
+  const constraints: { x: boolean; y: boolean; rotation: boolean;
+    springX?: number; springY?: number; springRot?: number } = {
+    x: steun.x.soort !== "vrij",
+    y: steun.z.soort !== "vrij",
+    rotation: steun.ry.soort !== "vrij",
+  };
+  if (steun.x.soort === "veer") constraints.springX = steun.x.k * 1000;
+  if (steun.z.soort === "veer") constraints.springY = steun.z.k * 1000;
+  if (steun.ry.soort === "veer") constraints.springRot = steun.ry.k / 1000;
+  mesh.updateNode(meshNodeId, { constraints });
 }
 
 /**
@@ -419,11 +404,18 @@ export function buildMesh(
     nodeIdMap.set(n.id, meshNode.id);
   }
 
-  // Supports
-  for (const s of input.supports) {
-    const meshNid = nodeIdMap.get(s.nodeId);
+  // Supports — per knoop samengevoegd per vrijheidsgraad (issue #223).
+  // Tegenstrijdige opleggingen (star én verend, of twee veren in dezelfde
+  // richting) worden geweigerd in plaats van dat de laatste stil wint.
+  const opleggingen = combineerOpleggingen(input.supports, "solver");
+  const opleggingFouten = opleggingen.bevindingen.filter((b) => b.ernst === "fout");
+  if (opleggingFouten.length > 0) {
+    throw new Error(opleggingFouten.map((f) => f.tekst).join(" "));
+  }
+  for (const steun of opleggingen.perKnoop.values()) {
+    const meshNid = nodeIdMap.get(steun.nodeId);
     if (meshNid === undefined) continue;
-    applySupportToMesh(mesh, meshNid, s);
+    applySupportToMesh(mesh, meshNid, steun);
   }
 
   // UI-knoopposities (mm) — nodig voor het staafsplitsen langs plaatranden
@@ -1873,6 +1865,8 @@ function convertResult(
   const displacements = new Map<number, NodalDisp>();
   const reactions = new Map<number, NodalReaction>();
   const elements = new Map<number, ElementForces>();
+  // Dezelfde samenvoeging per vrijheidsgraad als `buildMesh` (issue #223).
+  const steunPerKnoop = combineerOpleggingen(supports, "solver").perKnoop;
 
   // Build mesh-id → array-index lookup (matches order in Mesh.nodes Map).
   // Mét platen komt de index van de solver zelf (actieve knopen) binnen via
@@ -1896,22 +1890,20 @@ function convertResult(
     const ux = ux_m * 1000, uz = uz_m * 1000;
     displacements.set(uiId, { ux, uz, ry });
 
-    const support = supports.find(s => s.nodeId === uiId);
-    if (support) {
+    const steun = steunPerKnoop.get(uiId);
+    if (steun) {
       let fx = engineResult.reactions[base + 0] ?? 0;
       let fz = engineResult.reactions[base + 1] ?? 0;
       let my_Nmm = (engineResult.reactions[base + 2] ?? 0) * 1000; // N·m → N·mm
       // Veerreacties: de core vult de reactievector alleen op STARRE DOF's;
       // een veer-DOF blijft vrij en meldt daar 0. De veerkracht is R = −k·u
       // (k canoniek N/mm resp. N·mm/rad, u in mm resp. rad — zie liftSpringK
-      // in App.tsx en applySupportToMesh). k ≤ 0 werd hierboven star gezet en
-      // levert dan wél een core-reactie, dus alleen bij k > 0 aanvullen.
-      const k = support.k ?? 0;
-      if (k > 0) {
-        if (support.type === "zSpring")  fz = -k * uz;
-        if (support.type === "xSpring")  fx = -k * ux;
-        if (support.type === "rotSpring") my_Nmm = -k * ry;
-      }
+      // en applySupportToMesh). Per RICHTING van de samengevoegde steun
+      // (issue #223): vroeger las dit de eerste oplegging op de knoop, zodat
+      // een overschreven rotatieveer alsnog een fictief veermoment −k·θ gaf.
+      if (steun.x.soort === "veer") fx = -steun.x.k * ux;
+      if (steun.z.soort === "veer") fz = -steun.z.k * uz;
+      if (steun.ry.soort === "veer") my_Nmm = -steun.ry.k * ry;
       reactions.set(uiId, { fx, fz, my: my_Nmm });
     }
   }
@@ -2286,6 +2278,27 @@ function eisEindigeUitkomst(r: SolverResult, wat: string): SolverResult {
 }
 
 // ── Public engine functions ─────────────────────────────────────────────────
+
+/**
+ * MECHANISMECONTROLE VOOR DE VALIDATIE (issue #248). Bouwt de rekenmesh met
+ * dezelfde `buildMesh` als elke berekening (zonder lasten) en vraagt de kern
+ * of het raamwerkstelsel singulier is (`zoekFrameMechanisme`). Geeft de
+ * melding terug die de berekening zou geven, met het knoopnummer uit het
+ * model, of `null` als het stelsel oplosbaar is.
+ *
+ * Alleen voor modellen zonder platen: het gemengde pad (staven + schijven)
+ * wordt hier niet nagebootst; daar geeft deze functie `null` en blijft het
+ * oordeel aan de berekening zelf.
+ */
+export function zoekMechanisme(input: SolverInput | MultiInput): string | null {
+  const { mesh, nodeIdMap, plateInfo } = buildMesh(input, () => 0);
+  if (plateInfo.length > 0) return null;
+  const fout = zoekFrameMechanisme(mesh);
+  if (!fout) return null;
+  const vertaald = metKnoopnummer(fout, nodeIdMap, plateInfo);
+  return vertaald instanceof Error ? vertaald.message : String(vertaald);
+}
+
 
 export function solve(input: SolverInput): SolverResult {
   const { mesh, nodeIdMap, beamIdMap, plateInfo, beamSegments, segmentUitvoer, randKoppelingen } = buildMesh(input);
