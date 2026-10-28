@@ -545,6 +545,13 @@
       "openFolder": "Ouvrir le dossier",
       "savedNamed": "Enregistré : {{naam}}"
     },
+    "ifcResults": {
+      "noResults": "Pas encore de résultats",
+      "noResultsBody": "Calculez d’abord le modèle ; les résultats pourront ensuite être enregistrés en .ifcfemresults.",
+      "exported": "Résultats enregistrés (.ifcfemresults)",
+      "exportFailed": "Échec de l’enregistrement des résultats",
+      "opened": "Résultats ouverts (sans recalcul)"
+    },
     "ifc": {
       "exportErrors": "L'export IFC contient des erreurs",
       "exportedWithNotes": "IFC exporté — avec remarques",

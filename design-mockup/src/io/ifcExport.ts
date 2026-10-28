@@ -338,6 +338,37 @@ export interface IfcExportOpties {
    * Standaard `false`: het bouwkundige model gaat mee.
    */
   zonderBouwkundig?: boolean;
+  /**
+   * Schrijft rekenresultaten in hetzelfde bestand (issue #87, de
+   * `.ifcfemresults`-export van `io/ifcResultaten.ts`). Wordt aangeroepen
+   * nadat het hele rekenmodel geschreven is, met de #id's van knopen, staven,
+   * platen en belastinggroepen. Levert per analysemodel de
+   * IfcStructuralResultGroup's, die als `HasResults` op het model komen.
+   * Ontbreekt de optie, dan verandert er niets aan het bestand.
+   */
+  resultaten?: (context: IfcResultaatContext) => { resultaten2D: number[]; resultaten3D: number[] };
+}
+
+/** De #id's van één analysemodel, voor het schrijven van resultaten. */
+export interface IfcAnalysemodelIds {
+  analyseModel: number;
+  connectiePerKnoop: Map<number, number>;
+  memberPerStaaf: Map<number, number>;
+  memberPerPlaat: Map<number, number>;
+  /** IfcStructuralLoadGroup (LOAD_CASE) per belastinggeval-id. */
+  groepPerCase: Map<number, number>;
+  /** IfcStructuralLoadGroup (LOAD_COMBINATION) per combinatie-id. */
+  groepPerCombinatie: Map<number, number>;
+}
+
+/** Wat `IfcExportOpties.resultaten` meekrijgt. */
+export interface IfcResultaatContext {
+  w: SpfSchrijver;
+  project: number;
+  context: number;
+  tweeD: IfcAnalysemodelIds;
+  /** Alleen als er een 3D-analysemodel in het bestand staat. */
+  drieD?: IfcAnalysemodelIds;
 }
 
 // ── Staalprofiel-afmetingen (mm) ────────────────────────────────────────────
@@ -420,7 +451,7 @@ function meter(mm: number): string {
  * ISO 8859-1 basis-ASCII als \X2\…\X0\ (UTF-16 hex) — zodat namen met
  * bv. accenten geldig blijven.
  */
-function stepString(s: string): string {
+export function stepString(s: string): string {
   let uit = "";
   let inX2 = false;
   for (const ch of s) {
@@ -474,7 +505,7 @@ function ifcGuid(seed: string): string {
 
 // ── SPF-schrijver ───────────────────────────────────────────────────────────
 
-class SpfSchrijver {
+export class SpfSchrijver {
   private regels: string[] = [];
   private volgendId = 1;
   private guids = new Set<string>();
@@ -484,6 +515,16 @@ class SpfSchrijver {
     const id = this.volgendId++;
     this.regels.push(`#${id}=${naam}(${attrs.join(",")});`);
     return id;
+  }
+
+  /**
+   * Vervang een eerder geschreven entiteit (zelfde #id). Voor een attribuut
+   * dat pas later bekend is, zoals `HasResults` van een analysemodel.
+   */
+  vervang(id: number, naam: string, ...attrs: string[]): void {
+    const index = this.regels.findIndex((regel) => regel.startsWith(`#${id}=`));
+    if (index < 0) throw new Error(`#${id} bestaat niet`);
+    this.regels[index] = `#${id}=${naam}(${attrs.join(",")});`;
   }
 
   /** Unieke deterministische GUID als STEP-string-attribuut. */
@@ -500,8 +541,8 @@ class SpfSchrijver {
   }
 }
 
-const ref = (id: number) => `#${id}`;
-const lijst = (ids: number[]) => `(${ids.map(ref).join(",")})`;
+export const ref = (id: number) => `#${id}`;
+export const lijst = (ids: number[]) => `(${ids.map(ref).join(",")})`;
 
 // ── Hoofdopbouw ─────────────────────────────────────────────────────────────
 
@@ -609,6 +650,7 @@ export function bouwIfcRekenmodel(
   // want de combinatie is geen enkelvoudige belastingsoort meer. Alleen
   // gevallen die ook echt in het bestand staan doen mee.
   const combinatieGroepen: number[] = [];
+  const groepPerCombinatie = new Map<number, number>();
   const combinaties = zonderLasten ? [] : (model.combinations ?? []);
   for (const combo of combinaties) {
     const groep = w.ent("IFCSTRUCTURALLOADGROUP",
@@ -616,6 +658,7 @@ export function bouwIfcRekenmodel(
       ".LOAD_COMBINATION.", ".USERDEFINED.", ".USERDEFINED.", "$",
       stepString(combo.type === "uls" ? "UGT" : "BGT"));
     combinatieGroepen.push(groep);
+    groepPerCombinatie.set(combo.id, groep);
     const factoren = [...combo.factors.entries()]
       .filter(([caseId, f]) => f !== 0 && groepPerCase.has(caseId))
       .sort((a, b) => a[0] - b[0]);
@@ -633,10 +676,11 @@ export function bouwIfcRekenmodel(
   const vlakAssen = w.ent("IFCAXIS2PLACEMENT3D",
     ref(oorsprong), ref(richtingMinY), ref(richtingX));
   const groepIds = [...groepPerCase.values(), ...combinatieGroepen];
-  const analyseModel = w.ent("IFCSTRUCTURALANALYSISMODEL",
+  const analyseModelAttrs = [
     w.guid("analysemodel"), "$", stepString(`Rekenmodel ${projectNaam}`), "$", "$",
     ".IN_PLANE_LOADING_2D.", ref(vlakAssen),
-    groepIds.length > 0 ? lijst(groepIds) : "$", "$", "$");
+    groepIds.length > 0 ? lijst(groepIds) : "$", "$", "$"];
+  const analyseModel = w.ent("IFCSTRUCTURALANALYSISMODEL", ...analyseModelAttrs);
   w.ent("IFCRELSERVICESBUILDINGS",
     w.guid("dienst:model-gebouw"), "$", "$", "$", ref(analyseModel), lijst([gebouw]));
 
@@ -963,15 +1007,42 @@ export function bouwIfcRekenmodel(
   // mogen gelijk zijn aan de 2D-id's; alle IFC-GUID-seeds en #id-maps hieronder
   // hebben een eigen 3d:-naamruimte. Oude 2D-projecten schrijven geen extra
   // entiteiten en houden daardoor exact dezelfde export.
+  let drieD: (IfcAnalysemodelIds & { attrs: string[] }) | undefined;
   if (model.model3d !== undefined) {
     const openFem3d = parseOpenFem3DModel(model.model3d);
     schrijf3DSchilpanelen(w, openFem3d, context, gebouw);
     if (openFem3d.beams.length > 0 || (openFem3d.plates?.length ?? 0) > 0
       || (openFem3d.envelopePanels?.length ?? 0) > 0) {
-      schrijf3DRekenmodel(w, openFem3d, {
+      drieD = schrijf3DRekenmodel(w, openFem3d, {
         context, gebouw, richtingY, richtingZ, projectNaam, zonderLasten,
         loadCases: model.loadCases,
       });
+    }
+  }
+
+  // ── Resultaten (issue #87) ───────────────────────────────────────────────
+  // Pas nu: elk resultaat hangt aan een knoop, staaf of plaat die hierboven
+  // geschreven is. De resultaatgroepen gaan daarna als HasResults op hun
+  // analysemodel (het tiende attribuut).
+  if (opties.resultaten) {
+    const uit = opties.resultaten({
+      w, project, context,
+      tweeD: {
+        analyseModel, connectiePerKnoop, memberPerStaaf,
+        memberPerPlaat: new Map([...plaatInfo].map(([id, info]) => [id, info.member])),
+        groepPerCase, groepPerCombinatie,
+      },
+      drieD,
+    });
+    if (uit.resultaten2D.length > 0) {
+      const attrs = [...analyseModelAttrs];
+      attrs[8] = lijst(uit.resultaten2D);
+      w.vervang(analyseModel, "IFCSTRUCTURALANALYSISMODEL", ...attrs);
+    }
+    if (drieD && uit.resultaten3D.length > 0) {
+      const attrs = [...drieD.attrs];
+      attrs[8] = lijst(uit.resultaten3D);
+      w.vervang(drieD.analyseModel, "IFCSTRUCTURALANALYSISMODEL", ...attrs);
     }
   }
 
@@ -1179,7 +1250,7 @@ function schrijf3DRekenmodel(
     zonderLasten: boolean;
     loadCases: LoadCase[];
   },
-): void {
+): IfcAnalysemodelIds & { attrs: string[] } {
   const gekoppeld = gekoppelde3DKnopen(openFem3d);
   const knoopLasten = env.zonderLasten
     ? []
@@ -1207,9 +1278,10 @@ function schrijf3DRekenmodel(
       w.guid(`3d:lastgroep:${caseId}`), "$", stepString(naam), "$", "$",
       ".LOAD_CASE.", ".NOTDEFINED.", ".NOTDEFINED.", "$", "$")] as const;
   }));
-  const analyse3d = w.ent("IFCSTRUCTURALANALYSISMODEL",
+  const analyse3dAttrs = [
     w.guid("3d:analysemodel"), "$", stepString(`3D-rekenmodel ${env.projectNaam}`), "$", "$",
-    ".LOADING_3D.", "$", loadGroepen.size > 0 ? lijst([...loadGroepen.values()]) : "$", "$", "$");
+    ".LOADING_3D.", "$", loadGroepen.size > 0 ? lijst([...loadGroepen.values()]) : "$", "$", "$"];
+  const analyse3d = w.ent("IFCSTRUCTURALANALYSISMODEL", ...analyse3dAttrs);
   w.ent("IFCRELSERVICESBUILDINGS",
     w.guid("3d:dienst:model-gebouw"), "$", "$", "$", ref(analyse3d), lijst([env.gebouw]));
 
@@ -1543,6 +1615,11 @@ function schrijf3DRekenmodel(
         lijst(acties), "$", ref(loadGroepen.get(caseId)!));
     }
   }
+  return {
+    analyseModel: analyse3d, attrs: analyse3dAttrs,
+    connectiePerKnoop, memberPerStaaf, memberPerPlaat,
+    groepPerCase: new Map(loadGroepen), groepPerCombinatie: new Map(),
+  };
 }
 
 // ── Materialen en profielen ─────────────────────────────────────────────────
@@ -3171,6 +3248,9 @@ export const GEWORTELDE_ENTITEITEN = [
   "IFCSTRUCTURALPOINTCONNECTION", "IFCSTRUCTURALCURVEMEMBER", "IFCSTRUCTURALSURFACEMEMBER",
   "IFCSTRUCTURALPOINTACTION", "IFCSTRUCTURALLINEARACTION",
   "IFCSTRUCTURALCURVEACTION",
+  // Resultaten (.ifcfemresults, issue #87)
+  "IFCSTRUCTURALRESULTGROUP", "IFCSTRUCTURALPOINTREACTION",
+  "IFCSTRUCTURALCURVEREACTION", "IFCSTRUCTURALSURFACEREACTION",
   // Bouwkundig model, eigenschappen en hoeveelheden
   "IFCBEAM", "IFCCOLUMN", "IFCCOVERING", "IFCREINFORCINGBAR",
   "IFCPROPERTYSET", "IFCELEMENTQUANTITY",

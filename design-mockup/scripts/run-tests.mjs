@@ -810,6 +810,10 @@ const ALLEEN_BRON = new Map([
     "de instelbare verbindingstolerantie van het 2D-model (#55): modelcontrole (lib/modelControle), rekenpoort, plaatsen en herstellen in de zustand-store, de snapinstellingen, i18n en de bron van FemCanvas, App.tsx en de tab Weergave. Geen van die modules hoort in de barrel; de MCP-poort houdt zijn eigen exacte drempel",
   ],
   ["ifc-export", "staat los van de solver (IFC-export)"],
+  [
+    "ifc-resultaten",
+    "resultaten als .ifcfemresults (issue #87): IFC-export plus resultaatgroepen en de exacte teruglezer. Rekent met de bron-solver en leest `io/ifcExport.ts`, dat niet in de barrel staat; de MCP-weg (`ifcfemresults_schrijven`/`_lezen`) staat in de sidecar en wordt door `tests/ifc_resultaten_mcp.rs` tegen de bundel bewezen",
+  ],
   ["ifc-spiegel", "staat los van de solver (IFC-export spiegelt het model)"],
   ["profieleditor-snap", "test de objectsnap van de profieleditor, niet de solver"],
   ["oude-profielen", "controleert de overgetypte profieltabellen tegen de doorsnedemotor, niet de solver"],

@@ -55,6 +55,8 @@
     "asIfcDesc": "Het model als IFC4-bestand",
     "asIfcStructural": "Exporteren als IFC (structureel)",
     "asIfcStructuralDesc": "Het analysemodel als IFC4 structural analysis view",
+    "asIfcResults": "Resultaten (.ifcfemresults)",
+    "asIfcResultsDesc": "Model en rekenresultaten als één IFC4-bestand; opnieuw te openen zonder te rekenen",
     "notAvailable": "Deze export is in deze omgeving niet beschikbaar; gebruik de desktop-app.",
     "imageSoon": "Exporteren als afbeelding is nog niet beschikbaar. Gebruik het rapport (Afdrukken / PDF) of een schermafbeelding."
   },

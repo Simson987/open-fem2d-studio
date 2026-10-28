@@ -55,6 +55,8 @@
     "asIfcDesc": "The model as an IFC4 file",
     "asIfcStructural": "Export as IFC (structural)",
     "asIfcStructuralDesc": "The analysis model as IFC4 structural analysis view",
+    "asIfcResults": "Results (.ifcfemresults)",
+    "asIfcResultsDesc": "Model and analysis results as one IFC4 file; reopens without recalculating",
     "notAvailable": "This export is not available in this environment; use the desktop app.",
     "imageSoon": "Export as image is not available yet. Use the report (Print / PDF) or a screenshot."
   },
