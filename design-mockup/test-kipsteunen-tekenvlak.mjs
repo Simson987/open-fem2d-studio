@@ -398,7 +398,12 @@ if (!existsSync(TOETSBRUG)) {
     ok(`staal, ${naam}: L_st van de kern (${lSt.join(", ")}) staat in die ketting`,
       lSt.length > 0 && lSt.every((v) => ketting.lengtesMm.some((l) => Math.abs(l - v) < 1e-3)));
   }
-  for (const [naam, cfg] of [["ℓ = 1,2 m", { ltbSupportSpacing_m: 1.2 }], ["geen ℓ", {}]]) {
+  // Issue #220: de kern leidt het belastinggeval van tabel 6.1 af uit het
+  // momentverloop. Zonder kipsteunafstand is dat hier de parabool van een
+  // gelijkmatige last: l_ef = 0,9·ℓ. Met een kipsteunafstand korter dan de
+  // staaf is het verloop BINNEN een kipveld niet dat van de staaf; dan geldt
+  // de bovengrens van de tabel, l_ef = 1,0·ℓ (tot oktober 2026 vast 0,9·ℓ).
+  for (const [naam, cfg, factor] of [["ℓ = 1,2 m", { ltbSupportSpacing_m: 1.2 }, 1.0], ["geen ℓ", {}, 0.9]]) {
     const beams = [houtStaaf(cfg)];
     const { inputs } = houtInvoer(liggerNodes, beams, liggerSupports);
     const [beeld] = kipsteunBeelden({ nodes: liggerNodes, beams, supports: liggerSupports });
@@ -406,9 +411,8 @@ if (!existsSync(TOETSBRUG)) {
     const kip = r.checks.find((c) => c.id === "6.3.3_beam_stability");
     const lef = waardenVan(kip, "l_{ef}")[0];
     const l = beeld.kettingen[0].toetsLengteMm;
-    // Tabel 6.1, gelijkmatig verdeelde belasting op twee steunpunten, last in
-    // het zwaartepunt: l_ef = 0,9 · ℓ.
-    ok(`hout, ${naam}: l_ef van de kern = 0,9 · de getekende ℓ (${l} mm)`, Math.abs(lef - 0.9 * l) < 1e-6, `${lef}`);
+    ok(`hout, ${naam}: l_ef van de kern = ${String(factor).replace(".", ",")} · de getekende ℓ (${l} mm)`,
+      Math.abs(lef - factor * l) < 1e-6, `${lef}`);
   }
 }
 
