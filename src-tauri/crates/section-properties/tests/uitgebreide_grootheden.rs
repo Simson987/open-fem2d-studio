@@ -559,3 +559,20 @@ fn gedraaid_profiel_houdt_dezelfde_hoofdasgrootheden() {
         "er hoort een melding over Av;u te staan"
     );
 }
+
+/// Issue #244, punt 098: een vierkante koker (SHS 100×100×5, uitwendige
+/// hoekstraal 2·t = 10 mm, inwendig 1·t) heeft I_y = I_z en I_yz = 0, dus elke
+/// as is een hoofdas. Gemeten in 2026.42: α = 0,7854 (45°) en W_el,u/v =
+/// 41 334 mm³ tegen W_el,y = 55 886 mm³ (26 % lager) — een hoek uit
+/// afrondingsresten. Verwacht: y en z blijven de hoofdassen, α = 0 en
+/// W_el,u = W_el,y, W_el,v = W_el,z.
+#[test]
+fn vierkante_koker_houdt_y_en_z_als_hoofdassen() {
+    let v = draai(r#"{ "naam": "SHS 100x100x5", "soort": "Shs", "h": 100, "b": 100, "t": 5, "r": 10, "r2": 5 }"#);
+    dicht(getal(&v, "iy_mm4"), getal(&v, "iz_mm4"), 1e-6 * getal(&v, "iy_mm4"), "I_y = I_z");
+    dicht(getal(&v, "alpha_hoofdas_rad"), 0.0, 1e-12, "α");
+    dicht(getal(&v, "wel_u_mm3"), getal(&v, "wel_y_mm3"), 1e-6 * getal(&v, "wel_y_mm3"), "W_el,u = W_el,y");
+    dicht(getal(&v, "wel_v_mm3"), getal(&v, "wel_z_mm3"), 1e-6 * getal(&v, "wel_z_mm3"), "W_el,v = W_el,z");
+    // Orde van grootte tegen de catalogus (EN 10219: W_el = 55,9 cm³).
+    dicht(getal(&v, "wel_y_mm3"), 55_886.0, 600.0, "W_el,y");
+}

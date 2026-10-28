@@ -1318,7 +1318,10 @@ impl Doorsnede {
         let straal = ((iy - iz).powi(2) + 4.0 * iyz * iyz).sqrt();
         let iu = 0.5 * (iy + iz) + 0.5 * straal;
         let iv = 0.5 * (iy + iz) - 0.5 * straal;
-        let alpha = if iyz == 0.0 && iy >= iz {
+        // Issue #244 (punt 098): bij Iu = Iv (vierkante koker, cirkel) is elke
+        // as een hoofdas; dan blijven y en z de hoofdassen in plaats van een
+        // hoek uit afrondingsresten (gemeten 45° bij SHS 100×100×5).
+        let alpha = if (iyz == 0.0 && iy >= iz) || straal <= 1e-9 * (iy + iz).abs() {
             0.0
         } else {
             0.5 * (-2.0 * iyz).atan2(iy - iz)

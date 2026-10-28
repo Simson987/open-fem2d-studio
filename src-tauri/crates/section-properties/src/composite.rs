@@ -529,7 +529,18 @@ impl CompositeSection {
         let r = ((iy - iz).powi(2) + 4.0 * iyz * iyz).sqrt();
         let iu = 0.5 * (iy + iz) + 0.5 * r;
         let iv = 0.5 * (iy + iz) - 0.5 * r;
-        let alpha = 0.5 * (-2.0 * iyz).atan2(iy - iz);
+        // Issue #244 (punt 098): is de traagheid in elke richting gelijk
+        // (Iy = Iz en Iyz = 0, zoals bij een vierkante koker of een cirkel),
+        // dan is ELKE as een hoofdas en is de richting onbepaald. atan2 van
+        // twee afrondingsresten gaf dan een willekeurige hoek — gemeten 45°
+        // bij SHS 100×100×5, met W_el,u/v 26 % onder W_el,y. In dat geval
+        // blijven y en z de hoofdassen (α = 0). De drempel is relatief: R is
+        // het verschil Iu − Iv.
+        let alpha = if r <= 1e-9 * (iy + iz).abs() {
+            0.0
+        } else {
+            0.5 * (-2.0 * iyz).atan2(iy - iz)
+        };
 
         // Uitersten in het hoofdasstelsel: dezelfde punten, over −α gedraaid.
         // `u = y·cos α + z·sin α`, `v = −y·sin α + z·cos α`.
