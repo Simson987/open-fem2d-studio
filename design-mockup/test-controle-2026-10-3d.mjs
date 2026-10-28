@@ -84,9 +84,9 @@ const dicht = (naam, gemeten, hand, rel) => {
   assert.ok(inv, "houten uitkraging getoetst"); geslaagd++;
   dicht("hout: w_inst naar de kern = zakking vrije eind", -inv.deflection_inst_mm, delta * 1000, 1e-6);
   // Zonder klasse "uitkraging", maar met een vrij eind: ℓ_rep = 2·L, dus de
-  // vloer-noemers 250 en 333 op de staaflengte gehalveerd.
+  // vloer-noemers 250 en 1000/3 (3/1000·ℓ_rep, issue #236) op de staaflengte gehalveerd.
   assert.equal(inv.deflection_limit_fin, 125); geslaagd++;
-  assert.equal(inv.deflection_limit_add, 166.5); geslaagd++;
+  assert.equal(inv.deflection_limit_add, 500 / 3); geslaagd++;
   assert.ok(inv.deflection_notes.some((n) => n.startsWith("Uitkraging: w is de verplaatsing")), "rapportregel"); geslaagd++;
 }
 
@@ -137,7 +137,7 @@ console.log("\n[3D] Ligger op een wandplaat: geen uitkraging");
     assert.ok(!s.deflection_notes.some((n) => n.startsWith("Uitkraging")), `staal ${naam}: koorde`); geslaagd++;
     const h = buildOpenFem3DTimberCheckInputs({ ...basis, beams: [{ id: 1, startNodeId: 1, endNodeId: eindknoop, profileName: "100x300", material: "C24" }] }, result).inputs[0];
     assert.equal(h.deflection_limit_fin, 250, `hout ${naam}: w_fin-noemer 250`); geslaagd++;
-    assert.equal(h.deflection_limit_add, 333, `hout ${naam}: w_add-noemer 333`); geslaagd++;
+    assert.equal(h.deflection_limit_add, 1000 / 3, `hout ${naam}: w_add-noemer 1000/3`); geslaagd++;
     console.log(`  ✓ ${naam} van de wand: staal en hout geen uitkraging (250/333)`);
   }
   // Tegenproef: zonder plaat is knoop 2 wél vrij (alleen een oplegging op 1).

@@ -18031,14 +18031,14 @@ function timberDeflectionNumerators(cls, customN) {
     case "floorBrittle":
       return { fin: 250, add: 500 };
     case "cantilever":
-      return { fin: 125, add: 167 };
+      return { fin: 125, add: 500 / 3 };
     case "custom": {
       const n2 = customN ?? 333;
       return { fin: n2, add: n2 };
     }
     case "floor":
     default:
-      return { fin: 250, add: 333 };
+      return { fin: 250, add: 1e3 / 3 };
   }
 }
 function houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm) {
@@ -18062,7 +18062,7 @@ function houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm) {
   const uit = { fin: klasse.fin / 2, add: klasse.add / 2 };
   return {
     ...uit,
-    notitie: `Uitkraging (vrij staafeind herkend): \u2113_rep = 2\xB7L, dus w_fin tegen L/${uit.fin} en w_add tegen L/${uit.add} op de staaflengte (de noemers ${klasse.fin} en ${klasse.add} van de klasse, op \u2113_rep).`
+    notitie: `Uitkraging (vrij staafeind herkend): \u2113_rep = 2\xB7L, dus w_fin tegen L/${getal5(uit.fin)} en w_add tegen L/${getal5(uit.add)} op de staaflengte (de noemers ${getal5(klasse.fin)} en ${getal5(klasse.add)} van de klasse, op \u2113_rep).`
   };
 }
 function matchSupportedTimberGrade(materialName, supportedGrades = SUPPORTED_TIMBER_GRADES) {
@@ -31369,7 +31369,7 @@ function buildOpenFem3DTimberCheckInputs(model, result, combinationSet) {
       ...notes,
       ...permanent.notes,
       ...inklemming ? [
-        openFem3DUitkragingNotitie(inklemming) + (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${limits.fin} en w_add tegen L/${limits.add} op de staaflengte.` : "")
+        openFem3DUitkragingNotitie(inklemming) + (vrijEindZonderKlasse ? ` Dus w_fin tegen L/${String(Math.round(limits.fin * 1e3) / 1e3).replace(".", ",")} en w_add tegen L/${String(Math.round(limits.add * 1e3) / 1e3).replace(".", ",")} op de staaflengte.` : "")
       ] : [],
       ...characteristic.length ? [] : ["Karakteristieke BGT-combinatie ontbreekt: w_inst is uit de beschikbare BGT-omhullende genomen."],
       ...quasi.length ? [] : ["Quasi-blijvende BGT-combinatie ontbreekt: w_qp = w_inst is veilig-zijdig aangehouden."]

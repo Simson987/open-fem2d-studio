@@ -284,12 +284,12 @@ log("\n[K5] Hout op een scharnier en een kolom: geen uitkraging, ook bij een dee
     ],
   };
   const app = houtVan(m).inputs.find((i) => i.beam_id === 1);
-  ok("app-route: noemers 250/333 (veld)", app.deflection_limit_fin === 250 && app.deflection_limit_add === 333, `${app.deflection_limit_fin}/${app.deflection_limit_add}`);
+  ok("app-route: noemers 250/333 (veld)", app.deflection_limit_fin === 250 && app.deflection_limit_add === 1000 / 3, `${app.deflection_limit_fin}/${app.deflection_limit_add}`);
   ok("app-route: gemeten vanaf de koorde", isKoorde(app), app.deflection_notes[0].slice(0, 50));
   // check_fem_model met beam_ids [1]: de sidecar geeft het hele model als alleBeams.
   const selectie = houtVan(m, { beams: [m.beams[0]] }).inputs[0];
   ok("selectie [1] met het hele model: 250/333, koorde (tot de herziening 125/166,5)",
-    selectie.deflection_limit_fin === 250 && selectie.deflection_limit_add === 333 && isKoorde(selectie),
+    selectie.deflection_limit_fin === 250 && selectie.deflection_limit_add === 1000 / 3 && isKoorde(selectie),
     `${selectie.deflection_limit_fin}/${selectie.deflection_limit_add}`);
   // De variant (stores/variantStore.ts) toetst één staaf, nu met het hele model.
   const variant = houtVan(m, { beams: [{ ...m.beams[0], profile: "100x350" }],
@@ -324,7 +324,7 @@ log("\n[K5] Ligger op een wandschijf: hoek- en randknoop zijn geen vrij eind");
   };
   const h = houtVan(hoek).inputs[0];
   ok("hout op de plaathoek: 250/333 en koorde (tot de herziening 125/166,5)",
-    h.deflection_limit_fin === 250 && h.deflection_limit_add === 333 && isKoorde(h), `${h.deflection_limit_fin}/${h.deflection_limit_add}`);
+    h.deflection_limit_fin === 250 && h.deflection_limit_add === 1000 / 3 && isKoorde(h), `${h.deflection_limit_fin}/${h.deflection_limit_add}`);
 
   // Staal IPE 200 dat MIDDEN op de bovenrand van een wandschijf eindigt (knoop
   // 7 ligt op de rand 2–4, geen hoek). Het rekennet koppelt die knoop aan de
@@ -439,7 +439,7 @@ log("\n[K5] Doorgaande lijn over een kolomkop met overstek: veld en overstek apa
   }
   // Dezelfde lijn in hout C24 100×300: de noemers op de lijnlengte volgen uit
   // ℓ_rep van het maatgevende deel. Overstek: 250·8000/4000 = 500 en
-  // 333·8000/4000 = 666 (= ℓ_rep/250 en ℓ_rep/333 met ℓ_rep = 4000 mm).
+  // (1000/3)·8000/4000 = 666,67 (= ℓ_rep/250 en 3/1000·ℓ_rep met ℓ_rep = 4000 mm, issue #236).
   const mHout = { ...m, beams: [
     { id: 1, from: 1, to: 2, material: "C24", profile: "100x300", checkConfig: { serviceClass: 1 } },
     { id: 2, from: 2, to: 3, material: "C24", profile: "100x300", checkConfig: { serviceClass: 1 } },
@@ -447,7 +447,7 @@ log("\n[K5] Doorgaande lijn over een kolomkop met overstek: veld en overstek apa
   ] };
   const hi = houtVan(mHout).inputs.find((i) => i.beam_id === 1);
   ok("hout-lijn: noemers op de lijnlengte uit ℓ_rep van het overstek (500/666)",
-    Math.abs(hi.deflection_limit_fin - 500) < 1e-9 && Math.abs(hi.deflection_limit_add - 666) < 1e-9,
+    Math.abs(hi.deflection_limit_fin - 500) < 1e-9 && Math.abs(hi.deflection_limit_add - 2000 / 3) < 1e-9,
     `${hi.deflection_limit_fin}/${hi.deflection_limit_add}`);
   // De lijnnotitie spreekt de toets per deel niet tegen (review samenvoeging
   // 2026.42): niet "de koorde van de doorbuiging over de hele lengte" of "de
@@ -517,7 +517,7 @@ log("\n[K5] Doorgaande lijn over een kolomkop met overstek: veld en overstek apa
     ...b, material: "C24", profile: b.profile === "IPE300" ? "100x300" : "200x200", checkConfig: { serviceClass: 1 },
   })) }).inputs.find((i) => i.beam_id === 1);
   ok("hout met paal: noemers uit ℓ_rep van het overstek vanaf de kolomkop (500/666), zoals zonder paal",
-    Math.abs(hp.deflection_limit_fin - 500) < 1e-9 && Math.abs(hp.deflection_limit_add - 666) < 1e-9,
+    Math.abs(hp.deflection_limit_fin - 500) < 1e-9 && Math.abs(hp.deflection_limit_add - 2000 / 3) < 1e-9,
     `${hp.deflection_limit_fin}/${hp.deflection_limit_add}`);
 }
 

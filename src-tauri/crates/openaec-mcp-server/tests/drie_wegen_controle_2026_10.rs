@@ -440,7 +440,8 @@ async fn k5_hout_met_beam_ids_is_geen_uitkraging() {
     let invoer = &uit["timber_check_inputs"][0];
     assert_eq!(invoer["beam_id"], 1);
     dichtbij(getal(invoer, &["deflection_limit_fin"]), 250.0, 1e-12, "w_fin-noemer");
-    dichtbij(getal(invoer, &["deflection_limit_add"]), 333.0, 1e-12, "w_add-noemer");
+    // Issue #236: 3/1000·L exact (NB A1.4.3(3)), niet L/333.
+    dichtbij(getal(invoer, &["deflection_limit_add"]), 1000.0 / 3.0, 1e-12, "w_add-noemer");
     let notities = invoer["deflection_notes"].as_array().unwrap();
     assert!(
         notities[0].as_str().unwrap_or("").starts_with("w is gemeten vanaf de koorde"),

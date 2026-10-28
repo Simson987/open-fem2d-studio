@@ -44,7 +44,7 @@
  *    cfg.ltbLoadPosition, leeg → zwaartepunt; kiptoets uit
  *    cfg.performLtbCheck, leeg → aan; k_cr uit cfg.kCr, leeg → 1,0 (NB bij
  *    6.1.7); geen lastverdelend systeem;
- *  - doorbuiging: klasse "vloer" → w_fin ≤ L/250 en w_add ≤ L/333
+ *  - doorbuiging: klasse "vloer" → w_fin ≤ L/250 en w_add ≤ 3/1000·L
  *    (NB-standaard); w_qp komt uit de quasi-blijvende BGT-combinatie
  *    (G + Σ ψ₂,i · Q_k,i), en valt alleen mét een notitie in het rapport terug
  *    op de volle last; w_perm (w₁) komt uit de BGT-combinatie die alleen de
@@ -177,19 +177,18 @@ export function kCrUitConfig(cfg: BeamCheckConfig): { kCr: number } | { fout: st
  * De w_fin-noemers volgen NEN-EN 1990:2002/NB:2019 A1.4.3(4) — w_max ≤ 1/250
  * deel van ℓ_rep bij zowel vloeren als daken. De w_add-noemers volgen
  * A1.4.3(3), dat vier categorieën voor w2 + w3 kent:
- *  - "floor":        fin 250, add 333 — het tweede gedachtestreepje, "overige
- *    vloeren en daken die intensief door personen worden gebruikt", 3/1 000
- *    deel van ℓ_rep. De 333 is de afronding naar beneden van 333⅓ en dus een
- *    fractie strenger dan de norm; de staalkern rekent sinds september 2026
- *    met 1000/3 exact. Bewust niet gelijkgetrokken: 333 is veilig-zijdig en
- *    het wijzigen zou de bevroren houtreferenties verschuiven;
+ *  - "floor":        fin 250, add 1000/3 — het tweede gedachtestreepje,
+ *    "overige vloeren en daken die intensief door personen worden gebruikt",
+ *    3/1 000 deel van ℓ_rep. EXACT 1000/3 (issue #236), zoals de staalkern:
+ *    tot oktober 2026 stond hier 333, een grens die 0,1 % te RUIM was (L/333
+ *    > 3·L/1000), dus niet veilig-zijdig;
  *  - "floorBrittle": fin 250, add 500 — het eerste gedachtestreepje, "vloeren
  *    die scheurgevoelige scheidingswanden dragen", 1/500 deel van ℓ_rep;
  *  - "roof":         fin 250, add 250 — het derde gedachtestreepje, "overige
  *    daken", 1/250 deel van ℓ_rep;
- *  - "cantilever":   fin 125, add 167 — de NB-conventie "ℓ_rep = tweemaal de
- *    lengte van een uitkraging" uitgedrukt als gehalveerde noemers op de
- *    staaflengte;
+ *  - "cantilever":   fin 125, add 500/3 — de NB-conventie "ℓ_rep = tweemaal
+ *    de lengte van een uitkraging" uitgedrukt als gehalveerde noemers op de
+ *    staaflengte (3/1000·2L = L/(500/3); tot oktober 2026 afgerond op 167);
  *  - "custom":       de opgegeven n geldt voor w_fin én w_add (één knop,
  *    transparant gedocumenteerd in de UI-hint). Zonder opgegeven n: 333,
  *    dezelfde terugval als de staalbouwer. Een OPGEGEVEN 0 of negatief getal
@@ -205,13 +204,13 @@ export function timberDeflectionNumerators(
   switch (cls) {
     case "roof":         return { fin: 250, add: 250 };
     case "floorBrittle": return { fin: 250, add: 500 };
-    case "cantilever":   return { fin: 125, add: 167 };
+    case "cantilever":   return { fin: 125, add: 500 / 3 };
     case "custom": {
       const n = customN ?? 333;
       return { fin: n, add: n };
     }
     case "floor":
-    default:             return { fin: 250, add: 333 };
+    default:             return { fin: 250, add: 1000 / 3 };
   }
 }
 
@@ -267,9 +266,9 @@ export function houtDoorbuigingsNoemers(
   return {
     ...uit,
     notitie:
-      `Uitkraging (vrij staafeind herkend): ℓ_rep = 2·L, dus w_fin tegen L/${uit.fin} en ` +
-      `w_add tegen L/${uit.add} op de staaflengte (de noemers ${klasse.fin} en ` +
-      `${klasse.add} van de klasse, op ℓ_rep).`,
+      `Uitkraging (vrij staafeind herkend): ℓ_rep = 2·L, dus w_fin tegen L/${getal(uit.fin)} en ` +
+      `w_add tegen L/${getal(uit.add)} op de staaflengte (de noemers ${getal(klasse.fin)} en ` +
+      `${getal(klasse.add)} van de klasse, op ℓ_rep).`,
   };
 }
 

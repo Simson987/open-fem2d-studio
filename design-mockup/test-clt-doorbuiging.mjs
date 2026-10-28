@@ -35,7 +35,8 @@
 // gekozen om ongelijk te zijn aan de tabel-3.2-waarden van massief hout, zodat
 // een stille terugval op 0,60 hier zou opvallen.
 //   w_fin = 7,30087 + 0,85·3,89380 = 10,61060 mm → UC = 10,61060/(5000/250) = 0,53053
-//   w_add = 10,61060 − 2,43362     =  8,17698 mm → UC = 8,17698·333/5000   = 0,54459
+//   w_add = 10,61060 − 2,43362     =  8,17698 mm → UC = 8,17698/(3/1000·5000) = 0,54513
+//   (issue #236: de grens is exact 3/1000·L; tot oktober 2026 L/333 → 0,54513)
 //
 // Draaien met: npx tsx test-clt-doorbuiging.mjs
 //         of : node scripts/run-tests.mjs --filter=clt-doorbuiging
@@ -143,7 +144,7 @@ if (metKdef) {
   dicht("w_qp = −3,89380", metKdef.deflection_quasi_perm_mm, -wQp, 5e-4);
   dicht("w₁ = −2,43362", metKdef.deflection_permanent_mm, -wPerm, 5e-4);
   ok("k_def en bron gaan door", metKdef.k_def === KDEF && metKdef.k_def_bron === BRON);
-  ok("NB-noemers 250 / 333", metKdef.deflection_limit_fin === 250 && metKdef.deflection_limit_add === 333);
+  ok("NB-noemers 250 / (1000/3)", metKdef.deflection_limit_fin === 250 && metKdef.deflection_limit_add === 1000 / 3);
   ok("notities noemen w_qp en w₁", metKdef.deflection_notes.some((n) => /quasi-blijvende/.test(n)) &&
     metKdef.deflection_notes.some((n) => n.startsWith("w₁ =")));
 }
@@ -163,7 +164,7 @@ if (heeftKern && metKdef && zonderKdef) {
     dicht("w_fin = w_inst + 0,85·w_qp = 10,61060 mm", fin.uc.ed, wFin, 2e-3);
     dicht("UC w_fin = 0,53053", fin.uc.uc, 0.53053, 2e-4);
     dicht("w_add = w_fin − w₁ = 8,17698 mm", add.uc.ed, wAdd, 2e-3);
-    dicht("UC w_add = 0,54459", add.uc.uc, 0.54459, 2e-4);
+    dicht("UC w_add = 0,54513", add.uc.uc, 0.54513, 2e-4);
     ok("k_def-variabele is de opgegeven 0,85 (geen terugval op 0,60)",
       fin.variables.find((v) => v.symbol === "k_{def}")?.value === KDEF);
     ok("de bron staat in de notitie bij w_fin", fin.notes.some((n) => n.includes(BRON) && /tabel 3\.2/.test(n)));
@@ -188,7 +189,7 @@ if (heeftKern && metKdef && zonderKdef) {
   const zonderDoorbuiging = z.checks.filter((c) => !c.id.startsWith("deflection_"))
     .map((c) => c.kind.data.uc?.uc ?? 0);
   dicht("uc_max = de grootste lameltoets (de weigering telt niet mee)", z.uc_max, Math.max(...zonderDoorbuiging), 1e-12);
-  ok("met k_def is uc_max de doorbuiging (0,54459) of hoger", r.uc_max >= 0.54459 - 2e-4, String(r.uc_max));
+  ok("met k_def is uc_max de doorbuiging (0,54513) of hoger", r.uc_max >= 0.54513 - 2e-4, String(r.uc_max));
 
   // ─────────────────────────────────────────────────────────────────────────
   log("\n[4] k_def zonder bron, en een negatieve k_def");
@@ -275,7 +276,7 @@ if (!existsSync(MCP_SERVER)) {
   const rz = inhoud(zonder)?.clt_results?.[0];
   if (rm) {
     dicht("MCP met k_def: UC w_fin = 0,53053", toets(rm, "deflection_w_fin")?.uc?.uc, 0.53053, 2e-4);
-    dicht("MCP met k_def: UC w_add = 0,54459", toets(rm, "deflection_w_add")?.uc?.uc, 0.54459, 2e-4);
+    dicht("MCP met k_def: UC w_add = 0,54513", toets(rm, "deflection_w_add")?.uc?.uc, 0.54513, 2e-4);
   } else ok("MCP met k_def: CLT-resultaat aanwezig", false, JSON.stringify(inhoud(met)?.skipped_beams ?? []).slice(0, 200));
   if (rz) {
     ok("MCP zonder k_def: w_fin niet van toepassing met reden",

@@ -4,7 +4,7 @@
 //!   w_fin,z = w_z + k_def · w_quasi-blijvend,z
 //!   w_add,z = w_fin,z − w_BGT-blijvend,z
 //! met de Nederlandse NB-grenswaarden w_fin <= L/250 (0,004·L) en
-//! w_add <= L/333 (0,003·L).
+//! w_add <= 3/1000·L (NEN-EN 1990:2002/NB:2019 A1.4.3(3), noemer exact 1000/3).
 //!
 //! Verificatie (staaf 2): w_fin = −24,5 + 0,6·−24,5 = −39,2 mm;
 //! UC = 39,2/(6342/250) = 1,55. w_add = −39,2 + 24,5 = −14,7 mm;
@@ -120,6 +120,23 @@ fn doorbuigingstoets(
         },
     ];
     variables.extend(extra);
+    // Issue #236: de NB-grens van w_add is 3/1000·ℓ_rep (A1.4.3(3)); de noemer
+    // 1000/3 (of 500/3 bij ℓ_rep = 2·L) leest als "333,33", dus wordt de grens
+    // in de vorm van de norm genoemd.
+    let mut notes: Vec<String> = Vec::new();
+    if getoetst && id == "deflection_w_add" {
+        if (noemer - 1000.0 / 3.0).abs() < 1e-9 {
+            notes.push(format!(
+                "Grens w_add = 3/1000·L = {} mm (NEN-EN 1990:2002/NB:2019 A1.4.3(3)).",
+                nl(grens, 3)
+            ));
+        } else if (noemer - 500.0 / 3.0).abs() < 1e-9 {
+            notes.push(format!(
+                "Grens w_add = 3/1000·ℓ_rep met ℓ_rep = 2·L, dus 6/1000·L = {} mm (NEN-EN 1990:2002/NB:2019 A1.4.3(3)).",
+                nl(grens, 3)
+            ));
+        }
+    }
     ResistanceCalc {
         deelstappen: Vec::new(),
         id: id.to_string(),
@@ -148,7 +165,7 @@ fn doorbuigingstoets(
             CheckStatus::NotOk
         },
         notes: if getoetst {
-            vec![]
+            notes
         } else {
             vec![format!(
                 "Niet getoetst: noemer n = {noemer} geeft geen grenswaarde L/n (n moet groter dan nul zijn)."
@@ -592,6 +609,17 @@ mod tests {
         assert!(f1.variables.iter().any(|v| v.symbol == "w_{zeeg}" && v.value == 15.0));
         assert_eq!(format!("{a0:?}"), format!("{a1:?}"), "de zeeg telt niet in w_add");
         assert!(keur_zeeg(Some(f64::NAN)).is_err() && keur_zeeg(Some(15.0)).is_ok());
+    }
+
+    /// Issue #236 (controle C1): C24 75×200, L = 4000 mm, w_add = 21,576 mm.
+    /// Grens 3/1000·4000 = 12,000 mm (niet 4000/333 = 12,012), UC = 1,798.
+    #[test]
+    fn w_add_grens_is_exact_drie_duizendste() {
+        assert_relative_eq!(NOEMER_W_ADD, 1000.0 / 3.0);
+        let (_, add) = check_deflection_pair(-21.576, 0.0, 0.0, 0.0, 4000.0, NOEMER_W_FIN, NOEMER_W_ADD);
+        assert_relative_eq!(add.uc.as_ref().unwrap().rd, 12.0, max_relative = 1e-12);
+        assert_relative_eq!(add.uc.as_ref().unwrap().uc, 1.798, max_relative = 1e-12);
+        assert!(add.notes.iter().any(|n| n.contains("3/1000·L = 12,000 mm")));
     }
 
     #[test]

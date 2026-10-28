@@ -125,7 +125,7 @@ deflection_permanent_mm: number,
  */
 deflection_limit_fin: number, 
 /**
- * Noemer voor w_add (L/n), NB-standaard 333.
+ * Noemer voor w_add (L/n), NB-standaard 1000/3: w_add ≤ 3/1000·L (NEN-EN 1990:2002/NB:2019 A1.4.3(3), issue #236).
  */
 deflection_limit_add: number, 
 /**

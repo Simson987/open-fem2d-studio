@@ -162,7 +162,7 @@ pub struct CltBeamCheckInput {
     /// Noemer voor w_fin (L/n), NB-standaard 250.
     #[serde(default = "default_noemer_fin")]
     pub deflection_limit_fin: f64,
-    /// Noemer voor w_add (L/n), NB-standaard 333.
+    /// Noemer voor w_add (L/n), NB-standaard 1000/3: w_add ≤ 3/1000·L (NEN-EN 1990:2002/NB:2019 A1.4.3(3), issue #236).
     #[serde(default = "default_noemer_add")]
     pub deflection_limit_add: f64,
     /// Vrije toelichtingen bij de doorbuigingstoets; zelfde rol als bij

@@ -49,7 +49,10 @@ pub const NDP_1995_NL: Ndp1995 = Ndp1995 {
     k_cr_prismatisch: 1.0,
     k_cr_dun_lijf: 0.8,
     noemer_w_fin: 250.0,
-    noemer_w_add: 333.0,
+    // NEN-EN 1990:2002/NB:2019 A1.4.3(3): w₂ + w₃ ≤ 3/1000·ℓ_rep voor
+    // "overige vloeren" — EXACT 1000/3 (issue #236). Tot oktober 2026 333,
+    // een grens die 0,1 % te ruim was.
+    noemer_w_add: 1000.0 / 3.0,
 };
 
 #[cfg(test)]
@@ -61,6 +64,8 @@ mod tests {
         let n = Ndp1995::voor(NationaleBijlage::NL);
         assert_eq!((n.gamma_m_massief, n.gamma_m_gelamineerd), (1.30, 1.25));
         assert_eq!((n.k_cr_prismatisch, n.k_cr_dun_lijf), (1.0, 0.8));
-        assert_eq!((n.noemer_w_fin, n.noemer_w_add), (250.0, 333.0));
+        assert_eq!((n.noemer_w_fin, n.noemer_w_add), (250.0, 1000.0 / 3.0));
+        // Issue #236: 3/1000·L exact, L = 4000 → 12,000 mm (niet 12,012).
+        assert!((4000.0 / n.noemer_w_add - 12.0).abs() < 1e-12);
     }
 }

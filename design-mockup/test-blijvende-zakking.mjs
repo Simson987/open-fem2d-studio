@@ -37,8 +37,10 @@
 //     w_qp   = w(G + 0,3·Q = 0,95)   =  7,967 mm   (6.16b)
 //     w₁     = w(G = 0,5)            =  4,193 mm   (6.16b zonder Q)
 //     w_fin  = 16,774 + 0,60·7,967   = 21,554 mm → UC = 21,554/(3000/250) = 1,7962
-//     w_add  = 21,554 − 4,193        = 17,361 mm → UC = 17,361·333/3000  = 1,9270
-//   Met w₁ = 0 (het oude gedrag):  w_add = 21,554 → UC = 21,554·333/3000 = 2,3925.
+//     w_add  = 21,554 − 4,193        = 17,361 mm → UC = 17,361/(3/1000·3000) = 1,9290
+//   Met w₁ = 0 (het oude gedrag):  w_add = 21,554 → UC = 21,554/9 = 2,3949.
+//   (Issue #236: de grens is 3/1000·L = 9,000 mm exact; met L/333 = 9,009 mm
+//   waren het 1,9270 en 2,3925.)
 //
 // STAAL. IPE 200, L = 5000 mm, E = 210 000 N/mm², I_y = 19,4·10⁶ mm⁴;
 //   384·E·I = 1,564416·10¹⁵; L⁴ = 6,25·10¹⁴. G = 2 kN/m, Q = 3 kN/m cat. A.
@@ -223,7 +225,7 @@ log("\n[1] Hout mét blijvende BGT-combinatie");
     dicht("kern w_fin = 21,554 mm", fin.uc.ed, hFin, 2e-3);
     dicht("kern UC w_fin = 1,7962", fin.uc.uc, 1.7962, 2e-4);
     dicht("kern w_add = w_fin − w₁ = 17,361 mm", add.uc.ed, hAdd, 2e-3);
-    dicht("kern UC w_add = 1,9270 (was 2,3925)", add.uc.uc, 1.9270, 2e-4);
+    dicht("kern UC w_add = 1,9290 (was 2,3949)", add.uc.uc, 1.9290, 2e-4);
   }
 }
 
@@ -240,7 +242,7 @@ log("\n[2] Hout ZONDER blijvende BGT-combinatie: 0 met melding, nooit stil");
   ok("de melding zegt hoe het te herstellen is (6.16b zonder veranderlijke gevallen)", /6\.16b in de opstelling zonder veranderlijke gevallen/.test(noot ?? ""));
   if (heeftKern) {
     const r = (await kern("check_timber_beams", [inv]))[0];
-    dicht("kern UC w_add = 2,3925 (het strenge oude getal)", toets(r, "deflection_w_add").uc.uc, 2.3925, 2e-4);
+    dicht("kern UC w_add = 2,3949 (het strenge oude getal)", toets(r, "deflection_w_add").uc.uc, 2.3949, 2e-4);
     ok("de melding reist mee in het kernresultaat (w_fin-notes)",
       toets(r, "deflection_w_fin").notes.some((n) => /is op 0 gezet/.test(n)));
   }
@@ -414,7 +416,7 @@ if (!existsSync(MCP_SERVER)) {
     const inv = inhoud(h).timber_check_inputs?.[0];
     const r = inhoud(h).timber_results?.[0];
     dicht("MCP hout: w₁ in de toetsinvoer", inv?.deflection_permanent_mm, -hPerm, 1e-3);
-    if (r) dicht("MCP hout: UC w_add = 1,9270", toets(r, "deflection_w_add").uc.uc, 1.9270, 2e-4);
+    if (r) dicht("MCP hout: UC w_add = 1,9290", toets(r, "deflection_w_add").uc.uc, 1.9290, 2e-4);
   }
   if (inhoud(s)) {
     const inv = inhoud(s).steel_check_inputs?.[0];
