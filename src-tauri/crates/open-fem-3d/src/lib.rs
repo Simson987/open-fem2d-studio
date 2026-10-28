@@ -18,6 +18,7 @@ mod shell;
 mod trek_alleen;
 mod tweede_orde;
 mod veldmaximum;
+mod mechanismevorm;
 mod verloop;
 pub use shell::{
     PlateAxes3D, PlateExtreme3D, PlateSummary3D, ShellElementResult3D, ShellNodeResult3D, ShellValues3D,
@@ -2193,11 +2194,17 @@ pub(crate) fn solve_fixed(
         AnalysisKind::Linear => "lineaire 3D-berekening",
         AnalysisKind::PDelta => "tweede-orde 3D-berekening",
     };
-    let mut results = solve_3d(&model.input).map_err(|error| engine_error(request, context, error))?;
+    // Issue #243 (punt 081): bij een mechanisme ook de knoop en de vrije
+    // vrijheidsgraad noemen, uit de nulvorm van K (`mechanismevorm`).
+    let mechanisme = |fout: String, input: &SolverInput3D| mechanismevorm::aanvullen(request, input, fout);
+    let mut results = solve_3d(&model.input)
+        .map_err(|error| mechanisme(engine_error(request, context, error), &model.input))?;
     tweede_orde::herstel_residu(&model.input, &mut results).map_err(aanvullen)?;
-    require_usable_solution(context, &results).map_err(aanvullen)?;
+    require_usable_solution(context, &results)
+        .map_err(|fout| mechanisme(aanvullen(fout), &model.input))?;
     draaiing.controleer(context, request, &model.input, &results)?;
-    controleer_regulier(request, context, &model.input)?;
+    controleer_regulier(request, context, &model.input)
+        .map_err(|fout| mechanisme(fout, &model.input))?;
     plaatbedding::controleer_vlak(context, &model.plaat)?;
     let gedrukt = gedrukte_staven(&model, &results);
     // De grootste kracht in de vasthouding van een plaat op bedding in haar vlak (#107).
