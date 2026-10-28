@@ -106,6 +106,8 @@ const BUNDEL_TESTS = new Set([
   "api-model3d-envelope-loads", "api-model3d-nbc2025-preview",
   // Plaatsen op een object (#76, #77): model3d.support.place en model3d.load.placePoint.
   "api-model3d-plaatsen",
+  // #230: onbekend profiel/materiaal geweigerd bij model3d.beam.add/update.
+  "api-model3d-doorsnede",
   // Staaf op bedding in 3D (issue #106): beam.add/update en beam.setBedding.
   "api-model3d-bedding",
   "api-model3d-panelen",
