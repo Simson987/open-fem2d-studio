@@ -575,7 +575,9 @@ pub(crate) fn check_timber_beam_intern(
     )
     .and_then(|_| {
         nen_en_1995_1_1::deflection::keur_langeduurzakking(input.deflection_quasi_perm_fin_mm)
-    }) {
+    })
+    .and_then(|_| nen_en_1995_1_1::deflection::keur_w_add(input.deflection_add_mm))
+    {
         return TimberBeamCheckResult {
             beam_id: input.beam_id,
             section_name: format!("{} x {}", input.width_mm, input.height_mm),
@@ -709,11 +711,14 @@ pub(crate) fn check_timber_beam_intern(
     // Met een aangeleverde w_qp,fin volgens 2.2.3(4) (delen met verschillend
     // kruipgedrag), anders de vereenvoudiging van 2.2.3(5) — bit-identiek aan
     // de rekengang van vóór dat veld.
-    let (mut fin, mut add) = deflection::check_deflection_pair_met_langeduur(
+    // Met w₃ per BGT-combinatie (`deflection_add_mm`, issues #200/#210) is
+    // w_add = w₂ + w₃; zonder dat veld bit-identiek aan de rekengang van daarvoor.
+    let (mut fin, mut add) = deflection::check_deflection_pair_volledig(
         input.deflection_inst_mm,
         input.deflection_quasi_perm_mm,
         input.deflection_quasi_perm_fin_mm,
         input.deflection_permanent_mm,
+        input.deflection_add_mm,
         kdef,
         input.length_m * 1e3,
         input.deflection_limit_fin,

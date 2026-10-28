@@ -232,6 +232,18 @@ pub struct TimberBeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub deflection_quasi_perm_fin_mm: Option<f64>,
+    /// De ogenblikkelijke bijkomende zakking w₃ = w_c − w₁ (mm, met teken,
+    /// negatief = omlaag), door de invoerbouwer PER BGT-COMBINATIE bepaald: de
+    /// combinatie c met de grootste |w₂ + w_c − w₁|. De kern rekent dan
+    /// w_add = w₂ + w₃, met w₂ = w_fin − w_inst het kruipdeel van de
+    /// quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur
+    /// NB.1). Dezelfde tekenconventie als `deflection_add_mm` van de staalkern.
+    ///
+    /// `None` of weglaten = w₃ = w_inst − w₁, tot op het laatste bit het gedrag
+    /// van vóór dit veld. Een niet-eindige waarde wordt geweigerd met reden.
+    #[serde(default)]
+    #[ts(optional)]
+    pub deflection_add_mm: Option<f64>,
     /// Reden waarom de BGT-zakking niet betrouwbaar kan worden bepaald.
     /// De sterkte- en stabiliteitstoetsen blijven beschikbaar; w_fin en w_add
     /// worden expliciet `NotApplicable` zonder UC.

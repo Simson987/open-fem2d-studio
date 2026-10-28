@@ -525,6 +525,15 @@ export interface HoutDoorbuiging {
   quasiFinMm?: number;
   /** w₁ onder de BGT-combinatie met alleen de blijvende belasting (mm). */
   permMm: number;
+  /**
+   * w₃ = w_c − w₁ (mm, teken behouden) van de BGT-combinatie met de grootste
+   * |w₂ + w_c − w₁|, als dat NIET de combinatie van w_inst is; anders
+   * `undefined` en rekent de kern w_inst − w₁. Gaat als `deflection_add_mm`
+   * naar de hout- en de CLT-kern (issues #200, #210).
+   */
+  addMm?: number;
+  /** De herkomst van `addMm`, voor `deflection_notes`. */
+  addNotitie?: string;
   /** `deflection_notes` voor de kern: referentielijn, w_inst, w_qp en w₁. */
   notes: string[];
   /**
@@ -544,8 +553,11 @@ export interface HoutDoorbuiging {
 
 /**
  * k_def uit EN 1995-1-1 tabel 3.2 voor massief en gelijmd gelamineerd hout,
- * per klimaatklasse — ALLEEN om bij een lijn in delen het maatgevende deel te
- * kiezen (`houtDoorbuigingsInvoer`); de toets zelf neemt k_def uit de kern.
+ * per klimaatklasse — ALLEEN om te kiezen: bij een lijn in delen het
+ * maatgevende deel (`houtDoorbuigingsInvoer`), en de BGT-combinatie van w₃
+ * voor w_add (`houtDoorbuigingVanDeel`). De toets zelf neemt k_def uit de kern
+ * (bij kruislaaghout de opgegeven waarde; een andere k_def verandert alleen
+ * welke combinatie gekozen wordt, en de kern rekent w_add met haar eigen k_def).
  */
 const K_DEF_KEUZE: Record<1 | 2 | 3, number> = { 1: 0.6, 2: 0.8, 3: 2.0 };
 
@@ -600,10 +612,15 @@ export function houtDoorbuigingsInvoer(
   const wFin = (h: HoutDoorbuiging) =>
     Math.abs(h.instMm) +
     (h.quasiFinMm !== undefined ? Math.abs(h.quasiFinMm - h.quasiMm) : kDef * Math.abs(h.quasiMm));
+  // w_add: met een apart bepaalde w₃ w₂ + w₃ met teken, anders w_fin − |w₁|.
+  const wAdd = (h: HoutDoorbuiging) =>
+    h.addMm !== undefined
+      ? Math.abs(h.addMm + (h.quasiFinMm !== undefined ? h.quasiFinMm - h.quasiMm : kDef * h.quasiMm))
+      : wFin(h) - Math.abs(h.permMm);
   let m = 0;
   let beste = -1;
   perDeel.forEach((h, i) => {
-    const v = Math.max(wFin(h), Math.abs(wFin(h) - Math.abs(h.permMm))) / lRepVanDeelMm(delen[i]);
+    const v = Math.max(wFin(h), Math.abs(wAdd(h))) / lRepVanDeelMm(delen[i]);
     if (v > beste) {
       beste = v;
       m = i;
@@ -615,7 +632,7 @@ export function houtDoorbuigingsInvoer(
     0,
     delenNotitie(
       delen,
-      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wFin(h) - Math.abs(h.permMm) })),
+      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wAdd(h) })),
       m,
     ) +
       " (Hout: w = |w_inst| + k_def·|w_qp| met k_def = " +
@@ -726,12 +743,44 @@ function houtDoorbuigingVanDeel(
     },
   });
 
+  // w_add = w₂ + w₃ PER COMBINATIE (issues #200, #210): w₃ = w_c − w₁ over
+  // dezelfde combinaties als w_inst, en de combinatie met de grootste
+  // |w₂ + w₃| (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1). Niet
+  // "w_inst − w₁ van de combinatie met de grootste |w|": gaat de punt van een
+  // uitkraging onder de blijvende last omhoog en onder de veranderlijke omlaag,
+  // dan hoort de grootste |w| bij een combinatie dicht bij de blijvende, en valt
+  // w_add te laag uit. Het kruipdeel w₂ is dat van de quasi-blijvende
+  // combinatie; het teken telt. Alleen apart naar de kern als het een andere
+  // combinatie is dan die van w_inst: dan blijft de invoer byte-gelijk.
+  const quasiMm = langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm;
+  const w2 = langeduur.paar
+    ? langeduur.paar.quasiFinMm - langeduur.paar.quasiMm
+    : (K_DEF_KEUZE[beam.checkConfig?.serviceClass ?? 1] ?? 0.6) * quasiMm;
+  const w3Inst = wInstMm - wPerm.mm;
+  let w3: { w: number; naam: string } | null = inst ? { w: w3Inst, naam: inst.combo.name } : null;
+  for (const a of inst?.alle ?? []) {
+    const d = a.w - wPerm.mm;
+    if (w3 && Math.abs(w2 + d) > Math.abs(w2 + w3.w) + 1e-9) w3 = { w: d, naam: a.combo.name };
+  }
+  const addApart = inst && w3 && Math.abs(w3.w - w3Inst) > 1e-6 ? w3 : null;
+  const mmTekst = (x: number) => `${x.toFixed(2).replace(".", ",")} mm`;
 
   return {
     instMm: wInstMm,
-    quasiMm: langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm,
+    quasiMm,
     ...(langeduur.paar ? { quasiFinMm: langeduur.paar.quasiFinMm } : {}),
     permMm: wPerm.mm,
+    ...(addApart
+      ? {
+          addMm: addApart.w,
+          addNotitie:
+            `w₃ = w_c − w₁ = ${mmTekst(addApart.w)} komt uit "${addApart.naam}": daar is ` +
+            `|w₂ + w_c − w₁| het grootst (w₂ ≈ ${mmTekst(w2)}, w₁ = ${mmTekst(wPerm.mm)}). De ` +
+            `combinatie van w_inst ("${inst?.combo.name ?? "—"}") geeft w_inst − w₁ = ${mmTekst(w3Inst)}; ` +
+            "w₃ gaat daarom apart naar de kern, die w_add = w₂ + w₃ rekent (NEN-EN 1990:2002/NB:2019 " +
+            "A1.4.3(2), figuur NB.1: w₂ + w₃ = w_tot − w₁, per combinatie).",
+        }
+      : {}),
     inklemming,
     notes: [
       ...deflectionNotesFor(
@@ -965,6 +1014,7 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
     // delen van een doorgaande lijn verwerkt — zie `houtDoorbuigingsNoemers`.
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     // Een scheurfactor buiten (0, 1] is geen keuze maar een fout; die gaat
     // niet stil op 1,0 maar houdt de staaf buiten de toetsing, met reden.
     const kCr = kCrUitConfig(cfg);
@@ -1151,6 +1201,10 @@ export function buildTimberCheckInputs(ruweData: TimberBuildData): TimberBuildRe
       // A1.4.3(2), figuur NB.1). Ontbreekt die combinatie, dan 0 — en dan
       // staat in de notities dat w_add daardoor de volledige zakking is.
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issues #200, #210), alleen als die
+      // uit een andere combinatie komt dan w_inst; de kern rekent dan
+      // w_add = w₂ + w₃.
+      ...(doorbuiging.addMm !== undefined ? { deflection_add_mm: doorbuiging.addMm } : {}),
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
       // Referentielijn + eventuele waarschuwing over een doorgeknipte staaf

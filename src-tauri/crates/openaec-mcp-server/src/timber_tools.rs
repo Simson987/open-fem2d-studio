@@ -212,6 +212,8 @@ fn schema_houten_staaf() -> Value {
                 "description": "Kniklengte om de sterke y-as in m (§6.3.2): knik IN het vlak van het model. 0 (of weglaten) = niet opgegeven; de kern houdt dan de staaflengte aan en zet in de kolomtoets dat die lengte een terugval is." },
             "buckling_length_z_m": { "type": "number", "default": 0,
                 "description": "Kniklengte om de zwakke z-as in m (§6.3.2): knik UIT het vlak van het model, een richting die de raamwerkberekening nooit ziet. 0 (of weglaten) = niet opgegeven; de kern leidt L_cr,z dan af uit 'lateral_bracing', maar ALLEEN op plaatsen waar een steun aan de boven- EN aan de onderrand zit (binnen 1 mm). Anders de staaflengte. De gebruikte waarde en haar herkomst staan in de kolomtoets en in de drukterm van de kiptoets." },
+            "ruimtelijk": { "type": "boolean", "default": false,
+                "description": "Ruimtelijk raamwerk (3D-berekening): de berekening ziet knik om BEIDE doorsnedeassen, dus knik om z is uitbuigen in het rekenvlak en de kolomtoets meldt dat niet als 'uit het vlak van het model'. Default false (2D)." },
             "is_cantilever": { "type": "boolean", "default": false,
                 "description": "Vrij staafeind (uitkraging, vrijstaande kolom): geen oplegging en geen aansluitende staaf aan één eind. Zonder opgegeven kniklengte geldt dan L_cr = 2*L, de ingeklemd-vrije staaf, behalve om een as uit 'zijdelingse_knik_in_analyse' (dan L). Weglaten = false: de terugval op de staaflengte, die beide einden als zijdelings gesteund aanneemt. `check_fem_model` en de app vullen dit uit het model." },
             "zijdelingse_knik_in_analyse": {
@@ -268,6 +270,10 @@ fn schema_houten_staaf() -> Value {
                 "description": "Noemer n in de eis L/n voor de bijkomende zakking w_add. Default 333, de NB-waarde (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
             "deflection_quasi_perm_fin_mm": { "type": "number",
                 "description": "Langeduurzakking w_qp,fin in mm, met teken: de zakking onder de quasi-blijvende BGT-combinatie, berekend met E_mean,fin = E_mean/(1 + k_def) voor het hout (EN 1995-1-1 2.3.2.2(1), uitdrukking 2.7) en de langeduurstijfheid van de andere delen. Alleen nodig in een statisch onbepaalde constructie met delen van VERSCHILLEND kruipgedrag (hout naast staal, beton of hout met een andere k_def): dan geldt de vereenvoudiging w_fin = w_inst + k_def * w_qp van 2.2.3(5) niet en rekent de kern volgens 2.2.3(4) w_fin = w_inst + (w_qp,fin - w_qp); w_add blijft w_fin - w_perm = w2 + w3, met w2 = w_qp,fin - w_qp. Weglaten = de vereenvoudiging. `check_fem_model` vult dit veld zelf in zo'n constructie, uit de eindtoestandvariant van de quasi-blijvende combinatie." },
+            "deflection_not_applicable_reason": { "type": "string",
+                "description": "Reden waarom de BGT-zakking van deze staaf niet betrouwbaar te bepalen is (bijvoorbeeld een ontbrekende BGT-combinatie, of verbonden delen met verschillend kruipgedrag zonder eindstijfheidsberekening, EN 1995-1-1 2.2.3(4)). Opgegeven = w_fin en w_add krijgen status NotApplicable zonder UC, met 'BGT niet getoetst: <reden>' in hun notities; de sterkte- en stabiliteitstoetsen lopen door. Weglaten = de doorbuiging wordt getoetst." },
+            "deflection_add_mm": { "type": "number",
+                "description": "w3 = w_c - w1 in mm, met teken (negatief = omlaag): de ogenblikkelijke zakking bovenop de blijvende, PER BGT-combinatie c bepaald, voor de combinatie met de grootste |w2 + w_c - w1|. De kern rekent dan w_add = w2 + w3, met w2 = w_fin - w_inst het kruipdeel van de quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1); dezelfde tekenconventie als 'deflection_add_mm' van de staaltoets. Nodig als de combinatie met de grootste |w| niet het grootste verschil met w1 geeft (bijvoorbeeld opwaartse wind tegenover vloerbelasting, of een uitkraging). Weglaten = w3 = deflection_inst_mm - deflection_permanent_mm. Een niet-eindig getal wordt geweigerd. `check_fem_model` vult dit veld zelf als het verschilt." },
             "deflection_notes": { "type": "array", "items": { "type": "string" }, "default": [],
                 "description": "Vrije toelichtingen bij de doorbuigingstoets; ze komen letterlijk in de 'notes' van de w_fin-regel van het resultaat. Bedoeld om zichtbaar te maken uit welke combinatie 'deflection_quasi_perm_mm' komt — of dat die combinatie niet gevonden is en er op de volle last is teruggevallen." },
             "staaf_notities": { "type": "array", "items": { "type": "string" }, "default": [],
@@ -370,6 +376,8 @@ fn schema_clt_staaf() -> Value {
                 "description": "Noemer n in de eis L/n voor de bijkomende zakking w_add. Default 333, de NB-waarde (geldt als het veld wegblijft). Een opgegeven 0, negatieve of niet-eindige waarde is een invoerfout: de staaf wordt dan niet getoetst en krijgt status NotApplicable met de reden in governing_check_id." },
             "deflection_quasi_perm_fin_mm": { "type": "number",
                 "description": "Langeduurzakking w_qp,fin in mm, met teken: de zakking onder de quasi-blijvende BGT-combinatie, berekend met E_mean,fin = E_mean/(1 + k_def) voor het hout (EN 1995-1-1 2.3.2.2(1), uitdrukking 2.7) en de langeduurstijfheid van de andere delen. Alleen nodig in een statisch onbepaalde constructie met delen van VERSCHILLEND kruipgedrag (hout naast staal, beton of hout met een andere k_def): dan geldt de vereenvoudiging w_fin = w_inst + k_def * w_qp van 2.2.3(5) niet en rekent de kern volgens 2.2.3(4) w_fin = w_inst + (w_qp,fin - w_qp); w_add blijft w_fin - w_perm = w2 + w3, met w2 = w_qp,fin - w_qp. Weglaten = de vereenvoudiging. `check_fem_model` vult dit veld zelf in zo'n constructie, uit de eindtoestandvariant van de quasi-blijvende combinatie." },
+            "deflection_add_mm": { "type": "number",
+                "description": "w3 = w_c - w1 in mm, met teken (negatief = omlaag): de ogenblikkelijke zakking bovenop de blijvende, PER BGT-combinatie c bepaald, voor de combinatie met de grootste |w2 + w_c - w1|. De kern rekent dan w_add = w2 + w3, met w2 = w_fin - w_inst het kruipdeel van de quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1); dezelfde tekenconventie als 'deflection_add_mm' van de staaltoets. Nodig als de combinatie met de grootste |w| niet het grootste verschil met w1 geeft (bijvoorbeeld opwaartse wind tegenover vloerbelasting, of een uitkraging). Weglaten = w3 = deflection_inst_mm - deflection_permanent_mm. Een niet-eindig getal wordt geweigerd. `check_fem_model` vult dit veld zelf als het verschilt." },
             "deflection_notes": { "type": "array", "items": { "type": "string" }, "default": [],
                 "description": "Vrije toelichtingen bij de doorbuigingstoets; ze komen letterlijk in de 'notes' van de w_fin-regel. Bedoeld om zichtbaar te maken uit welke combinatie elke zakking komt, en welke terugval er eventueel is toegepast." }
         },
@@ -508,6 +516,18 @@ mod tests {
             json!(false),
             "het houten staafschema moet onbekende velden weigeren, net als de kern"
         );
+        // Ook hier de velden uit het TYPE zelf (zie de CLT-spiegeltest, issue
+        // #210): zo vielen `ruimtelijk` en `deflection_not_applicable_reason`
+        // op, die de kern kende maar het schema niet.
+        let uit_type = velden_van_het_type::<timber_check::TimberBeamCheckInput>(json!({
+            "beam_id": 1, "width_mm": 100.0, "height_mm": 300.0, "strength_class": "C24",
+            "service_class": "Sc1", "load_duration": "MediumTerm",
+            "length_m": 4.0, "forces_envelope": []
+        }));
+        for v in &uit_type {
+            assert!(velden.contains_key(v), "het staafschema mist het veld `{v}` van TimberBeamCheckInput");
+        }
+        assert_eq!(velden.len(), uit_type.len(), "het staafschema kent een veld dat TimberBeamCheckInput niet heeft");
         let verwacht = [
             // De nationale bijlage waarmee getoetst wordt (normnaad, september
             // 2026): zij bepaalt gamma_M, k_cr en de doorbuigingsnoemers.
@@ -550,6 +570,10 @@ mod tests {
             // Het vrije eind en de 2e-orde-regel daarbij (L in plaats van 2·L).
             "is_cantilever",
             "zijdelingse_knik_in_analyse",
+            "ruimtelijk",
+            "deflection_not_applicable_reason",
+            // Issues #200/#210: w₃ = w_c − w₁ per BGT-combinatie.
+            "deflection_add_mm",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het staafschema mist `{v}`");
@@ -581,6 +605,40 @@ mod tests {
         );
     }
 
+    /// De veldnamen van een invoertype, gelezen uit het type zelf: een
+    /// minimale invoer door serde heen en terug. Alle invoertypen hier staan
+    /// zonder `skip_serializing`, dus elk veld komt als sleutel terug.
+    fn velden_van_het_type<T: serde::de::DeserializeOwned + serde::Serialize>(
+        minimaal: Value,
+    ) -> Vec<String> {
+        let t: T = serde_json::from_value(minimaal).expect("minimale invoer is geldig");
+        serde_json::to_value(&t)
+            .expect("serialiseert")
+            .as_object()
+            .expect("een object")
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    /// Het mechanisme van de spiegeltest vangt een ontbrekend veld: haal één
+    /// veld uit het CLT-schema en de vergelijking met het type valt om.
+    #[test]
+    fn de_spiegeltest_vangt_een_ontbrekend_veld() {
+        let schema = schema_clt_staaf();
+        let mut velden = schema["properties"].as_object().unwrap().clone();
+        velden.remove("k_def_bron");
+        let uit_type = velden_van_het_type::<timber_check::clt::CltBeamCheckInput>(json!({
+            "beam_id": 1,
+            "layup": { "width_mm": 1000.0, "layers": [
+                { "thickness_mm": 40.0, "orientation": "Longitudinal", "strength_class": "C24" }
+            ]},
+            "service_class": "Sc1", "load_duration": "MediumTerm",
+            "length_m": 4.0, "forces_envelope": []
+        }));
+        assert!(uit_type.iter().any(|v| !velden.contains_key(v)), "de ontbrekende `k_def_bron` moet opvallen");
+    }
+
     /// Het CLT-schema is de spiegel van `CltBeamCheckInput` en `CltLayup`.
     #[test]
     fn het_clt_schema_kent_alle_velden_van_het_invoertype() {
@@ -602,6 +660,25 @@ mod tests {
             "laag"
         );
         let velden = staaf["properties"].as_object().expect("properties");
+        // Issue #210: de velden komen uit het INVOERTYPE zelf, niet uit een
+        // overgetypte lijst. Een minimale invoer gaat door serde (de
+        // standaardwaarden vullen de rest) en weer terug naar JSON; zonder
+        // `skip_serializing` staan dan ALLE velden van `CltBeamCheckInput`
+        // als sleutel in het resultaat. Een nieuw veld in de kern dat het
+        // schema niet kent, valt zo hier om — met `additionalProperties:
+        // false` zou het anders langs MCP geweigerd worden.
+        let uit_type = velden_van_het_type::<timber_check::clt::CltBeamCheckInput>(json!({
+            "beam_id": 1,
+            "layup": { "width_mm": 1000.0, "layers": [
+                { "thickness_mm": 40.0, "orientation": "Longitudinal", "strength_class": "C24" }
+            ]},
+            "service_class": "Sc1", "load_duration": "MediumTerm",
+            "length_m": 4.0, "forces_envelope": []
+        }));
+        for v in &uit_type {
+            assert!(velden.contains_key(v), "het CLT-schema mist het veld `{v}` van CltBeamCheckInput");
+        }
+        assert_eq!(velden.len(), uit_type.len(), "het CLT-schema kent een veld dat CltBeamCheckInput niet heeft");
         let verwacht = [
             // Zie het staafschema hierboven: de bijlage reist mee.
             "bijlage",
@@ -629,6 +706,8 @@ mod tests {
             // Issue #232: de gedeclareerde rolschuifsterkte met bron.
             "f_v_rol_k",
             "f_v_rol_k_bron",
+            // Issue #210: w₃ = w_c − w₁ per BGT-combinatie, zoals bij hout.
+            "deflection_add_mm",
         ];
         for v in verwacht {
             assert!(velden.contains_key(v), "het CLT-schema mist `{v}`");

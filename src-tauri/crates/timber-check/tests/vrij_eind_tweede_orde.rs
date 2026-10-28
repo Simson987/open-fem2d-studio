@@ -81,6 +81,7 @@ fn kolom(is_cantilever: bool, zijdelings: Option<ZijdelingseKnikInAnalyse>) -> T
         deflection_limit_add: 333.0,
         deflection_notes: vec![],
         deflection_quasi_perm_fin_mm: None,
+        deflection_add_mm: None,
         staaf_notities: None,
         width_end_mm: None,
         height_end_mm: None,

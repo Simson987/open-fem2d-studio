@@ -641,6 +641,7 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
     const doorbuiging = houtDoorbuigingsInvoer(beam, data);
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
       // bepaalt zij de nationaal bepaalde parameters van deze toetsing.
@@ -684,6 +685,9 @@ export function buildCltCheckInputs(ruweData: CltBuildData): CltBuildResult {
         ? { deflection_quasi_perm_fin_mm: doorbuiging.quasiFinMm }
         : {}),
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issue #210), zoals bij massief hout;
+      // alleen als die uit een andere combinatie komt dan w_inst.
+      ...(doorbuiging.addMm !== undefined ? { deflection_add_mm: doorbuiging.addMm } : {}),
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
       deflection_notes: doorbuiging.notes,

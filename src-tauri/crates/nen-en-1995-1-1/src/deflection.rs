@@ -323,6 +323,90 @@ pub fn check_deflection_pair_met_langeduur(
     (fin, add)
 }
 
+/// Beide doorbuigingstoetsen met de volledige opgave: w_fin volgens 2.2.3(4)
+/// of (5) en w₃ = w_c − w₁ PER BGT-COMBINATIE (`w3_per_combinatie_mm`).
+/// `None` = precies [`check_deflection_pair_met_langeduur`], tot op het
+/// laatste bit.
+///
+/// w₃ PER COMBINATIE (issues #200, #210). Zonder opgave is w_add = w_fin − w₁
+/// = w₂ + (w_inst − w₁), met w_inst de zakking van de combinatie met de
+/// grootste |w|. Dat is alleen de grootste w₂ + w₃ als die combinatie ook het
+/// grootste verschil met w₁ geeft — bij een uitkraging die onder de blijvende
+/// last omhoog en onder de veranderlijke omlaag gaat niet. NEN-EN
+/// 1990:2002/NB:2019 figuur NB.1: w_add = w₂ + w₃, w₂ het kruipdeel van de
+/// quasi-blijvende combinatie (w_fin − w_inst), w₃ uit de opgegeven combinatie.
+#[allow(clippy::too_many_arguments)]
+pub fn check_deflection_pair_volledig(
+    w_inst_mm: f64,
+    w_quasi_perm_mm: f64,
+    w_quasi_perm_fin_mm: Option<f64>,
+    w_perm_mm: f64,
+    w3_per_combinatie_mm: Option<f64>,
+    k_def: f64,
+    lengte_mm: f64,
+    noemer_fin: f64,
+    noemer_add: f64,
+) -> (ResistanceCalc, ResistanceCalc) {
+    let (fin, mut add) = check_deflection_pair_met_langeduur(
+        w_inst_mm,
+        w_quasi_perm_mm,
+        w_quasi_perm_fin_mm,
+        w_perm_mm,
+        k_def,
+        lengte_mm,
+        noemer_fin,
+        noemer_add,
+    );
+    let w_fin = match w_quasi_perm_fin_mm {
+        Some(w_qp_fin) => w_fin_langeduur_mm(w_inst_mm, w_quasi_perm_mm, w_qp_fin),
+        None => w_fin_mm(w_inst_mm, k_def, w_quasi_perm_mm),
+    };
+    if let Some(w3) = w3_per_combinatie_mm {
+        let w2 = w_fin - w_inst_mm;
+        let w_add = w2 + w3;
+        add = doorbuigingstoets(
+            "deflection_w_add",
+            "Doorbuiging w_add (BGT)",
+            w_add,
+            lengte_mm,
+            noemer_add,
+            r"w_{add,z} = w_{2,z} + \left(w_{z,c} - w_{perm,z}\right)",
+            vec![
+                NamedValue { symbol: r"w_{perm}".to_string(), value: w_perm_mm, unit: "mm".to_string() },
+                NamedValue { symbol: r"w_{2}".to_string(), value: w2, unit: "mm".to_string() },
+                NamedValue { symbol: r"w_{z,c} - w_{perm}".to_string(), value: w3, unit: "mm".to_string() },
+            ],
+        );
+        add.notes.push(format!(
+            "w_add = w₂ + w₃ (NEN-EN 1990:2002/NB:2019 figuur NB.1) met w₃ = w_c − w₁ = {} mm PER \
+             BGT-COMBINATIE bepaald: de combinatie met de grootste |w₂ + w_c − w₁|, en niet die met \
+             de grootste |w| (w_inst = {} mm, w_inst − w₁ = {} mm). Het kruipdeel w₂ = w_fin − \
+             w_inst = {} mm blijft dat van de quasi-blijvende combinatie. w_add = {} + ({}) = {} mm; \
+             met w_inst − w₁ was het {} mm geweest.",
+            nl(w3, 2),
+            nl(w_inst_mm, 2),
+            nl(w_inst_mm - w_perm_mm, 2),
+            nl(w2, 2),
+            nl(w2, 2),
+            nl(w3, 2),
+            nl(w_add, 2),
+            nl(w_add_mm(w_fin, w_perm_mm), 2),
+        ));
+    }
+    (fin, add)
+}
+
+/// Keurt een opgegeven w₃ per combinatie (`deflection_add_mm`). Weglaten is
+/// altijd goed; een niet-eindig getal is geen zakking.
+pub fn keur_w_add(w3: Option<f64>) -> Result<(), String> {
+    match w3 {
+        Some(w) if !w.is_finite() => Err(format!(
+            "deflection_add_mm = {w} is geen zakking — er is niet getoetst"
+        )),
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,6 +510,30 @@ mod tests {
     }
 
     /// Issue #9: een noemer van 0, negatief of niet eindig geeft geen grens.
+    /// Issues #200/#210: w₃ per combinatie. Zonder opgave bit-gelijk aan de
+    /// langeduurvariant; met opgave w_add = w₂ + w₃, w₂ = k_def·w_qp of
+    /// w_qp,fin − w_qp.
+    #[test]
+    fn w_add_met_w3_per_combinatie() {
+        let (f0, a0) = check_deflection_pair_met_langeduur(7.0, 4.0, None, 4.0, 0.6, 2000.0, 125.0, 166.5);
+        let (f1, a1) = check_deflection_pair_volledig(7.0, 4.0, None, 4.0, None, 0.6, 2000.0, 125.0, 166.5);
+        assert_eq!(format!("{f0:?}"), format!("{f1:?}"));
+        assert_eq!(format!("{a0:?}"), format!("{a1:?}"));
+        // w₂ = 0,6·4 = 2,4; w₃ = −10 → w_add = −7,6 (zonder: 9,4 − 4 = 5,4).
+        let (f2, a2) = check_deflection_pair_volledig(7.0, 4.0, None, 4.0, Some(-10.0), 0.6, 2000.0, 125.0, 166.5);
+        assert_eq!(format!("{f0:?}"), format!("{f2:?}"), "w_fin verandert niet");
+        assert_relative_eq!(a2.variables[1].value, -7.6, max_relative = 1e-12);
+        assert_relative_eq!(a2.uc.as_ref().unwrap().ed, 7.6, max_relative = 1e-12);
+        assert!(a2.notes.iter().any(|n| n.contains("-7,60") && n.contains("5,40")));
+        // Met w_qp,fin: w₂ = 5,5 − 4 = 1,5 → w_add = −8,5.
+        let (_, a3) = check_deflection_pair_volledig(7.0, 4.0, Some(5.5), 4.0, Some(-10.0), 0.6, 2000.0, 125.0, 166.5);
+        assert_relative_eq!(a3.variables[1].value, -8.5, max_relative = 1e-12);
+        assert!(keur_w_add(None).is_ok() && keur_w_add(Some(-3.0)).is_ok());
+        for w in [f64::NAN, f64::INFINITY] {
+            assert!(keur_w_add(Some(w)).unwrap_err().contains("deflection_add_mm"));
+        }
+    }
+
     #[test]
     fn noemer_zonder_grens_is_nooit_ok() {
         for n in [0.0, -250.0, f64::NAN] {

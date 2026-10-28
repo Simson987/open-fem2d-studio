@@ -16347,6 +16347,7 @@ function buildCltCheckInputs(ruweData) {
     const doorbuiging = houtDoorbuigingsInvoer(beam, data);
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     inputs.push({
       // De nationale bijlage van het project reist mee naar de kern; daar
       // bepaalt zij de nationaal bepaalde parameters van deze toetsing.
@@ -16385,6 +16386,9 @@ function buildCltCheckInputs(ruweData) {
       // `houtDoorbuigingsInvoer`.
       ...doorbuiging.quasiFinMm !== void 0 ? { deflection_quasi_perm_fin_mm: doorbuiging.quasiFinMm } : {},
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issue #210), zoals bij massief hout;
+      // alleen als die uit een andere combinatie komt dan w_inst.
+      ...doorbuiging.addMm !== void 0 ? { deflection_add_mm: doorbuiging.addMm } : {},
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
       deflection_notes: doorbuiging.notes
@@ -18157,10 +18161,11 @@ function houtDoorbuigingsInvoer(beam, data, opties = {}) {
   const kDef = K_DEF_KEUZE[beam.checkConfig?.serviceClass ?? 1] ?? 0.6;
   const perDeel = delen.map((d) => houtDoorbuigingVanDeel(beam, data, d));
   const wFin = (h) => Math.abs(h.instMm) + (h.quasiFinMm !== void 0 ? Math.abs(h.quasiFinMm - h.quasiMm) : kDef * Math.abs(h.quasiMm));
+  const wAdd = (h) => h.addMm !== void 0 ? Math.abs(h.addMm + (h.quasiFinMm !== void 0 ? h.quasiFinMm - h.quasiMm : kDef * h.quasiMm)) : wFin(h) - Math.abs(h.permMm);
   let m = 0;
   let beste = -1;
   perDeel.forEach((h, i) => {
-    const v = Math.max(wFin(h), Math.abs(wFin(h) - Math.abs(h.permMm))) / lRepVanDeelMm(delen[i]);
+    const v = Math.max(wFin(h), Math.abs(wAdd(h))) / lRepVanDeelMm(delen[i]);
     if (v > beste) {
       beste = v;
       m = i;
@@ -18172,7 +18177,7 @@ function houtDoorbuigingsInvoer(beam, data, opties = {}) {
     0,
     delenNotitie(
       delen,
-      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wFin(h) - Math.abs(h.permMm) })),
+      perDeel.map((h) => ({ wFinMm: wFin(h), wAddMm: wAdd(h) })),
       m
     ) + " (Hout: w = |w_inst| + k_def\xB7|w_qp| met k_def = " + kDef.toFixed(1).replace(".", ",") + " uit EN 1995-1-1 tabel 3.2, alleen om het maatgevende deel te kiezen.)"
   );
@@ -18225,11 +18230,25 @@ function houtDoorbuigingVanDeel(beam, data, meting) {
       return extractFieldDeflectionMm(beam, r, meting);
     }
   });
+  const quasiMm = langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm;
+  const w2 = langeduur.paar ? langeduur.paar.quasiFinMm - langeduur.paar.quasiMm : (K_DEF_KEUZE[beam.checkConfig?.serviceClass ?? 1] ?? 0.6) * quasiMm;
+  const w3Inst = wInstMm - wPerm.mm;
+  let w3 = inst ? { w: w3Inst, naam: inst.combo.name } : null;
+  for (const a of inst?.alle ?? []) {
+    const d = a.w - wPerm.mm;
+    if (w3 && Math.abs(w2 + d) > Math.abs(w2 + w3.w) + 1e-9) w3 = { w: d, naam: a.combo.name };
+  }
+  const addApart = inst && w3 && Math.abs(w3.w - w3Inst) > 1e-6 ? w3 : null;
+  const mmTekst3 = (x) => `${x.toFixed(2).replace(".", ",")} mm`;
   return {
     instMm: wInstMm,
-    quasiMm: langeduur.paar ? langeduur.paar.quasiMm : wQuasi.mm,
+    quasiMm,
     ...langeduur.paar ? { quasiFinMm: langeduur.paar.quasiFinMm } : {},
     permMm: wPerm.mm,
+    ...addApart ? {
+      addMm: addApart.w,
+      addNotitie: `w\u2083 = w_c \u2212 w\u2081 = ${mmTekst3(addApart.w)} komt uit "${addApart.naam}": daar is |w\u2082 + w_c \u2212 w\u2081| het grootst (w\u2082 \u2248 ${mmTekst3(w2)}, w\u2081 = ${mmTekst3(wPerm.mm)}). De combinatie van w_inst ("${inst?.combo.name ?? "\u2014"}") geeft w_inst \u2212 w\u2081 = ${mmTekst3(w3Inst)}; w\u2083 gaat daarom apart naar de kern, die w_add = w\u2082 + w\u2083 rekent (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur NB.1: w\u2082 + w\u2083 = w_tot \u2212 w\u2081, per combinatie).`
+    } : {},
     inklemming,
     notes: [
       ...deflectionNotesFor(
@@ -18363,6 +18382,7 @@ function buildTimberCheckInputs(ruweData) {
     const kip = kipsteunenVanStaaf(cfg, lengthMm, "hout");
     const defl = houtDoorbuigingsNoemers(cfg, doorbuiging, lengthMm);
     if (defl.notitie) doorbuiging.notes.push(defl.notitie);
+    if (doorbuiging.addNotitie) doorbuiging.notes.push(doorbuiging.addNotitie);
     const kCr = kCrUitConfig(cfg);
     if ("fout" in kCr) {
       skipped.push({ beamId: beam.id, reason: kCr.fout });
@@ -18537,6 +18557,10 @@ function buildTimberCheckInputs(ruweData) {
       // A1.4.3(2), figuur NB.1). Ontbreekt die combinatie, dan 0 — en dan
       // staat in de notities dat w_add daardoor de volledige zakking is.
       deflection_permanent_mm: doorbuiging.permMm,
+      // w₃ = w_c − w₁ per BGT-combinatie (issues #200, #210), alleen als die
+      // uit een andere combinatie komt dan w_inst; de kern rekent dan
+      // w_add = w₂ + w₃.
+      ...doorbuiging.addMm !== void 0 ? { deflection_add_mm: doorbuiging.addMm } : {},
       deflection_limit_fin: defl.fin,
       deflection_limit_add: defl.add,
       // Referentielijn + eventuele waarschuwing over een doorgeknipte staaf

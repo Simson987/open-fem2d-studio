@@ -807,6 +807,10 @@ const ALLEEN_BRON = new Map([
     "issue #9: een doorbuigingsnoemer van 0 of kleiner wordt geweigerd. Raakt de MCP-modelkeuring `keurCheckConfig` (src/mcp, niet in de barrel) en start de toetsbrug en de MCP-server als apart proces voor de echte EN 1993- en EN 1995-kern; tegen de bundel zou de test juist de kernen overslaan die de weigering doen. De sidecarweg zelf loopt mee in het slotblok via `check_fem_model`",
   ],
   [
+    "clt-w-add",
+    "issue #210: w_add = w₂ + w₃ met w₃ per BGT-combinatie voor kruislaaghout. De CLT-bouwer staat niet in de barrel, en de kern draait in de toetsbrug als apart proces",
+  ],
+  [
     "clt-rolschuif",
     "issue #232: de rolschuiftoets van kruislaaghout met een gedeclareerde f_v,rol,k. De CLT-bouwer en de modelkeuring staan niet in de barrel, en de kern draait in de toetsbrug als apart proces",
   ],

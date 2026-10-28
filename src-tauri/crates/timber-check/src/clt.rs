@@ -187,6 +187,18 @@ pub struct CltBeamCheckInput {
     #[serde(default)]
     #[ts(optional)]
     pub deflection_quasi_perm_fin_mm: Option<f64>,
+    /// De ogenblikkelijke bijkomende zakking w₃ = w_c − w₁ (mm, met teken,
+    /// negatief = omlaag), door de invoerbouwer PER BGT-COMBINATIE bepaald: de
+    /// combinatie c met de grootste |w₂ + w_c − w₁|. De kern rekent dan
+    /// w_add = w₂ + w₃, met w₂ = w_fin − w_inst het kruipdeel van de
+    /// quasi-blijvende combinatie (NEN-EN 1990:2002/NB:2019 A1.4.3(2), figuur
+    /// NB.1). Dezelfde tekenconventie als `deflection_add_mm` van de staalkern.
+    ///
+    /// `None` of weglaten = w₃ = w_inst − w₁, tot op het laatste bit het gedrag
+    /// van vóór dit veld. Een niet-eindige waarde wordt geweigerd met reden.
+    #[serde(default)]
+    #[ts(optional)]
+    pub deflection_add_mm: Option<f64>,
 }
 
 /// Uitkomst per laag — de regel in de tabel "toetsing per lamel".
@@ -406,11 +418,15 @@ fn doorbuiging_toetsen(input: &CltBeamCheckInput) -> Vec<NamedCheck> {
             doorbuiging_niet_getoetst("deflection_w_add", "Doorbuiging w_add (BGT)", &reden),
         ],
         Ok((kdef, bron)) => {
-            let (mut fin, add) = deflection::check_deflection_pair_met_langeduur(
+            // Issue #210: met w₃ per BGT-combinatie (`deflection_add_mm`)
+            // dezelfde w_add = w₂ + w₃ als massief hout; zonder dat veld
+            // bit-identiek aan de rekengang van daarvoor.
+            let (mut fin, add) = deflection::check_deflection_pair_volledig(
                 input.deflection_inst_mm,
                 input.deflection_quasi_perm_mm,
                 input.deflection_quasi_perm_fin_mm,
                 input.deflection_permanent_mm,
+                input.deflection_add_mm,
                 kdef,
                 input.length_m * 1e3,
                 input.deflection_limit_fin,
@@ -731,6 +747,7 @@ pub fn check_clt_beam(input: CltBeamCheckInput) -> CltBeamCheckResult {
     if let Err(reden) =
         deflection::keur_noemers(input.deflection_limit_fin, input.deflection_limit_add)
             .and_then(|_| deflection::keur_langeduurzakking(input.deflection_quasi_perm_fin_mm))
+            .and_then(|_| deflection::keur_w_add(input.deflection_add_mm))
     {
         let mut r = foutresultaat(&input, reden.clone());
         r.notes = vec![format!("Niet getoetst: {reden}")];
@@ -986,6 +1003,7 @@ mod tests {
             deflection_limit_add: default_noemer_add(),
             deflection_notes: vec![],
             deflection_quasi_perm_fin_mm: None,
+            deflection_add_mm: None,
         }
     }
 
@@ -1083,6 +1101,36 @@ mod tests {
         assert_relative_eq!(met.layup.layers[1].f_vd_mpa, 0.8 * 1.1 / 1.3, max_relative = 1e-9);
         // Buiging blijft maatgevend: 6,818/14,77 = 0,4616.
         assert_relative_eq!(met.uc_max, 0.4616, max_relative = 1e-3);
+    }
+
+    /// Issue #210: w_add = w₂ + w₃ met w₃ per BGT-combinatie (zie
+    /// design-mockup/test-clt-w-add.mjs voor de herkomst van de getallen).
+    /// k_def = 0,8: w₂ = 0,8·(−4,62388) = −3,69910; w₃ = −7,30087 →
+    /// w_add = −10,99997. Zonder het veld: w_fin − w₁ = 9,97785 − 3,69910 +
+    /// 2,43362 = 8,71237, bit-gelijk aan de rekengang van vóór het veld.
+    #[test]
+    fn w_add_met_w3_per_combinatie() {
+        let mut i = invoer();
+        i.k_def = Some(0.8);
+        i.k_def_bron = Some("testgetal".into());
+        i.deflection_inst_mm = 9.97785;
+        i.deflection_quasi_perm_mm = -4.62388;
+        i.deflection_permanent_mm = -2.43362;
+        let w = |r: &CltBeamCheckResult| match &r.checks.iter().find(|c| c.id == "deflection_w_add").unwrap().kind {
+            CheckKind::Resistance(x) => (x.variables[1].value, serde_json::to_string(x).unwrap()),
+            CheckKind::Stability(_) => unreachable!(),
+        };
+        let oud = check_clt_beam(i.clone());
+        assert_relative_eq!(w(&oud).0, 9.97785 + 0.8 * -4.62388 + 2.43362, max_relative = 1e-12);
+        let mut met_none = i.clone();
+        met_none.deflection_add_mm = None;
+        assert_eq!(serde_json::to_string(&check_clt_beam(met_none)).unwrap(), serde_json::to_string(&oud).unwrap());
+        i.deflection_add_mm = Some(-7.30087);
+        let r = check_clt_beam(i.clone());
+        assert_relative_eq!(w(&r).0, -10.99997, max_relative = 1e-6);
+        assert!(w(&r).1.contains("PER"));
+        i.deflection_add_mm = Some(f64::NAN);
+        assert!(check_clt_beam(i).governing_check_id.contains("deflection_add_mm"));
     }
 
     #[test]
