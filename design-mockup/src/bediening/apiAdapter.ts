@@ -56,9 +56,13 @@ export interface ApiAppActies {
    * Openen, maar zonder bestand (Opslaan vraagt daarna om een pad).
    */
   nieuwProject(tekst: string): Promise<void>;
-  /** Hetzelfde als Ctrl+Z en Ctrl+Y. */
-  ongedaanMaken(): void;
-  opnieuw(): void;
+  /**
+   * Hetzelfde als Ctrl+Z en Ctrl+Y. Geeft `false` als er geen stap was om
+   * ongedaan te maken of opnieuw te doen (issue #244, punt 001): dan
+   * gebeurde er niets, en dat hoort het antwoord te zeggen.
+   */
+  ongedaanMaken(): boolean;
+  opnieuw(): boolean;
   /** Opslaan (zonder pad: naar het huidige bestand, of de dialoog); geeft het pad. */
   opslaan(pad?: string): Promise<string>;
   /** Een projectbestand openen zoals Openen (zonder vraag); geeft het pad. */
@@ -147,8 +151,14 @@ export function appRegister(acties: ApiAppActies): ApiRegister {
       acties.zetExplode3D(invoer.amountMm / 1000);
       return { uitkomst: { mode: invoer.mode, amountMm: invoer.amountMm } };
     },
-    "app.undo": () => { acties.ongedaanMaken(); return { uitkomst: { done: true } }; },
-    "app.redo": () => { acties.opnieuw(); return { uitkomst: { done: true } }; },
+    // `done: false` met de reden als er niets te doen was; tot oktober 2026
+    // gaf app.redo zonder herhaalbare actie `done: true` (issue #244, punt 001).
+    "app.undo": () => (acties.ongedaanMaken()
+      ? { uitkomst: { done: true } }
+      : { uitkomst: { done: false, reason: "Er is geen wijziging om ongedaan te maken; er is niets veranderd." } }),
+    "app.redo": () => (acties.opnieuw()
+      ? { uitkomst: { done: true } }
+      : { uitkomst: { done: false, reason: "Er is geen ongedaan gemaakte wijziging om opnieuw te doen; er is niets veranderd." } }),
     "app.project.save": async (invoer: { path?: string }) => ({ uitkomst: { path: await acties.opslaan(invoer.path) } }),
     "app.project.open": async (invoer: { path: string; discardChanges?: boolean }) => {
       bewaakNietOpgeslagen(acties, invoer);

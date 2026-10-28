@@ -45,8 +45,9 @@ function nepApp(start = leegDocument()) {
       acties.laatsteCombinaties = p.combinations;
     },
     nieuwProject: async (tekst) => { log.push(["nieuwProject"]); doc = documentUitTekst(tekst); },
-    ongedaanMaken: () => log.push(["ongedaanMaken"]),
-    opnieuw: () => log.push(["opnieuw"]),
+    // Zoals de app: `false` als er geen stap was (issue #244, punt 001).
+    ongedaanMaken: () => { log.push(["ongedaanMaken"]); return acties.geenStap !== true; },
+    opnieuw: () => { log.push(["opnieuw"]); return acties.geenStap !== true; },
     opslaan: async (pad) => { log.push(["opslaan", pad ?? null]); return pad ?? "C:/huidig.ifcfem"; },
     openen: async (pad) => { log.push(["openen", pad]); return pad; },
     importeren: async (pad, importerId) => {
@@ -155,6 +156,17 @@ console.log("\n[5] app-commando's");
 const ondo = nepApp();
 check("app.undo → ongedaanMaken", (await voerApiUitInApp(ondo.acties, "app.undo", {})).ok && ondo.log.at(-1)[0] === "ongedaanMaken");
 check("app.redo → opnieuw", (await voerApiUitInApp(ondo.acties, "app.redo", {})).ok && ondo.log.at(-1)[0] === "opnieuw");
+{
+  // Issue #244, punt 001: zonder herhaalbare actie geen `done: true`.
+  ondo.acties.geenStap = true;
+  const redo = await voerApiUitInApp(ondo.acties, "app.redo", {});
+  check("app.redo zonder stap: done false met reden", redo.ok && redo.output.done === false && /niets veranderd/.test(redo.output.reason), JSON.stringify(redo));
+  const undo = await voerApiUitInApp(ondo.acties, "app.undo", {});
+  check("app.undo zonder stap: done false met reden", undo.ok && undo.output.done === false && /niets veranderd/.test(undo.output.reason), JSON.stringify(undo));
+  ondo.acties.geenStap = false;
+  const wel = await voerApiUitInApp(ondo.acties, "app.redo", {});
+  check("app.redo met stap: done true", wel.ok && wel.output.done === true, JSON.stringify(wel));
+}
 const opslaan = await voerApiUitInApp(ondo.acties, "app.project.save", { path: "C:/proef.ifcfem" });
 check("app.project.save met pad → opslaan(pad) en het pad terug", opslaan.ok && opslaan.output.path === "C:/proef.ifcfem"
   && JSON.stringify(ondo.log.at(-1)) === JSON.stringify(["opslaan", "C:/proef.ifcfem"]));
