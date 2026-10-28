@@ -12,7 +12,8 @@ use crate::input::{
     Draadeind, MELDING_VORM_NIET_CONTROLEERBAAR, NIET_VOLLEDIG_GETOETST, REDEN_GESLOTEN_CEL_NIET_GEDECLAREERD,
     REDEN_INTERACTIE_GEEN_DRUK, REDEN_INTERACTIE_ZONDER_KIP, REDEN_KIP_HOEKPROFIEL,
     REDEN_KIP_NIET_DUBBELSYMMETRISCH, REDEN_KIP_NVT_CHS, REDEN_KIP_NVT_RONDSTAAL, REDEN_KIP_NVT_STRIP,
-    REDEN_KIP_STRIP_STERKE_AS, REDEN_KLASSE_4, TOETS_TREK_ALLEEN,
+    REDEN_KIP_STRIP_STERKE_AS, REDEN_KLASSE_4, TOETS_TREK_ALLEEN, MELDING_TREK_ALLEEN_DRUK,
+    TREK_ALLEEN_DRUKGRENS,
 };
 use crate::result::{BeamCheckResult, CheckKind, NamedCheck};
 use mechanics::{ForcePoint, ForceStateSnapshot, InternalForces, Staafstand};
@@ -3386,6 +3387,47 @@ fn trek_alleen_staaf(
     }
     // De informatieve regel: de grootste drukkracht, niet getoetst.
     let druk = comp_state.forces.n_ed < 0.0;
+    // Is die druk meer dan speling (#244, punt 097)? Grens: een fractie
+    // TREK_ALLEEN_DRUKGRENS van N_pl,Rd = A·f_y/γ_M0 (6.2.3(2)a, bruto).
+    let n_pl_rd_kn = p.area_mm2 * grade.fy_mpa / grade.gamma_m0 / 1000.0;
+    let drukgrens_kn = TREK_ALLEEN_DRUKGRENS * n_pl_rd_kn;
+    let echte_druk = druk && -comp_state.forces.n_ed > drukgrens_kn;
+    let druk_reden = echte_druk.then(|| {
+        // Euler-kniklast om de zwakste as over de staaflengte, alleen om te
+        // zeggen of knik bij die druk verwaarloosbaar zou zijn
+        // (6.3.1.2(4): N_Ed/N_cr ≤ 0,04).
+        let e_mpa = 210_000.0; // NEN-EN 1993-1-1 3.2.6(1)
+        let i_min = p.iy_mm4.min(p.iz_mm4);
+        let l_mm = input.length_m * 1000.0;
+        let n_cr_kn = if l_mm > 0.0 && i_min > 0.0 {
+            std::f64::consts::PI.powi(2) * e_mpa * i_min / (l_mm * l_mm) / 1000.0
+        } else {
+            f64::INFINITY
+        };
+        let knik = if n_cr_kn.is_finite() && -comp_state.forces.n_ed > 0.04 * n_cr_kn {
+            format!(
+                " Als drukstaaf zou zij ook knikgevoelig zijn: |N_Ed| > 0,04·N_cr = {} kN \
+                 (N_cr = {} kN om de zwakste as over L = {} mm, NEN-EN 1993-1-1 6.3.1.2(4)).",
+                nl_getal_2(0.04 * n_cr_kn),
+                nl_getal_2(n_cr_kn),
+                nl_getal(l_mm)
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            "{MELDING_TREK_ALLEEN_DRUK} in combinatie {}: N_Ed = {} kN (x = {} mm), meer dan \
+             speling (1 % van N_pl,Rd = {} kN, dus {} kN). Een trek-alleen staaf neemt die druk \
+             niet op: in het model hoort zij in die combinatie uit te vallen (N = 0), en dan \
+             draagt de rest van de constructie deze kracht. Bereken het model met deze staaf als \
+             trek-alleen staaf, of toets haar als gewone staaf op druk.{knik}",
+            comp_state.combination_id,
+            nl_getal_2(comp_state.forces.n_ed),
+            nl_getal(comp_state.position_mm),
+            nl_getal_2(n_pl_rd_kn),
+            nl_getal_2(drukgrens_kn),
+        )
+    });
     let tekst = if druk {
         format!(
             "{MELDING_TREK_ALLEEN}. Grootste drukkracht in de omhullende: N_Ed = {} kN \
@@ -3397,12 +3439,16 @@ fn trek_alleen_staaf(
     } else {
         format!("{MELDING_TREK_ALLEEN}. De omhullende bevat geen drukkracht.")
     };
+    let mut info = vec![tekst];
+    if let Some(reden) = &druk_reden {
+        info.push(reden.clone());
+    }
     checks.push(weigering(
         TOETS_TREK_ALLEEN,
         "Trek-alleen staaf: drukkracht niet getoetst",
         "trek-alleen",
         false,
-        vec![tekst],
+        info,
         comp_state,
     ));
     // Wringing (6.2.7), ook bij een trek-alleen staaf: de wringtoets en, bij
@@ -3421,6 +3467,15 @@ fn trek_alleen_staaf(
     let wringing_ontbreekt = match &doorsnede.wringing {
         Wringingvorm::Niet(reden) if heeft_wringing(env) => Some(reden.clone()),
         _ => None,
+    };
+    // Niet volledig getoetst: een drukkracht boven de speling (#244, 097)
+    // en/of wringing die niet te toetsen is. De drukmelding eerst: zij gaat
+    // over de krachtsverdeling zelf.
+    let niet_volledig = match (&druk_reden, &wringing_ontbreekt) {
+        (None, None) => None,
+        (Some(d), None) => Some(d.clone()),
+        (None, Some(w)) => Some(w.clone()),
+        (Some(d), Some(w)) => Some(format!("{d}; {w}")),
     };
     hang_toets_notities(&mut checks, &doorsnede.toets_notities);
     hang_dikte_notitie(&mut checks, dikte_notitie);
@@ -3443,12 +3498,12 @@ fn trek_alleen_staaf(
         uc_max,
         status: if uc_max > 1.0 {
             CheckStatus::NotOk
-        } else if wringing_ontbreekt.is_some() {
+        } else if niet_volledig.is_some() {
             CheckStatus::NotApplicable
         } else {
             CheckStatus::Ok
         },
-        governing_check_id: match (&wringing_ontbreekt, uc_max > 1.0) {
+        governing_check_id: match (&niet_volledig, uc_max > 1.0) {
             (Some(reden), false) => format!("{NIET_VOLLEDIG_GETOETST}: {reden}"),
             _ => governing_check_id,
         },

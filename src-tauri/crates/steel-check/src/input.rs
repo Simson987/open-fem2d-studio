@@ -336,7 +336,10 @@ pub struct BeamCheckInput {
     /// Een drukkracht in de omhullende is bij zo'n staaf speling of
     /// voorspanning (de kruisregel laat één diagonaal per kruis een kleine
     /// druk houden), geen druksterkte; zij wordt niet getoetst, maar wel met de
-    /// grootste waarde in een eigen regel van het resultaat gemeld.
+    /// grootste waarde in een eigen regel van het resultaat gemeld. Is die
+    /// druk groter dan [`TREK_ALLEEN_DRUKGRENS`]·N_pl,Rd, dan is zij geen
+    /// speling meer: de toetsing is dan "niet volledig getoetst" met de
+    /// drukcombinatie als reden (#244).
     ///
     /// `None` of `false` = een gewone staaf, het gedrag van vóór dit veld.
     #[serde(default)]
@@ -437,6 +440,24 @@ pub const TOETS_TREK_ALLEEN: &str = "trek_alleen";
 /// De vaste tekst van die regel.
 pub const MELDING_TREK_ALLEEN: &str =
     "trek-alleen staaf: drukkracht geldt als speling/voorspanning, niet getoetst";
+
+/// Grens tussen speling en een echte drukkracht bij een trek-alleen staaf,
+/// als fractie van N_pl,Rd = A·f_y/γ_M0 (#244, punt 097).
+///
+/// Tot deze grens geldt de druk als speling of voorspanning (zoals de kleine
+/// restdruk die de kruisregel een diagonaal laat houden): alleen de
+/// informatieve regel. Daarboven klopt de krachtsverdeling niet met de
+/// aanname "trek-alleen": de staaf neemt die druk niet op en hoort in die
+/// combinatie uit te vallen (N = 0), zodat de rest van de constructie die
+/// kracht moet dragen. De toetsing krijgt dan de status "niet volledig
+/// getoetst" in plaats van Ok. De 1 % is een modelleertolerantie, geen
+/// normwaarde: NEN-EN 1993-1-1 kent geen grens voor trek-alleen staven.
+pub const TREK_ALLEEN_DRUKGRENS: f64 = 0.01;
+
+/// Begin van de waarschuwing bij een drukkracht boven
+/// [`TREK_ALLEEN_DRUKGRENS`].
+pub const MELDING_TREK_ALLEEN_DRUK: &str =
+    "trek-alleen staaf staat op druk";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  D4.3 — inline (samengestelde) doorsnede

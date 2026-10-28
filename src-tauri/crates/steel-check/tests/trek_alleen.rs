@@ -171,3 +171,53 @@ fn zonder_vlag_blijft_alles_zoals_het_was() {
         assert!(!ids(&r).contains(&TOETS_TREK_ALLEEN), "{naam}");
     }
 }
+
+/// #244, punt 097: HEA100 S235, L = 4 m, trek-alleen; combinatie 1
+/// N = +300 kN, combinatie 2 N = −40 kN.
+///   A = 2124 mm² (catalogus) → N_pl,Rd = 2124·235/1,0 = 499,14 kN
+///   UC trek = 300/499,14 = 0,6010
+///   speling tot 1 % van N_pl,Rd = 4,99 kN; 40 kN is daar ver boven
+///   N_cr,z = π²·210000·134·10⁴/4000² = 173,6 kN; 0,04·N_cr = 6,94 kN < 40
+/// De uitkomst mag dus niet Ok zijn: "niet volledig getoetst" met de
+/// drukcombinatie in de reden. De trek-UC blijft gerekend.
+#[test]
+fn hea100_met_echte_druk_is_niet_ok() {
+    let mut invoer = windverband("HEA 100", 300.0, -40.0, Some(true));
+    invoer.length_m = 4.0;
+    for fp in invoer.forces_envelope.iter_mut() {
+        fp.position_mm *= 4.0 / 6.0;
+    }
+    let r = check_beam(invoer);
+    let a = 2124.0;
+    let n_pl = a * 235.0 / 1000.0;
+    let trek = weerstand(&r, "6.2.3_tension");
+    assert_relative_eq!(trek.value, n_pl, max_relative = 2e-3);
+    assert_relative_eq!(r.uc_max, 300.0 / n_pl, max_relative = 2e-3);
+    assert_eq!(r.status, CheckStatus::NotApplicable, "{}", r.governing_check_id);
+    assert!(r.governing_check_id.starts_with(NIET_VOLLEDIG_GETOETST), "{}", r.governing_check_id);
+    assert!(r.governing_check_id.contains(MELDING_TREK_ALLEEN_DRUK), "{}", r.governing_check_id);
+    assert!(r.governing_check_id.contains("combinatie 2: N_Ed = -40,00 kN"), "{}", r.governing_check_id);
+    let info = weerstand(&r, TOETS_TREK_ALLEEN);
+    assert_eq!(info.force_state.combination_id, 2);
+    assert_eq!(info.notes.len(), 2, "{:?}", info.notes);
+    assert!(info.notes[1].contains("hoort zij in die combinatie uit te vallen"), "{:?}", info.notes);
+    // 0,04·N_cr = 6,94 kN → de knikopmerking staat erbij, met N_cr = 173,6 kN.
+    let n_cr = std::f64::consts::PI.powi(2) * 210000.0 * 134.0e4 / 4000.0_f64.powi(2) / 1000.0;
+    assert!((n_cr - 173.6).abs() < 0.5, "{n_cr}");
+    assert!(info.notes[1].contains("6.3.1.2(4)"), "{:?}", info.notes);
+}
+
+/// Dezelfde staaf met een druk van 4 kN (< 1 % van N_pl,Rd = 4,99 kN):
+/// speling, dus Ok met alleen de informatieve regel.
+#[test]
+fn hea100_met_speling_blijft_ok() {
+    let mut invoer = windverband("HEA 100", 300.0, -4.0, Some(true));
+    invoer.length_m = 4.0;
+    for fp in invoer.forces_envelope.iter_mut() {
+        fp.position_mm *= 4.0 / 6.0;
+    }
+    let r = check_beam(invoer);
+    assert_eq!(r.status, CheckStatus::Ok, "{}", r.governing_check_id);
+    assert_eq!(r.governing_check_id, "6.2.3_tension");
+    assert_eq!(weerstand(&r, TOETS_TREK_ALLEEN).notes.len(), 1);
+}
