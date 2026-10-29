@@ -277,16 +277,18 @@ log("\n[11] Twee liggers scharnierend op een middenkolom: geen doorgaande lijn o
   // IPE 300-liggers 5 en 6 sluiten aan beide einden scharnierend aan op de
   // kolommen. Tot nu toe één lijn van 12 m op kip. Nu elk 6 m, gaffel op de
   // kolom, en het moment per ligger qL²/8 = 1,35·10·6²/8 = 60,75 kNm.
-  const ligger = (id, from, to) => ({ id, from, to, material: "S235", profile: "IPE300",
-    releases: { startRy: true, endRy: true } });
+  const ligger = (id, from, to, releases = { startRy: true, endRy: true }) => ({ id, from, to, material: "S235",
+    profile: "IPE300", releases });
+  // Zonder middenkolom: een Gerberligger, star op de buitenkolommen met één
+  // scharnier op knoop 4 (anders een mechanisme).
   const raam = (metKolom) => staal({
-    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 }, { id: 9, x: 12000, z: 0 },
+    nodes: [{ id: 1, x: 0, z: 0 }, ...(metKolom ? [{ id: 2, x: 6000, z: 0 }] : []), { id: 9, x: 12000, z: 0 },
       { id: 3, x: 0, z: 3500 }, { id: 4, x: 6000, z: 3500 }, { id: 5, x: 12000, z: 3500 }],
     beams: [
       { id: 1, from: 1, to: 3, material: "S235", profile: "HEA160" },
       ...(metKolom ? [{ id: 2, from: 2, to: 4, material: "S235", profile: "HEA160" }] : []),
       { id: 3, from: 9, to: 5, material: "S235", profile: "HEA160" },
-      ligger(5, 3, 4), ligger(6, 4, 5),
+      ...(metKolom ? [ligger(5, 3, 4), ligger(6, 4, 5)] : [ligger(5, 3, 4, { endRy: true }), ligger(6, 4, 5, {})]),
     ],
     supports: [{ nodeId: 1, type: "fixed" }, ...(metKolom ? [{ nodeId: 2, type: "fixed" }] : []), { nodeId: 9, type: "fixed" }],
     loads: [q(5), q(6)],
