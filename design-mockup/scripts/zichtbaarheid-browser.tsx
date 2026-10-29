@@ -282,8 +282,9 @@ async function run() {
     ok(Math.abs(dubbel / normaal - 2) < 0.02, `schaal 200%: ${dubbel / normaal}`);
     gelijk(flags.supportScale, 2, "weergaveschaal ingesteld");
     gelijk(JSON.stringify(model.supports), modelVoor, "constructieve opleggingen ongewijzigd");
-    // SupportScaleControl toont de schaal sinds cf107758 in een invoerveld (in %) i.p.v. een <output>.
-    const veld = container.querySelector<HTMLInputElement>(".zichtbaarheid-venster .fem-support-scale-number input");
+    // SupportScaleControl toont de schaal sinds cf107758 in een invoerveld (in %) i.p.v. een <output>;
+    // het venster (Modal) staat in een portal, dus via document.
+    const veld = document.querySelector<HTMLInputElement>(".zichtbaarheid-venster .fem-support-scale-number input");
     ok(veld?.value === "200", `waarde in het venster: ${veld?.value}`);
   });
 

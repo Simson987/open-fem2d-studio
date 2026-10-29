@@ -258,7 +258,9 @@ async function run() {
     const donker = getComputedStyle(tip).backgroundColor;
     document.documentElement.removeAttribute("data-oa-theme");
     flushSync(() => knop.blur());
-    gelijk([licht, donker], ["rgb(255, 255, 255)", "rgb(39, 39, 42)"], "achtergrond licht/donker");
+    // Ontwerp 0.4: --oa-panel is #FFFFFF in Licht en #33333C in Donker (openaec-tokens.css);
+    // 2026.42 had #27272A in het thema "openaec".
+    gelijk([licht, donker], ["rgb(255, 255, 255)", "rgb(51, 51, 60)"], "achtergrond licht/donker");
   });
 
   await test("staafdialoog: dezelfde uitleg in tips, de status en de waarschuwing blijven", () => {

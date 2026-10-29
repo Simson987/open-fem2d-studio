@@ -261,7 +261,7 @@ async function run() {
     ok(gekozen.at(-1) === 9, `lijst koos ${gekozen.at(-1)}`);
     ok(!lijst(), "lijst blijft open na een keuze");
     ok(tabVan(9).getAttribute("aria-selected") === "true", "geval 9 niet actief");
-    ok(inBeeld(tabVan(9)), "gekozen geval niet in beeld geschoven");
+    ok(inBeeld(tabVan(9)), `gekozen geval niet in beeld geschoven: ${info(tabVan(9))}`);
   });
 
   await test("de lijst: pijltoetsen verplaatsen de focus, Esc sluit, klik ernaast sluit", async () => {
