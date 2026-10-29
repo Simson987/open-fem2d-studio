@@ -98,9 +98,15 @@ jobs:
           key: npm-${{ runner.os }}-${{ hashFiles('design-mockup/package-lock.json') }}
           restore-keys: npm-${{ runner.os }}-
 
-      # Een deel van de tests roept de Rust-kern als apart proces aan: de
-      # toetsbrug en de MCP-server (release) en de 3D-solver (debug). Zonder
-      # die binaries falen ze met "bouw eerst …".
+      # Een deel van de tests roept de Rust-kern als apart proces aan, op het
+      # pad dat de test zelf noemt (src-tauri/target/{debug,release}/…). Zonder
+      # die binaries falen ze met ENOENT of "bouw eerst …". Precies wat de
+      # tests spawnen:
+      #   release: toetsbrug, openaec-mcp-server, open-fem-3d (test-nafems-3d),
+      #            native-volume3d-concrete-damage en -finite-j2 (3072-routes)
+      #   debug:   toetsbrug, open-fem-3d, frame3d-solver en alle native-*
+      #            binaries van openaec-native-fem (app-routes, trek-alleen,
+      #            fysisch-nietlineair, mixed3d)
       - name: Rust installeren
         uses: dtolnay/rust-toolchain@stable
 
@@ -112,8 +118,9 @@ jobs:
       - name: Rust-kern bouwen
         working-directory: src-tauri
         run: |
-          cargo build --release -p toetsbrug -p openaec-mcp-server
-          cargo build -p open-fem-3d
+          cargo build --release -p toetsbrug -p openaec-mcp-server -p open-fem-3d
+          cargo build --release -p openaec-native-fem --bin native-volume3d-concrete-damage --bin native-volume3d-finite-j2
+          cargo build -p toetsbrug -p open-fem-3d -p frame3d-solver -p openaec-native-fem --bins
 
       - name: 3D-rekenkern testen
         working-directory: src-tauri
