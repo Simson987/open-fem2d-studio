@@ -733,8 +733,8 @@ log("\n[6] de instelling en de bedrading");
     && /openFem3DConnectButton\(historyRef\.current\.model, selectieRef\.current, leesSnapInstellingen\(\), "model"\)/.test(harnas)
     && /openFem3DConnectButton\(historyRef\.current\.model, selectieRef\.current, leesSnapInstellingen\(\), "selectie"\)/.test(harnas)
     && !/autoConnectOpenFem3DEdit\(|connectOpenFem3DNodesToBeams\(/.test(harnas));
-  check("App: vóór het rekenen een waarschuwing (de berekening gaat door) en de modelcontrole open",
-    /if \(modelDimension === "3d"\) \{[\s\S]{0,400}findOpenFem3DNodesOnBeams\(openFem3d, leesSnapInstellingen\(\)\.verbindingsTolerantie\)/.test(app)
+  check("App: vóór het rekenen een waarschuwing (de berekening gaat door) en de modelcontrole open; wat het plaatnet verbindt telt niet (#97)",
+    /if \(modelDimension === "3d"\) \{[\s\S]{0,400}findOpenFem3DNodesOnBeams\(openFem3d, leesSnapInstellingen\(\)\.verbindingsTolerantie, undefined, "all"\)/.test(app)
     && /setOpenFem3dModelCheckToken\(/.test(app));
   const editor = bron("src", "components", "openFem3d", "OpenFem3DEditor.tsx");
   check("editor: de modelcontrole live met de verbindingstolerantie, met de redenen en wat aan te sluiten valt",
@@ -781,6 +781,45 @@ log("\n[6] de instelling en de bedrading");
   const nl = JSON.parse(bron("src", "i18n", "locales", "nl", "ribbon.json"));
   check("de waarschuwing per knoop: 'Knoop {{node}} ligt op staaf {{beam}} maar is niet verbonden.'",
     nl.openFem3d?.modelCheck?.nodeOnBeam === "Knoop {{node}} ligt op staaf {{beam}} maar is niet verbonden.");
+}
+
+{
+  log("\n[7] knopen die het plaatnet al verbindt (lateien in de metselwerkwand, #97)");
+  // Wand 6 × 2,7 m in het vlak y = 0 met een opening 1–3 m × 0–2,2 m; de
+  // latei loopt van x = 0,85 tot 3,15 m op z = 2,2 m (oplegging 0,15 m). De
+  // bovenhoeken van de opening (knopen 7 en 8) liggen exact op de latei, maar
+  // het plaatnet geeft de latei ze als tussenknoop en de lateikoppeling hangt
+  // eraan: geen losse knoop. Een vrije knoop op de latei die niet van de wand
+  // is (9), en een plaatknoop 3 mm naast de as (die het net niet koppelt),
+  // blijven wel een vondst.
+  const wand = (extra = []) => parseOpenFem3DModel({
+    nodes: [
+      { id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 6, y: 0, z: 0 }, { id: 3, x: 6, y: 0, z: 2.7 }, { id: 4, x: 0, y: 0, z: 2.7 },
+      { id: 5, x: 1, y: 0, z: 0.9 }, { id: 6, x: 3, y: 0, z: 0.9 }, { id: 7, x: 3, y: 0, z: 2.2 }, { id: 8, x: 1, y: 0, z: 2.2 },
+      { id: 10, x: 0.85, y: 0, z: 2.2 }, { id: 11, x: 3.15, y: 0, z: 2.2 }, ...extra,
+    ],
+    beams: [{ id: 1, startNodeId: 10, endNodeId: 11, profile: "HEA 200" }],
+    plates: [{ id: 1, nodeIds: [1, 2, 3, 4], thicknessMm: 100, openings: [{ id: 1, nodeIds: [5, 6, 7, 8], lintel: { beamId: 1, bearingM: 0.15, loadSpread: "triangle60" } }] }],
+    supports: [], loads: [], memberLoads: [],
+  });
+  const m = wand();
+  check("model ingelezen met latei", m.plates?.[0]?.openings?.[0]?.lintel?.beamId === 1, JSON.stringify(m.plates?.[0]?.openings));
+  check("openingshoeken 7 en 8 op de latei: geen vondst", findOpenFem3DNodesOnBeams(m).length === 0,
+    JSON.stringify(findOpenFem3DNodesOnBeams(m)));
+  check("modelcontrole: niets te melden, Aansluiten laat de latei heel",
+    openFem3DConnectCheck(m).findings.length === 0 && connectOpenFem3DNodesToBeams(m).model === m);
+  const los = wand([{ id: 9, x: 2, y: 0, z: 2.2 }]);
+  check("een vrije knoop op de latei (geen wandknoop) blijft een vondst",
+    JSON.stringify(findOpenFem3DNodesOnBeams(los).map((p) => [p.nodeId, p.beamId])) === "[[9,1]]");
+  const naast = parseOpenFem3DModel({ ...m, nodes: m.nodes.map((n) => n.id === 7 ? { ...n, z: 2.203 } : n) });
+  check("een wandknoop 3 mm naast de as blijft een vondst (het net koppelt hem niet)",
+    JSON.stringify(findOpenFem3DNodesOnBeams(naast).map((p) => p.nodeId)) === "[7]");
+  // Het voorbeeldproject: 14 meldingen, waarvan 12 openingshoeken onder een
+  // latei. De twee die overblijven zijn steunpunten (knopen 45 en 46) midden
+  // op een funderingsbalk die niet aan die balk vastzitten: terecht.
+  const huis = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "examples", "masonry-house.ifcfem"), "utf8"));
+  const vondst = findOpenFem3DNodesOnBeams(parseOpenFem3DModel(huis.model3d)).map((p) => `${p.nodeId}@${p.beamId}`);
+  check("examples/masonry-house: alleen de losse steunpunten 45 en 46", JSON.stringify(vondst) === '["45@3","46@10"]', JSON.stringify(vondst));
 }
 
 log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);

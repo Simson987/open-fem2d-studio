@@ -267,6 +267,96 @@ enum Wringingvorm {
     /// wringing draagt (I, U) of een doorsnede zonder bekende W_t. Bij
     /// T_Ed ≠ 0 is de staaf dan NIET VOLLEDIG GETOETST.
     Niet(String),
+    /// Een gewalste, dubbelsymmetrische I-doorsnede met een KLEIN wringend
+    /// moment, getoetst met veilige bovengrenzen van de spanningen (zie
+    /// [`begrens_open_i`]): τ_Ed ≤ |T_Ed|/`w_t_mm3` (Saint-Venant plus de
+    /// welvingsschuifspanning in de flens) en σ_w,Ed ≤ `sigma_w_mpa_per_knm`·|T_Ed|
+    /// (de welvingsnormaalspanning uit B_Ed ≤ |T_Ed|·L). Beide gaan, net als bij
+    /// Saint-Venant, de toetsen in: V_pl,T,Rd in 6.2.6/6.2.8/6.2.10, en f_y,T
+    /// (verminderd met σ_w,Ed) in de toets op buiging en normaalkracht.
+    Begrensd { w_t_mm3: f64, sigma_w_mpa_per_knm: f64, toelichting: String },
+}
+
+/// Tot welke fractie de bovengrenzen van [`begrens_open_i`] mogen gaan
+/// (τ_Ed/τ_Rd en σ_w,Ed/f_y, elk): daarboven blijft een open I-doorsnede
+/// "niet getoetst". De grenzen gaan volledig in de toetsen mee, dus deze
+/// drempel is geen veiligheidskeuze maar een bruikbaarheidskeuze: bij een
+/// groter wringend moment zijn de grenzen (vooral B_Ed ≤ T·L) te grof, en
+/// hoort de wringing apart beschouwd te worden.
+const DREMPEL_WRINGING_BEGRENSD: f64 = 0.05;
+
+/// Een open, dubbelsymmetrische I-doorsnede met een klein wringend moment
+/// (vondst bij de stalen hal uit de halwizard: |T_Ed| ≤ 0,002 kNm in elke
+/// IPE en HEA, rekenresten van de 3D-staafanalyse, en toch stond bijna elke
+/// staaf op "niet volledig getoetst"). In plaats van de welving uit te
+/// rekenen (dat kan een staafanalyse met zes vrijheidsgraden niet) gaan
+/// veilige bovengrenzen de toetsen in, met h_s = h − t_f:
+///
+/// * schuifspanning: T_Ed = T_t,Ed + T_w,Ed (6.2.7(2)) met beide delen
+///   hoogstens |T_Ed| (een wringend moment van één teken langs de staaf).
+///   Saint-Venant τ_t ≤ |T_Ed|·t_max/I_t (zoals `w_t_open`), en de
+///   welvingsschuifspanning in de flens, met de flensdwarskracht
+///   V_f = T_w/h_s en τ = 1,5·V_f/(b·t_f): τ_w ≤ 1,5·|T_Ed|/(h_s·b·t_f). De
+///   som staat in τ_Ed; W_t,eq = 1/(t_max/I_t + 1,5/(h_s·b·t_f));
+/// * normaalspanning: dB/dx = T_w (6.2.7(4)), dus |B_Ed| ≤ |T_Ed|·L vanaf een
+///   punt met B = 0 (een vrij welvend eind; bij twee ingeklemde einden ligt
+///   het nulpunt ertussen). Als flensbuiging: M_f = B/h_s en
+///   σ_w ≤ 6·M_f/(t_f·b²) = 6·|T_Ed|·L/(h_s·t_f·b²).
+///
+/// Alleen als beide grenzen bij de grootste |T_Ed| hoogstens
+/// [`DREMPEL_WRINGING_BEGRENSD`] van τ_Rd en f_y zijn; anders blijft het
+/// `Niet` (de reden van de open doorsnede). Een U-doorsnede (het
+/// dwarskrachtmiddelpunt ligt buiten het lijf) blijft altijd `Niet`.
+fn begrens_open_i(
+    vorm: Wringingvorm,
+    kind: ProfileKind,
+    p: &SectionProperties,
+    g: &steel_profiles::ProfileGeometry,
+    lengte_m: f64,
+    grade: &SteelGrade,
+    env: &[ForcePoint],
+) -> Wringingvorm {
+    if !matches!(vorm, Wringingvorm::Niet(_)) || !matches!(kind, ProfileKind::ISection) || !heeft_wringing(env) {
+        return vorm;
+    }
+    let (h, b, tf, tw, it) = (g.h, g.b, g.tf, g.tw, p.it_mm4);
+    let l_mm = lengte_m * 1000.0;
+    let ok = |v: f64| v.is_finite() && v > 0.0;
+    if !(ok(h) && ok(b) && ok(tf) && ok(tw) && ok(it) && ok(l_mm) && h > tf) {
+        return vorm;
+    }
+    let h_s = h - tf;
+    let t_max = tf.max(tw);
+    let w_t_eq = 1.0 / (t_max / it + 1.5 / (h_s * b * tf));
+    // MPa per kNm: 6·(T·10⁶)·L/(h_s·t_f·b²).
+    let sigma_per_knm = 6.0 * 1e6 * l_mm / (h_s * tf * b * b);
+    let t_max_ed = env.iter().map(|fp| fp.forces.mt_ed.abs()).fold(0.0, f64::max);
+    let tau = wringing::tau_t_ed_mpa(t_max_ed, w_t_eq);
+    let sigma = sigma_per_knm * t_max_ed;
+    if tau > DREMPEL_WRINGING_BEGRENSD * wringing::tau_rd_mpa(grade)
+        || sigma > DREMPEL_WRINGING_BEGRENSD * grade.fy_mpa
+    {
+        return vorm;
+    }
+    Wringingvorm::Begrensd {
+        w_t_mm3: w_t_eq,
+        sigma_w_mpa_per_knm: sigma_per_knm,
+        toelichting: format!(
+            "Open I-doorsnede met een klein wringend moment (|T_Ed| ≤ {} kNm): de welving is niet \
+             uitgerekend, maar begrensd (6.2.7(2), (4)). Schuifspanning: τ_Ed ≤ |T_Ed|·(t_max/I_t + \
+             1,5/(h_s·b·t_f)) = |T_Ed|/W_t,eq met W_t,eq = {} mm³ (Saint-Venant plus de \
+             welvingsschuifspanning in de flens, h_s = h − t_f = {} mm). Normaalspanning: \
+             |B_Ed| ≤ |T_Ed|·L met L = {} mm, als flensbuiging σ_w,Ed ≤ 6·|T_Ed|·L/(h_s·t_f·b²) = \
+             {} N/mm². Beide grenzen zijn hoogstens {} % van τ_Rd en f_y; daarboven blijft de \
+             wringing van een open I-doorsnede niet getoetst.",
+            nl_getal_3(t_max_ed),
+            nl_getal(w_t_eq),
+            nl_getal(h_s),
+            nl_getal(l_mm),
+            nl_getal_2(sigma),
+            nl_getal(DREMPEL_WRINGING_BEGRENSD * 100.0)
+        ),
+    }
 }
 
 /// Een wringend moment tot deze grootte (kNm) telt als nul (rekenruis).
@@ -346,8 +436,19 @@ impl Wringingvorm {
 
     fn w_t(&self) -> Option<f64> {
         match self {
-            Wringingvorm::SaintVenant { w_t_mm3, .. } => Some(*w_t_mm3),
+            Wringingvorm::SaintVenant { w_t_mm3, .. } | Wringingvorm::Begrensd { w_t_mm3, .. } => {
+                Some(*w_t_mm3)
+            }
             Wringingvorm::Niet(_) => None,
+        }
+    }
+
+    /// De bovengrens van de welvingsnormaalspanning per kNm wringend moment
+    /// (N/mm² per kNm); 0 bij Saint-Venant.
+    fn sigma_w_per_knm(&self) -> f64 {
+        match self {
+            Wringingvorm::Begrensd { sigma_w_mpa_per_knm, .. } => *sigma_w_mpa_per_knm,
+            _ => 0.0,
         }
     }
 }
@@ -446,6 +547,23 @@ fn wringtoets(
             );
             make_resistance(r)
         }
+        Wringingvorm::Begrensd { w_t_mm3, sigma_w_mpa_per_knm, toelichting } => {
+            let mut r = maatgevend_over_omhullende(env, state, "telkens met T_Ed van dat punt", |s| {
+                wringing::t_rd(*w_t_mm3, toelichting, grade, s)
+            });
+            r.title = "Wringing (open I-doorsnede, bovengrens)".to_string();
+            r.article = "art. 6.2.7 (6.23), bovengrens".to_string();
+            // De noot van `t_rd` over een gesloten doorsnede geldt hier niet.
+            r.notes.retain(|n| !n.starts_with("τ_t,Ed ="));
+            r.notes.push(format!(
+                "De welvingsnormaalspanning σ_w,Ed ≤ {}·|T_Ed| N/mm² (T_Ed in kNm) gaat met f_y,T in \
+                 toets 6.2.7_combined_nmt; de schuifspanning hierboven via V_pl,T,Rd in 6.2.6, 6.2.8 \
+                 en 6.2.10. Wringing in de stabiliteitstoetsen (6.3) is niet meegenomen; bij deze \
+                 kleine waarde is dat verwaarloosbaar.",
+                nl_getal_2(*sigma_w_mpa_per_knm)
+            ));
+            make_resistance(r)
+        }
         Wringingvorm::Niet(reden) => weigering(
             TOETS_WRINGING,
             "Wringing",
@@ -466,6 +584,7 @@ fn wringtoets(
 /// kant. `None` zonder punt met wringing én normaalkracht of moment.
 fn buiging_normaal_met_wringing(
     w_t: f64,
+    sigma_w_per_knm: f64,
     grade: &SteelGrade,
     env: &[ForcePoint],
     toets: impl Fn(&SteelGrade, ForceStateSnapshot) -> ResistanceCalc,
@@ -491,9 +610,19 @@ fn buiging_normaal_met_wringing(
         "op elk punt met T_Ed ≠ 0, telkens met N, M_y, M_z en T_Ed van dat punt",
         |s| {
             let tau = wringing::tau_t_ed_mpa(s.forces.mt_ed, w_t);
-            let fy_t = wringing::fy_onder_wringing(tau, grade).max(1e-3 * grade.fy_mpa);
+            // Een open I met een begrensde wringing: ook de bovengrens van de
+            // welvingsnormaalspanning gaat van de vloeigrens af.
+            let sigma_w = sigma_w_per_knm * s.forces.mt_ed.abs();
+            let fy_t = (wringing::fy_onder_wringing(tau, grade) - sigma_w).max(1e-3 * grade.fy_mpa);
             let g = SteelGrade { fy_mpa: fy_t, ..*grade };
             let mut r = toets(&g, s);
+            if sigma_w > 0.0 {
+                r.notes.push(format!(
+                    "Welving (open I-doorsnede, bovengrens): f_y,T is daarnaast verminderd met \
+                     σ_w,Ed = {} N/mm².",
+                    nl_getal_2(sigma_w)
+                ));
+            }
             r.notes.push(format!(
                 "Wringing: τ_t,Ed = {} N/mm², dus f_y,T = f_y·√(1 − (τ_t,Ed/τ_Rd)²) = {}·√(1 − ({}/{})²) \
                  = {} N/mm² voor de normaalspanning (vloeicriterium 6.2.1(5), 6.2.7(5)). De f_y in \
@@ -949,7 +1078,15 @@ fn resolveer_doorsnede(
             },
             rond_d_mm: is_rond.then_some(profile.geometry.h),
             interactievorm,
-            wringing: Wringingvorm::catalogus(profile.kind, p, &profile.geometry),
+            wringing: begrens_open_i(
+                Wringingvorm::catalogus(profile.kind, p, &profile.geometry),
+                profile.kind,
+                p,
+                &profile.geometry,
+                input.length_m,
+                grade,
+                &input.forces_envelope,
+            ),
             schuif_weigering: None,
             // Klasse 4 wordt in `check_beam` afgehandeld: met de effectieve
             // doorsnede volgens NEN-EN 1993-1-5 4.4 waar die voor de vorm
@@ -2133,11 +2270,11 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
     }
     if let Some(w) = w_t_v {
         let nmt = if doorsnede.rond_d_mm.is_some() {
-            buiging_normaal_met_wringing(w, &grade, env, |g, s| {
+            buiging_normaal_met_wringing(w, doorsnede.wringing.sigma_w_per_knm(), &grade, env, |g, s| {
                 combinatie_rond(p, g, RondCombinatie::BuigingNormaalkracht, s)
             })
         } else {
-            buiging_normaal_met_wringing(w, &grade, env, |g, s| {
+            buiging_normaal_met_wringing(w, doorsnede.wringing.sigma_w_per_knm(), &grade, env, |g, s| {
                 buiging_en_normaalkracht(
                     p_reken,
                     g,
@@ -3310,12 +3447,12 @@ fn check_beam_kern(input: BeamCheckInput) -> BeamCheckResult {
     } else {
         match &doorsnede.wringing {
             Wringingvorm::Niet(reden) => Some(reden.clone()),
-            Wringingvorm::SaintVenant { .. } if klasse4.is_some() => Some(
+            Wringingvorm::SaintVenant { .. } | Wringingvorm::Begrensd { .. } if klasse4.is_some() => Some(
                 "Wringing bij een doorsnede in klasse 4: de plooi van de wanden onder de \
                  wringschuifspanning (NEN-EN 1993-1-5) is niet getoetst"
                     .to_string(),
             ),
-            Wringingvorm::SaintVenant { .. } => None,
+            Wringingvorm::SaintVenant { .. } | Wringingvorm::Begrensd { .. } => None,
         }
     };
     let status = if uc_max > 1.0 {
@@ -3492,7 +3629,7 @@ fn trek_alleen_staaf(
     }
     if let (true, Some(w)) = (heeft_wringing(env), doorsnede.wringing.w_t()) {
         if let Some(c) =
-            buiging_normaal_met_wringing(w, grade, env, |g, s| n_t_rd(p, g, None, s))
+            buiging_normaal_met_wringing(w, doorsnede.wringing.sigma_w_per_knm(), grade, env, |g, s| n_t_rd(p, g, None, s))
         {
             checks.push(c);
         }

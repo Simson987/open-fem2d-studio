@@ -236,6 +236,7 @@ function lijnenVan(beams: readonly OpenFem3DBeam[], knoopOp: ReadonlyMap<number,
  */
 export function findOpenFem3DNodesOnBeams(
   model: OpenFem3DModel, toleranceMm: number = OPEN_FEM_3D_CONNECT_TOLERANCE_MM, scope?: OpenFem3DConnectScope,
+  overslaan: OpenFem3DMeshConnectedSkip = "lintels",
 ): OpenFem3DNodeOnBeam[] {
   const tolM = begrensVerbindingstolerantie(toleranceMm) / 1000;
   const knoopOp = new Map(model.nodes.map((node) => [node.id, node]));
@@ -249,7 +250,74 @@ export function findOpenFem3DNodesOnBeams(
     if (nodeIds.size > 0) zoekParen(model.nodes.filter((node) => nodeIds.has(node.id)), alleLijnen(), tolM, gevonden);
     if (beamIds.size > 0) zoekParen(model.nodes, lijnenVan(model.beams.filter((beam) => beamIds.has(beam.id)), knoopOp), tolM, gevonden);
   }
-  return [...gevonden.values()].sort((p, q) => p.beamId - q.beamId || p.t - q.t || p.nodeId - q.nodeId);
+  const viaPlaat = doorPlaatnetVerbonden(model, knoopOp, overslaan === "lintels");
+  return [...gevonden.values()]
+    .filter((paar) => !(paar.distanceM <= PLAATNET_TOL_M && viaPlaat(paar.nodeId, paar.beamId)))
+    .sort((p, q) => p.beamId - q.beamId || p.t - q.t || p.nodeId - q.nodeId);
+}
+
+/**
+ * De maattolerantie van het plaatnet (`TOL * 10` in openFem3dPlateMesh.ts):
+ * daarbinnen ligt een staaf in het plaatvlak en een plaatknoop op de staafas.
+ */
+const PLAATNET_TOL_M = 1e-5;
+
+/**
+ * Welke paren die het plaatnet al verbindt `findOpenFem3DNodesOnBeams`
+ * overslaat. "lintels" (standaard, ook voor Aansluiten en het automatisch
+ * aansluiten): alleen een knoop van de eigen metselwerkwand op een latei; een
+ * knip zou de latei (`opening.lintel.beamId`) opdelen. "all" (de
+ * modelcontrole en de waarschuwing bij het rekenen): elke plaatknoop op een
+ * staaf in het vlak van die plaat. Aansluiten mag zo'n gewone staaf wel
+ * splitsen (de hoek van een getekende plaat op een staaf, #63): dat
+ * verandert de rekenuitkomst niet, maar het is ook geen losse knoop.
+ */
+export type OpenFem3DMeshConnectedSkip = "lintels" | "all";
+
+/**
+ * Of het plaatnet een knoop al met een staaf verbindt (vondst bij de
+ * lateien van de metselwerkwand, #97). Een staaf in het vlak van een plaat
+ * krijgt bij het rekenen de knopen van die plaat op haar as als tussenknopen
+ * (`beamIntermediateNodes` in openFem3dPlateMesh.ts); een latei hangt daarna
+ * met knoopkoppelingen aan precies die knopen (`withOpenFem3DLintelLinks`).
+ * De hoeken van een opening onder een latei zijn dus wél verbonden, en een
+ * knip zou de latei (`opening.lintel.beamId`) zelfs opdelen. Zulke paren zijn
+ * geen losse knoop: de modelcontrole, de waarschuwing bij het rekenen en
+ * Aansluiten slaan ze over. Alleen exact (binnen de nettolerantie): een knoop
+ * die er millimeters naast ligt, koppelt het net niet en blijft een vondst.
+ */
+function doorPlaatnetVerbonden(
+  model: OpenFem3DModel, knoopOp: Map<number, OpenFem3DNode>, alleenLateien: boolean,
+): (nodeId: number, beamId: number) => boolean {
+  const platen = (model.plates ?? []).map((plate) => {
+    const ids = new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)]);
+    const lateien = new Set((plate.openings ?? []).flatMap((opening) => opening.lintel ? [opening.lintel.beamId] : []));
+    const punten = plate.nodeIds.map((id) => knoopOp.get(id)).filter((p): p is OpenFem3DNode => p !== undefined);
+    // Newell-normaal van de buitencontour.
+    let nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < punten.length; i += 1) {
+      const p = punten[i]!, q = punten[(i + 1) % punten.length]!;
+      nx += (p.y - q.y) * (p.z + q.z);
+      ny += (p.z - q.z) * (p.x + q.x);
+      nz += (p.x - q.x) * (p.y + q.y);
+    }
+    const n = Math.hypot(nx, ny, nz);
+    return { ids, lateien, origin: punten[0], normaal: n > 1e-12 ? [nx / n, ny / n, nz / n] as const : undefined };
+  }).filter((plaat) => plaat.origin !== undefined && plaat.normaal !== undefined
+    && (!alleenLateien || plaat.lateien.size > 0));
+  if (platen.length === 0) return () => false;
+  const staafOp = new Map(model.beams.map((beam) => [beam.id, beam]));
+  return (nodeId, beamId) => {
+    const beam = staafOp.get(beamId);
+    const a = beam && knoopOp.get(beam.startNodeId), b = beam && knoopOp.get(beam.endNodeId);
+    if (!a || !b) return false;
+    return platen.some(({ ids, lateien, origin, normaal }) => {
+      if (!ids.has(nodeId) || (alleenLateien && !lateien.has(beamId))) return false;
+      const afstand = (p: OpenFem3DNode) =>
+        Math.abs((p.x - origin!.x) * normaal![0] + (p.y - origin!.y) * normaal![1] + (p.z - origin!.z) * normaal![2]);
+      return afstand(a) <= PLAATNET_TOL_M && afstand(b) <= PLAATNET_TOL_M;
+    });
+  };
 }
 
 /** De staaf die een knip van `deel` op knoop `nodeId` zou verdubbelen: dezelfde toets als `splitOpenFem3DBeam`. */
@@ -358,7 +426,7 @@ export interface OpenFem3DConnectCheck {
 export function openFem3DConnectCheck(
   model: OpenFem3DModel, toleranceMm: number = OPEN_FEM_3D_CONNECT_TOLERANCE_MM,
 ): OpenFem3DConnectCheck {
-  const findings = findOpenFem3DNodesOnBeams(model, toleranceMm);
+  const findings = findOpenFem3DNodesOnBeams(model, toleranceMm, undefined, "all");
   if (findings.length === 0) return { findings, skipped: [], connectable: 0 };
   const zonderLasten: OpenFem3DModel = { ...model, memberLoads: [], memberPointLoads: [], thermalLoads: [] };
   const proef = knipOp(zonderLasten, findings, begrensVerbindingstolerantie(toleranceMm) / 1000, false);

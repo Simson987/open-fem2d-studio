@@ -67,8 +67,18 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
     const hatch = buildOpenFem3DPlateBeddingHatch(input.model, input.supportSizePercent, input.plateDisplay ?? "volume");
     if (hatch) group.add(hatch);
   }
-  const resultMesh = input.result?.plateMesh && (input.result.shellNodes?.length ?? 0) > 0 ? input.result.plateMesh : null;
-  const mesh = resultMesh ?? input.mesh;
+  // Een net (uit het resultaat of de weergave) hoort alleen bij dit model als
+  // elk element naar een bekende knoop en een bestaande plaat wijst. Na het
+  // openen van een ander project rendert het tekenvlak één keer met het
+  // nieuwe model en het oude resultaat (App wist het pas daarna): de hoeken
+  // van het oude net bestonden dan niet, `place` las `undefined`, en de fout
+  // in het effect brak de hele app af ("APP BOOTSTRAP ERROR"). Een net dat
+  // niet past, wordt nu overgeslagen.
+  const hoortBijModel = (net: OpenFem3DPlateMesh | null | undefined): net is OpenFem3DPlateMesh =>
+    net !== null && net !== undefined && openFem3DPlateMeshFitsModel(net, input.model);
+  const resultMesh = input.result?.plateMesh && (input.result.shellNodes?.length ?? 0) > 0
+    && hoortBijModel(input.result.plateMesh) ? input.result.plateMesh : null;
+  const mesh = resultMesh ?? (hoortBijModel(input.mesh) ? input.mesh : null);
   if (!input.showPlates || !mesh || mesh.elements.length === 0) return { group, contourShown: false, liftedNodes: 0 };
   const positions = new Map<number, V3>();
   for (const node of input.model.nodes) positions.set(node.id, [node.x, node.y, node.z]);
@@ -172,6 +182,19 @@ export function buildOpenFem3DPlateOverlay(input: OpenFem3DPlateOverlayInput): O
     }
   }
   return { group, contourShown, liftedNodes };
+}
+
+/**
+ * Past een plaatnet bij het model: elke elementknoop is een knoop van het net
+ * of van het model, en elke plaat van het net bestaat in het model.
+ */
+export function openFem3DPlateMeshFitsModel(
+  mesh: Pick<OpenFem3DPlateMesh, "nodes" | "elements">, model: Pick<OpenFem3DModel, "nodes" | "plates">,
+): boolean {
+  const knopen = new Set<number>(model.nodes.map((node) => node.id));
+  for (const node of mesh.nodes) knopen.add(node.id);
+  const platen = new Set((model.plates ?? []).map((plate) => plate.id));
+  return mesh.elements.every((element) => platen.has(element.plateId) && element.nodeIds.every((id) => knopen.has(id)));
 }
 
 /** Naam van de groep met randopleggingen binnen de plaatlaag. */

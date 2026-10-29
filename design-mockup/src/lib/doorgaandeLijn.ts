@@ -92,9 +92,20 @@
  * samenvoeging 2026.42, `test-vakwerk-kniklengte.mjs`).
  *
  * Een vrijgave of veer op de tussenknoop (een Gerberscharnier) knipt de lijn
- * NIET: de knoop steunt de lijn nergens, en apart getoetst kreeg elk deel een
- * staafeind "Doorlopend", waarop de kern knik en kip weigerde terwijl de
- * status Ok bleef. Het scharnier zit in de krachten; de notitie noemt het,
+ * NIET als niets anders de knoop vasthoudt: de knoop steunt de lijn nergens,
+ * en apart getoetst kreeg elk deel een staafeind "Doorlopend", waarop de kern
+ * knik en kip weigerde terwijl de status Ok bleef.
+ *
+ * MOMENTSCHARNIER OP EEN VASTGEHOUDEN KNOOP (vondst bij de voorbeeldprojecten)
+ * Zit er een momentscharnier (vrijgave Ry) in de lijn op een knoop waar een
+ * staaf aansluit die de knoop vasthoudt (`steunend`: een kolom, een
+ * wandstaaf), dan zijn het twee liggers die elk scharnierend op die staaf
+ * aansluiten, geen doorgaande ligger. Twee IPE 330-liggers van 6 m, elk
+ * scharnierend op de middenkolom van een raamwerk met twee beuken, werden als
+ * één lijn van 12 m op kip getoetst (UC 2,47, kipveld en momentverloop van
+ * 12 m). Daar knipt de lijn nu (`lijnLooptDoor`): elke ligger wordt apart
+ * getoetst, en haar eind op de kolom is een gewoon aangesloten eind (gaffel,
+ * `bepaalStaafeinden`), zoals elke ligger-kolomaansluiting in het vlakke model. Het scharnier zit in de krachten; de notitie noemt het,
  * met de kanttekening dat de kniklengte in het vlak dan groter kan zijn dan
  * de lijn. Een plaat op de tussenknoop knipt de lijn wel: een wandschijf
  * houdt de knoop vast zoals een oplegging.
@@ -331,10 +342,23 @@ function losOpKnoop(beam: Beam, knoop: number): string[] {
  * andere staven aansluiten of een vrijgave of veer zit — zie KNIK PER VAK in
  * de kop.
  */
-function lijnLooptDoor(a: Beam, b: Beam, plates: { nodeIds: number[] }[] | undefined): boolean {
+function lijnLooptDoor(
+  a: Beam,
+  b: Beam,
+  plates: readonly PlaatVoorEinden[] | undefined,
+  model: { nodes: Node[]; alleBeams: Beam[]; supports: Support[] },
+): boolean {
   const knoop = [a.from, a.to].find((n) => n === b.from || n === b.to);
   if (knoop === undefined) return false;
-  return !(plates ?? []).some((p) => p.nodeIds.includes(knoop));
+  if ((plates ?? []).some((p) => p.nodeIds.includes(knoop))) return false;
+  // Een momentscharnier op een knoop die een aansluitende staaf vasthoudt:
+  // twee liggers, geen doorgaande lijn (zie MOMENTSCHARNIER in de kop).
+  const scharnier = (beam: Beam) =>
+    (beam.from === knoop && beam.releases?.startRy === true) || (beam.to === knoop && beam.releases?.endRy === true);
+  if (!scharnier(a) && !scharnier(b)) return true;
+  const deel = (beam: Beam): LijnDeel => ({ beam, gespiegeld: false, lengteMm: 0, xStartMm: 0 });
+  const k = beschrijfKnoop(knoop, 0, [deel(a), deel(b)], model.alleBeams, model.supports, model.nodes, plates);
+  return k.steunend.length === 0;
 }
 
 /**
@@ -467,7 +491,7 @@ export function vindDoorgaandeLijnen(
       for (const id of collinearContinuations(b, nodes, alleBeams, supports)) {
         if (gezien.has(id)) continue;
         const other = perId.get(id);
-        if (!other || !lijnLooptDoor(b, other, plates)) continue;
+        if (!other || !lijnLooptDoor(b, other, plates, { nodes, alleBeams, supports })) continue;
         gezien.add(id);
         wachtrij.push(other);
       }

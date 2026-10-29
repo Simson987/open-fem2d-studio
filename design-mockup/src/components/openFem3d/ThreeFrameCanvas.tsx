@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { SCHERMAFDRUK_EVENT } from "../../bediening/schermafdrukCanvas";
 import { useTranslation } from "react-i18next";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -4971,8 +4972,13 @@ export default function ThreeFrameCanvas({ model, conditionModel, onChange, onDr
     window.addEventListener("blur", onVensterBlur);
     window.addEventListener("keydown", onMaatToets);
     window.addEventListener("keydown", onKeyDown);
+    // De DOM-schermafdruk van de bediening (gui_screenshot buiten Windows):
+    // direct tekenen, zodat het beeld in dezelfde taak uit te lezen is
+    // (bediening/schermafdrukCanvas.ts).
+    window.addEventListener(SCHERMAFDRUK_EVENT, renderScene);
 
     return () => {
+      window.removeEventListener(SCHERMAFDRUK_EVENT, renderScene);
       discardDraftNodes(plateDraftCreatedNodesRef.current, plateHistoryGroupRef);
       discardDraftNodes(openingDraftCreatedNodesRef.current, openingHistoryGroupRef);
       observer.disconnect();

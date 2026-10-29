@@ -882,6 +882,59 @@ function metAxiaalLos(request: FrameRequest, losseLeden: Set<number>): FrameRequ
   return kopie;
 }
 
+/**
+ * De last langs de as van een uitgeschakelde staaf over BEIDE eindknopen,
+ * zoals bij een actieve staaf; zie `verdeelEigenAxiaalLast` in
+ * core/solver/NonlinearSolver.ts. De huls aan het eind zet de axiale
+ * lijnlast (eigen gewicht van een schuine diagonaal) en een axiale puntlast
+ * anders helemaal op de beginknoop; met eigen gewicht en scheefstand bleef de
+ * lus daardoor wisselen. Hier: R_eind = ∫ q(x)·x/L dx + Σ P·x/L als knooplast
+ * langs de as op de eindknoop, −R_eind op de beginknoop. `ketens` = per
+ * uitgeschakelde staaf zijn segment-id's, van begin naar eind.
+ */
+function metEigenAxiaalLast(request: FrameRequest, basis: FrameRequest, ketens: number[][]): FrameRequest {
+  if (ketens.length === 0) return request;
+  const knopen = new Map(basis.nodes.map(node => [node.id, node]));
+  const leden = new Map(basis.members.map(member => [member.id, member]));
+  const extra: typeof basis.nodalLoads = [];
+  for (const ketting of ketens) {
+    const eerste = leden.get(ketting[0]!), laatste = leden.get(ketting[ketting.length - 1]!);
+    if (!eerste || !laatste) continue;
+    const begin = knopen.get(eerste.startNodeId)!, eind = knopen.get(laatste.endNodeId)!;
+    const L = Math.hypot(eind.x - begin.x, eind.y - begin.y);
+    if (!(L > 0)) continue;
+    const c = (eind.x - begin.x) / L, sn = (eind.y - begin.y) / L;
+    const inKetting = new Map<number, number>(); // segment-id → plaats van zijn begin langs de staaf (m)
+    for (const id of ketting) {
+      const lid = leden.get(id);
+      if (!lid) continue;
+      const a = knopen.get(lid.startNodeId)!;
+      inKetting.set(id, (a.x - begin.x) * c + (a.y - begin.y) * sn);
+    }
+    let rEind = 0;
+    for (const load of basis.memberLoads) {
+      const x0 = inKetting.get(load.memberId);
+      if (x0 === undefined) continue;
+      const xa = x0 + load.startPositionM, xb = x0 + load.endPositionM;
+      // ∫ q(x)·x dx over [xa, xb] voor q lineair van qa naar qb.
+      rEind += (xb - xa) * (load.qxStartKnPerM * (2 * xa + xb) + load.qxEndKnPerM * (xa + 2 * xb)) / 6 / L;
+    }
+    for (const load of basis.memberPointLoads) {
+      const x0 = inKetting.get(load.memberId);
+      if (x0 === undefined) continue;
+      rEind += load.pxKn * (x0 + load.positionM) / L;
+    }
+    if (rEind === 0) continue;
+    extra.push({ nodeId: eind.id, fx: rEind * c, fy: rEind * sn, mz: 0 });
+    extra.push({ nodeId: begin.id, fx: -rEind * c, fy: -rEind * sn, mz: 0 });
+  }
+  if (extra.length === 0) return request;
+  const kopie = { ...request, nodalLoads: [...request.nodalLoads, ...extra] } as FrameRequest;
+  const mesh = frameMeshes.get(request);
+  if (mesh) frameMeshes.set(kopie, mesh);
+  return kopie;
+}
+
 function lineaireKopie(request: FrameRequest): FrameRequest {
   const { loadPath: _loadPath, ...rest } = request as FrameRequest & { loadPath?: unknown };
   const kopie = {
@@ -925,7 +978,8 @@ async function solveNativeFrame2DTrekAlleen(
         const segmenten = mesh.segmentsByBeam.get(beamId)!;
         return segmenten[segmenten.length - 1].id;
       }));
-      const verzoek = metAxiaalLos(basis, losseLeden);
+      const verzoek = metEigenAxiaalLast(metAxiaalLos(basis, losseLeden), basis, [...uit].map(beamId =>
+        mesh.segmentsByBeam.get(beamId)!.map(segment => segment.id)));
       const native = await solveNativeFrame2DWithRecovery(verzoek);
       const leden = new Map(native.members.map(member => [member.memberId, member]));
       const verplaatsing = new Map(native.nodes.map(node => [node.nodeId, node.displacement]));

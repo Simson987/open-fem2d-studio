@@ -230,3 +230,44 @@ fn zonder_wringing_geen_toets() {
     let r = staaf("IPE 300", "S235", 3.0, InternalForces { my_ed: 30.0, ..Default::default() });
     assert!(r.checks.iter().all(|c| !c.id.starts_with("6.2.7")));
 }
+
+/// Vondst bij de stalen hal uit de halwizard: de 3D-staafanalyse geeft elke
+/// IPE en HEA een wringend moment van hoogstens enkele Nm (rekenresten), en
+/// door de regel hierboven stond bijna elke staaf op "niet volledig
+/// getoetst". Een klein moment wordt nu met veilige bovengrenzen getoetst.
+///
+/// IPE 300 S235, L = 3 m, |T_Ed| = 0,01 kNm, M_y,Ed = 30 kNm. Catalogus:
+/// h = 300, b = 150, t_f = 10,7, t_w = 7,1 mm, I_t = 201 000 mm⁴.
+///   h_s = h − t_f = 289,3 mm
+///   1/W_t,eq = t_f/I_t + 1,5/(h_s·b·t_f) = 5,3234·10⁻⁵ + 3,2305·10⁻⁶
+///   W_t,eq = 17 710 mm³;  τ_Ed ≤ 0,01·10⁶/17 710 = 0,5646 N/mm²
+///   UC 6.2.7 = 0,5646/135,68 = 0,00416
+///   σ_w,Ed ≤ 6·T·L/(h_s·t_f·b²) = 6·10⁴·3000/(289,3·10,7·150²) = 2,584 N/mm²
+/// Beide ≤ 5 % van τ_Rd (6,78) en f_y (11,75): getoetst, status Ok. In de
+/// toets op buiging en normaalkracht: f_y,T = 235·√(1 − (0,5646/135,68)²) −
+/// 2,584 = 232,414 N/mm².
+#[test]
+fn ipe_klein_wringend_moment_met_bovengrenzen_getoetst() {
+    let r = staaf("IPE 300", "S235", 3.0, InternalForces { mt_ed: 0.01, my_ed: 30.0, ..Default::default() });
+    let h_s: f64 = 300.0 - 10.7;
+    let w_t_eq: f64 = 1.0 / (10.7 / 201_000.0 + 1.5 / (h_s * 150.0 * 10.7));
+    let tau: f64 = 0.01e6 / w_t_eq;
+    let sigma_w: f64 = 6.0 * 0.01e6 * 3000.0 / (h_s * 10.7 * 150.0 * 150.0);
+    assert!((w_t_eq - 17_710.3).abs() < 1.0, "{w_t_eq}");
+    assert!((sigma_w - 2.5844).abs() < 1e-3, "{sigma_w}");
+    assert_eq!(status(&r, "6.2.7_torsion"), CheckStatus::Ok);
+    let uc_t = uc(&r, "6.2.7_torsion").expect("UC 6.2.7");
+    assert!((uc_t - tau / TAU_RD_S235).abs() < 1e-9, "{uc_t} ≠ {}", tau / TAU_RD_S235);
+    assert!((uc_t - 0.004_16).abs() < 1e-5, "{uc_t}");
+    assert_eq!(r.status, CheckStatus::Ok, "{}", r.governing_check_id);
+    // Buiging met wringing: f_y,T met τ én σ_w; M_y,Ed/M_c,Rd met die f_y.
+    let fy_t = 235.0 * (1.0 - (tau / TAU_RD_S235).powi(2)).sqrt() - sigma_w;
+    assert!((fy_t - 232.414).abs() < 1e-3, "{fy_t}");
+    let uc_nm = uc(&r, "6.2.7_combined_nmt").expect("UC 6.2.7_combined_nmt");
+    let uc_buiging = uc(&r, "6.2.5_bending_y").expect("UC 6.2.5");
+    assert!((uc_nm / uc_buiging - 235.0 / fy_t).abs() < 1e-6, "{uc_nm} / {uc_buiging}");
+    // Een groter moment (0,5 kNm: τ ≤ 28 N/mm² > 5 % van τ_Rd) blijft niet getoetst.
+    let groot = staaf("IPE 300", "S235", 3.0, t(0.5));
+    assert_eq!(groot.status, CheckStatus::NotApplicable);
+    assert!(uc(&groot, "6.2.7_torsion").is_none());
+}

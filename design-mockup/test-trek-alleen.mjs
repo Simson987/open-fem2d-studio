@@ -367,6 +367,77 @@ async function metNativeFrame2D(callback) {
   });
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────
+log("\n[9] Eigen gewicht van een uitgeschakelde staaf: over beide eindknopen (vondst voorbeeldprojecten)");
+// ─────────────────────────────────────────────────────────────────────────
+// Diagonaal 1 (0,0) → 2 (4,3) m, L = 5 m, sin α = 0,6, cos α = 0,8, tussen
+// twee scharnierende opleggingen; eigen gewicht W = q·L en ΔT = +20 K in
+// hetzelfde geval: de diagonaal staat op druk en valt uit. Een slappe staaf
+// hangt aan beide knopen: elke oplegging krijgt W/2 verticaal en 0
+// horizontaal (de reactie van de aan beide einden vastgehouden staaf). Met de
+// huls alleen ging de component langs de as (W·sin α) naar knoop 1:
+// Rx₁ = +W·sin α·cos α/2 = +0,24·W, Rx₂ = −0,24·W, Rz₁ = (1 + sin²α)·W/2.
+{
+  const model = {
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 4000, z: 3000 }],
+    beams: [{ id: 1, from: 1, to: 2, profile: "Strip 50x10", material: "S235", releases: { ...scharnier }, tensionOnly: true }],
+    supports: [{ nodeId: 1, type: "pinned" }, { nodeId: 2, type: "pinned" }],
+    loadCases: [{ id: 1, name: "G", type: "dead", eigenGewicht: true }],
+    loads: [{ id: 1, type: "thermal", beamId: 1, caseId: 1, deltaT: 20 }],
+    selfWeightEnabled: true,
+  };
+  const inv = invoer(model);
+  const controleer = (route, r) => {
+    const R1 = r.reactions.get(1), R2 = r.reactions.get(2);
+    const W = (R1.fz + R2.fz) / 1000;
+    ok(`${route}: diagonaal uitgeschakeld`, JSON.stringify(r.trekAlleenUitgeschakeld) === "[1]", JSON.stringify(r.trekAlleenUitgeschakeld));
+    ok(`${route}: eigen gewicht aanwezig (W = ${W.toFixed(4)} kN > 0)`, W > 0.1);
+    check(`${route}: Rz knoop 1 = W/2 (kN)`, R1.fz / 1000, W / 2, 1e-6);
+    check(`${route}: Rz knoop 2 = W/2 (kN)`, R2.fz / 1000, W / 2, 1e-6);
+    check(`${route}: Rx knoop 1 = 0 (was +0,24·W) (kN)`, R1.fx / 1000, 0, 1e-6);
+    check(`${route}: Rx knoop 2 = 0 (kN)`, R2.fx / 1000, 0, 1e-6);
+  };
+  controleer("TypeScript", solveAllCases(inv).perCase.get(1));
+  if (existsSync(NATIVE_FRAME2D)) {
+    await metNativeFrame2D(async () => controleer("Rust", (await solveAllCasesNativeFrame2D(inv, "linear")).get(1)));
+  } else ok("Rust-route: native-frame2d ontbreekt", false, NATIVE_FRAME2D);
+
+  // Het raamwerk met twee beuken en kruisverbanden (L 70x70x7) uit de
+  // voorbeeldprojecten: het geval Eigen gewicht met scheefstand wisselde
+  // tussen twee standen en gaf "keert terug naar een eerdere stand".
+  const r = { ...scharnier };
+  const kolom = (id, from, to) => ({ id, from, to, material: "S355", profile: "HEA 200" });
+  const ligger = (id, from, to) => ({ id, from, to, material: "S355", profile: "IPE 330", releases: r });
+  const schoor = (id, from, to) => ({ id, from, to, material: "S355", profile: "L 70x70x7", tensionOnly: true, releases: r });
+  const raam = {
+    nodes: [0, 6000, 12000].flatMap((x, i) => [{ id: 1 + i, x, z: 0 }, { id: 11 + i, x, z: 3500 }, { id: 21 + i, x, z: 7000 }]),
+    beams: [kolom(1, 1, 11), kolom(2, 11, 21), kolom(3, 2, 12), kolom(4, 12, 22), kolom(5, 3, 13), kolom(6, 13, 23),
+      ligger(7, 11, 12), ligger(8, 12, 13), ligger(9, 21, 22), ligger(10, 22, 23),
+      schoor(11, 1, 12), schoor(12, 2, 11), schoor(13, 2, 13), schoor(14, 3, 12),
+      schoor(15, 11, 22), schoor(16, 12, 21), schoor(17, 12, 23), schoor(18, 13, 22)],
+    supports: [1, 2, 3].map((nodeId) => ({ nodeId, type: "fixed" })),
+    loadCases: [{ id: 5, name: "Eigen gewicht", type: "dead", eigenGewicht: true }],
+    loads: [], selfWeightEnabled: true,
+  };
+  const invRaam = bouwMultiInput({ ...metDefaults(raam), scheefstandEnabled: true });
+  let fout = null, ts = null;
+  try { ts = solveAllCases(invRaam).perCase; } catch (e) { fout = e; }
+  ok("TypeScript: twee beuken, eigen gewicht met scheefstand convergeert", fout === null && ts?.size === 2, String(fout));
+  if (existsSync(NATIVE_FRAME2D)) {
+    await metNativeFrame2D(async () => {
+      let foutR = null, rs = null;
+      try { rs = await solveAllCasesNativeFrame2D(invRaam, "linear"); } catch (e) { foutR = e; }
+      ok("Rust: twee beuken, eigen gewicht met scheefstand convergeert", foutR === null && rs?.size === 2, String(foutR));
+      for (const id of [5, 1000005]) {
+        ok(`Rust = TypeScript, uitgeschakelde schoren geval ${id}`,
+          JSON.stringify(rs?.get(id)?.trekAlleenUitgeschakeld) === JSON.stringify(ts?.get(id)?.trekAlleenUitgeschakeld),
+          `${JSON.stringify(rs?.get(id)?.trekAlleenUitgeschakeld)} / ${JSON.stringify(ts?.get(id)?.trekAlleenUitgeschakeld)}`);
+      }
+    });
+  }
+}
+
 log("[veldpatronen] trek-alleen staven maken de berekening niet-lineair (#219 × #234)");
 {
   const { readFileSync } = await import("node:fs");
