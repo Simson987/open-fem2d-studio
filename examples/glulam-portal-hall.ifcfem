@@ -1,0 +1,1703 @@
+{
+  "format": "open-fem-studio-v2",
+  "version": 4,
+  "savedAt": "2026-10-29T00:04:33.929Z",
+  "modelDimension": "3d",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 5,
+      "name": "Self-weight",
+      "type": "dead",
+      "eigenGewicht": true
+    },
+    {
+      "id": 1,
+      "name": "Dead load (G)",
+      "type": "dead"
+    },
+    {
+      "id": 3,
+      "name": "Snow (S)",
+      "type": "snow"
+    },
+    {
+      "id": 4,
+      "name": "Wind (W)",
+      "type": "wind"
+    },
+    {
+      "id": 6,
+      "name": "Wind longitudinal (W2)",
+      "type": "wind"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": true,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 1,
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 2,
+        "x": 12,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 3,
+        "x": 0,
+        "y": 0,
+        "z": 4
+      },
+      {
+        "id": 4,
+        "x": 2,
+        "y": 0,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 5,
+        "x": 4,
+        "y": 0,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 6,
+        "x": 6,
+        "y": 0,
+        "z": 6
+      },
+      {
+        "id": 7,
+        "x": 8,
+        "y": 0,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 8,
+        "x": 10,
+        "y": 0,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 9,
+        "x": 12,
+        "y": 0,
+        "z": 4
+      },
+      {
+        "id": 10,
+        "x": 0,
+        "y": 5,
+        "z": 0
+      },
+      {
+        "id": 11,
+        "x": 12,
+        "y": 5,
+        "z": 0
+      },
+      {
+        "id": 12,
+        "x": 0,
+        "y": 5,
+        "z": 4
+      },
+      {
+        "id": 13,
+        "x": 2,
+        "y": 5,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 14,
+        "x": 4,
+        "y": 5,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 15,
+        "x": 6,
+        "y": 5,
+        "z": 6
+      },
+      {
+        "id": 16,
+        "x": 8,
+        "y": 5,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 17,
+        "x": 10,
+        "y": 5,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 18,
+        "x": 12,
+        "y": 5,
+        "z": 4
+      },
+      {
+        "id": 19,
+        "x": 0,
+        "y": 10,
+        "z": 0
+      },
+      {
+        "id": 20,
+        "x": 12,
+        "y": 10,
+        "z": 0
+      },
+      {
+        "id": 21,
+        "x": 0,
+        "y": 10,
+        "z": 4
+      },
+      {
+        "id": 22,
+        "x": 2,
+        "y": 10,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 23,
+        "x": 4,
+        "y": 10,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 24,
+        "x": 6,
+        "y": 10,
+        "z": 6
+      },
+      {
+        "id": 25,
+        "x": 8,
+        "y": 10,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 26,
+        "x": 10,
+        "y": 10,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 27,
+        "x": 12,
+        "y": 10,
+        "z": 4
+      },
+      {
+        "id": 28,
+        "x": 0,
+        "y": 15,
+        "z": 0
+      },
+      {
+        "id": 29,
+        "x": 12,
+        "y": 15,
+        "z": 0
+      },
+      {
+        "id": 30,
+        "x": 0,
+        "y": 15,
+        "z": 4
+      },
+      {
+        "id": 31,
+        "x": 2,
+        "y": 15,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 32,
+        "x": 4,
+        "y": 15,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 33,
+        "x": 6,
+        "y": 15,
+        "z": 6
+      },
+      {
+        "id": 34,
+        "x": 8,
+        "y": 15,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 35,
+        "x": 10,
+        "y": 15,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 36,
+        "x": 12,
+        "y": 15,
+        "z": 4
+      },
+      {
+        "id": 37,
+        "x": 0,
+        "y": 20,
+        "z": 0
+      },
+      {
+        "id": 38,
+        "x": 12,
+        "y": 20,
+        "z": 0
+      },
+      {
+        "id": 39,
+        "x": 0,
+        "y": 20,
+        "z": 4
+      },
+      {
+        "id": 40,
+        "x": 2,
+        "y": 20,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 41,
+        "x": 4,
+        "y": 20,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 42,
+        "x": 6,
+        "y": 20,
+        "z": 6
+      },
+      {
+        "id": 43,
+        "x": 8,
+        "y": 20,
+        "z": 5.333333333333334
+      },
+      {
+        "id": 44,
+        "x": 10,
+        "y": 20,
+        "z": 4.666666666666667
+      },
+      {
+        "id": 45,
+        "x": 12,
+        "y": 20,
+        "z": 4
+      }
+    ],
+    "beams": [
+      {
+        "id": 1,
+        "startNodeId": 1,
+        "endNodeId": 3,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 2,
+        "startNodeId": 2,
+        "endNodeId": 9,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 3,
+        "startNodeId": 3,
+        "endNodeId": 4,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 4,
+        "startNodeId": 4,
+        "endNodeId": 5,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 5,
+        "startNodeId": 5,
+        "endNodeId": 6,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 6,
+        "startNodeId": 6,
+        "endNodeId": 7,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 7,
+        "startNodeId": 7,
+        "endNodeId": 8,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 8,
+        "startNodeId": 8,
+        "endNodeId": 9,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 9,
+        "startNodeId": 10,
+        "endNodeId": 12,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 10,
+        "startNodeId": 11,
+        "endNodeId": 18,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 11,
+        "startNodeId": 12,
+        "endNodeId": 13,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 12,
+        "startNodeId": 13,
+        "endNodeId": 14,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 13,
+        "startNodeId": 14,
+        "endNodeId": 15,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 14,
+        "startNodeId": 15,
+        "endNodeId": 16,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 15,
+        "startNodeId": 16,
+        "endNodeId": 17,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 16,
+        "startNodeId": 17,
+        "endNodeId": 18,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 17,
+        "startNodeId": 19,
+        "endNodeId": 21,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 18,
+        "startNodeId": 20,
+        "endNodeId": 27,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 19,
+        "startNodeId": 21,
+        "endNodeId": 22,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 20,
+        "startNodeId": 22,
+        "endNodeId": 23,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 21,
+        "startNodeId": 23,
+        "endNodeId": 24,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 22,
+        "startNodeId": 24,
+        "endNodeId": 25,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 23,
+        "startNodeId": 25,
+        "endNodeId": 26,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 24,
+        "startNodeId": 26,
+        "endNodeId": 27,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 25,
+        "startNodeId": 28,
+        "endNodeId": 30,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 26,
+        "startNodeId": 29,
+        "endNodeId": 36,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 27,
+        "startNodeId": 30,
+        "endNodeId": 31,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 28,
+        "startNodeId": 31,
+        "endNodeId": 32,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 29,
+        "startNodeId": 32,
+        "endNodeId": 33,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 30,
+        "startNodeId": 33,
+        "endNodeId": 34,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 31,
+        "startNodeId": 34,
+        "endNodeId": 35,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 32,
+        "startNodeId": 35,
+        "endNodeId": 36,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 33,
+        "startNodeId": 37,
+        "endNodeId": 39,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 34,
+        "startNodeId": 38,
+        "endNodeId": 45,
+        "profileName": "160x600",
+        "material": "GL24h"
+      },
+      {
+        "id": 35,
+        "startNodeId": 39,
+        "endNodeId": 40,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 36,
+        "startNodeId": 40,
+        "endNodeId": 41,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 37,
+        "startNodeId": 41,
+        "endNodeId": 42,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 38,
+        "startNodeId": 42,
+        "endNodeId": 43,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 39,
+        "startNodeId": 43,
+        "endNodeId": 44,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 40,
+        "startNodeId": 44,
+        "endNodeId": 45,
+        "profileName": "160x720",
+        "material": "GL24h"
+      },
+      {
+        "id": 41,
+        "startNodeId": 3,
+        "endNodeId": 12,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 42,
+        "startNodeId": 12,
+        "endNodeId": 21,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 43,
+        "startNodeId": 21,
+        "endNodeId": 30,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 44,
+        "startNodeId": 30,
+        "endNodeId": 39,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 45,
+        "startNodeId": 4,
+        "endNodeId": 13,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 46,
+        "startNodeId": 13,
+        "endNodeId": 22,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 47,
+        "startNodeId": 22,
+        "endNodeId": 31,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 48,
+        "startNodeId": 31,
+        "endNodeId": 40,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 49,
+        "startNodeId": 5,
+        "endNodeId": 14,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 50,
+        "startNodeId": 14,
+        "endNodeId": 23,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 51,
+        "startNodeId": 23,
+        "endNodeId": 32,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 52,
+        "startNodeId": 32,
+        "endNodeId": 41,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 53,
+        "startNodeId": 6,
+        "endNodeId": 15,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 54,
+        "startNodeId": 15,
+        "endNodeId": 24,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 55,
+        "startNodeId": 24,
+        "endNodeId": 33,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 56,
+        "startNodeId": 33,
+        "endNodeId": 42,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 57,
+        "startNodeId": 7,
+        "endNodeId": 16,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 58,
+        "startNodeId": 16,
+        "endNodeId": 25,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 59,
+        "startNodeId": 25,
+        "endNodeId": 34,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 60,
+        "startNodeId": 34,
+        "endNodeId": 43,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 61,
+        "startNodeId": 8,
+        "endNodeId": 17,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 62,
+        "startNodeId": 17,
+        "endNodeId": 26,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 63,
+        "startNodeId": 26,
+        "endNodeId": 35,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 64,
+        "startNodeId": 35,
+        "endNodeId": 44,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 65,
+        "startNodeId": 9,
+        "endNodeId": 18,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 66,
+        "startNodeId": 18,
+        "endNodeId": 27,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 67,
+        "startNodeId": 27,
+        "endNodeId": 36,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 68,
+        "startNodeId": 36,
+        "endNodeId": 45,
+        "profileName": "100x240",
+        "material": "GL24h",
+        "releases": {
+          "myStart": true,
+          "myEnd": true,
+          "mzStart": true,
+          "mzEnd": true,
+          "torsionStart": false,
+          "torsionEnd": false
+        }
+      },
+      {
+        "id": 69,
+        "startNodeId": 3,
+        "endNodeId": 15,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 70,
+        "startNodeId": 6,
+        "endNodeId": 12,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 71,
+        "startNodeId": 6,
+        "endNodeId": 18,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 72,
+        "startNodeId": 9,
+        "endNodeId": 15,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 73,
+        "startNodeId": 1,
+        "endNodeId": 12,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 74,
+        "startNodeId": 3,
+        "endNodeId": 10,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 75,
+        "startNodeId": 2,
+        "endNodeId": 18,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 76,
+        "startNodeId": 9,
+        "endNodeId": 11,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 77,
+        "startNodeId": 30,
+        "endNodeId": 42,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 78,
+        "startNodeId": 33,
+        "endNodeId": 39,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 79,
+        "startNodeId": 33,
+        "endNodeId": 45,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 80,
+        "startNodeId": 36,
+        "endNodeId": 42,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 81,
+        "startNodeId": 28,
+        "endNodeId": 39,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 82,
+        "startNodeId": 30,
+        "endNodeId": 37,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 83,
+        "startNodeId": 29,
+        "endNodeId": 45,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      },
+      {
+        "id": 84,
+        "startNodeId": 36,
+        "endNodeId": 38,
+        "profileName": "RD 20",
+        "material": "S235",
+        "tensionOnly": true
+      }
+    ],
+    "plates": [],
+    "supports": [
+      {
+        "nodeId": 1,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 2,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 10,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 11,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 19,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 20,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 28,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 29,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 37,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      },
+      {
+        "nodeId": 38,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": false,
+        "ry": false,
+        "rz": false
+      }
+    ],
+    "loads": [
+      {
+        "id": 1,
+        "nodeId": 3,
+        "fx": 0,
+        "fy": 3,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 6
+      },
+      {
+        "id": 2,
+        "nodeId": 6,
+        "fx": 0,
+        "fy": 4,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 6
+      },
+      {
+        "id": 3,
+        "nodeId": 9,
+        "fx": 0,
+        "fy": 3,
+        "fz": 0,
+        "mx": 0,
+        "my": 0,
+        "mz": 0,
+        "caseId": 6
+      }
+    ],
+    "memberLoads": [
+      {
+        "id": 1,
+        "beamId": 1,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.75,
+        "qEnd": 1.75,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 2,
+        "beamId": 2,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1,
+        "qEnd": 1,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 3,
+        "beamId": 9,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 3.5,
+        "qEnd": 3.5,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 4,
+        "beamId": 10,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2,
+        "qEnd": 2,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 5,
+        "beamId": 17,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 3.5,
+        "qEnd": 3.5,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 6,
+        "beamId": 18,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2,
+        "qEnd": 2,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 7,
+        "beamId": 25,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 3.5,
+        "qEnd": 3.5,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 8,
+        "beamId": 26,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2,
+        "qEnd": 2,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 9,
+        "beamId": 33,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.75,
+        "qEnd": 1.75,
+        "startPositionM": 0,
+        "endPositionM": 4
+      },
+      {
+        "id": 10,
+        "beamId": 34,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1,
+        "qEnd": 1,
+        "startPositionM": 0,
+        "endPositionM": 4
+      }
+    ],
+    "memberPointLoads": [],
+    "thermalLoads": [],
+    "surfaceLoads": [],
+    "tensionOnlyCrossRule": true,
+    "loadPanels": [
+      {
+        "id": 1,
+        "nodeIds": [
+          3,
+          6,
+          42,
+          39
+        ],
+        "caseId": 1,
+        "q": 0.5,
+        "direction": "gravity",
+        "distribution": "oneWay",
+        "spanDirection": {
+          "x": 6,
+          "y": 0,
+          "z": 2
+        }
+      },
+      {
+        "id": 2,
+        "nodeIds": [
+          3,
+          6,
+          42,
+          39
+        ],
+        "caseId": 3,
+        "q": 0.56,
+        "direction": "gravity",
+        "distribution": "oneWay",
+        "spanDirection": {
+          "x": 6,
+          "y": 0,
+          "z": 2
+        }
+      },
+      {
+        "id": 3,
+        "nodeIds": [
+          6,
+          9,
+          45,
+          42
+        ],
+        "caseId": 1,
+        "q": 0.5,
+        "direction": "gravity",
+        "distribution": "oneWay",
+        "spanDirection": {
+          "x": 6,
+          "y": 0,
+          "z": -2
+        }
+      },
+      {
+        "id": 4,
+        "nodeIds": [
+          6,
+          9,
+          45,
+          42
+        ],
+        "caseId": 3,
+        "q": 0.56,
+        "direction": "gravity",
+        "distribution": "oneWay",
+        "spanDirection": {
+          "x": 6,
+          "y": 0,
+          "z": -2
+        }
+      }
+    ],
+    "envelopePanels": []
+  },
+  "projectInfo": {
+    "name": "Glulam portal frame hall",
+    "description": "Fictitious example project for Open FEM Studio (not a real building)."
+  },
+  "combinations": [
+    {
+      "id": 1,
+      "name": "UGT 6.10a",
+      "type": "uls",
+      "formula": "1,35·G   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35
+      },
+      "standaard": {
+        "sleutel": "6.10a",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 4,
+      "name": "UGT 6.10b — Snow (S) leidend",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·S   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "3": 1.5,
+        "5": 1.2
+      },
+      "standaard": {
+        "sleutel": "6.10b|S:3",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 6,
+      "name": "UGT 6.10b — Wind (W) leidend",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·W[Wind (W)]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "4": 1.5,
+        "5": 1.2
+      },
+      "standaard": {
+        "sleutel": "6.10b|W:4",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 25,
+      "name": "UGT 6.10b — Wind longitudinal (W2) leidend",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·W[Wind longitudinal (W2)]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "6": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|W:6",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 9,
+      "name": "UGT 6.10b — Snow (S) leidend, blijvend gunstig",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·S   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "3": 1.5,
+        "5": 0.9
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|S:3",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 11,
+      "name": "UGT 6.10b — Wind (W) leidend, blijvend gunstig",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·W[Wind (W)]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "4": 1.5,
+        "5": 0.9
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|W:4",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 26,
+      "name": "UGT 6.10b — Wind longitudinal (W2) leidend, blijvend gunstig",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·W[Wind longitudinal (W2)]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "6": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|W:6",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 14,
+      "name": "BGT karakteristiek 6.14b — Snow (S) leidend",
+      "type": "sls",
+      "formula": "G + S   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|S:3",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 16,
+      "name": "BGT karakteristiek 6.14b — Wind (W) leidend",
+      "type": "sls",
+      "formula": "G + W[Wind (W)]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "4": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|W:4",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 27,
+      "name": "BGT karakteristiek 6.14b — Wind longitudinal (W2) leidend",
+      "type": "sls",
+      "formula": "G + W[Wind longitudinal (W2)]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|W:6",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 19,
+      "name": "BGT frequent 6.15b — Snow (S) leidend",
+      "type": "sls",
+      "formula": "G + 0,2·S   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "3": 0.2,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.15b|S:3",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 21,
+      "name": "BGT frequent 6.15b — Wind (W) leidend",
+      "type": "sls",
+      "formula": "G + 0,2·W[Wind (W)]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "4": 0.2,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.15b|W:4",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 28,
+      "name": "BGT frequent 6.15b — Wind longitudinal (W2) leidend",
+      "type": "sls",
+      "formula": "G + 0,2·W[Wind longitudinal (W2)]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.2
+      },
+      "standaard": {
+        "sleutel": "6.15b|W:6",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 23,
+      "name": "BGT quasi-blijvend 6.16b",
+      "type": "sls",
+      "formula": "G   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.16b",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    }
+  ],
+  "idTellers": {
+    "belastinggeval": 7,
+    "combinatie": 29
+  },
+  "openFem3dViewSets": []
+}
