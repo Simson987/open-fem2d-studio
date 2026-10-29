@@ -784,8 +784,46 @@ struct Schermafdruk {
     #[serde(default = "hoofdvenster")]
     window: String,
     path: String,
+    /// Zonder opgave: de echte pixels waar de app die kan vastleggen
+    /// (Windows, `PrintWindow`), elders de DOM-weergave ([`dom_standaard`]).
     #[serde(default)]
-    dom: bool,
+    dom: Option<bool>,
+}
+
+/// Of `gui_screenshot` zonder `dom` de DOM-weergave neemt. De venstercapture
+/// van de app (`capture::naar_png` in gui_control.rs) bestaat alleen op
+/// Windows; op Linux en macOS gaf de standaard tot nu toe altijd een fout en
+/// werkte alleen `dom: true`. De MCP-server praat over 127.0.0.1 met de app op
+/// dezelfde machine, dus het platform van de server is dat van de app.
+fn dom_standaard() -> bool {
+    !cfg!(windows)
+}
+
+/// `gui_solve`. Strikt, zoals de andere argumenten: een tikfout (`timeout`)
+/// is een fout. (`detail` haalt `samenvatting::neem_detail` er eerst af.)
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Rekenen {
+    #[serde(default)]
+    timeout_s: Option<u64>,
+}
+
+/// Tijdslimiet van `gui_solve` in seconden. Was vast 120 s; het woningmodel
+/// van `examples/masonry-house.ifcfem` (metselwerkwanden als schalen, met de
+/// toetsing) rekent langer. De bovengrens is die van het kanaal in de app
+/// (`MAX_TIJDSLIMIET_S` in gui_control.rs): daarboven kapt de app af.
+const STANDAARD_REKEN_S: u64 = 300;
+const MIN_REKEN_S: u64 = 10;
+const MAX_REKEN_S: u64 = 600;
+
+fn rekentijd(gevraagd: Option<u64>) -> Result<u64, RpcError> {
+    let tijd = gevraagd.unwrap_or(STANDAARD_REKEN_S);
+    if !(MIN_REKEN_S..=MAX_REKEN_S).contains(&tijd) {
+        return Err(RpcError::invalid_params(format!(
+            "gui_solve: `timeout_s` must lie between {MIN_REKEN_S} and {MAX_REKEN_S}, not {tijd}"
+        )));
+    }
+    Ok(tijd)
 }
 fn hoofdvenster() -> String {
     "main".into()
@@ -1048,8 +1086,9 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
             let mut args = args;
             let samenvatting = crate::samenvatting::neem_detail(&mut args)
                 .map_err(|e| RpcError::invalid_params(format!("{naam}: {e}")))?;
-            let _: Leeg = lees(naam, args)?;
-            let mut uit = roep("rekenen", json!({}), 120)?;
+            let a: Rekenen = lees(naam, args)?;
+            let tijd = rekentijd(a.timeout_s)?;
+            let mut uit = roep("rekenen", json!({}), tijd)?;
             eis_toetsanalyse_van_app(naam, &uit)?;
             if samenvatting {
                 crate::samenvatting::samenvat_gui_solve(&mut uit);
@@ -1082,7 +1121,7 @@ fn dispatch_sync(naam: &str, args: Value) -> Result<Value, RpcError> {
             let a: Schermafdruk = lees(naam, args)?;
             roep(
                 "screenshot",
-                json!({ "venster": a.window, "pad": a.path, "dom": a.dom }),
+                json!({ "venster": a.window, "pad": a.path, "dom": a.dom.unwrap_or_else(dom_standaard) }),
                 60,
             )
         }
@@ -1343,7 +1382,11 @@ pub fn tool_definitions() -> Vec<Value> {
             "name": "gui_solve",
             "description": format!("{vooraf}Runs the full calculation exactly as the Bereken button does and returns only when analysis and checks are finished. For 2D this covers all load cases/combinations, the physically non-linear concrete round when selected, and the ULS check forces, which are always second order (P-Delta) with sway imperfection in +x and −x, whatever the analysis type; `toetsing.toetsanalyse` names that analysis, φ and whether the results were reused, and `toetsing.fout` the reason when the check forces could not be determined (the results stay). For 3D the RESULTS follow the analysis type (eersteOrde: linear; otherwise P-Delta with eigenvalue buckling), with all six local member-force components and reactions; the ULS check forces of the EN 1992/EN 1993/EN 1995 checks are always second order (P-Delta) with sway imperfection in +X, −X, +Y and −Y, whatever the analysis type, and `toetsanalyse`, `toetsAlphaCr` and `toetsmeldingen` describe them. A 3D answer contains the complete result plus steel/concrete/timber results and explicit skipped reasons. An app that does not report the check analysis (an older version) gives TOETSING_ONMOGELIJK instead of an answer. When the active load case has no loads (and so no result of its own), the answer is not an error: `result` then holds the first calculated combination (or the active case switches to a calculated case), and `melding` / `actiefBelastinggeval` say so. With detail \"samenvatting\" a 3D answer stays a few kB: per-node, per-member and per-shell-element lists become counts (`result.weggelaten`) plus their extremes (`result.uitersten`, `reactieSomKn`), checks keep only id, title, article, UC, status and combination; the 2D answer is already compact and unchanged."),
             "inputSchema": { "type": "object", "additionalProperties": false,
-                "properties": { "detail": crate::samenvatting::schema_detail() } }
+                "properties": {
+                    "detail": crate::samenvatting::schema_detail(),
+                    "timeout_s": { "type": "integer", "minimum": MIN_REKEN_S, "maximum": MAX_REKEN_S, "default": STANDAARD_REKEN_S,
+                        "description": "Time limit in seconds for the calculation and checks; a large shell model (masonry walls, slabs) can need several minutes." }
+                } }
         }),
         json!({
             "name": "gui_run_checks",
@@ -1374,12 +1417,12 @@ pub fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "gui_screenshot",
-            "description": format!("{vooraf}Captures a window of the app to a PNG file: real pixels via PrintWindow (default), or with dom=true a DOM render via html2canvas. `window` is the Tauri label: main, or the label gui_detach_report returned."),
+            "description": format!("{vooraf}Captures a window of the app to a PNG file: real pixels via PrintWindow (Windows only), or with dom=true a DOM render via html2canvas (the 3D canvas is drawn into it). Without `dom` the default is the real pixels on Windows and the DOM render on Linux and macOS, where window capture is not available. `window` is the Tauri label: main, or the label gui_detach_report returned."),
             "inputSchema": { "type": "object", "additionalProperties": false, "required": ["path"],
                 "properties": {
                     "window": { "type": "string", "default": "main" },
                     "path": { "type": "string", "description": "Absolute path of the PNG to write." },
-                    "dom": { "type": "boolean", "default": false }
+                    "dom": { "type": "boolean", "description": "true: DOM render (html2canvas); false: real pixels (Windows only). Default: false on Windows, true elsewhere." }
                 } }
         }),
         json!({
@@ -1886,6 +1929,37 @@ mod tests {
         std::fs::write(&elders, b"").unwrap();
         assert_eq!(kies_app_exe(Some(&elders.to_string_lossy()), &server).unwrap(), elders);
         std::fs::remove_dir_all(&map).unwrap();
+    }
+
+    /// `gui_solve` had een vaste limiet van 120 s; het woningmodel rekent
+    /// langer. Nu een argument met een ruimere standaard, binnen de grens van
+    /// het kanaal in de app (600 s).
+    #[test]
+    fn gui_solve_heeft_een_instelbare_tijdslimiet() {
+        assert_eq!(rekentijd(None).unwrap(), 300);
+        assert_eq!(rekentijd(Some(600)).unwrap(), 600);
+        assert!(rekentijd(Some(601)).is_err(), "boven de grens van de app");
+        assert!(rekentijd(Some(5)).is_err());
+        assert!(lees::<Rekenen>("gui_solve", json!({ "timeout": 200 })).is_err(), "tikfout geweigerd");
+        assert_eq!(lees::<Rekenen>("gui_solve", json!({ "timeout_s": 450 })).unwrap().timeout_s, Some(450));
+        let defs = tool_definitions();
+        let d = defs.iter().find(|d| d["name"] == "gui_solve").expect("gui_solve");
+        let t = &d["inputSchema"]["properties"]["timeout_s"];
+        assert_eq!((t["minimum"].clone(), t["maximum"].clone(), t["default"].clone()), (json!(10), json!(600), json!(300)));
+    }
+
+    /// Op Linux werkte `gui_screenshot` alleen met `dom: true`: de
+    /// venstercapture van de app bestaat alleen op Windows. Zonder `dom` nu
+    /// de DOM-weergave buiten Windows; een expliciete keuze blijft staan.
+    #[test]
+    fn gui_screenshot_kiest_buiten_windows_de_dom_weergave() {
+        let a: Schermafdruk = lees("gui_screenshot", json!({ "path": "/tmp/x.png" })).unwrap();
+        assert_eq!(a.dom.unwrap_or_else(dom_standaard), !cfg!(windows));
+        let b: Schermafdruk = lees("gui_screenshot", json!({ "path": "/tmp/x.png", "dom": false })).unwrap();
+        assert!(!b.dom.unwrap_or_else(dom_standaard));
+        let defs = tool_definitions();
+        let d = defs.iter().find(|d| d["name"] == "gui_screenshot").expect("gui_screenshot");
+        assert!(d["inputSchema"]["properties"]["dom"].get("default").is_none(), "de standaard hangt van het platform af");
     }
 
     #[test]

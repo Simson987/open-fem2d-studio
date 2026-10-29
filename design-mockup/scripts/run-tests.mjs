@@ -766,6 +766,7 @@ const ALLEEN_BRON = new Map([
   ["beton-tooltips", "Leest KorfVelden.tsx en ProfielKiezer.tsx als bron: waar de uitleg staat (tooltip of tekst); geen solvercode en niet in de sidecarbundel."],
   ["lijnlast-pijlen", "Pijlafstand van lijnlasten op het 2D-tekenvlak en de bron van FemCanvas; geen solvercode en niet in de sidecarbundel."],
   ["open-fem3d-projectwissel", "Een tweede 3D-project met platen openen: de plaatlaag (Three.js) met een net dat niet bij het model past, en de bedrading in App.tsx; weergavelogica buiten de barrel, de sidecar tekent niets."],
+  ["schermafdruk-canvas", "DOM-schermafdruk van de bediening buiten Windows: de WebGL-tekenvlakken vastleggen vóór html2canvas (bediening/schermafdrukCanvas.ts, met nep-canvassen) en de bedrading in bediening.ts en het 3D-tekenvlak; geen solvercode en niet in de sidecarbundel."],
   ["html2canvas-ui", "DOM-schermafbeelding met html2canvas en color-mix in Chromium (bedieningskanaal en feedback); geen solvercode en niet in de sidecarbundel."],
   ["tekenhulp", "Tekenhulpen van het 2D-tekenvlak (#53): ortho, hoeksnap en de bewaarde snapinstellingen, plus de bron van FemCanvas en de tab Weergave; geen solvercode en niet in de sidecarbundel."],
   ["last-waarde", "Een lastwaarde intypen (komma, punt, min-teken, eenheid) voor het q-veld op het tekenvlak en het paneel; geen solvercode en niet in de sidecarbundel."],

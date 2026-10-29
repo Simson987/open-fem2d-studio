@@ -1279,12 +1279,29 @@ export async function voerUit(
       const { default: html2canvas } = await import("html2canvas");
       // html2canvas kent color() niet; de kloon wordt zelf nagelopen (#100).
       const { maakKleurenCompatibel } = await import("../lib/html2canvasKleuren");
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        logging: false,
-        onclone: maakKleurenCompatibel,
-      });
-      return { dataUrl: canvas.toDataURL("image/png") };
+      // De 3D-tekenvlakken (WebGL) eerst vastleggen, anders zijn ze leeg in
+      // het beeld; zie schermafdrukCanvas.ts.
+      const { legCanvassenVast, tekenInKloon, verwijderMerken, SCHERMAFDRUK_EVENT } = await import("./schermafdrukCanvas");
+      const echte = [...document.querySelectorAll("canvas")];
+      const beelden = legCanvassenVast(echte, () => window.dispatchEvent(new Event(SCHERMAFDRUK_EVENT)));
+      try {
+        const canvas = await html2canvas(document.body, {
+          useCORS: true,
+          logging: false,
+          onclone: async (kloon) => {
+            maakKleurenCompatibel(kloon);
+            await tekenInKloon(kloon, beelden, async (data) => {
+              const img = new Image();
+              img.src = data;
+              await img.decode();
+              return img;
+            });
+          },
+        });
+        return { dataUrl: canvas.toDataURL("image/png") };
+      } finally {
+        verwijderMerken(echte);
+      }
     }
 
     // Het standaardrapport als PDF: Rust (`rapport_pdf`) roept deze twee aan,
