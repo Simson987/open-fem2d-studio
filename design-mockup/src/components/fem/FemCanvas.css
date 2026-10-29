@@ -4,7 +4,12 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--theme-bg);
+  /* Het tekenvlak is in ontwerp 0.4 de werkruimte (--oa-workspace: wit in
+     Licht, #26262D in Donker, volgt de instelling Werkruimte), niet het
+     vensterkader (--theme-bg = --oa-frame, #F1EEEA in Licht). Op dat kader
+     haalde het profielpalet (lib/profielKleur.ts, gekozen voor #FAFAF9 en
+     #27272A) geen 3:1 meer: blauw #508FF9 2,74:1 (WCAG 2.1, 1.4.11). */
+  background: var(--theme-content-bg);
   overflow: hidden;
 }
 
