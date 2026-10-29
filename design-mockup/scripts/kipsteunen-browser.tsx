@@ -15,6 +15,7 @@ import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/report/report.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
@@ -114,7 +115,7 @@ async function run() {
   });
   const beeld = /beeld=(\w+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld === "donker" ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld === "donker" ? "dark" : "light");
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
     if (beeld === "rapport") {

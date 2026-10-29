@@ -110,7 +110,9 @@ async function run() {
   tests.push("Scharnierende voeten zonder wandverband: vertaalde melding, Maken uit; hersteld: Maken aan");
 
   const trekAlleen = [...document.querySelectorAll(".shw-vink")].find((el) => el.textContent?.startsWith("Verbanden alleen op trek"))!.querySelector("input")!;
-  klik(trekAlleen, "trek-alleenverband");
+  // Sinds #199 begint de wizard met trek-alleen verbanden (STAALHAL_WIZARD_BEGINSTAND);
+  // een klik zou ze juist uitzetten.
+  ok(trekAlleen.checked, "trek-alleenverband staat in de beginstand aan (#199)");
   ok(!document.querySelector(".shw-problemen") && !maakKnop().disabled, "trek-alleenverband is geldige invoer");
 
   stap("Belastingen");

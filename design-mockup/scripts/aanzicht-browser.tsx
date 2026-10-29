@@ -15,6 +15,7 @@ import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/report/report.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
@@ -103,7 +104,7 @@ async function run() {
   });
   const beeld = /beeld=(\w+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld === "donker" ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld === "donker" ? "dark" : "light");
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
     if (beeld === "rapport") {
@@ -226,11 +227,11 @@ async function run() {
     mount(<Tekenvlak flags={AAN} />);
     await wacht();
     const kleur = () => getComputedStyle(lijnen(3, "contour")[0]).stroke;
-    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.setAttribute("data-oa-theme", "light");
     const licht = kleur();
-    document.documentElement.setAttribute("data-theme", "openaec");
+    document.documentElement.setAttribute("data-oa-theme", "dark");
     const donker = kleur();
-    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-oa-theme");
     ok(licht !== donker, `zelfde kleur in beide thema's: ${licht}`);
   });
 

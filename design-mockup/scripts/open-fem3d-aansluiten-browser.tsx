@@ -50,6 +50,7 @@ import commonFr from "../src/i18n/locales/fr/common.json";
 import ribbonEn from "../src/i18n/locales/en/ribbon.json";
 import ribbonDe from "../src/i18n/locales/de/ribbon.json";
 import ribbonFr from "../src/i18n/locales/fr/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import "../src/components/ribbon/Ribbon.css";
@@ -66,6 +67,16 @@ import { herstelSnapBeginstand, leesSnapInstellingen, zetKnopenAansluiten, zetSn
 import type { OpenFem3DSelection } from "../src/components/openFem3d/openFem3dSelection";
 import type { OpenFem3DTool } from "../src/components/openFem3d/openFem3dCommands";
 import type { OpenFem3DCameraState } from "../src/components/openFem3d/openFem3dViewSets";
+
+
+// Ontwerp 0.4 (RibbonButton): een lintknop heeft geen title-attribuut meer. De
+// uitleg staat in de eigen tooltip en, voor schermlezers, in aria-label als
+// "<naam>. <uitleg>".
+const lintUitleg = (b?: HTMLButtonElement | null): string => {
+  const label = b?.querySelector(".ribbon-btn-label")?.textContent ?? "";
+  const aria = b?.getAttribute("aria-label") ?? "";
+  return aria.startsWith(`${label}. `) ? aria.slice(label.length + 2) : "";
+};
 
 // Synthetische PointerEvents hebben geen actieve aanwijzer om vast te houden.
 Element.prototype.setPointerCapture = function () {};
@@ -239,7 +250,7 @@ async function run() {
   await i18next.use(initReactI18next).init({
     lng: "nl", resources: { nl: { common, check, ribbon } }, defaultNS: "common", initImmediate: false,
   });
-  document.documentElement.setAttribute("data-theme", "light");
+  document.documentElement.setAttribute("data-oa-theme", "light");
   try { localStorage.clear(); } catch { /* privé venster */ }
   herstelSnapBeginstand();
   const beeld = new URLSearchParams(location.hash.slice(1)).get("beeld");
@@ -436,8 +447,8 @@ async function run() {
     const knop = [...container.querySelectorAll<HTMLButtonElement>("button.ribbon-btn")]
       .find((b) => b.querySelector(".ribbon-btn-label")?.textContent === "Knopen aansluiten");
     ok(knop && !knop.disabled, "de knop staat in het lint");
-    ok((knop!.title ?? "").startsWith("Knopen op staven aansluiten:"), `uitleg: ${knop!.title}`);
-    ok((knop!.title ?? "").includes("begin- en eindknoop"), `uitleg noemt de eindknopen van een geselecteerde staaf: ${knop!.title}`);
+    ok(lintUitleg(knop).startsWith("Knopen op staven aansluiten:"), `uitleg: ${lintUitleg(knop)}`);
+    ok(lintUitleg(knop).includes("begin- en eindknoop"), `uitleg noemt de eindknopen van een geselecteerde staaf: ${lintUitleg(knop)}`);
     flushSync(() => knop!.click());
     gelijk(geroepen, 1, "een klik roept de handler");
   });

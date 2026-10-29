@@ -51,7 +51,7 @@ try {
 
   const schermen = process.env.EIGEN_GEWICHT_SCHERMEN;
   if (schermen) {
-    for (const [thema, naam] of [["light", "licht"], ["openaec", "donker"]]) {
+    for (const [thema, naam] of [["light", "licht"], ["dark", "donker"]]) {
       const pad = resolve(schermen, `eigen-gewicht-${naam}.png`);
       const r = chromium([`--screenshot=${pad}`, "--window-size=1100,640", "--hide-scrollbars"],
         `${pathToFileURL(html).href}#toon-${thema}`);

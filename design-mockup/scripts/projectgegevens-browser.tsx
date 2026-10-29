@@ -24,6 +24,7 @@ import nl from "../src/i18n/locales/nl/common.json";
 import en from "../src/i18n/locales/en/common.json";
 import de from "../src/i18n/locales/de/common.json";
 import fr from "../src/i18n/locales/fr/common.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import ProjectSettingsDialog from "../src/components/project/ProjectSettingsDialog";
@@ -161,7 +162,7 @@ async function run() {
   document.body.style.background = "var(--theme-bg)";
   const beeld = /beeld=([\w-]+)/.exec(HASH)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld.startsWith("donker") ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld.startsWith("donker") ? "dark" : "light");
     document.getElementById("uitslag")!.remove();
     mount(<ProjectSettingsDialog open onClose={noop} />);
     await wacht(200);

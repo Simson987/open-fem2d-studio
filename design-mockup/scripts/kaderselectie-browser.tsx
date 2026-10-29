@@ -18,6 +18,7 @@ import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
 import { DEFAULT_DISPLAY_FLAGS } from "../src/components/fem/FemResultsOverlay";
@@ -181,7 +182,7 @@ async function run() {
   });
 
   await test("donker thema: andere kaderkleuren, venster en crossing verschillend", async () => {
-    document.documentElement.setAttribute("data-theme", "openaec");
+    document.documentElement.setAttribute("data-oa-theme", "dark");
     try {
       mount(<MetStore />);
       await klaar();
@@ -194,7 +195,7 @@ async function run() {
         () => { venster = getComputedStyle(kader()!).stroke; });
       gelijk([crossing, venster], ["rgb(74, 222, 128)", "rgb(96, 165, 250)"], "donkere kaderkleuren");
     } finally {
-      document.documentElement.removeAttribute("data-theme");
+      document.documentElement.removeAttribute("data-oa-theme");
     }
   });
 

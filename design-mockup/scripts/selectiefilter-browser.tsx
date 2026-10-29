@@ -22,6 +22,7 @@ import { openFem3DSelectieBelastinggevallen } from "../src/components/openFem3d/
 import type { OpenFem3DModel } from "../src/components/openFem3d/openFem3dModel";
 import type { OpenFem3DSelection } from "../src/components/openFem3d/openFem3dSelection";
 import type { LoadCase, Selection } from "../src/components/fem/femTypes";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 
@@ -174,9 +175,9 @@ async function run() {
     resources: { nl: { common, ribbon }, en: { common: commonEn, ribbon } },
     interpolation: { escapeValue: false }, initImmediate: false,
   });
-  const beeld = /^#beeld=(3d|2d)-(light|openaec)$/.exec(location.hash);
+  const beeld = /^#beeld=(3d|2d)-(light|dark)$/.exec(location.hash);
   if (beeld) {
-    document.documentElement.dataset.theme = beeld[2];
+    document.documentElement.dataset.oaTheme = beeld[2];
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     if (beeld[1] === "3d") {
       flushSync(() => root.render(<Proef3D start={tienStaven} />));
@@ -189,7 +190,7 @@ async function run() {
     document.getElementById("uitslag")!.textContent = JSON.stringify({ tests: ["beeld"], errors });
     return;
   }
-  document.documentElement.dataset.theme = "light";
+  document.documentElement.dataset.oaTheme = "light";
 
   // ── 3D ──
   test("3D: de lintknop opent het venster op de selectie van tien staven", () => {

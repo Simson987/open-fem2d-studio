@@ -15,6 +15,7 @@ import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
 import { DEFAULT_DISPLAY_FLAGS } from "../src/components/fem/FemResultsOverlay";
@@ -91,7 +92,7 @@ async function run() {
   });
   const beeld = /beeld=(\w+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld === "donker" ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld === "donker" ? "dark" : "light");
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
     mount(<MetStore />);
@@ -106,7 +107,9 @@ async function run() {
     await wacht();
     const g = peilmaat("2", "links");
     ok(g, "peilmaat van +5,00 m ontbreekt");
-    gelijk(g!.querySelector("text")!.textContent, "+5,00 m", "tekst");
+    // Sinds #244 heten de levels van een nieuw project "Peil 0" en "Peil 1"; een
+    // eigen niveaunaam staat vóór de peilmaat (lib/peilmaat.ts, niveauLabel).
+    gelijk(g!.querySelector("text")!.textContent, "Peil 1  +5,00 m", "tekst");
     gelijk(getComputedStyle(g!.querySelector("text")!).fontSize, "12.5px", "lettergrootte");
     const d = g!.querySelector("polygon")!.getBBox();
     gelijk([d.width, d.height], [12, 8], "driehoekje");
@@ -145,7 +148,7 @@ async function run() {
     ok(!invoer(), "de invoer is na Enter niet dicht");
     gelijk([niveau("2"), knoopZ(3), knoopZ(4)], [5500, 5500, 5500], "niveau en knopen op 5500");
     gelijk([knoopZ(1), knoopZ(2), niveau("1")], [0, 0, 0], "de rest blijft staan");
-    gelijk(peilmaat("2", "links")!.querySelector("text")!.textContent, "+5,50 m", "peilmaat volgt");
+    gelijk(peilmaat("2", "links")!.querySelector("text")!.textContent, "Peil 1  +5,50 m", "peilmaat volgt");
     ok(store.canUndo, "geen undo-stap");
     flushSync(() => store.undo());
     await wacht();
@@ -218,7 +221,7 @@ async function run() {
     toets(el, "Enter");
     await wacht();
     gelijk([niveau("1"), knoopZ(1), knoopZ(2)], [-500, -500, -500], "nulniveau en voetknopen");
-    gelijk(peilmaat("1", "links")!.querySelector("text")!.textContent, "−0,50 m", "peilmaat");
+    gelijk(peilmaat("1", "links")!.querySelector("text")!.textContent, "Peil 0  −0,50 m", "peilmaat");
   });
 }
 

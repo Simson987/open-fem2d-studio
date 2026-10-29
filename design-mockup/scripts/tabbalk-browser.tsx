@@ -18,6 +18,7 @@ import nl from "../src/i18n/locales/nl/common.json";
 import en from "../src/i18n/locales/en/common.json";
 import de from "../src/i18n/locales/de/common.json";
 import fr from "../src/i18n/locales/fr/common.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import LoadCaseTabBar from "../src/components/fem/LoadCaseTabBar";
@@ -138,7 +139,7 @@ async function run() {
   });
   const beeld = /beeld=([\w-]+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld.endsWith("donker") ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld.endsWith("donker") ? "dark" : "light");
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
     mount(<Balk begin={beeld.startsWith("midden") || beeld.startsWith("lijst") ? 6 : 1} />);

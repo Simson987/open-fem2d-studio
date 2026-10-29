@@ -46,6 +46,7 @@ import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import "../src/components/ribbon/Ribbon.css";
@@ -205,7 +206,7 @@ async function run() {
   await i18next.use(initReactI18next).init({
     lng: "nl", resources: { nl: { common, check, ribbon } }, defaultNS: "common", initImmediate: false,
   });
-  document.documentElement.setAttribute("data-theme", "light");
+  document.documentElement.setAttribute("data-oa-theme", "light");
   try { localStorage.clear(); } catch { /* privé venster */ }
   herstelSnapBeginstand();
   const beeld = new URLSearchParams(location.hash.slice(1)).get("beeld");
@@ -383,9 +384,13 @@ async function run() {
     await wacht(200);
     const knoppen = [...container.querySelectorAll<HTMLButtonElement>("button.ribbon-btn")];
     ok(knoppen.length > 20, `knoppen in het lint: ${knoppen.length}`);
-    const zonderNaam = knoppen.filter((knop) => (knop.getAttribute("aria-label") ?? "")
-      !== (knop.querySelector(".ribbon-btn-label")?.textContent ?? ""));
-    gelijk(zonderNaam.map((knop) => knop.title), [], "aria-label gelijk aan het label");
+    // Ontwerp 0.4: aria-label is de naam, of "<naam>. <uitleg>" als de knop een uitleg heeft.
+    const zonderNaam = knoppen.filter((knop) => {
+      const label = knop.querySelector(".ribbon-btn-label")?.textContent ?? "";
+      const aria = knop.getAttribute("aria-label") ?? "";
+      return label === "" || (aria !== label && !aria.startsWith(`${label}. `));
+    });
+    gelijk(zonderNaam.map((knop) => knop.getAttribute("aria-label")), [], "aria-label begint met het label");
     const kopieer = knoppen.find((knop) => knop.getAttribute("aria-label") === "Kopiëren");
     ok(kopieer, "de knop Kopiëren staat in het lint");
     ok(knoppen.every((knop) => knop.querySelector(".ribbon-btn-icon")?.getAttribute("aria-hidden") === "true"),

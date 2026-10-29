@@ -16,6 +16,7 @@ import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import FemProperties from "../src/components/fem/FemProperties";
@@ -126,7 +127,7 @@ async function run() {
   });
   const beeld = /beeld=([\w-]+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld.endsWith("donker") ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld.endsWith("donker") ? "dark" : "light");
     for (const el of [document.documentElement, document.body, container]) {
       el.style.height = "auto";
       el.style.overflow = "visible";
@@ -251,11 +252,11 @@ async function run() {
     const knop = knopBij("L_cr,z");
     flushSync(() => knop.focus());
     const tip = document.getElementById(knop.getAttribute("aria-describedby")!)!;
-    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.setAttribute("data-oa-theme", "light");
     const licht = getComputedStyle(tip).backgroundColor;
-    document.documentElement.setAttribute("data-theme", "openaec");
+    document.documentElement.setAttribute("data-oa-theme", "dark");
     const donker = getComputedStyle(tip).backgroundColor;
-    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-oa-theme");
     flushSync(() => knop.blur());
     gelijk([licht, donker], ["rgb(255, 255, 255)", "rgb(39, 39, 42)"], "achtergrond licht/donker");
   });

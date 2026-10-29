@@ -320,7 +320,7 @@ async function smal() {
 /** Eén toestand op het scherm zetten voor een schermafbeelding. */
 function beeld(naam: string) {
   const [, thema, toestand] = naam.split("-");
-  document.documentElement.setAttribute("data-theme", thema === "donker" ? "openaec" : "light");
+  document.documentElement.setAttribute("data-oa-theme", thema === "donker" ? "dark" : "light");
   mount();
   if (toestand === "zoek" || toestand === "smal") {
     typ(zoekveld(), "160");

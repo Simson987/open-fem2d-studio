@@ -24,7 +24,7 @@ assert.ok(browser, "Chromium vereist; stel OPENAEC_BROWSER in");
 const beeldmap = process.env.MAATGEVEND_SCHERMAFBEELDINGEN;
 const folder = mkdtempSync(join(tmpdir(), "maatgevend-ui-"));
 try {
-  const styles = ["src/themes.css", "src/App.css", "node_modules/katex/dist/katex.min.css", "src/components/panels/CheckPanel.css"]
+  const styles = ["src/openaec/openaec-tokens.css", "src/themes.css", "src/App.css", "node_modules/katex/dist/katex.min.css", "src/components/panels/CheckPanel.css"]
     .map((path) => readFileSync(path, "utf8")).join("\n");
   const pagina = async (thema) => {
     const bundle = await build({ entryPoints: ["scripts/maatgevend-browser.tsx"], bundle: true, write: false,
@@ -52,7 +52,7 @@ try {
 
   if (beeldmap) {
     mkdirSync(beeldmap, { recursive: true });
-    for (const [thema, naam] of [["light", "toetsingspaneel-licht.png"], ["openaec", "toetsingspaneel-donker.png"]]) {
+    for (const [thema, naam] of [["light", "toetsingspaneel-licht.png"], ["dark", "toetsingspaneel-donker.png"]]) {
       const doel = join(beeldmap, naam);
       startBrowser(browser, [...vlaggen(thema + "-beeld"), `--screenshot=${doel}`, pathToFileURL(await pagina(thema)).href],
         { encoding: "utf8", timeout: 180_000 });

@@ -39,6 +39,7 @@ import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/openFem3d/OpenFem3DEditor.css";
 import "../src/components/fem/FemProjectTree.css";
@@ -60,6 +61,16 @@ import type { OpenFem3DSolveResult } from "../src/components/openFem3d/openFem3d
 import type { OpenFem3DPlateQuantity } from "../src/components/openFem3d/openFem3dPlateResults";
 import type { OpenFem3DUtilization } from "../src/components/openFem3d/openFem3dUtilization";
 import { DEFAULT_DISPLAY_FLAGS } from "../src/components/fem/FemResultsOverlay";
+
+
+// Ontwerp 0.4 (RibbonButton): een lintknop heeft geen title-attribuut meer. De
+// uitleg staat in de eigen tooltip en, voor schermlezers, in aria-label als
+// "<naam>. <uitleg>".
+const lintUitleg = (b?: HTMLButtonElement | null): string => {
+  const label = b?.querySelector(".ribbon-btn-label")?.textContent ?? "";
+  const aria = b?.getAttribute("aria-label") ?? "";
+  return aria.startsWith(`${label}. `) ? aria.slice(label.length + 2) : "";
+};
 
 // Synthetische PointerEvents hebben geen actieve aanwijzer om vast te houden.
 Element.prototype.setPointerCapture = function () {};
@@ -724,7 +735,7 @@ async function run() {
     gelijk(actief(), ["Mesh"], "Mesh licht op");
     flushSync(() => knop("Volume").click());
     gelijk(actief(), ["Volume"], "Volume licht op");
-    ok(knop("Vlak").title.length > 10, "toelichting bij de knop");
+    ok(lintUitleg(knop("Vlak")).length > 10, "toelichting bij de knop");
     mount(null);
   });
 }
