@@ -10,6 +10,7 @@ import { solveAllCases, zetSolverLogOpvanger } from '../src/components/fem/solve
 import { bouwMultiInput } from '../src/lib/modelNaarSolverInput';
 import { combineResults, computeEnvelope } from '../src/components/fem/solver/combinations';
 import { useCheckStore } from '../src/stores/checkStore';
+import '../src/openaec/openaec-tokens.css';
 import '../src/themes.css';
 import '../src/App.css';
 import nl from '../src/i18n/locales/nl/common.json';
@@ -48,7 +49,12 @@ zetSolverLogOpvanger(()=>{logs++;});
 
 async function run(){
  await i18next.use(initReactI18next).init({lng:'nl',fallbackLng:'nl',defaultNS:'common',resources:{nl:{common:nl,check:nlCheck,ribbon:nlRibbon},en:{common:en,check:enCheck},de:{common:de,check:deCheck},fr:{common:fr,check:frCheck}},interpolation:{escapeValue:false}});
- document.documentElement.dataset.theme='openaec';
+ // Ribbon → SettingsTab laadt ook de app-brede i18n-config (i18n/config.ts).
+ // Die zet de taal asynchroon op de instelling "auto", in headless Chrome dus
+ // Engels. Laat die eerst lopen en begin daarna in het Nederlands.
+ await new Promise(r=>setTimeout(r,50));
+ await i18next.changeLanguage('nl');
+ document.documentElement.dataset.oaTheme='dark';
  const perCase=calculate();
  test('actueel centraal G-resultaat zonder canvasberekening',()=>{
    mount(canvas({perCase}));ok(banner().includes(perCase.get(1)!.maxDisplacement.toFixed(2)),banner());

@@ -28,6 +28,7 @@ import { initReactI18next } from "react-i18next";
 import * as THREE from "three";
 import common from "../src/i18n/locales/nl/common.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/openFem3d/OpenFem3DEditor.css";
 import ThreeFrameCanvas from "../src/components/openFem3d/ThreeFrameCanvas";

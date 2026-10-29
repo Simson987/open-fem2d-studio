@@ -3,7 +3,7 @@
 //
 // Twee standen, gekozen met de hash van de pagina:
 //   (geen hash)        de controles — uitslag als JSON in <pre id="uitslag">;
-//   #toon-light/-openaec  alleen de weergave, blijvend gemonteerd, voor een
+//   #toon-light/-dark  alleen de weergave, blijvend gemonteerd, voor een
 //                      schermafbeelding in het lichte of donkere thema.
 //
 // Het overzicht komt uit `eigenGewichtOverzicht`, dezelfde functie die App.tsx
@@ -19,6 +19,7 @@ import LoadCaseTabBar from '../src/components/fem/LoadCaseTabBar';
 import { makeInitialSnapshot, DEFAULT_LOAD_CASES, DEFAULT_SELF_WEIGHT_ENABLED } from '../src/hooks/useFemStore';
 import { eigenGewichtOverzicht } from '../src/lib/eigenGewichtOverzicht';
 import { EIGEN_GEWICHT_STANDAARD_ID } from '../src/lib/eigenGewicht';
+import '../src/openaec/openaec-tokens.css';
 import '../src/themes.css';
 import '../src/App.css';
 import nl from '../src/i18n/locales/nl/common.json';
@@ -71,15 +72,15 @@ async function run() {
     resources: { nl: { common: nl }, en: { common: en }, de: { common: de }, fr: { common: fr } },
     interpolation: { escapeValue: false },
   });
-  const toon = /^#toon-(light|openaec)$/.exec(location.hash);
+  const toon = /^#toon-(light|dark)$/.exec(location.hash);
   if (toon) {
-    document.documentElement.dataset.theme = toon[1];
+    document.documentElement.dataset.oaTheme = toon[1];
     document.body.style.cssText = 'margin:0;background:var(--theme-bg)';
     mount(<Weergave actief={EIGEN_GEWICHT_STANDAARD_ID} />);
     document.getElementById('uitslag')!.textContent = JSON.stringify({ tests: ['weergave'], errors: [] });
     return;
   }
-  document.documentElement.dataset.theme = 'light';
+  document.documentElement.dataset.oaTheme = 'light';
   const eg = overzicht(true);
   const staven = model.beams.length;
 
@@ -121,9 +122,9 @@ async function run() {
     ok(!box.querySelector('[data-testid="eigen-gewicht-laag"]'), 'laag zichtbaar met schakelaar uit');
     ok(!box.querySelector('.lc-tab-auto .lc-tab-count'), 'teller zichtbaar met schakelaar uit');
   });
-  for (const theme of ['light', 'openaec']) {
+  for (const theme of ['light', 'dark']) {
     test(`${theme}: pijl en tekst gebruiken de themakleur, niet zwart op zwart`, () => {
-      document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.oaTheme = theme;
       mount(<Weergave actief={EIGEN_GEWICHT_STANDAARD_ID} />);
       const tekst = box.querySelector('.fem-eg-tekst')!;
       const kleur = getComputedStyle(tekst).fill;
@@ -131,7 +132,7 @@ async function run() {
       ok(verwacht !== '' && kleur !== '' && kleur !== 'rgb(0, 0, 0)', `${theme}: fill ${kleur}, token ${verwacht}`);
     });
   }
-  document.documentElement.dataset.theme = 'light';
+  document.documentElement.dataset.oaTheme = 'light';
   for (const [lang, auto] of [['en', 'auto'], ['de', 'auto'], ['fr', 'auto']] as const) {
     test(`${lang}: tabtitel vertaald, met het aantal`, () => {
       flushSync(() => { void i18next.changeLanguage(lang); });

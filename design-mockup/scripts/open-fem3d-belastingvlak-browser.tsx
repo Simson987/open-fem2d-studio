@@ -21,6 +21,7 @@ import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import OpenFem3DEditor from "../src/components/openFem3d/OpenFem3DEditor";
@@ -223,7 +224,7 @@ async function run() {
   await i18next.use(initReactI18next).init({
     lng: "nl", resources: { nl: { common, check, ribbon } }, defaultNS: "common", initImmediate: false,
   });
-  document.documentElement.setAttribute("data-theme", "light");
+  document.documentElement.setAttribute("data-oa-theme", "light");
 
   // ── Tekenen op het werkvlak ─────────────────────────────────────────────
   async function tekenVlak(camera: OpenFem3DCameraState, level: string, z: number,
@@ -379,8 +380,8 @@ async function run() {
 
   // ── Label in licht en donker thema ──────────────────────────────────────
   await test("label: leesbaar in het lichte en het donkere thema (contrast ≥ 4,5)", async () => {
-    for (const thema of ["light", "openaec"]) {
-      document.documentElement.setAttribute("data-theme", thema);
+    for (const thema of ["light", "dark"]) {
+      document.documentElement.setAttribute("data-oa-theme", thema);
       mount(<Werkruimte begin={dakEnVloer()} camera={BOVEN} geval={2} />);
       await wacht(300);
       const label = container.querySelector<HTMLElement>(".open-fem3d-load-panel-label");
@@ -392,7 +393,7 @@ async function run() {
       ok(Math.abs(achtergrond) < 3, `${thema}: 3D-achtergrond niet wit (${achtergrond.toFixed(1)})`);
       ok(tint(leeg) > 15, `${thema}: vlak niet zichtbaar`);
     }
-    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.setAttribute("data-oa-theme", "light");
   });
 }
 

@@ -16,6 +16,7 @@ import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
@@ -193,7 +194,7 @@ async function run() {
   });
   const t = (k: string, o?: Record<string, unknown>) => i18next.t(k, o);
   const beeld = /beeld=([\w-]+)/.exec(location.hash)?.[1];
-  document.documentElement.setAttribute("data-theme", beeld === "donker" ? "openaec" : "light");
+  document.documentElement.setAttribute("data-oa-theme", beeld === "donker" ? "dark" : "light");
   if (beeld) {
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
@@ -338,8 +339,8 @@ async function run() {
     };
     const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
     const tekst: string[] = [];
-    for (const thema of ["light", "openaec"]) {
-      document.documentElement.setAttribute("data-theme", thema);
+    for (const thema of ["light", "dark"]) {
+      document.documentElement.setAttribute("data-oa-theme", thema);
       const achter = getComputedStyle(container.querySelector(".fem-canvas-wrap")!).backgroundColor;
       for (const l of lijnen()) {
         const c = contrast(getComputedStyle(l).stroke, achter);
@@ -347,7 +348,7 @@ async function run() {
       }
       tekst.push(getComputedStyle(legenda()!.querySelector(".profiel-legenda-naam")!).color);
     }
-    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.setAttribute("data-oa-theme", "light");
     ok(tekst[0] !== tekst[1], `legendatekst in beide thema's ${tekst[0]}`);
   });
 

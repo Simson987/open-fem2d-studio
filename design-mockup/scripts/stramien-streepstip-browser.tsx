@@ -33,6 +33,7 @@ import * as THREE from "three";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/openFem3d/OpenFem3DEditor.css";
 import ThreeFrameCanvas from "../src/components/openFem3d/ThreeFrameCanvas";
@@ -274,7 +275,7 @@ async function run() {
   await i18next.use(initReactI18next).init({
     lng: "nl", resources: { nl: { common, check, ribbon } }, defaultNS: "common", initImmediate: false,
   });
-  document.documentElement.setAttribute("data-theme", "light");
+  document.documentElement.setAttribute("data-oa-theme", "light");
   const beeldNaam = /beeld=([\w-]+)/.exec(location.hash)?.[1];
   if (beeldNaam) { await toonBeeld(beeldNaam); return; }
 

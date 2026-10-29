@@ -94,6 +94,7 @@ import commonDe from "../src/i18n/locales/de/common.json";
 import ribbonDe from "../src/i18n/locales/de/ribbon.json";
 import commonFr from "../src/i18n/locales/fr/common.json";
 import ribbonFr from "../src/i18n/locales/fr/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/openFem3d/OpenFem3DEditor.css";
 import ThreeFrameCanvas from "../src/components/openFem3d/ThreeFrameCanvas";
@@ -676,7 +677,7 @@ async function kleineModellen() {
   });
 
   await test("crossing van rechts naar links: gestippeld kader, staaf die erdoor loopt; venster: doorgetrokken, niets", async () => {
-    document.documentElement.setAttribute("data-theme", "openaec");
+    document.documentElement.setAttribute("data-oa-theme", "dark");
     try {
       await toon(portaal, { ...snel }, { camera: vooraanzicht(0.5, 3, 16) });
       const cam = camera();
@@ -702,7 +703,7 @@ async function kleineModellen() {
       wijzer("pointerup", rechts, 0, 0);
       gelijk(selectie, null, "het venster bevat de ligger niet geheel");
     } finally {
-      document.documentElement.removeAttribute("data-theme");
+      document.documentElement.removeAttribute("data-oa-theme");
     }
   });
 
@@ -1498,12 +1499,12 @@ async function kubusProeven() {
   await test("view cube: focusrand en hover ≥ 3:1 tegen vlak, hovertint en wit podium, in alle thema's; naam ≥ 4,5:1", async () => {
     await toon(portaal, { ...snel });
     const html = document.documentElement;
-    const oud = html.dataset.theme;
+    const oud = html.dataset.oaTheme;
     const podium = rgb(getComputedStyle(container.querySelector(".open-fem3d-stage")!).backgroundColor);
     gelijk(podium.slice(0, 3), [255, 255, 255], "het podium is wit");
     try {
-      for (const thema of ["light", "forge", "openaec", "blueprint", "contrast"]) {
-        html.dataset.theme = thema;
+      for (const thema of ["light", "dark", "blueprint", "high-contrast-dark", "high-contrast-light"]) {
+        html.dataset.oaTheme = thema;
         const meet: string[] = [];
         for (const vlak of ["boven", "voor", "onder"]) {
           const vlakKleur = rgb(getComputedStyle(vlakEl(vlak)).backgroundColor);
@@ -1553,7 +1554,7 @@ async function kubusProeven() {
         gelijk(meet, [], `thema ${thema}`);
       }
     } finally {
-      if (oud === undefined) delete html.dataset.theme; else html.dataset.theme = oud;
+      if (oud === undefined) delete html.dataset.oaTheme; else html.dataset.oaTheme = oud;
     }
     const regels = [...document.styleSheets].flatMap((blad) => { try { return [...blad.cssRules]; } catch { return []; } });
     ok(regels.some((r) => r instanceof CSSStyleRule && r.selectorText.includes(".open-fem3d-view-cube-menuknop:focus-visible")

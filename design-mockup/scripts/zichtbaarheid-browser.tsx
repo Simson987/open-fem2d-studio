@@ -16,6 +16,7 @@ import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import FemCanvas from "../src/components/fem/FemCanvas";
@@ -124,7 +125,7 @@ async function run() {
   const t = (k: string) => i18next.t(k);
   const beeld = /beeld=([\w-]+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld.endsWith("donker") ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld.endsWith("donker") ? "dark" : "light");
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
     if (beeld.startsWith("venster")) {
@@ -281,7 +282,10 @@ async function run() {
     ok(Math.abs(dubbel / normaal - 2) < 0.02, `schaal 200%: ${dubbel / normaal}`);
     gelijk(flags.supportScale, 2, "weergaveschaal ingesteld");
     gelijk(JSON.stringify(model.supports), modelVoor, "constructieve opleggingen ongewijzigd");
-    ok(container.querySelector(".zichtbaarheid-venster .fem-support-scale-control output")?.textContent === "200%", "waarde in het venster");
+    // SupportScaleControl toont de schaal sinds cf107758 in een invoerveld (in %) i.p.v. een <output>;
+    // het venster (Modal) staat in een portal, dus via document.
+    const veld = document.querySelector<HTMLInputElement>(".zichtbaarheid-venster .fem-support-scale-number input");
+    ok(veld?.value === "200", `waarde in het venster: ${veld?.value}`);
   });
 
   await test("profielbreedte: alleen met het aanzicht, als b = … mm per staaf", async () => {
@@ -391,11 +395,11 @@ async function run() {
     mount(<Proef tekenvlak={false} lijst={false} />);
     await wacht();
     const kleur = () => getComputedStyle(document.querySelector(".zichtbaarheid-venster .modal-body")!).backgroundColor;
-    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.setAttribute("data-oa-theme", "light");
     const licht = kleur();
-    document.documentElement.setAttribute("data-theme", "openaec");
+    document.documentElement.setAttribute("data-oa-theme", "dark");
     const donker = kleur();
-    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-oa-theme");
     ok(licht !== donker, `zelfde achtergrond: ${licht}`);
   });
 }

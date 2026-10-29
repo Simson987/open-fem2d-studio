@@ -53,6 +53,7 @@ import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import check from "../src/i18n/locales/nl/check.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import "../src/components/fem/FemProjectTree.css";
@@ -286,7 +287,7 @@ async function run() {
   await i18next.use(initReactI18next).init({
     lng: "nl", resources: { nl: { common, check, ribbon } }, defaultNS: "common", initImmediate: false,
   });
-  document.documentElement.setAttribute("data-theme", "light");
+  document.documentElement.setAttribute("data-oa-theme", "light");
   herstelSnapBeginstand();
   const beeld = new URLSearchParams(location.hash.slice(1)).get("beeld");
   if (beeld) { await toonBeeld(beeld); return; }

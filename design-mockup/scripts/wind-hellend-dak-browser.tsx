@@ -15,6 +15,7 @@ import { flushSync } from "react-dom";
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import WindGeneratorDialog from "../src/lib/wind/WindGeneratorDialog";
@@ -94,7 +95,7 @@ async function run() {
 
   const beeld = /beeld=([\w-]+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld.endsWith("donker") ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld.endsWith("donker") ? "dark" : "light");
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
     mount(<Proef begin={beeld === "ingevuld" ? { ...START, cpeDakLoef: -0.5 } : START} />);
@@ -190,11 +191,11 @@ async function run() {
     mount(<Proef />);
     await wacht();
     const kleur = () => getComputedStyle(cpeVelden()[0]).backgroundColor;
-    document.documentElement.setAttribute("data-theme", "light");
+    document.documentElement.setAttribute("data-oa-theme", "light");
     const licht = kleur();
-    document.documentElement.setAttribute("data-theme", "openaec");
+    document.documentElement.setAttribute("data-oa-theme", "dark");
     const donker = kleur();
-    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-oa-theme");
     ok(licht !== donker, `zelfde achtergrond: ${licht}`);
   });
 }

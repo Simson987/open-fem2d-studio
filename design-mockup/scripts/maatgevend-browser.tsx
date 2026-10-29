@@ -86,7 +86,7 @@ const combinations = [
 
 async function run() {
   document.body.dataset.openFem3dCurrentTest = "initialisatie";
-  document.documentElement.setAttribute("data-theme", THEMA);
+  document.documentElement.setAttribute("data-oa-theme", THEMA);
   await i18next.use(initReactI18next).init({
     lng: "nl", resources: { nl: { check: checkNl, common: commonNl, ribbon: ribbonNl } }, defaultNS: "common", initImmediate: false,
   });

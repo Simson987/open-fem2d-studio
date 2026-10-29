@@ -39,10 +39,10 @@ try {
     loader: { ".css": "empty", ".svg": "dataurl", ".png": "dataurl" } });
   // De echte stylesheets: zonder thema-tokens en Modal.css zegt een
   // indelingscontrole niets.
-  const styles = ["src/themes.css", "src/App.css", "src/components/Modal.css", "src/components/fem/ProfielKiezer.css"]
+  const styles = ["src/openaec/openaec-tokens.css", "src/themes.css", "src/App.css", "src/components/Modal.css", "src/components/fem/ProfielKiezer.css"]
     .map((path) => readFileSync(path, "utf8")).join("\n");
   const html = join(folder, "test.html");
-  writeFileSync(html, '<!doctype html><html data-theme="light"><meta charset="utf-8"><style>' + styles +
+  writeFileSync(html, '<!doctype html><html data-oa-theme="light"><meta charset="utf-8"><style>' + styles +
     '</style><div id="test-root"></div><pre id="uitslag"></pre><script>' +
     bundle.outputFiles[0].text.replace(/<\/script/gi, "<\\/script") + "</script></html>");
   const url = pathToFileURL(html).href;

@@ -59,7 +59,7 @@ try {
   const schermen = process.env.SELECTIEFILTER_SCHERMEN;
   if (schermen) {
     assert.ok(existsSync(schermen), `map voor schermafbeeldingen bestaat niet: ${schermen}`);
-    for (const [dim, thema, naam] of [["3d", "light", "3d-licht"], ["3d", "openaec", "3d-donker"], ["2d", "light", "2d-licht"]]) {
+    for (const [dim, thema, naam] of [["3d", "light", "3d-licht"], ["3d", "dark", "3d-donker"], ["2d", "light", "2d-licht"]]) {
       const pad = resolve(schermen, `selectiefilter-${naam}.png`);
       const r = chromium([`--screenshot=${pad}`, "--window-size=1100,820", "--hide-scrollbars"],
         `${pathToFileURL(html).href}#beeld=${dim}-${thema}`, `profiel-${naam}`);

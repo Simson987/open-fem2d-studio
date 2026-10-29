@@ -30,6 +30,7 @@ import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/openFem3d/OpenFem3DEditor.css";
 import "../src/components/fem/FemProjectTree.css";

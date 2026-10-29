@@ -18,6 +18,7 @@ import nl from "../src/i18n/locales/nl/common.json";
 import en from "../src/i18n/locales/en/common.json";
 import de from "../src/i18n/locales/de/common.json";
 import fr from "../src/i18n/locales/fr/common.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import LoadCaseTabBar from "../src/components/fem/LoadCaseTabBar";
@@ -107,6 +108,11 @@ function info(el?: HTMLElement): string {
 function inBeeld(el: HTMLElement): boolean {
   const s = strook().getBoundingClientRect();
   const r = el.getBoundingClientRect();
+  // Een tab die breder is dan de strook (lange naam, max. 160 px tekst, in een
+  // smalle strook) kan niet helemaal in beeld; tabbalkScroll.scrollVoorZichtbaar
+  // zet dan zijn begin in beeld. Dat telt als "in beeld": begin zichtbaar, en de
+  // tab vult de rest van de strook.
+  if (r.width > s.width) return r.left >= s.left - 0.5 && r.left < s.right && r.right >= s.right - 0.5;
   return r.left >= s.left - 0.5 && r.right <= s.right + 0.5;
 }
 /** Staat `el` helemaal binnen de balk en het venster, en niet in de strook? */
@@ -138,7 +144,7 @@ async function run() {
   });
   const beeld = /beeld=([\w-]+)/.exec(location.hash)?.[1];
   if (beeld) {
-    document.documentElement.setAttribute("data-theme", beeld.endsWith("donker") ? "openaec" : "light");
+    document.documentElement.setAttribute("data-oa-theme", beeld.endsWith("donker") ? "dark" : "light");
     document.body.style.cssText = "margin:0;background:var(--theme-bg)";
     document.getElementById("uitslag")!.remove();
     mount(<Balk begin={beeld.startsWith("midden") || beeld.startsWith("lijst") ? 6 : 1} />);
@@ -260,7 +266,7 @@ async function run() {
     ok(gekozen.at(-1) === 9, `lijst koos ${gekozen.at(-1)}`);
     ok(!lijst(), "lijst blijft open na een keuze");
     ok(tabVan(9).getAttribute("aria-selected") === "true", "geval 9 niet actief");
-    ok(inBeeld(tabVan(9)), "gekozen geval niet in beeld geschoven");
+    ok(inBeeld(tabVan(9)), `gekozen geval niet in beeld geschoven: ${info(tabVan(9))}`);
   });
 
   await test("de lijst: pijltoetsen verplaatsen de focus, Esc sluit, klik ernaast sluit", async () => {

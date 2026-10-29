@@ -9,6 +9,7 @@ import de from "../src/i18n/locales/de/check.json";
 import fr from "../src/i18n/locales/fr/check.json";
 import { PlaatWapeningVenster } from "../src/components/fem/PlaatWapeningVenster";
 import type { Plate } from "../src/components/fem/femTypes";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/components/fem/FemProperties.css";
 

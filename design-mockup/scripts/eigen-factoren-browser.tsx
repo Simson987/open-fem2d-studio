@@ -29,6 +29,7 @@ import {
   type CombinatieStaat,
 } from '../src/lib/combinatieBeheer';
 import P01 from '../referentie-projecten/P01.femp';
+import '../src/openaec/openaec-tokens.css';
 import '../src/themes.css';
 import '../src/App.css';
 import nlCommon from '../src/i18n/locales/nl/common.json';
@@ -108,7 +109,7 @@ async function run() {
 
   const toon = /^#toon-(melding|bevestigd|rapport)$/.exec(location.hash);
   if (toon) {
-    document.documentElement.dataset.theme = 'light';
+    document.documentElement.dataset.oaTheme = 'light';
     document.body.style.cssText = 'margin:0;background:var(--theme-bg)';
     if (toon[1] === 'rapport') mount(<Proef melden={false} metRapport metVenster={false} bevestigd />);
     else mount(<Proef melden={toon[1] === 'melding'} metRapport={false} />);

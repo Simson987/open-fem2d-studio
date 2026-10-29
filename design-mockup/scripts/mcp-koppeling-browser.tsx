@@ -24,6 +24,7 @@ import nlRibbon from "../src/i18n/locales/nl/ribbon.json";
 import enRibbon from "../src/i18n/locales/en/ribbon.json";
 import deRibbon from "../src/i18n/locales/de/ribbon.json";
 import frRibbon from "../src/i18n/locales/fr/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import AiAssistentPaneel from "../src/components/settings/AiAssistentPaneel";
@@ -116,10 +117,10 @@ function knopMet(label: string): HTMLButtonElement | null {
   return [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === label) as HTMLButtonElement | null;
 }
 
-function thema(naam: "light" | "openaec") { document.documentElement.setAttribute("data-theme", naam); }
+function thema(naam: "light" | "dark") { document.documentElement.setAttribute("data-oa-theme", naam); }
 
 async function toonBeeld(beeld: string) {
-  thema(beeld.startsWith("donker") ? "openaec" : "light");
+  thema(beeld.startsWith("donker") ? "dark" : "light");
   // "-sessie": alleen voor deze sessie aan (zoals na gui_start_app).
   toestand = beeld.endsWith("-sessie")
     ? { ...UIT, actief: true, poort: 51234, doorOmgeving: true }

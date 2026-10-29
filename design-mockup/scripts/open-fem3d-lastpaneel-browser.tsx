@@ -29,6 +29,7 @@ import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 import common from "../src/i18n/locales/nl/common.json";
 import ribbon from "../src/i18n/locales/nl/ribbon.json";
+import "../src/openaec/openaec-tokens.css";
 import "../src/themes.css";
 import "../src/App.css";
 import "../src/components/openFem3d/OpenFem3DEditor.css";
@@ -123,7 +124,7 @@ const naam = (el: Element) => {
   const tekst = (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 28);
   return `<${el.tagName.toLowerCase()}${el.className ? `.${String(el.className).split(" ").join(".")}` : ""}>${tekst ? ` "${tekst}"` : ""}`;
 };
-function thema(naam: "light" | "openaec") { document.documentElement.setAttribute("data-theme", naam); }
+function thema(naam: "light" | "dark") { document.documentElement.setAttribute("data-oa-theme", naam); }
 
 /**
  * Letter, maat, contrast en veldvorm van alles in `paneel`, vergeleken met de
@@ -138,7 +139,7 @@ function controleer(paneel: Element, minimaal: { tekst: number; velden: number }
   // Een veld met focus heeft terecht een accentrand: vergelijk zonder focus.
   (document.activeElement as HTMLElement | null)?.blur();
   const fouten: string[] = [];
-  for (const naamThema of ["light", "openaec"] as const) {
+  for (const naamThema of ["light", "dark"] as const) {
     thema(naamThema);
     const letter = getComputedStyle(kop!).fontFamily;
     const elementen = tekstElementen(paneel);
@@ -231,7 +232,7 @@ async function run() {
 /* ── Beelden voor de schermafbeeldingen (geen proeven) ──────────────── */
 
 async function toonBeeld(beeld: string) {
-  thema(beeld === "donker" ? "openaec" : "light");
+  thema(beeld === "donker" ? "dark" : "light");
   const kolommen: OpenFem3DSelection[] = [
     { type: "memberLoad", id: 2 }, { type: "memberPointLoad", id: 1 }, { type: "thermalLoad", id: 1 }, { type: "node", id: 2 },
   ];
