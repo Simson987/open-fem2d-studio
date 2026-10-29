@@ -1255,9 +1255,75 @@ export function schakelAxiaalGroepenUit(mesh: Mesh, sleutels: Iterable<number>):
   const uit = new Set(sleutels);
   const herstel: (() => void)[] = [];
   for (const g of verzamelAxiaalGroepen(mesh)) {
-    if (uit.has(g.sleutel)) herstel.push(maakAxiaalLos(mesh, g.staafIds[g.staafIds.length - 1]));
+    if (!uit.has(g.sleutel)) continue;
+    // Eerst de lastcorrectie (leest de staaf zoals hij is), dan de huls.
+    herstel.push(verdeelEigenAxiaalLast(mesh, g.staafIds));
+    herstel.push(maakAxiaalLos(mesh, g.staafIds[g.staafIds.length - 1]));
   }
   return () => { for (const h of herstel.reverse()) h(); };
+}
+
+/**
+ * De eigen lijnlast van een uitgeschakelde staaf over BEIDE eindknopen
+ * verdelen, zoals bij een actieve staaf (vondst bij de voorbeeldprojecten:
+ * een raamwerk met eigen gewicht en scheefstand convergeerde niet).
+ *
+ * Met de huls aan het eind gaat de component van de lijnlast LANGS de staaf
+ * helemaal naar de beginknoop (de condensatie zet f₂ₓ bij f₁ₓ). Bij een
+ * schuine diagonaal onder eigen gewicht verschuift zo q·sin α·L/2 van de ene
+ * knoop naar de andere zodra de staaf uitvalt. In een belastinggeval met
+ * alleen eigen gewicht en de kleine scheefstandkrachten is dat groter dan
+ * wat de diagonalen op trek zet: uit gaf rek, aan gaf druk, en de lus bleef
+ * wisselen ("keert terug naar een eerdere stand"). Een slappe staaf hangt
+ * nog aan beide knopen; zijn last hoort daar als statisch gelijkwaardige
+ * knooplast, de reactie van de aan beide einden vastgehouden staaf — zoals
+ * open-fem-3d doet (trek_alleen.rs). Daarom krijgt de eindknoop het aandeel
+ * R_eind = Σ (f₁ₓ·s + f₂ₓ·e)/L (s, e: plaats van de deelelementeinden langs
+ * de staaf) als knooplast langs de as, en de beginknoop −R_eind. Een
+ * temperatuurlast telt niet mee: die geeft een slappe staaf geen kracht.
+ */
+function verdeelEigenAxiaalLast(mesh: Mesh, staafIds: number[]): () => void {
+  const ketting = staafIds
+    .map((id) => mesh.beamElements.get(id))
+    .filter((b): b is NonNullable<typeof b> => b !== undefined);
+  if (ketting.length === 0) return () => {};
+  const eerste = mesh.getBeamElementNodes(ketting[0]);
+  const laatste = mesh.getBeamElementNodes(ketting[ketting.length - 1]);
+  if (!eerste || !laatste) return () => {};
+  const begin = eerste[0], eind = laatste[1];
+  const Ltot = Math.hypot(eind.x - begin.x, eind.y - begin.y);
+  if (!(Ltot > 0)) return () => {};
+  const c = (eind.x - begin.x) / Ltot, sn = (eind.y - begin.y) / Ltot;
+  let rEind = 0;
+  for (const beam of ketting) {
+    const knopen = mesh.getBeamElementNodes(beam);
+    if (!knopen) continue;
+    const [n1, n2] = knopen;
+    const L = calculateBeamLength(n1, n2);
+    const angle = calculateBeamAngle(n1, n2);
+    // Plaats van de elementeinden langs de staaf (projectie op de as).
+    const s = (n1.x - begin.x) * c + (n1.y - begin.y) * sn;
+    const e = (n2.x - begin.x) * c + (n2.y - begin.y) * sn;
+    // Lokale x van het element valt samen met de staafas (zelfde richting
+    // als de ketting); bij een tegengesteld element wisselt het teken.
+    const richting = Math.sign(Math.cos(angle) * c + Math.sin(angle) * sn) || 1;
+    for (const dl of getBeamDistributedLoads(beam)) {
+      const f = calculateDistributedLoadLocalForces(L, angle, dl);
+      rEind += richting * (f[0] * s + f[3] * e) / Ltot;
+    }
+  }
+  if (rEind === 0) return () => {};
+  const origineel = new Map<number, ReturnType<typeof mesh.nodes.get>>();
+  const voegToe = (id: number, fx: number, fy: number) => {
+    const node = mesh.nodes.get(id);
+    if (!node) return;
+    if (!origineel.has(id)) origineel.set(id, node);
+    const nu = mesh.nodes.get(id)!;
+    mesh.nodes.set(id, { ...nu, loads: { ...nu.loads, fx: nu.loads.fx + fx, fy: nu.loads.fy + fy } });
+  };
+  voegToe(eind.id, rEind * c, rEind * sn);
+  voegToe(begin.id, -rEind * c, -rEind * sn);
+  return () => { for (const [id, node] of origineel) mesh.nodes.set(id, node!); };
 }
 
 function losOpMetAxiaalVoorwaarden(

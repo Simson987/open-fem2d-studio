@@ -4112,10 +4112,56 @@ function schakelAxiaalGroepenUit(mesh, sleutels) {
   const uit = new Set(sleutels);
   const herstel = [];
   for (const g of verzamelAxiaalGroepen(mesh)) {
-    if (uit.has(g.sleutel)) herstel.push(maakAxiaalLos(mesh, g.staafIds[g.staafIds.length - 1]));
+    if (!uit.has(g.sleutel)) continue;
+    herstel.push(verdeelEigenAxiaalLast(mesh, g.staafIds));
+    herstel.push(maakAxiaalLos(mesh, g.staafIds[g.staafIds.length - 1]));
   }
   return () => {
     for (const h of herstel.reverse()) h();
+  };
+}
+function verdeelEigenAxiaalLast(mesh, staafIds) {
+  const ketting2 = staafIds.map((id2) => mesh.beamElements.get(id2)).filter((b) => b !== void 0);
+  if (ketting2.length === 0) return () => {
+  };
+  const eerste = mesh.getBeamElementNodes(ketting2[0]);
+  const laatste = mesh.getBeamElementNodes(ketting2[ketting2.length - 1]);
+  if (!eerste || !laatste) return () => {
+  };
+  const begin = eerste[0], eind = laatste[1];
+  const Ltot = Math.hypot(eind.x - begin.x, eind.y - begin.y);
+  if (!(Ltot > 0)) return () => {
+  };
+  const c = (eind.x - begin.x) / Ltot, sn = (eind.y - begin.y) / Ltot;
+  let rEind = 0;
+  for (const beam of ketting2) {
+    const knopen = mesh.getBeamElementNodes(beam);
+    if (!knopen) continue;
+    const [n1, n2] = knopen;
+    const L = calculateBeamLength(n1, n2);
+    const angle = calculateBeamAngle(n1, n2);
+    const s = (n1.x - begin.x) * c + (n1.y - begin.y) * sn;
+    const e = (n2.x - begin.x) * c + (n2.y - begin.y) * sn;
+    const richting2 = Math.sign(Math.cos(angle) * c + Math.sin(angle) * sn) || 1;
+    for (const dl of getBeamDistributedLoads(beam)) {
+      const f = calculateDistributedLoadLocalForces(L, angle, dl);
+      rEind += richting2 * (f[0] * s + f[3] * e) / Ltot;
+    }
+  }
+  if (rEind === 0) return () => {
+  };
+  const origineel = /* @__PURE__ */ new Map();
+  const voegToe = (id2, fx, fy) => {
+    const node = mesh.nodes.get(id2);
+    if (!node) return;
+    if (!origineel.has(id2)) origineel.set(id2, node);
+    const nu = mesh.nodes.get(id2);
+    mesh.nodes.set(id2, { ...nu, loads: { ...nu.loads, fx: nu.loads.fx + fx, fy: nu.loads.fy + fy } });
+  };
+  voegToe(eind.id, rEind * c, rEind * sn);
+  voegToe(begin.id, -rEind * c, -rEind * sn);
+  return () => {
+    for (const [id2, node] of origineel) mesh.nodes.set(id2, node);
   };
 }
 function losOpMetAxiaalVoorwaarden(mesh, options, groepen2) {
@@ -15810,10 +15856,15 @@ function losOpKnoop(beam, knoop) {
   }
   return uit;
 }
-function lijnLooptDoor(a, b, plates) {
+function lijnLooptDoor(a, b, plates, model) {
   const knoop = [a.from, a.to].find((n2) => n2 === b.from || n2 === b.to);
   if (knoop === void 0) return false;
-  return !(plates ?? []).some((p2) => p2.nodeIds.includes(knoop));
+  if ((plates ?? []).some((p2) => p2.nodeIds.includes(knoop))) return false;
+  const scharnier = (beam) => beam.from === knoop && beam.releases?.startRy === true || beam.to === knoop && beam.releases?.endRy === true;
+  if (!scharnier(a) && !scharnier(b)) return true;
+  const deel = (beam) => ({ beam, gespiegeld: false, lengteMm: 0, xStartMm: 0 });
+  const k = beschrijfKnoop(knoop, 0, [deel(a), deel(b)], model.alleBeams, model.supports, model.nodes, plates);
+  return k.steunend.length === 0;
 }
 function hangendDeel(knoop, model, uitgesloten, verboden = /* @__PURE__ */ new Set(), stop = /* @__PURE__ */ new Set(), staafMagNiet = () => false) {
   const opgelegd2 = new Set(model.supports.map((s) => s.nodeId));
@@ -15883,7 +15934,7 @@ function vindDoorgaandeLijnen(beams, nodes, alleBeams, supports, plates) {
       for (const id2 of collinearContinuations(b, nodes, alleBeams, supports)) {
         if (gezien.has(id2)) continue;
         const other = perId.get(id2);
-        if (!other || !lijnLooptDoor(b, other, plates)) continue;
+        if (!other || !lijnLooptDoor(b, other, plates, { nodes, alleBeams, supports })) continue;
         gezien.add(id2);
         wachtrij.push(other);
       }
@@ -46222,7 +46273,7 @@ function lijnenVan(beams, knoopOp) {
   }
   return uit;
 }
-function findOpenFem3DNodesOnBeams(model, toleranceMm = OPEN_FEM_3D_CONNECT_TOLERANCE_MM, scope) {
+function findOpenFem3DNodesOnBeams(model, toleranceMm = OPEN_FEM_3D_CONNECT_TOLERANCE_MM, scope, overslaan = "lintels") {
   const tolM = begrensVerbindingstolerantie(toleranceMm) / 1e3;
   const knoopOp = new Map(model.nodes.map((node) => [node.id, node]));
   const alleLijnen = () => lijnenVan(model.beams, knoopOp);
@@ -46235,7 +46286,37 @@ function findOpenFem3DNodesOnBeams(model, toleranceMm = OPEN_FEM_3D_CONNECT_TOLE
     if (nodeIds.size > 0) zoekParen(model.nodes.filter((node) => nodeIds.has(node.id)), alleLijnen(), tolM, gevonden);
     if (beamIds.size > 0) zoekParen(model.nodes, lijnenVan(model.beams.filter((beam) => beamIds.has(beam.id)), knoopOp), tolM, gevonden);
   }
-  return [...gevonden.values()].sort((p2, q) => p2.beamId - q.beamId || p2.t - q.t || p2.nodeId - q.nodeId);
+  const viaPlaat = doorPlaatnetVerbonden(model, knoopOp, overslaan === "lintels");
+  return [...gevonden.values()].filter((paar) => !(paar.distanceM <= PLAATNET_TOL_M && viaPlaat(paar.nodeId, paar.beamId))).sort((p2, q) => p2.beamId - q.beamId || p2.t - q.t || p2.nodeId - q.nodeId);
+}
+var PLAATNET_TOL_M = 1e-5;
+function doorPlaatnetVerbonden(model, knoopOp, alleenLateien) {
+  const platen = (model.plates ?? []).map((plate) => {
+    const ids = /* @__PURE__ */ new Set([...plate.nodeIds, ...(plate.openings ?? []).flatMap((opening) => opening.nodeIds)]);
+    const lateien = new Set((plate.openings ?? []).flatMap((opening) => opening.lintel ? [opening.lintel.beamId] : []));
+    const punten = plate.nodeIds.map((id2) => knoopOp.get(id2)).filter((p2) => p2 !== void 0);
+    let nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < punten.length; i += 1) {
+      const p2 = punten[i], q = punten[(i + 1) % punten.length];
+      nx += (p2.y - q.y) * (p2.z + q.z);
+      ny += (p2.z - q.z) * (p2.x + q.x);
+      nz += (p2.x - q.x) * (p2.y + q.y);
+    }
+    const n2 = Math.hypot(nx, ny, nz);
+    return { ids, lateien, origin: punten[0], normaal: n2 > 1e-12 ? [nx / n2, ny / n2, nz / n2] : void 0 };
+  }).filter((plaat) => plaat.origin !== void 0 && plaat.normaal !== void 0 && (!alleenLateien || plaat.lateien.size > 0));
+  if (platen.length === 0) return () => false;
+  const staafOp = new Map(model.beams.map((beam) => [beam.id, beam]));
+  return (nodeId, beamId) => {
+    const beam = staafOp.get(beamId);
+    const a = beam && knoopOp.get(beam.startNodeId), b = beam && knoopOp.get(beam.endNodeId);
+    if (!a || !b) return false;
+    return platen.some(({ ids, lateien, origin, normaal }) => {
+      if (!ids.has(nodeId) || alleenLateien && !lateien.has(beamId)) return false;
+      const afstand5 = (p2) => Math.abs((p2.x - origin.x) * normaal[0] + (p2.y - origin.y) * normaal[1] + (p2.z - origin.z) * normaal[2]);
+      return afstand5(a) <= PLAATNET_TOL_M && afstand5(b) <= PLAATNET_TOL_M;
+    });
+  };
 }
 function verdubbeldeStaaf(model, deel, nodeId) {
   const verbindt = (beam, p2, q) => beam.startNodeId === p2 && beam.endNodeId === q || beam.startNodeId === q && beam.endNodeId === p2;
