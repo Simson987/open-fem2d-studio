@@ -3635,7 +3635,7 @@ function App() {
       // staaf zonder verbinding, dan een waarschuwing en de modelcontrole op
       // het tekenvlak open (met de knop Aansluiten). De berekening gaat door:
       // het kan bedoeld zijn (twee kruisende windverbanden).
-      const losseKnopen = findOpenFem3DNodesOnBeams(openFem3d, leesSnapInstellingen().verbindingsTolerantie);
+      const losseKnopen = findOpenFem3DNodesOnBeams(openFem3d, leesSnapInstellingen().verbindingsTolerantie, undefined, "all");
       if (losseKnopen.length > 0) {
         setOpenFem3dModelCheckToken((token) => token + 1);
         const aantal = new Set(losseKnopen.map((paar) => paar.nodeId)).size;
