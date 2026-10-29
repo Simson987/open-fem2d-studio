@@ -33459,7 +33459,7 @@ function openFem3DEinden(model) {
     }
     return vlakken.get(plate.id) ?? null;
   };
-  const ligtInPlaat = (plate, punt) => {
+  const ligtInPlaat2 = (plate, punt) => {
     const vlak = vlakVan(plate);
     if (!vlak) return false;
     const afstand5 = (punt.x - vlak.origin.x) * vlak.normal.x + (punt.y - vlak.origin.y) * vlak.normal.y + (punt.z - vlak.origin.z) * vlak.normal.z;
@@ -33475,7 +33475,7 @@ function openFem3DEinden(model) {
     const bekend = perKnoop.get(nodeId);
     if (bekend !== void 0) return bekend;
     const knoop = model.nodes.find((node) => node.id === nodeId);
-    const uit = knoop !== void 0 && (model.plates ?? []).some((plate) => plate.nodeIds.includes(nodeId) || (plate.openings ?? []).some((opening) => opening.nodeIds.includes(nodeId)) || ligtInPlaat(plate, knoop));
+    const uit = knoop !== void 0 && (model.plates ?? []).some((plate) => plate.nodeIds.includes(nodeId) || (plate.openings ?? []).some((opening) => opening.nodeIds.includes(nodeId)) || ligtInPlaat2(plate, knoop));
     perKnoop.set(nodeId, uit);
     return uit;
   };
@@ -46303,7 +46303,16 @@ function doorPlaatnetVerbonden(model, knoopOp, alleenLateien) {
       nz += (p2.x - q.x) * (p2.y + q.y);
     }
     const n2 = Math.hypot(nx, ny, nz);
-    return { ids, lateien, origin: punten[0], normaal: n2 > 1e-12 ? [nx / n2, ny / n2, nz / n2] : void 0 };
+    const normaal = n2 > 1e-12 ? [nx / n2, ny / n2, nz / n2] : void 0;
+    const contour2 = (nodeIds) => nodeIds.map((id2) => knoopOp.get(id2)).filter((q) => q !== void 0);
+    return {
+      ids,
+      lateien,
+      origin: punten[0],
+      normaal,
+      buiten: punten,
+      openingen: (plate.openings ?? []).map((opening) => contour2(opening.nodeIds))
+    };
   }).filter((plaat) => plaat.origin !== void 0 && plaat.normaal !== void 0 && (!alleenLateien || plaat.lateien.size > 0));
   if (platen.length === 0) return () => false;
   const staafOp = new Map(model.beams.map((beam) => [beam.id, beam]));
@@ -46311,12 +46320,38 @@ function doorPlaatnetVerbonden(model, knoopOp, alleenLateien) {
     const beam = staafOp.get(beamId);
     const a = beam && knoopOp.get(beam.startNodeId), b = beam && knoopOp.get(beam.endNodeId);
     if (!a || !b) return false;
-    return platen.some(({ ids, lateien, origin, normaal }) => {
-      if (!ids.has(nodeId) || alleenLateien && !lateien.has(beamId)) return false;
+    const knoop = knoopOp.get(nodeId);
+    return platen.some(({ ids, lateien, origin, normaal, buiten, openingen }) => {
+      if (alleenLateien && !lateien.has(beamId)) return false;
       const afstand5 = (p2) => Math.abs((p2.x - origin.x) * normaal[0] + (p2.y - origin.y) * normaal[1] + (p2.z - origin.z) * normaal[2]);
-      return afstand5(a) <= PLAATNET_TOL_M && afstand5(b) <= PLAATNET_TOL_M;
+      if (afstand5(a) > PLAATNET_TOL_M || afstand5(b) > PLAATNET_TOL_M) return false;
+      if (ids.has(nodeId)) return true;
+      if (alleenLateien || !knoop || afstand5(knoop) > PLAATNET_TOL_M) return false;
+      return ligtInPlaat(knoop, normaal, buiten, openingen);
     });
   };
+}
+function ligtInPlaat(p2, normaal, buiten, openingen) {
+  const as3 = [0, 1, 2].reduce((m, i) => Math.abs(normaal[i]) > Math.abs(normaal[m]) ? i : m, 0);
+  const plat = (q) => as3 === 0 ? [q.y, q.z] : as3 === 1 ? [q.x, q.z] : [q.x, q.y];
+  const tol = PLAATNET_TOL_M * Math.abs(normaal[as3]) + 1e-12;
+  const [x, y] = plat(p2);
+  const opRand = (veelhoek) => veelhoek.some((q, i) => {
+    const [ax, ay] = plat(q), [bx, by] = plat(veelhoek[(i + 1) % veelhoek.length]);
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+    return Math.hypot(x - ax - t * dx, y - ay - t * dy) <= tol;
+  });
+  const binnen2 = (veelhoek) => {
+    let in_ = false;
+    for (let i = 0, j = veelhoek.length - 1; i < veelhoek.length; j = i++) {
+      const [xi, yi] = plat(veelhoek[i]), [xj, yj] = plat(veelhoek[j]);
+      if (yi > y !== yj > y && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in_ = !in_;
+    }
+    return in_;
+  };
+  if (buiten.length < 3 || !(opRand(buiten) || binnen2(buiten))) return false;
+  return !openingen.some((o) => o.length >= 3 && binnen2(o) && !opRand(o));
 }
 function verdubbeldeStaaf(model, deel, nodeId) {
   const verbindt = (beam, p2, q) => beam.startNodeId === p2 && beam.endNodeId === q || beam.startNodeId === q && beam.endNodeId === p2;
