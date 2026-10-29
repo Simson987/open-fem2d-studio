@@ -270,6 +270,45 @@ log("\n[10] Hout: C24 96x450 gesplitst → één invoer van 6 m met staaf_notiti
   check("staaf_notities aanwezig", Array.isArray(r.inputs[0].staaf_notities) && r.inputs[0].staaf_notities.length > 0);
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+log("\n[11] Twee liggers scharnierend op een middenkolom: geen doorgaande lijn over het momentscharnier");
+{
+  // Raamwerk met twee beuken van 6 m (vondst bij de voorbeeldprojecten): de
+  // IPE 300-liggers 5 en 6 sluiten aan beide einden scharnierend aan op de
+  // kolommen. Tot nu toe één lijn van 12 m op kip. Nu elk 6 m, gaffel op de
+  // kolom, en het moment per ligger qL²/8 = 1,35·10·6²/8 = 60,75 kNm.
+  const ligger = (id, from, to) => ({ id, from, to, material: "S235", profile: "IPE300",
+    releases: { startRy: true, endRy: true } });
+  const raam = (metKolom) => staal({
+    nodes: [{ id: 1, x: 0, z: 0 }, { id: 2, x: 6000, z: 0 }, { id: 9, x: 12000, z: 0 },
+      { id: 3, x: 0, z: 3500 }, { id: 4, x: 6000, z: 3500 }, { id: 5, x: 12000, z: 3500 }],
+    beams: [
+      { id: 1, from: 1, to: 3, material: "S235", profile: "HEA160" },
+      ...(metKolom ? [{ id: 2, from: 2, to: 4, material: "S235", profile: "HEA160" }] : []),
+      { id: 3, from: 9, to: 5, material: "S235", profile: "HEA160" },
+      ligger(5, 3, 4), ligger(6, 4, 5),
+    ],
+    supports: [{ nodeId: 1, type: "fixed" }, ...(metKolom ? [{ nodeId: 2, type: "fixed" }] : []), { nodeId: 9, type: "fixed" }],
+    loads: [q(5), q(6)],
+  });
+  const r = raam(true);
+  const l5 = r.inputs.find((i) => i.beam_id === 5), l6 = r.inputs.find((i) => i.beam_id === 6);
+  check("ligger 5 en 6 elk apart getoetst, 6 m (niet één lijn van 12 m)",
+    l5?.length_m === 6 && l6?.length_m === 6 && !r.skipped.some((x) => x.beamId === 5 || x.beamId === 6),
+    JSON.stringify({ l5: l5?.length_m, l6: l6?.length_m, skipped: r.skipped }));
+  check("eind op de middenkolom is een gaffel (geen 'Doorlopend', geen weigering van de kip)",
+    (l5?.staafeinden?.eind ?? "Gaffel") === "Gaffel" && (l6?.staafeinden?.begin ?? "Gaffel") === "Gaffel",
+    JSON.stringify([l5?.staafeinden, l6?.staafeinden]));
+  check("M_Ed per ligger = qL²/8 = 60,75 kNm", approx(maxMy(l5), 60.75, 0.05) && approx(maxMy(l6), 60.75, 0.05),
+    `${maxMy(l5)} / ${maxMy(l6)}`);
+  // Zonder middenkolom houdt niets de scharnierknoop vast (een Gerberscharnier
+  // zonder steun): daar blijft het één lijn, zoals in de kop van doorgaandeLijn.ts.
+  const g = raam(false);
+  check("zonder middenkolom (Gerberscharnier, niets houdt de knoop vast): wel één lijn van 12 m",
+    g.inputs.some((i) => i.beam_id === 5 && i.length_m === 12) && g.skipped.some((x) => x.beamId === 6),
+    JSON.stringify(g.inputs.map((i) => [i.beam_id, i.length_m])));
+}
+
 log(`\n${"─".repeat(50)}`);
 log(`Resultaat: ${passed} geslaagd, ${failed} gefaald`);
 if (failed > 0) process.exit(1);
