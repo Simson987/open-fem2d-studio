@@ -814,12 +814,53 @@ log("\n[6] de instelling en de bedrading");
   const naast = parseOpenFem3DModel({ ...m, nodes: m.nodes.map((n) => n.id === 7 ? { ...n, z: 2.203 } : n) });
   check("een wandknoop 3 mm naast de as blijft een vondst (het net koppelt hem niet)",
     JSON.stringify(findOpenFem3DNodesOnBeams(naast).map((p) => p.nodeId)) === "[7]");
-  // Het voorbeeldproject: 14 meldingen, waarvan 12 openingshoeken onder een
-  // latei. De twee die overblijven zijn steunpunten (knopen 45 en 46) midden
-  // op een funderingsbalk die niet aan die balk vastzitten: terecht.
+  // Het voorbeeldproject: 14 meldingen in de oorspronkelijke versie, 12
+  // openingshoeken onder een latei en 2 paalknopen (45, 46) midden op de
+  // onderrand van een wand, onder een funderingsbalk. Ook die zat via het
+  // plaatnet vast (zelfde reacties met en zonder knip); sinds 64b4f0c1 is de
+  // balk er bovendien op geknipt. De modelcontrole is schoon.
   const huis = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "examples", "masonry-house.ifcfem"), "utf8"));
-  const vondst = findOpenFem3DNodesOnBeams(parseOpenFem3DModel(huis.model3d)).map((p) => `${p.nodeId}@${p.beamId}`);
-  check("examples/masonry-house: alleen de losse steunpunten 45 en 46", JSON.stringify(vondst) === '["45@3","46@10"]', JSON.stringify(vondst));
+  const vondst = findOpenFem3DNodesOnBeams(parseOpenFem3DModel(huis.model3d), 5, undefined, "all").map((p) => `${p.nodeId}@${p.beamId}`);
+  check("examples/masonry-house: modelcontrole schoon", JSON.stringify(vondst) === "[]", JSON.stringify(vondst));
+}
+
+{
+  log("\n[7b] een knoop op de plaatrand of in het veld: het plaatnet neemt hem op");
+  // Wand 8,4 × 2,7 m in y = 0 met een opening x 2–4, z 1–2. Funderingsbalk 1
+  // langs de onderrand (knopen 1 → 2); paalknoop 5 op (4,2; 0; 0) midden op
+  // die rand, niet in de contour. Het plaatnet neemt elke modelknoop in het
+  // vlak die op de rand of binnen de plaat ligt op (openFem3dPlateMesh.ts),
+  // en geeft hem aan de balk als tussenknoop: verbonden, geen melding.
+  const wandMet = (extraNodes, extraBeams = []) => parseOpenFem3DModel({
+    nodes: [
+      { id: 1, x: 0, y: 0, z: 0 }, { id: 2, x: 8.4, y: 0, z: 0 }, { id: 3, x: 8.4, y: 0, z: 2.7 }, { id: 4, x: 0, y: 0, z: 2.7 },
+      { id: 11, x: 2, y: 0, z: 1 }, { id: 12, x: 4, y: 0, z: 1 }, { id: 13, x: 4, y: 0, z: 2 }, { id: 14, x: 2, y: 0, z: 2 },
+      ...extraNodes,
+    ],
+    beams: [{ id: 1, startNodeId: 1, endNodeId: 2, profileName: "400x500", material: "C30/37" }, ...extraBeams],
+    plates: [{ id: 1, nodeIds: [1, 2, 3, 4], thicknessMm: 120, openings: [{ id: 1, nodeIds: [11, 12, 13, 14] }] }],
+    supports: [{ nodeId: 5, ux: false, uy: false, uz: true, rx: false, ry: false, rz: false }], loads: [], memberLoads: [],
+  });
+  const paren = (m, modus) => JSON.stringify(findOpenFem3DNodesOnBeams(m, 5, undefined, modus).map((p) => [p.nodeId, p.beamId]));
+  const rand = wandMet([{ id: 5, x: 4.2, y: 0, z: 0 }]);
+  check("paalknoop midden op de onderrand: geen melding in de modelcontrole", paren(rand, "all") === "[]", paren(rand, "all"));
+  check("Aansluiten (standaard) knipt wel: een gewone staaf mag op de randknoop gesplitst worden", paren(rand, undefined) === "[[5,1]]");
+  // Een balk door het veld (z = 0,5) met knoop 6 in het veld: ook opgenomen.
+  const veld = wandMet([{ id: 5, x: 7, y: 0, z: 0 }, { id: 6, x: 1, y: 0, z: 0.5 }, { id: 7, x: 0, y: 0, z: 0.5 }, { id: 8, x: 8.4, y: 0, z: 0.5 }],
+    [{ id: 2, startNodeId: 7, endNodeId: 8, profileName: "HEA 100", material: "S235" }]);
+  check("knoop in het plaatveld op een balk in het vlak: geen melding", !paren(veld, "all").includes("[6,2]"), paren(veld, "all"));
+  // Een balk door de opening (z = 1,5) met knoop 9 binnen de opening: niet in de plaat, wel een melding.
+  const opening = wandMet([{ id: 5, x: 7, y: 0, z: 0 }, { id: 9, x: 3, y: 0, z: 1.5 }, { id: 15, x: 0, y: 0, z: 1.5 }, { id: 16, x: 8.4, y: 0, z: 1.5 }],
+    [{ id: 3, startNodeId: 15, endNodeId: 16, profileName: "HEA 100", material: "S235" }]);
+  check("knoop binnen de opening: blijft een melding", paren(opening, "all").includes("[9,3]"), paren(opening, "all"));
+  // Buiten het plaatvlak (y = 0,2): het net neemt hem niet op.
+  const buiten = wandMet([{ id: 5, x: 7, y: 0, z: 0 }, { id: 17, x: 0, y: 0.2, z: 0 }, { id: 18, x: 8.4, y: 0.2, z: 0 }, { id: 19, x: 4, y: 0.2, z: 0 }],
+    [{ id: 4, startNodeId: 17, endNodeId: 18, profileName: "HEA 100", material: "S235" }]);
+  check("balk en knoop naast het plaatvlak: blijft een melding", paren(buiten, "all").includes("[19,4]"), paren(buiten, "all"));
+  // Op de rand maar voorbij de plaat (x = 9): niet in de plaat.
+  const voorbij = wandMet([{ id: 5, x: 7, y: 0, z: 0 }, { id: 20, x: 10, y: 0, z: 0 }, { id: 21, x: 9, y: 0, z: 0 }],
+    [{ id: 5, startNodeId: 2, endNodeId: 20, profileName: "HEA 100", material: "S235" }]);
+  check("knoop op de balk voorbij de plaatrand: blijft een melding", paren(voorbij, "all").includes("[21,5]"), paren(voorbij, "all"));
 }
 
 log(`\n${geslaagd} geslaagd, ${gefaald} gefaald`);

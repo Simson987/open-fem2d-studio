@@ -302,7 +302,12 @@ function doorPlaatnetVerbonden(
       nz += (p.x - q.x) * (p.y + q.y);
     }
     const n = Math.hypot(nx, ny, nz);
-    return { ids, lateien, origin: punten[0], normaal: n > 1e-12 ? [nx / n, ny / n, nz / n] as const : undefined };
+    const normaal = n > 1e-12 ? [nx / n, ny / n, nz / n] as const : undefined;
+    const contour = (nodeIds: readonly number[]) => nodeIds.map((id) => knoopOp.get(id)).filter((q): q is OpenFem3DNode => q !== undefined);
+    return {
+      ids, lateien, origin: punten[0], normaal,
+      buiten: punten, openingen: (plate.openings ?? []).map((opening) => contour(opening.nodeIds)),
+    };
   }).filter((plaat) => plaat.origin !== undefined && plaat.normaal !== undefined
     && (!alleenLateien || plaat.lateien.size > 0));
   if (platen.length === 0) return () => false;
@@ -311,13 +316,57 @@ function doorPlaatnetVerbonden(
     const beam = staafOp.get(beamId);
     const a = beam && knoopOp.get(beam.startNodeId), b = beam && knoopOp.get(beam.endNodeId);
     if (!a || !b) return false;
-    return platen.some(({ ids, lateien, origin, normaal }) => {
-      if (!ids.has(nodeId) || (alleenLateien && !lateien.has(beamId))) return false;
+    const knoop = knoopOp.get(nodeId);
+    return platen.some(({ ids, lateien, origin, normaal, buiten, openingen }) => {
+      if (alleenLateien && !lateien.has(beamId)) return false;
       const afstand = (p: OpenFem3DNode) =>
         Math.abs((p.x - origin!.x) * normaal![0] + (p.y - origin!.y) * normaal![1] + (p.z - origin!.z) * normaal![2]);
-      return afstand(a) <= PLAATNET_TOL_M && afstand(b) <= PLAATNET_TOL_M;
+      if (afstand(a) > PLAATNET_TOL_M || afstand(b) > PLAATNET_TOL_M) return false;
+      if (ids.has(nodeId)) return true;
+      // Niet alleen de hoekknopen: het plaatnet neemt elke modelknoop in het
+      // plaatvlak op die op de rand of binnen de plaat ligt (en niet binnen een
+      // opening), en geeft hem aan een staaf in dat vlak als tussenknoop
+      // (openFem3dPlateMesh.ts, "Modelknopen in het veld"). Een paalknoop midden
+      // op de onderrand van een wand onder een funderingsbalk is zo verbonden
+      // (examples/masonry-house vóór 64b4f0c1: de reacties waren gelijk met en
+      // zonder knip).
+      if (alleenLateien || !knoop || afstand(knoop) > PLAATNET_TOL_M) return false;
+      return ligtInPlaat(knoop, normaal!, buiten, openingen);
     });
   };
+}
+
+/**
+ * Ligt `p` (in het plaatvlak) op de rand of binnen de buitencontour, en niet
+ * strikt binnen een opening? Op een rand = binnen PLAATNET_TOL_M. In het vlak
+ * geprojecteerd langs de grootste normaalcomponent; een boog telt als de
+ * veelhoek van haar contourknopen.
+ */
+function ligtInPlaat(
+  p: OpenFem3DNode, normaal: readonly [number, number, number],
+  buiten: readonly OpenFem3DNode[], openingen: readonly (readonly OpenFem3DNode[])[],
+): boolean {
+  const as = [0, 1, 2].reduce((m, i) => (Math.abs(normaal[i]!) > Math.abs(normaal[m]!) ? i : m), 0);
+  const plat = (q: OpenFem3DNode): [number, number] => as === 0 ? [q.y, q.z] : as === 1 ? [q.x, q.z] : [q.x, q.y];
+  // Schaal van de projectie: een afstand in het vlak wordt × |n_as| kleiner.
+  const tol = PLAATNET_TOL_M * Math.abs(normaal[as]!) + 1e-12;
+  const [x, y] = plat(p);
+  const opRand = (veelhoek: readonly OpenFem3DNode[]) => veelhoek.some((q, i) => {
+    const [ax, ay] = plat(q), [bx, by] = plat(veelhoek[(i + 1) % veelhoek.length]!);
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+    return Math.hypot(x - ax - t * dx, y - ay - t * dy) <= tol;
+  });
+  const binnen = (veelhoek: readonly OpenFem3DNode[]) => {
+    let in_ = false;
+    for (let i = 0, j = veelhoek.length - 1; i < veelhoek.length; j = i++) {
+      const [xi, yi] = plat(veelhoek[i]!), [xj, yj] = plat(veelhoek[j]!);
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) in_ = !in_;
+    }
+    return in_;
+  };
+  if (buiten.length < 3 || !(opRand(buiten) || binnen(buiten))) return false;
+  return !openingen.some((o) => o.length >= 3 && binnen(o) && !opRand(o));
 }
 
 /** De staaf die een knip van `deel` op knoop `nodeId` zou verdubbelen: dezelfde toets als `splitOpenFem3DBeam`. */
