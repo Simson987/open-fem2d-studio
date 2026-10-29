@@ -108,6 +108,11 @@ function info(el?: HTMLElement): string {
 function inBeeld(el: HTMLElement): boolean {
   const s = strook().getBoundingClientRect();
   const r = el.getBoundingClientRect();
+  // Een tab die breder is dan de strook (lange naam, max. 160 px tekst, in een
+  // smalle strook) kan niet helemaal in beeld; tabbalkScroll.scrollVoorZichtbaar
+  // zet dan zijn begin in beeld. Dat telt als "in beeld": begin zichtbaar, en de
+  // tab vult de rest van de strook.
+  if (r.width > s.width) return r.left >= s.left - 0.5 && r.left < s.right && r.right >= s.right - 0.5;
   return r.left >= s.left - 0.5 && r.right <= s.right + 0.5;
 }
 /** Staat `el` helemaal binnen de balk en het venster, en niet in de strook? */
