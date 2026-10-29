@@ -1,0 +1,1754 @@
+{
+  "format": "open-fem-studio-v2",
+  "version": 3,
+  "savedAt": "2026-10-28T23:57:17.759Z",
+  "modelDimension": "3d",
+  "nodes": [],
+  "beams": [],
+  "supports": [],
+  "plates": [],
+  "loads": [],
+  "loadCases": [
+    {
+      "id": 5,
+      "name": "Self-weight",
+      "type": "dead",
+      "eigenGewicht": true
+    },
+    {
+      "id": 1,
+      "name": "Dead load (G)",
+      "type": "dead"
+    },
+    {
+      "id": 2,
+      "name": "Office floor (Q)",
+      "type": "live",
+      "categorie": "B"
+    },
+    {
+      "id": 3,
+      "name": "Snow (S)",
+      "type": "snow"
+    },
+    {
+      "id": 4,
+      "name": "Wind (W)",
+      "type": "wind"
+    }
+  ],
+  "activeLoadCaseId": 1,
+  "selfWeightEnabled": true,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "model3d": {
+    "nodes": [
+      {
+        "id": 1,
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 2,
+        "x": 7.2,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 3,
+        "x": 14.4,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 4,
+        "x": 21.6,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "id": 5,
+        "x": 0,
+        "y": 6,
+        "z": 0
+      },
+      {
+        "id": 6,
+        "x": 7.2,
+        "y": 6,
+        "z": 0
+      },
+      {
+        "id": 7,
+        "x": 14.4,
+        "y": 6,
+        "z": 0
+      },
+      {
+        "id": 8,
+        "x": 21.6,
+        "y": 6,
+        "z": 0
+      },
+      {
+        "id": 9,
+        "x": 0,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 10,
+        "x": 7.2,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 11,
+        "x": 14.4,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 12,
+        "x": 21.6,
+        "y": 12,
+        "z": 0
+      },
+      {
+        "id": 13,
+        "x": 0,
+        "y": 0,
+        "z": 3.6
+      },
+      {
+        "id": 14,
+        "x": 7.2,
+        "y": 0,
+        "z": 3.6
+      },
+      {
+        "id": 15,
+        "x": 14.4,
+        "y": 0,
+        "z": 3.6
+      },
+      {
+        "id": 16,
+        "x": 21.6,
+        "y": 0,
+        "z": 3.6
+      },
+      {
+        "id": 17,
+        "x": 0,
+        "y": 6,
+        "z": 3.6
+      },
+      {
+        "id": 18,
+        "x": 7.2,
+        "y": 6,
+        "z": 3.6
+      },
+      {
+        "id": 19,
+        "x": 14.4,
+        "y": 6,
+        "z": 3.6
+      },
+      {
+        "id": 20,
+        "x": 21.6,
+        "y": 6,
+        "z": 3.6
+      },
+      {
+        "id": 21,
+        "x": 0,
+        "y": 12,
+        "z": 3.6
+      },
+      {
+        "id": 22,
+        "x": 7.2,
+        "y": 12,
+        "z": 3.6
+      },
+      {
+        "id": 23,
+        "x": 14.4,
+        "y": 12,
+        "z": 3.6
+      },
+      {
+        "id": 24,
+        "x": 21.6,
+        "y": 12,
+        "z": 3.6
+      },
+      {
+        "id": 25,
+        "x": 0,
+        "y": 0,
+        "z": 7.2
+      },
+      {
+        "id": 26,
+        "x": 7.2,
+        "y": 0,
+        "z": 7.2
+      },
+      {
+        "id": 27,
+        "x": 14.4,
+        "y": 0,
+        "z": 7.2
+      },
+      {
+        "id": 28,
+        "x": 21.6,
+        "y": 0,
+        "z": 7.2
+      },
+      {
+        "id": 29,
+        "x": 0,
+        "y": 6,
+        "z": 7.2
+      },
+      {
+        "id": 30,
+        "x": 7.2,
+        "y": 6,
+        "z": 7.2
+      },
+      {
+        "id": 31,
+        "x": 14.4,
+        "y": 6,
+        "z": 7.2
+      },
+      {
+        "id": 32,
+        "x": 21.6,
+        "y": 6,
+        "z": 7.2
+      },
+      {
+        "id": 33,
+        "x": 0,
+        "y": 12,
+        "z": 7.2
+      },
+      {
+        "id": 34,
+        "x": 7.2,
+        "y": 12,
+        "z": 7.2
+      },
+      {
+        "id": 35,
+        "x": 14.4,
+        "y": 12,
+        "z": 7.2
+      },
+      {
+        "id": 36,
+        "x": 21.6,
+        "y": 12,
+        "z": 7.2
+      },
+      {
+        "id": 37,
+        "x": 0,
+        "y": 0,
+        "z": 10.8
+      },
+      {
+        "id": 38,
+        "x": 7.2,
+        "y": 0,
+        "z": 10.8
+      },
+      {
+        "id": 39,
+        "x": 14.4,
+        "y": 0,
+        "z": 10.8
+      },
+      {
+        "id": 40,
+        "x": 21.6,
+        "y": 0,
+        "z": 10.8
+      },
+      {
+        "id": 41,
+        "x": 0,
+        "y": 6,
+        "z": 10.8
+      },
+      {
+        "id": 42,
+        "x": 7.2,
+        "y": 6,
+        "z": 10.8
+      },
+      {
+        "id": 43,
+        "x": 14.4,
+        "y": 6,
+        "z": 10.8
+      },
+      {
+        "id": 44,
+        "x": 21.6,
+        "y": 6,
+        "z": 10.8
+      },
+      {
+        "id": 45,
+        "x": 0,
+        "y": 12,
+        "z": 10.8
+      },
+      {
+        "id": 46,
+        "x": 7.2,
+        "y": 12,
+        "z": 10.8
+      },
+      {
+        "id": 47,
+        "x": 14.4,
+        "y": 12,
+        "z": 10.8
+      },
+      {
+        "id": 48,
+        "x": 21.6,
+        "y": 12,
+        "z": 10.8
+      }
+    ],
+    "beams": [
+      {
+        "id": 1,
+        "startNodeId": 1,
+        "endNodeId": 13,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 2,
+        "startNodeId": 2,
+        "endNodeId": 14,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 3,
+        "startNodeId": 3,
+        "endNodeId": 15,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 4,
+        "startNodeId": 4,
+        "endNodeId": 16,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 5,
+        "startNodeId": 5,
+        "endNodeId": 17,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 6,
+        "startNodeId": 6,
+        "endNodeId": 18,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 7,
+        "startNodeId": 7,
+        "endNodeId": 19,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 8,
+        "startNodeId": 8,
+        "endNodeId": 20,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 9,
+        "startNodeId": 9,
+        "endNodeId": 21,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 10,
+        "startNodeId": 10,
+        "endNodeId": 22,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 11,
+        "startNodeId": 11,
+        "endNodeId": 23,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 12,
+        "startNodeId": 12,
+        "endNodeId": 24,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 13,
+        "startNodeId": 13,
+        "endNodeId": 25,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 14,
+        "startNodeId": 14,
+        "endNodeId": 26,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 15,
+        "startNodeId": 15,
+        "endNodeId": 27,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 16,
+        "startNodeId": 16,
+        "endNodeId": 28,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 17,
+        "startNodeId": 17,
+        "endNodeId": 29,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 18,
+        "startNodeId": 18,
+        "endNodeId": 30,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 19,
+        "startNodeId": 19,
+        "endNodeId": 31,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 20,
+        "startNodeId": 20,
+        "endNodeId": 32,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 21,
+        "startNodeId": 21,
+        "endNodeId": 33,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 22,
+        "startNodeId": 22,
+        "endNodeId": 34,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 23,
+        "startNodeId": 23,
+        "endNodeId": 35,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 24,
+        "startNodeId": 24,
+        "endNodeId": 36,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 25,
+        "startNodeId": 25,
+        "endNodeId": 37,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 26,
+        "startNodeId": 26,
+        "endNodeId": 38,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 27,
+        "startNodeId": 27,
+        "endNodeId": 39,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 28,
+        "startNodeId": 28,
+        "endNodeId": 40,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 29,
+        "startNodeId": 29,
+        "endNodeId": 41,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 30,
+        "startNodeId": 30,
+        "endNodeId": 42,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 31,
+        "startNodeId": 31,
+        "endNodeId": 43,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 32,
+        "startNodeId": 32,
+        "endNodeId": 44,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 33,
+        "startNodeId": 33,
+        "endNodeId": 45,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 34,
+        "startNodeId": 34,
+        "endNodeId": 46,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 35,
+        "startNodeId": 35,
+        "endNodeId": 47,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 36,
+        "startNodeId": 36,
+        "endNodeId": 48,
+        "profileName": "400x400",
+        "material": "C30/37"
+      },
+      {
+        "id": 37,
+        "startNodeId": 13,
+        "endNodeId": 14,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 38,
+        "startNodeId": 14,
+        "endNodeId": 15,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 39,
+        "startNodeId": 15,
+        "endNodeId": 16,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 40,
+        "startNodeId": 17,
+        "endNodeId": 18,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 41,
+        "startNodeId": 18,
+        "endNodeId": 19,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 42,
+        "startNodeId": 19,
+        "endNodeId": 20,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 43,
+        "startNodeId": 21,
+        "endNodeId": 22,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 44,
+        "startNodeId": 22,
+        "endNodeId": 23,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 45,
+        "startNodeId": 23,
+        "endNodeId": 24,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 46,
+        "startNodeId": 13,
+        "endNodeId": 17,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 47,
+        "startNodeId": 17,
+        "endNodeId": 21,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 48,
+        "startNodeId": 14,
+        "endNodeId": 18,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 49,
+        "startNodeId": 18,
+        "endNodeId": 22,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 50,
+        "startNodeId": 15,
+        "endNodeId": 19,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 51,
+        "startNodeId": 19,
+        "endNodeId": 23,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 52,
+        "startNodeId": 16,
+        "endNodeId": 20,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 53,
+        "startNodeId": 20,
+        "endNodeId": 24,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 54,
+        "startNodeId": 25,
+        "endNodeId": 26,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 55,
+        "startNodeId": 26,
+        "endNodeId": 27,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 56,
+        "startNodeId": 27,
+        "endNodeId": 28,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 57,
+        "startNodeId": 29,
+        "endNodeId": 30,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 58,
+        "startNodeId": 30,
+        "endNodeId": 31,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 59,
+        "startNodeId": 31,
+        "endNodeId": 32,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 60,
+        "startNodeId": 33,
+        "endNodeId": 34,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 61,
+        "startNodeId": 34,
+        "endNodeId": 35,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 62,
+        "startNodeId": 35,
+        "endNodeId": 36,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 63,
+        "startNodeId": 25,
+        "endNodeId": 29,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 64,
+        "startNodeId": 29,
+        "endNodeId": 33,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 65,
+        "startNodeId": 26,
+        "endNodeId": 30,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 66,
+        "startNodeId": 30,
+        "endNodeId": 34,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 67,
+        "startNodeId": 27,
+        "endNodeId": 31,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 68,
+        "startNodeId": 31,
+        "endNodeId": 35,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 69,
+        "startNodeId": 28,
+        "endNodeId": 32,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 70,
+        "startNodeId": 32,
+        "endNodeId": 36,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 71,
+        "startNodeId": 37,
+        "endNodeId": 38,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 72,
+        "startNodeId": 38,
+        "endNodeId": 39,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 73,
+        "startNodeId": 39,
+        "endNodeId": 40,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 74,
+        "startNodeId": 41,
+        "endNodeId": 42,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 75,
+        "startNodeId": 42,
+        "endNodeId": 43,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 76,
+        "startNodeId": 43,
+        "endNodeId": 44,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 77,
+        "startNodeId": 45,
+        "endNodeId": 46,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 78,
+        "startNodeId": 46,
+        "endNodeId": 47,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 79,
+        "startNodeId": 47,
+        "endNodeId": 48,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 80,
+        "startNodeId": 37,
+        "endNodeId": 41,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 81,
+        "startNodeId": 41,
+        "endNodeId": 45,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 82,
+        "startNodeId": 38,
+        "endNodeId": 42,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 83,
+        "startNodeId": 42,
+        "endNodeId": 46,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 84,
+        "startNodeId": 39,
+        "endNodeId": 43,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 85,
+        "startNodeId": 43,
+        "endNodeId": 47,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 86,
+        "startNodeId": 40,
+        "endNodeId": 44,
+        "profileName": "300x600",
+        "material": "C30/37"
+      },
+      {
+        "id": 87,
+        "startNodeId": 44,
+        "endNodeId": 48,
+        "profileName": "300x600",
+        "material": "C30/37"
+      }
+    ],
+    "plates": [
+      {
+        "id": 1,
+        "nodeIds": [
+          13,
+          16,
+          24,
+          21
+        ],
+        "thicknessM": 0.25,
+        "material": "C30/37"
+      },
+      {
+        "id": 2,
+        "nodeIds": [
+          25,
+          28,
+          36,
+          33
+        ],
+        "thicknessM": 0.25,
+        "material": "C30/37"
+      },
+      {
+        "id": 3,
+        "nodeIds": [
+          37,
+          40,
+          48,
+          45
+        ],
+        "thicknessM": 0.25,
+        "material": "C30/37"
+      }
+    ],
+    "supports": [
+      {
+        "nodeId": 1,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 2,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 3,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 4,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 5,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 6,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 7,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 8,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 9,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 10,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 11,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      },
+      {
+        "nodeId": 12,
+        "ux": true,
+        "uy": true,
+        "uz": true,
+        "rx": true,
+        "ry": true,
+        "rz": true
+      }
+    ],
+    "loads": [],
+    "memberLoads": [
+      {
+        "id": 1,
+        "beamId": 1,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2.4000000000000004,
+        "qEnd": 2.4000000000000004,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 2,
+        "beamId": 4,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.5,
+        "qEnd": 1.5,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 3,
+        "beamId": 5,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 4.800000000000001,
+        "qEnd": 4.800000000000001,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 4,
+        "beamId": 8,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 3,
+        "qEnd": 3,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 5,
+        "beamId": 9,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2.4000000000000004,
+        "qEnd": 2.4000000000000004,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 6,
+        "beamId": 12,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.5,
+        "qEnd": 1.5,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 7,
+        "beamId": 13,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2.4000000000000004,
+        "qEnd": 2.4000000000000004,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 8,
+        "beamId": 16,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.5,
+        "qEnd": 1.5,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 9,
+        "beamId": 17,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 4.800000000000001,
+        "qEnd": 4.800000000000001,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 10,
+        "beamId": 20,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 3,
+        "qEnd": 3,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 11,
+        "beamId": 21,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2.4000000000000004,
+        "qEnd": 2.4000000000000004,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 12,
+        "beamId": 24,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.5,
+        "qEnd": 1.5,
+        "startPositionM": 0,
+        "endPositionM": 3.6
+      },
+      {
+        "id": 13,
+        "beamId": 25,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2.4000000000000004,
+        "qEnd": 2.4000000000000004,
+        "startPositionM": 0,
+        "endPositionM": 3.6000000000000005
+      },
+      {
+        "id": 14,
+        "beamId": 28,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.5,
+        "qEnd": 1.5,
+        "startPositionM": 0,
+        "endPositionM": 3.6000000000000005
+      },
+      {
+        "id": 15,
+        "beamId": 29,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 4.800000000000001,
+        "qEnd": 4.800000000000001,
+        "startPositionM": 0,
+        "endPositionM": 3.6000000000000005
+      },
+      {
+        "id": 16,
+        "beamId": 32,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 3,
+        "qEnd": 3,
+        "startPositionM": 0,
+        "endPositionM": 3.6000000000000005
+      },
+      {
+        "id": 17,
+        "beamId": 33,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 2.4000000000000004,
+        "qEnd": 2.4000000000000004,
+        "startPositionM": 0,
+        "endPositionM": 3.6000000000000005
+      },
+      {
+        "id": 18,
+        "beamId": 36,
+        "caseId": 4,
+        "globalDirection": "x",
+        "qStart": 1.5,
+        "qEnd": 1.5,
+        "startPositionM": 0,
+        "endPositionM": 3.6000000000000005
+      }
+    ],
+    "memberPointLoads": [],
+    "thermalLoads": [],
+    "surfaceLoads": [
+      {
+        "id": 1,
+        "plateId": 1,
+        "caseId": 1,
+        "qx": 0,
+        "qy": 0,
+        "qz": -1.2
+      },
+      {
+        "id": 2,
+        "plateId": 1,
+        "caseId": 2,
+        "qx": 0,
+        "qy": 0,
+        "qz": -2.5
+      },
+      {
+        "id": 3,
+        "plateId": 2,
+        "caseId": 1,
+        "qx": 0,
+        "qy": 0,
+        "qz": -1.2
+      },
+      {
+        "id": 4,
+        "plateId": 2,
+        "caseId": 2,
+        "qx": 0,
+        "qy": 0,
+        "qz": -2.5
+      },
+      {
+        "id": 5,
+        "plateId": 3,
+        "caseId": 1,
+        "qx": 0,
+        "qy": 0,
+        "qz": -1.5
+      },
+      {
+        "id": 6,
+        "plateId": 3,
+        "caseId": 3,
+        "qx": 0,
+        "qy": 0,
+        "qz": -0.56
+      }
+    ],
+    "loadPanels": [],
+    "envelopePanels": []
+  },
+  "projectInfo": {
+    "name": "Concrete office building",
+    "description": "Fictitious example project for Open FEM Studio (not a real building)."
+  },
+  "combinations": [
+    {
+      "id": 1,
+      "name": "UGT 6.10a",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "2": 0.75,
+        "5": 1.35
+      },
+      "standaard": {
+        "sleutel": "6.10a",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 2,
+      "name": "UGT 6.10a — zonder Office floor (Q)",
+      "type": "uls",
+      "formula": "1,35·G   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:2",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 25,
+      "name": "UGT 6.10b — Office floor (Q) leidend",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "2": 1.5,
+        "5": 1.2
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 4,
+      "name": "UGT 6.10b — Snow (S) leidend",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·S + 1,5·0,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "2": 0.75,
+        "3": 1.5,
+        "5": 1.2
+      },
+      "standaard": {
+        "sleutel": "6.10b|S:3",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 5,
+      "name": "UGT 6.10b — Snow (S) leidend, zonder Office floor (Q)",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·S   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "3": 1.5,
+        "5": 1.2
+      },
+      "standaard": {
+        "sleutel": "6.10b|S:3|zonder:2",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 6,
+      "name": "UGT 6.10b — Wind (W) leidend",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·W + 1,5·0,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "2": 0.75,
+        "4": 1.5,
+        "5": 1.2
+      },
+      "standaard": {
+        "sleutel": "6.10b|W:4",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 7,
+      "name": "UGT 6.10b — Wind (W) leidend, zonder Office floor (Q)",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·W   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "4": 1.5,
+        "5": 1.2
+      },
+      "standaard": {
+        "sleutel": "6.10b|W:4|zonder:2",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 26,
+      "name": "UGT 6.10b — Office floor (Q) leidend, blijvend gunstig",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "2": 1.5,
+        "5": 0.9
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 9,
+      "name": "UGT 6.10b — Snow (S) leidend, blijvend gunstig",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·S + 1,5·0,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "2": 0.75,
+        "3": 1.5,
+        "5": 0.9
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|S:3",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 10,
+      "name": "UGT 6.10b — Snow (S) leidend, blijvend gunstig, zonder Office floor (Q)",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·S   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "3": 1.5,
+        "5": 0.9
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|S:3|zonder:2",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 11,
+      "name": "UGT 6.10b — Wind (W) leidend, blijvend gunstig",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·W + 1,5·0,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "2": 0.75,
+        "4": 1.5,
+        "5": 0.9
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|W:4",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 12,
+      "name": "UGT 6.10b — Wind (W) leidend, blijvend gunstig, zonder Office floor (Q)",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·W   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "4": 1.5,
+        "5": 0.9
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|W:4|zonder:2",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 27,
+      "name": "BGT karakteristiek 6.14b — Office floor (Q) leidend",
+      "type": "sls",
+      "formula": "G + Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "2": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 14,
+      "name": "BGT karakteristiek 6.14b — Snow (S) leidend",
+      "type": "sls",
+      "formula": "G + S + 0,5·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "2": 0.5,
+        "3": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|S:3",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 15,
+      "name": "BGT karakteristiek 6.14b — Snow (S) leidend, zonder Office floor (Q)",
+      "type": "sls",
+      "formula": "G + S   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|S:3|zonder:2",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 16,
+      "name": "BGT karakteristiek 6.14b — Wind (W) leidend",
+      "type": "sls",
+      "formula": "G + W + 0,5·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "2": 0.5,
+        "4": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|W:4",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 17,
+      "name": "BGT karakteristiek 6.14b — Wind (W) leidend, zonder Office floor (Q)",
+      "type": "sls",
+      "formula": "G + W   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "4": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|W:4|zonder:2",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 28,
+      "name": "BGT frequent 6.15b — Office floor (Q) leidend",
+      "type": "sls",
+      "formula": "G + 0,5·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "2": 0.5,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 19,
+      "name": "BGT frequent 6.15b — Snow (S) leidend",
+      "type": "sls",
+      "formula": "G + 0,2·S + 0,3·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "2": 0.3,
+        "3": 0.2,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.15b|S:3",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 20,
+      "name": "BGT frequent 6.15b — Snow (S) leidend, zonder Office floor (Q)",
+      "type": "sls",
+      "formula": "G + 0,2·S   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "3": 0.2,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.15b|S:3|zonder:2",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 21,
+      "name": "BGT frequent 6.15b — Wind (W) leidend",
+      "type": "sls",
+      "formula": "G + 0,2·W + 0,3·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "2": 0.3,
+        "4": 0.2,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.15b|W:4",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 22,
+      "name": "BGT frequent 6.15b — Wind (W) leidend, zonder Office floor (Q)",
+      "type": "sls",
+      "formula": "G + 0,2·W   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "4": 0.2,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.15b|W:4|zonder:2",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 23,
+      "name": "BGT quasi-blijvend 6.16b",
+      "type": "sls",
+      "formula": "G + 0,3·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "2": 0.3,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.16b",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 24,
+      "name": "BGT quasi-blijvend 6.16b — zonder Office floor (Q)",
+      "type": "sls",
+      "formula": "G   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:2",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    }
+  ],
+  "idTellers": {
+    "belastinggeval": 6,
+    "combinatie": 29
+  },
+  "openFem3dViewSets": []
+}

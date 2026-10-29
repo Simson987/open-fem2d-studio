@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  Open-source eindige-elementenprogramma (2D en 3D) voor constructieve berekeningen en normtoetsing.<br>
-  Onderdeel van het portfolio van de <a href="https://github.com/OpenAEC-Foundation">OpenAEC Foundation</a>.
+  Open-source finite element program (2D and 3D) for structural analysis and code checking.<br>
+  Part of the <a href="https://github.com/OpenAEC-Foundation">OpenAEC Foundation</a> portfolio.
 </p>
 
 <p align="center">
@@ -14,227 +14,185 @@
 </p>
 
 > [!WARNING]
-> **Alpha-versie — niet geschikt voor productieberekeningen.**
-> Open FEM Studio is in volle ontwikkeling. Rekenkern, normtoetsing en rapport kunnen fouten bevatten en
-> kunnen per versie veranderen. Gebruik de uitkomsten niet als grondslag voor constructieve berekeningen in
-> projecten, en controleer ze altijd met een onafhankelijke berekening.
+> **Alpha version: not suitable for production calculations.**
+> Open FEM Studio is under heavy development. The solvers, code checks and report may contain errors and
+> may change between versions. Do not use the results as the basis for structural calculations in real
+> projects, and always verify them with an independent calculation.
+
+Open FEM Studio is a desktop application (Windows, macOS, Linux) for modelling and analysing structures:
+frames, trusses, beams and plates in 2D, and frames with shells, slabs and walls in 3D. It checks members
+against the Eurocodes with the Dutch national annex and writes a calculation report as PDF. The user interface
+is available in English, Dutch, German and French.
 
 ---
 
-## Wat het programma doet
+## Gallery
 
-- Staven en platen (wandschijven, belast in het vlak) in 2D: lineair, tweede orde en fysisch niet-lineair
-- 3D-raamwerken (Open FEM 3D): staven, platen, belastingvlakken, trek-alleen staven en starre schijven, lineair
-  en tweede orde, met normtoetsing en rapport; import van IFC4-analysemodellen
-- Experimenteel: een eigen Rust-FEM-kern (`solve_native_fem`) met afzonderlijke routes voor platen en
-  Tet4-/Hex8-volumes; constructieve validatie daarvan is nog in ontwikkeling
-- Belastinggevallen, belastingcombinaties en omhullenden
-- Normtoetsing per staaf: staal (NEN-EN 1993-1-1, langslassen NEN-EN 1993-1-8), hout en kruislaaghout
-  (NEN-EN 1995-1-1), gewapend beton (NEN-EN 1992-1-1), plus een vrije spanningstoets
-- Toetsing van platen per element
-- Rekenrapport als PDF
-- IFC-export; projectbestanden met de extensie `.ifcfem` (oudere `.ifcfem2d`-bestanden openen ook). De installer
-  koppelt beide extensies aan de app: een dubbelklik opent het project, ook in een app die al draait (één venster)
-- Lokale importextensies voor extra bestandsformaten; zie [extensies gebruiken en schrijven](docs/extensies.md)
-- Gebruikersinterface in het Nederlands, Engels, Duits en Frans
-- Bediening door een AI-assistent via de meegeleverde MCP-server (zie hieronder)
+![Open FEM Studio: steel hall with bending moments](docs/images/app-overview.png)
 
-## Een AI-assistent koppelen
+The images below were made with the app from the [example projects](#example-projects) in [`examples/`](examples/).
+All structures are fictitious.
 
-De installer zet een MCP-server naast de app (`openaec-mcp-server`). Een AI-assistent als Claude Desktop of
-Claude Code rekent en toetst daarmee rechtstreeks, en kan de draaiende app bedienen: modellen bouwen, rekenen,
-toetsen, rapporten maken. Alles staat in de app onder **Instellingen → AI-assistent (MCP)**:
+| | |
+|:---:|:---:|
+| ![Steel hall](docs/images/steel-hall.png) | ![Glulam hall: unity checks](docs/images/glulam-hall-utilization.png) |
+| **Steel hall** from the hall wizard: portal frames, purlins and tension-only bracing | **Glulam portal frame hall**: unity checks to EN 1995-1-1 (timber) and EN 1993-1-1 (steel rods) |
+| ![Concrete office](docs/images/concrete-office.png) | ![Concrete office: slab moments](docs/images/concrete-office-slab-moments.png) |
+| **Concrete office**: columns, beams and floor slabs | **Concrete office**: slab bending moments m<sub>xx</sub> (shell elements) in an ULS combination |
+| ![Masonry house](docs/images/masonry-house.png) | ![Braced frame (2D)](docs/images/braced-frame-2d.png) |
+| **Masonry house**: calcium silicate walls with openings and steel lintels on foundation beams | **Braced frame (2D)** under wind: the compressed tension-only diagonals drop out |
 
-- **Bediening door een AI-assistent toestaan (MCP)** — standaard aan bij een nieuwe installatie. De app luistert
-  alleen op deze computer (127.0.0.1); voor iedere opdracht is de sleutel uit het alleen voor de gebruiker leesbare
-  vindbestand `gui-control.json` nodig. Die sleutel is bij elke start nieuw. Uitzetten geldt meteen en blijft na een
-  update bewaard. Een ongeldig of onleesbaar instellingenbestand houdt het kanaal uit; een geldig bestand zonder keuze
-  gebruikt de standaardwaarde aan.
-  Een assistent kan de app ook zelf starten met de tool `gui_start_app`; het kanaal staat dan alleen voor die
-  sessie aan (het paneel toont dat apart van de bewaarde keuze, met een knop om het meteen uit te zetten). Voor
-  ontwikkelaars werkt `OPENAEC_GUI_CONTROL=1` nog steeds.
-- Drie wegen om de server te koppelen, met het pad dat het paneel toont:
-  1. de knop **Toevoegen aan Claude Desktop** — zet de regel `open-fem-studio` in `claude_desktop_config.json`,
-     laat de rest van het bestand staan, maakt eerst een reservekopie en weigert bij ongeldige JSON; start
-     Claude Desktop daarna opnieuw;
-  2. voor Claude Code de opdracht `claude mcp add --scope user open-fem-studio -- "<pad>"`;
-  3. voor andere MCP-clients een JSON-fragment `{ "mcpServers": { "open-fem-studio": { "command": "<pad>", "args": [] } } }`.
+![Continuous beam (2D)](docs/images/continuous-beam-2d.png)
+**Continuous beam (2D)**: bending moment, deflection and reactions for the imposed load on the first span only.
 
-Meer, ook over elke tool: [`src-tauri/crates/openaec-mcp-server/README.md`](src-tauri/crates/openaec-mcp-server/README.md).
+## Features
 
-## Schermafbeeldingen
+**Analysis**
 
-Model met krachtsverloop en vervormingen:
+- **2D**: beams, frames and trusses, plus plates loaded in their plane (wall plates); linear, second order
+  (P-Δ) and physically non-linear analysis
+- **3D**: frames with shell elements for slabs and walls, load panels that distribute area loads to the
+  supporting beams, tension-only members, rigid diaphragms, elastic bedding under beams and plates, member end
+  releases, tapered members, and masonry walls with openings and lintels; linear and second order
+- Load cases, load combinations to EN 1990 (generated per consequence class with the Dutch national annex, or
+  your own), envelopes, initial sway imperfections to EN 1993-1-1 §5.3.2
+- A steel hall wizard that generates a complete hall (frames, purlins, eaves beams, roof and wall bracing,
+  loads, optionally a concrete foundation grid on piles)
 
-![Model en resultaten](docs/screenshots/model-resultaten.jpg)
+**Code checks** (Eurocodes with the Dutch national annex)
 
-Betonmodule met wapening en momentendekking:
+| Material | Standard |
+|---|---|
+| Steel | NEN-EN 1993-1-1 (cross-section, buckling, lateral-torsional buckling), longitudinal welds NEN-EN 1993-1-8 |
+| Cold-formed steel | NEN-EN 1993-1-3 |
+| Aluminium | NEN-EN 1999-1-1 |
+| Reinforced concrete | NEN-EN 1992-1-1 (bending, shear, columns, M-N-κ, curtailment lines, crack widths and cover) |
+| Timber and cross-laminated timber (CLT) | NEN-EN 1995-1-1 |
+| Masonry | NEN-EN 1996-1-1 |
+| Natural stone elements | strengths from testing (NEN-EN 1990 annex D) |
+| Plates (2D wall plates loaded in their plane) | per element; plus a code-independent von Mises stress check |
 
-![Betonmodule](docs/screenshots/betonmodule.jpg)
+The checks themselves are written in Rust; the ULS check forces always come from a second-order analysis with
+imperfections, independent of the analysis type chosen for the results. The member checks of a 3D model with
+plates (slabs, walls) are not available yet: the 3D engine has no geometric stiffness for shell elements, so the
+required second-order analysis cannot be made, and the app says so instead of falling back to first order.
 
-M-κ-diagram van de geselecteerde doorsnede met lokale wapening en gekozen normaalkracht:
+**Input and output**
 
-![M-kappa-diagram](docs/screenshots/beton-m-kappa.jpg)
+- Calculation report as PDF
+- Project files `.ifcfem` (older `.ifcfem2d` files still open); the installer associates both extensions
+- IFC4 export of the analysis model together with the physical model, and `.ifcfemresults`: an IFC4 file with
+  the analysis results (displacements, reactions, member forces, plate results, unity checks) and the project
+  embedded
+- Import of IFC4 structural analysis models into the 3D model
+- Local import extensions for other file formats, see [using and writing extensions](docs/extensies.md) (Dutch)
 
-De materiaalkiezer gebruikt dezelfde iconen in het lichte en donkere thema
-en past zich aan een smal venster aan.
+**Automation**
 
-<details>
-<summary>Materiaalkiezer: licht, donker en smal</summary>
+- An MCP server (`openaec-mcp-server`) ships with the app. An AI assistant such as Claude Desktop or Claude Code
+  can use it to run the solvers and code checks directly, edit `.ifcfem` project files without the app, and
+  drive the running app: build models, solve, check, take screenshots and export reports
+- Every command of the app's command register (`model3d.*`, `project.*`) is available as an MCP tool
 
-![Materiaalkiezer in het lichte thema](docs/screenshots/materiaalkiezer-licht.jpg)
+## Example projects
 
-![Materiaalkiezer in het donkere thema](docs/screenshots/materiaalkiezer-donker.jpg)
+Open any of these files with **File → Open** in the app. They are fictitious structures made to show what the
+program can do, with common profiles and the standard load combinations of NEN-EN 1990 (consequence class CC2).
 
-<img src="docs/screenshots/materiaalkiezer-smal.jpg" alt="Materiaalkiezer op een smal scherm" width="390">
+| File | Model | Shows |
+|---|---|---|
+| [`steel-hall.ifcfem`](examples/steel-hall.ifcfem) | 3D steel hall 36 × 24 m, eaves height 7 m, 6° duopitch roof; HEA 400 columns and IPE 500 rafters (S355), IPE 220 purlins, RD 24 bracing | Hall wizard, tension-only bracing, snow and wind cases, steel checks |
+| [`glulam-portal-hall.ifcfem`](examples/glulam-portal-hall.ifcfem) | 3D glulam (GL24h) portal frames, span 12 m, five frames at 5 m, pinned purlins, RD 20 steel rod bracing | Timber checks, load panels on a pitched roof, tension-only cross rule, longitudinal wind |
+| [`concrete-office.ifcfem`](examples/concrete-office.ifcfem) | 3D concrete frame, three storeys of 3.6 m, grid 3 × 7.2 m by 2 × 6.0 m; 400 × 400 columns, 300 × 600 beams, 250 mm slabs (C30/37) | Shell elements for slabs, area loads, office imposed load (category B), wind on the facade |
+| [`masonry-house.ifcfem`](examples/masonry-house.ifcfem) | 3D house 8.4 × 6.0 m with 120 mm calcium silicate walls, window openings with HEA 100/120 lintels, 400 × 500 concrete foundation beams on piles | Masonry walls (orthotropic shells) with lintels |
+| [`continuous-beam-2d.ifcfem`](examples/continuous-beam-2d.ifcfem) | 2D continuous IPE 360 beam over three spans of 6 m | One imposed load case per span (pattern loading) in the standard combinations, steel checks |
+| [`braced-frame-2d.ifcfem`](examples/braced-frame-2d.ifcfem) | 2D two-storey steel frame, one bay of 6 m; HEA 200 columns, IPE 330 beams with pinned ends, L 70x70x7 cross bracing | Tension-only bracing, steel checks |
 
-</details>
+## Installation
 
-## Opbouw van de repository
+Download the installer for your platform from the
+[Releases](https://github.com/OpenAEC-Foundation/open-fem-studio/releases) page:
 
-| Map | Inhoud |
-|-----|--------|
-| `design-mockup/` | **Het programma (v2).** React 19 + TypeScript + Vite 7, zustand, i18next. De mapnaam is historisch: dit is de app die gebouwd en uitgebracht wordt. |
-| `design-mockup/src/core/` | De FEM-kern: `fem/` (Mesh, staaf-, driehoeks-, vierhoeks- en DKT-elementen, plaatmesher), `solver/` (Assembler, NonlinearSolver), `math/`, `mesher/` |
-| `design-mockup/src/components/fem/solver/engine.ts` | Adapter tussen de UI-gegevens en de kern (eenheden, tekens); bevat geen FEM-wiskunde |
-| `src-tauri/` | Tauri v2-desktopschil (`src/lib.rs` met de Tauri-commando's) en de Rust-workspace |
-| `src-tauri/crates/` | De Rust-rekenkernen (zie hieronder) |
-| `src/` | De eerste versie van de app (v1). Bevroren: `tauri.conf.json` en de release-workflow bouwen hem niet meer. Nieuw werk hoort in `design-mockup/`. |
-| `docs/`, `voorbeelden/` | Documentatie en voorbeeldprojecten |
+- **Windows:** `.exe` (NSIS installer) or `.msi`
+- **macOS:** `.dmg` (universal)
+- **Linux:** `.AppImage` or `.deb`; signatures (`.asc`) and checksums (`SHA256SUMS`) are published alongside
 
-### Rust-crates in `src-tauri/crates/`
+The installers also place the MCP server next to the app. To connect an AI assistant, open
+**Settings → AI assistant (MCP)** in the app: it shows the path of the server, a button to add it to Claude
+Desktop, and the command for Claude Code. Driving the running app is only possible on the same computer and
+can be switched off there. See the [MCP server README](src-tauri/crates/openaec-mcp-server/README.md) for all
+tools.
 
-| Crate | Rol |
-|-------|-----|
-| `mechanics` | Basisstructuren: krachten, momenten, staafas, omhullenden |
-| `nationale-bijlage` | De normnaad: welke nationale bijlage geldt en welke nationaal bepaalde parameters daarbij horen |
-| `nen-en-1990` | Partiële factoren, ψ-factoren en gevolgklassen (NEN-EN 1990 + NB) |
-| `section-properties` | Doorsnedegrootheden uit geometrie; bevat ook de binary `doorsnedemotor` |
-| `steel-profiles` | Staalprofieldatabase (`data/profiles.json`), bron voor de gegenereerde TypeScript-tabellen |
-| `nen-en-1993-1-1-section` | Doorsnedetoetsen staal (art. 6.2) |
-| `nen-en-1993-1-1-stability` | Stabiliteitstoetsen staal (§6.3) |
-| `nen-en-1993-1-1-ltb` | Kip (§6.3.2) met Mcr volgens de nationale bijlage |
-| `nen-en-1993-1-8-las` | Doorlopende langslas in een samengestelde doorsnede |
-| `steel-check` | Orkestratie van de staaltoetsing per staaf |
-| `nen-en-1995-1-1` | Rekenregels hout en kruislaaghout |
-| `timber-check` | Orkestratie van de houttoetsing per staaf |
-| `nen-en-1992-1-1` | Beton: materiaal, spanning-rekrelaties, M-N-κ-doorsnedeberekening |
-| `concrete-check` | Orkestratie van de betontoetsing per staaf |
-| `plaat-check` | Toetsing van platen per element |
-| `spanning-check` | Vrije spanningstoets (von Mises tegen een toelaatbare spanning) |
-| `openaec-layout` | PDF-opmaakengine |
-| `report` | Het PDF-rekenrapport, gebouwd op `openaec-layout` |
-| `toetsbrug` | Normtoetsing als JSON-in/JSON-uit (stdin/stdout) |
-| `openaec-mcp-server` | MCP-server (JSON-RPC over stdio) voor de toetskernen, de solver en de bediening van de app |
-| `appdata-migratie` | Neemt bij de eerste start de app-datamappen van de vorige identifier over (aangeroepen in `src-tauri/src/main.rs`) |
+## Building from source
 
-## Drie wegen naar de rekenkern
-
-Elke rekenkern moet langs drie wegen bereikbaar zijn; de rekengang zelf staat in de bibliotheek van de crate.
-
-1. **Tauri-commando** in `src-tauri/src/lib.rs` (geregistreerd in `generate_handler!`) — de geïnstalleerde desktop-app.
-2. **Toetsbrug** (`crates/toetsbrug`) — de Vite-devserver roept `target/release/toetsbrug` aan via `POST /api/toetsing`, zodat de toetsing ook in de browser werkt. Doorsnedegrootheden lopen op dezelfde manier via `doorsnedemotor` en `POST /api/doorsnede`.
-3. **MCP-server** (`crates/openaec-mcp-server`) — de TypeScript-solver draait daar als gebundelde sidecar
-   (`assets/fem-kernel.mjs`, gecontroleerd met een SHA-256 in `build.rs`) in een kortlevend Node-proces.
-
-`crates/openaec-mcp-server/tests/drie_wegen_kruistabel.rs` bewaakt dat de wegen overeenkomen.
-
-## Bouwen
-
-Vereisten: Node.js (de CI gebruikt 22), de Rust-toolchain via [rustup](https://rustup.rs/), en op Windows de WebView2-runtime.
+Requirements: Node.js 22, the Rust toolchain via [rustup](https://rustup.rs/), and on Windows the WebView2
+runtime. On Linux you also need the development packages for GTK 3, WebKitGTK 4.1 and Cairo.
 
 ```bash
-npm install                                  # root: Tauri-CLI
-npm --prefix design-mockup install           # de frontend
+npm install                                  # root: the Tauri CLI
+npm --prefix design-mockup install           # the frontend
 
-# vanuit de root:
-npm run tauri:dev     # desktop-app in ontwikkelstand (devserver op poort 1440)
-npm run tauri:build   # installer; bouwt de frontend, de solverbundel en de MCP-server zelf
+# from the repository root:
+npm run tauri:dev     # desktop app in development mode (dev server on port 1440)
+npm run tauri:build   # installer; also builds the frontend, the solver bundle and the MCP server
 ```
 
-Op Linux start `bash scripts/dev-desktop.sh` dezelfde actuele frontend en de Tauri-app
-als één ontwikkelsessie. Het script gebruikt een al draaiende Vite-server op poort 1440
-of start er zelf één, en sluit de eigen server weer af wanneer de app stopt. Start niet
-rechtstreeks `src-tauri/target/debug/open-fem-studio`: dat is een eerdere build met
-ingebouwde, mogelijk verouderde frontend. Voor een Linux-build zijn onder andere de
-ontwikkelpakketten voor Cairo, GTK 3 en WebKitGTK 4.1 nodig.
+On Linux, `bash scripts/dev-desktop.sh` starts the frontend dev server and the Tauri app as one session.
 
-De installer levert de MCP-server mee als `openaec-mcp-server` naast de app (`scripts/mcp-sidecar.mjs`,
-`src-tauri/tauri.bundel.conf.json`); koppelen aan een MCP-client staat in
-[`src-tauri/crates/openaec-mcp-server/README.md`](src-tauri/crates/openaec-mcp-server/README.md).
+### Repository layout
 
-Voor de browserstand en de testbatterij zijn de release-binaries nodig:
+| Path | Contents |
+|---|---|
+| `design-mockup/` | **The application (v2).** React 19, TypeScript, Vite 7, zustand, i18next. The folder name is historical: this is the app that is built and released. |
+| `design-mockup/src/core/` | The 2D FEM core in TypeScript (bar, triangle, quadrilateral and DKT elements; linear, second order and non-linear solvers; plate mesher) |
+| `src-tauri/` | Tauri v2 desktop shell and the Rust workspace |
+| `src-tauri/crates/` | Code checks (`nen-en-*`, `*-check`), the 3D solver adapter (`open-fem-3d`), the PDF report, `toetsbrug` (checks as JSON over stdin/stdout for the browser dev server) and `openaec-mcp-server` |
+| `src/` | The first version of the app (v1), frozen and no longer built |
+| `docs/` | Documentation (mostly in Dutch) and verification against closed-form solutions and NAFEMS benchmarks |
+| `examples/`, `voorbeelden/` | Example projects |
+
+### Tests
 
 ```bash
 cd src-tauri
-cargo build --release -p toetsbrug -p openaec-mcp-server
-cargo build --release -p section-properties --bin doorsnedemotor
-```
+cargo build --release -p toetsbrug -p openaec-mcp-server    # the JS tests call these binaries
 
-Na een wijziging aan de solverkern of de adapter: de sidecarbundel opnieuw bouwen met
-`npm run build:sidecar` in `design-mockup/`.
-
-### Windows-toolchain
-
-Het project bouwt op `x86_64-pc-windows-gnu` (MinGW) en `x86_64-pc-windows-msvc` (Visual Studio Build Tools).
-De app-crate is bewust alleen `lib` (geen `cdylib`), omdat een DLL met alle overgeërfde symbolen de exportlimiet
-van 64K van PE/COFF overschrijdt. Voor volledige debug-builds kun je naar MSVC overstappen:
-
-```bash
-rustup default stable-x86_64-pc-windows-msvc
-```
-
-## Testen
-
-```bash
-cd design-mockup
+cd ../design-mockup
 npx tsc --noEmit
-node scripts/run-tests.mjs            # alle test-*.mjs tegen de bron
-node scripts/run-tests.mjs --bundel   # de adaptertests tegen de sidecarbundel
+node scripts/run-tests.mjs            # all test-*.mjs against the source
+node scripts/run-tests.mjs --bundel   # adapter tests against the solver bundle
 
 cd ../src-tauri
 cargo test --workspace --exclude open-fem-studio
 ```
 
-Een deel van de `test-*.mjs`-batterij roept `toetsbrug` en `openaec-mcp-server` uit `src-tauri/target/release/` aan;
-bouw die eerst, anders test je een oude kern. Nieuwe tests horen geregistreerd te worden in
-`design-mockup/scripts/run-tests.mjs` (`BUNDEL_TESTS` of `ALLEEN_BRON`).
-
-Verificatie van de 3D-kern tegen gesloten oplossingen en de NAFEMS-benchmarks staat in
-[`docs/verificatie/3d-raamwerk/`](docs/verificatie/3d-raamwerk/README.md) en
+After a change to the solver core or `engine.ts`, rebuild the MCP solver bundle with `npm run build:sidecar` in
+`design-mockup/`. Verification of the 3D core is documented in
+[`docs/verificatie/3d-raamwerk/`](docs/verificatie/3d-raamwerk/README.md) and
 [`docs/verificatie/nafems/`](docs/verificatie/nafems/README.md).
 
-## Release
+## Versioning
 
-Het versienummer staat in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (en daarmee `Cargo.lock`) en
-`design-mockup/package.json`. Een tag `v*` start `.github/workflows/release.yml`, die de installers bouwt en een
-conceptrelease publiceert. De root-`package.json` levert alleen de Tauri-CLI en de v1-scripts; zijn versienummer
-hoort niet bij deze reeks.
+Versions follow the OpenAEC Blueprint scheme **YYYY.W.N**: year, ISO week (no leading zero) and a sequence
+number within that week starting at 0, for example `2026.44.0`. Git tags are `vYYYY.W.N`; a tag starts the
+release workflow, which builds the installers and publishes a draft release. `npm run versie` shows and checks
+every place where the number is stored (`npm run versie -- --set 2026.44.1` changes them all).
 
-Het programmabestand heet `open-fem-studio.exe` (tot en met 2026.39.0: `open-fem2d-studio.exe`). De NSIS-installer
-ruimt bij een upgrade het oude bestand op en zet snelkoppelingen om; wat de Tauri-installer daarvoor zelf doet en
-wat de haken in `src-tauri/windows/installer-hooks.nsh` aanvullen, staat in de kop van dat bestand.
+## License
 
-De identifier is `org.openaec.fem-studio` (tot en met 2026.39.1: `org.openaec.fem2d-studio`). Bij de eerste start
-kopieert de app de app-datamappen van de oude identifier naar de nieuwe (instellingen, recente bestanden,
-localStorage), zie `src-tauri/crates/appdata-migratie`. Projectbestanden dragen het formaat-id `open-fem-studio-v2`;
-oudere bestanden openen gewoon, maar een bestand van deze versie opent niet in 2026.39.1 en ouder.
-
-## Licentie
-
-| Onderdeel | Licentie |
+| Part | License |
 |---|---|
-| Open FEM Studio als geheel: de app (`design-mockup/`, `src-tauri/`), toetsbrug, MCP-server, rapportage en de 3D-kernadapter | **AGPL-3.0-or-later** — zie [LICENSE.md](LICENSE.md) |
-| Normtoetsingsbibliotheken in `src-tauri/crates/`: `nen-en-*`, `*-check`, `section-properties`, `steel-profiles`, `nationale-bijlage`, `mechanics` | **LGPL-3.0-or-later** — zie [LICENSES/LGPL-3.0-or-later.md](LICENSES/LGPL-3.0-or-later.md) |
-| `openaec-layout` | MIT (zie de crate) |
-| Documentatie en afbeeldingen | CC BY-SA 4.0 |
+| Open FEM Studio as a whole: the app (`design-mockup/`, `src-tauri/`), toetsbrug, MCP server, reporting and the 3D solver adapter | **AGPL-3.0-or-later**, see [LICENSE.md](LICENSE.md) |
+| Code-check libraries in `src-tauri/crates/`: `nen-en-*`, `*-check`, `section-properties`, `steel-profiles`, `nationale-bijlage`, `mechanics` | **LGPL-3.0-or-later**, see [LICENSES/LGPL-3.0-or-later.md](LICENSES/LGPL-3.0-or-later.md) |
+| `openaec-layout` | MIT (see the crate) |
+| Documentation and images | CC BY-SA 4.0 |
 
-De app is AGPL omdat de 3D-raamwerkberekening een externe rekenkern onder AGPL-3.0 meelinkt (bron en vaste
-revisie: `src-tauri/crates/open-fem-3d/Cargo.toml`). Wie de app aanpast en aanbiedt, ook als netwerkdienst,
-moet de broncode van die versie beschikbaar stellen. De normtoetsingen blijven los bruikbaar als bibliotheek
-onder LGPL-3.0-or-later.
+The app is AGPL because the 3D frame analysis links an external solver licensed under AGPL-3.0 (source and
+pinned revision: `src-tauri/crates/open-fem-3d/Cargo.toml`). Anyone who modifies the app and offers it, also as a
+network service, must make the source code of that version available. The code checks remain usable as
+libraries under LGPL-3.0-or-later.
 
-## Over de OpenAEC Foundation
+## About the OpenAEC Foundation
 
-De OpenAEC Foundation ontwikkelt vrije, open-source software voor de gebouwde omgeving.
-Build free. Build together. — [openaec.org](https://github.com/OpenAEC-Foundation)
+The OpenAEC Foundation develops free, open-source software for the built environment.
+Build free. Build together. [openaec.org](https://github.com/OpenAEC-Foundation)

@@ -1,0 +1,979 @@
+{
+  "format": "open-fem-studio-v2",
+  "version": 2,
+  "savedAt": "2026-10-29T00:11:48.037Z",
+  "modelDimension": "2d",
+  "nodes": [
+    {
+      "id": 1,
+      "x": 0,
+      "z": 0
+    },
+    {
+      "id": 2,
+      "x": 6000,
+      "z": 0
+    },
+    {
+      "id": 3,
+      "x": 12000,
+      "z": 0
+    },
+    {
+      "id": 4,
+      "x": 18000,
+      "z": 0
+    }
+  ],
+  "beams": [
+    {
+      "id": 1,
+      "from": 1,
+      "to": 2,
+      "material": "S235",
+      "profile": "IPE 360"
+    },
+    {
+      "id": 2,
+      "from": 2,
+      "to": 3,
+      "material": "S235",
+      "profile": "IPE 360"
+    },
+    {
+      "id": 3,
+      "from": 3,
+      "to": 4,
+      "material": "S235",
+      "profile": "IPE 360"
+    }
+  ],
+  "supports": [
+    {
+      "nodeId": 1,
+      "type": "pinned"
+    },
+    {
+      "nodeId": 2,
+      "type": "zRoller"
+    },
+    {
+      "nodeId": 3,
+      "type": "zRoller"
+    },
+    {
+      "nodeId": 4,
+      "type": "zRoller"
+    }
+  ],
+  "plates": [],
+  "loads": [
+    {
+      "id": 1,
+      "type": "lineLoad",
+      "beamId": 1,
+      "q": -6,
+      "caseId": 1
+    },
+    {
+      "id": 2,
+      "type": "lineLoad",
+      "beamId": 2,
+      "q": -6,
+      "caseId": 1
+    },
+    {
+      "id": 3,
+      "type": "lineLoad",
+      "beamId": 3,
+      "q": -6,
+      "caseId": 1
+    },
+    {
+      "id": 4,
+      "type": "lineLoad",
+      "beamId": 1,
+      "q": -10,
+      "caseId": 6
+    },
+    {
+      "id": 5,
+      "type": "lineLoad",
+      "beamId": 2,
+      "q": -10,
+      "caseId": 7
+    },
+    {
+      "id": 6,
+      "type": "lineLoad",
+      "beamId": 3,
+      "q": -10,
+      "caseId": 8
+    }
+  ],
+  "loadCases": [
+    {
+      "id": 5,
+      "name": "Self-weight",
+      "type": "dead",
+      "eigenGewicht": true
+    },
+    {
+      "id": 1,
+      "name": "Dead load (G)",
+      "type": "dead"
+    },
+    {
+      "id": 6,
+      "name": "Q span 1",
+      "type": "live",
+      "categorie": "B"
+    },
+    {
+      "id": 7,
+      "name": "Q span 2",
+      "type": "live",
+      "categorie": "B"
+    },
+    {
+      "id": 8,
+      "name": "Q span 3",
+      "type": "live",
+      "categorie": "B"
+    }
+  ],
+  "activeLoadCaseId": 6,
+  "selfWeightEnabled": true,
+  "nonlinearEnabled": false,
+  "analysetype": "eersteOrde",
+  "projectInfo": {
+    "name": "Continuous beam with pattern loading",
+    "description": "Fictitious example project for Open FEM Studio (not a real building)."
+  },
+  "combinations": [
+    {
+      "id": 1,
+      "name": "UGT 6.10a",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35,
+        "6": 0.75,
+        "7": 0.75,
+        "8": 0.75
+      },
+      "standaard": {
+        "sleutel": "6.10a",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 27,
+      "name": "UGT 6.10a — zonder Q span 1",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q[Q span 2 + Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35,
+        "7": 0.75,
+        "8": 0.75
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:6",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 37,
+      "name": "UGT 6.10a — zonder Q span 2",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q[Q span 1 + Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35,
+        "6": 0.75,
+        "8": 0.75
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:7",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 57,
+      "name": "UGT 6.10a — zonder Q span 3",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q[Q span 1 + Q span 2]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35,
+        "6": 0.75,
+        "7": 0.75
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:8",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 38,
+      "name": "UGT 6.10a — zonder Q span 1, Q span 2",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q[Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35,
+        "8": 0.75
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:6+7",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 58,
+      "name": "UGT 6.10a — zonder Q span 1, Q span 3",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q[Q span 2]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35,
+        "7": 0.75
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:6+8",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 59,
+      "name": "UGT 6.10a — zonder Q span 2, Q span 3",
+      "type": "uls",
+      "formula": "1,35·G + 1,5·0,5·Q[Q span 1]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35,
+        "6": 0.75
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:7+8",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 60,
+      "name": "UGT 6.10a — zonder Q span 1, Q span 2, Q span 3",
+      "type": "uls",
+      "formula": "1,35·G   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.35,
+        "5": 1.35
+      },
+      "standaard": {
+        "sleutel": "6.10a|zonder:6+7+8",
+        "soort": "6.10a",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 33,
+      "name": "UGT 6.10b — Q cat. B leidend",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "6": 1.5,
+        "7": 1.5,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 53,
+      "name": "UGT 6.10b — Q cat. B leidend, zonder Q span 1",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q[Q span 2 + Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "7": 1.5,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B|zonder:6",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 39,
+      "name": "UGT 6.10b — Q cat. B leidend, zonder Q span 2",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q[Q span 1 + Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "6": 1.5,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B|zonder:7",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 61,
+      "name": "UGT 6.10b — Q cat. B leidend, zonder Q span 3",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q[Q span 1 + Q span 2]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "6": 1.5,
+        "7": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B|zonder:8",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 93,
+      "name": "UGT 6.10b — Q cat. B leidend, zonder Q span 1, Q span 2",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q[Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B|zonder:6+7",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 62,
+      "name": "UGT 6.10b — Q cat. B leidend, zonder Q span 1, Q span 3",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q[Q span 2]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "7": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B|zonder:6+8",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 63,
+      "name": "UGT 6.10b — Q cat. B leidend, zonder Q span 2, Q span 3",
+      "type": "uls",
+      "formula": "1,2·G + 1,5·Q[Q span 1]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1.2,
+        "5": 1.2,
+        "6": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b|Q:B|zonder:7+8",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 34,
+      "name": "UGT 6.10b — Q cat. B leidend, blijvend gunstig",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "6": 1.5,
+        "7": 1.5,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 54,
+      "name": "UGT 6.10b — Q cat. B leidend, blijvend gunstig, zonder Q span 1",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q[Q span 2 + Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "7": 1.5,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B|zonder:6",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 42,
+      "name": "UGT 6.10b — Q cat. B leidend, blijvend gunstig, zonder Q span 2",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q[Q span 1 + Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "6": 1.5,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B|zonder:7",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 68,
+      "name": "UGT 6.10b — Q cat. B leidend, blijvend gunstig, zonder Q span 3",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q[Q span 1 + Q span 2]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "6": 1.5,
+        "7": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B|zonder:8",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 94,
+      "name": "UGT 6.10b — Q cat. B leidend, blijvend gunstig, zonder Q span 1, Q span 2",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q[Q span 3]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "8": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B|zonder:6+7",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 69,
+      "name": "UGT 6.10b — Q cat. B leidend, blijvend gunstig, zonder Q span 1, Q span 3",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q[Q span 2]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "7": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B|zonder:6+8",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 70,
+      "name": "UGT 6.10b — Q cat. B leidend, blijvend gunstig, zonder Q span 2, Q span 3",
+      "type": "uls",
+      "formula": "0,9·G + 1,5·Q[Q span 1]   [γ: NEN-EN 1990 NB tabel NB.4, CC2; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 0.9,
+        "5": 0.9,
+        "6": 1.5
+      },
+      "standaard": {
+        "sleutel": "6.10b-gunstig|Q:B|zonder:7+8",
+        "soort": "6.10b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 35,
+      "name": "BGT karakteristiek 6.14b — Q cat. B leidend",
+      "type": "sls",
+      "formula": "G + Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 55,
+      "name": "BGT karakteristiek 6.14b — Q cat. B leidend, zonder Q span 1",
+      "type": "sls",
+      "formula": "G + Q[Q span 2 + Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "7": 1,
+        "8": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B|zonder:6",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 45,
+      "name": "BGT karakteristiek 6.14b — Q cat. B leidend, zonder Q span 2",
+      "type": "sls",
+      "formula": "G + Q[Q span 1 + Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 1,
+        "8": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B|zonder:7",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 75,
+      "name": "BGT karakteristiek 6.14b — Q cat. B leidend, zonder Q span 3",
+      "type": "sls",
+      "formula": "G + Q[Q span 1 + Q span 2]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B|zonder:8",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 95,
+      "name": "BGT karakteristiek 6.14b — Q cat. B leidend, zonder Q span 1, Q span 2",
+      "type": "sls",
+      "formula": "G + Q[Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "8": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B|zonder:6+7",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 76,
+      "name": "BGT karakteristiek 6.14b — Q cat. B leidend, zonder Q span 1, Q span 3",
+      "type": "sls",
+      "formula": "G + Q[Q span 2]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "7": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B|zonder:6+8",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 77,
+      "name": "BGT karakteristiek 6.14b — Q cat. B leidend, zonder Q span 2, Q span 3",
+      "type": "sls",
+      "formula": "G + Q[Q span 1]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 1
+      },
+      "standaard": {
+        "sleutel": "6.14b|Q:B|zonder:7+8",
+        "soort": "6.14b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 36,
+      "name": "BGT frequent 6.15b — Q cat. B leidend",
+      "type": "sls",
+      "formula": "G + 0,5·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.5,
+        "7": 0.5,
+        "8": 0.5
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 56,
+      "name": "BGT frequent 6.15b — Q cat. B leidend, zonder Q span 1",
+      "type": "sls",
+      "formula": "G + 0,5·Q[Q span 2 + Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "7": 0.5,
+        "8": 0.5
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B|zonder:6",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 48,
+      "name": "BGT frequent 6.15b — Q cat. B leidend, zonder Q span 2",
+      "type": "sls",
+      "formula": "G + 0,5·Q[Q span 1 + Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.5,
+        "8": 0.5
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B|zonder:7",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 82,
+      "name": "BGT frequent 6.15b — Q cat. B leidend, zonder Q span 3",
+      "type": "sls",
+      "formula": "G + 0,5·Q[Q span 1 + Q span 2]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.5,
+        "7": 0.5
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B|zonder:8",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 96,
+      "name": "BGT frequent 6.15b — Q cat. B leidend, zonder Q span 1, Q span 2",
+      "type": "sls",
+      "formula": "G + 0,5·Q[Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "8": 0.5
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B|zonder:6+7",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 83,
+      "name": "BGT frequent 6.15b — Q cat. B leidend, zonder Q span 1, Q span 3",
+      "type": "sls",
+      "formula": "G + 0,5·Q[Q span 2]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "7": 0.5
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B|zonder:6+8",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 84,
+      "name": "BGT frequent 6.15b — Q cat. B leidend, zonder Q span 2, Q span 3",
+      "type": "sls",
+      "formula": "G + 0,5·Q[Q span 1]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.5
+      },
+      "standaard": {
+        "sleutel": "6.15b|Q:B|zonder:7+8",
+        "soort": "6.15b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 23,
+      "name": "BGT quasi-blijvend 6.16b",
+      "type": "sls",
+      "formula": "G + 0,3·Q   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.3,
+        "7": 0.3,
+        "8": 0.3
+      },
+      "standaard": {
+        "sleutel": "6.16b",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 32,
+      "name": "BGT quasi-blijvend 6.16b — zonder Q span 1",
+      "type": "sls",
+      "formula": "G + 0,3·Q[Q span 2 + Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "7": 0.3,
+        "8": 0.3
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:6",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 51,
+      "name": "BGT quasi-blijvend 6.16b — zonder Q span 2",
+      "type": "sls",
+      "formula": "G + 0,3·Q[Q span 1 + Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.3,
+        "8": 0.3
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:7",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 89,
+      "name": "BGT quasi-blijvend 6.16b — zonder Q span 3",
+      "type": "sls",
+      "formula": "G + 0,3·Q[Q span 1 + Q span 2]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.3,
+        "7": 0.3
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:8",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 52,
+      "name": "BGT quasi-blijvend 6.16b — zonder Q span 1, Q span 2",
+      "type": "sls",
+      "formula": "G + 0,3·Q[Q span 3]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "8": 0.3
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:6+7",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 90,
+      "name": "BGT quasi-blijvend 6.16b — zonder Q span 1, Q span 3",
+      "type": "sls",
+      "formula": "G + 0,3·Q[Q span 2]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "7": 0.3
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:6+8",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 91,
+      "name": "BGT quasi-blijvend 6.16b — zonder Q span 2, Q span 3",
+      "type": "sls",
+      "formula": "G + 0,3·Q[Q span 1]   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1,
+        "6": 0.3
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:7+8",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    },
+    {
+      "id": 92,
+      "name": "BGT quasi-blijvend 6.16b — zonder Q span 1, Q span 2, Q span 3",
+      "type": "sls",
+      "formula": "G   [NEN-EN 1990; ψ uit NB tabel NB.2–A1.1]",
+      "factors": {
+        "1": 1,
+        "5": 1
+      },
+      "standaard": {
+        "sleutel": "6.16b|zonder:6+7+8",
+        "soort": "6.16b",
+        "gevolgklasse": "CC2",
+        "bijlage": "NL"
+      }
+    }
+  ],
+  "idTellers": {
+    "belastinggeval": 9,
+    "combinatie": 97
+  },
+  "structuralGrid": {
+    "enabled": true,
+    "xAxes": [
+      {
+        "id": "A",
+        "label": "A",
+        "position": 0
+      },
+      {
+        "id": "B",
+        "label": "B",
+        "position": 6000
+      },
+      {
+        "id": "x-1",
+        "label": "C",
+        "position": 12000
+      },
+      {
+        "id": "x-2",
+        "label": "D",
+        "position": 18000
+      }
+    ],
+    "yAxes": [
+      {
+        "id": "Y-A",
+        "label": "1",
+        "position": 0
+      },
+      {
+        "id": "Y-B",
+        "label": "2",
+        "position": 6000
+      }
+    ],
+    "zAxes": [
+      {
+        "id": "z-1",
+        "label": "Level 0",
+        "position": 0
+      }
+    ]
+  }
+}
