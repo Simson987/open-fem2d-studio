@@ -766,6 +766,20 @@ function App() {
   const [openFem3dResult, setOpenFem3dResult] = useState<OpenFem3DSolveResult | null>(null);
   const [openFem3dCaseResults, setOpenFem3dCaseResults] = useState<Map<number, OpenFem3DSolveResult>>(new Map());
   const [openFem3dCombinationResults, setOpenFem3dCombinationResults] = useState<Map<number, OpenFem3DSolveResult>>(new Map());
+  // De resultaten horen bij het model waarmee ze gerekend zijn. Het effect
+  // verderop (op `openFem3d`) wist ze pas NA de render met het nieuwe model:
+  // in die ene render kreeg het tekenvlak het nieuwe model met het oude
+  // resultaat, en bij een ander project met platen brak de contourlaag op de
+  // onbekende knopen van het oude net de app af ("APP BOOTSTRAP ERROR").
+  // Daarom hier, tijdens de render, al wissen zodra het model een ander is
+  // (React rendert dan meteen opnieuw, zonder de oude combinatie te tonen).
+  const [openFem3dResultaatModel, setOpenFem3dResultaatModel] = useState(openFem3d);
+  if (openFem3dResultaatModel !== openFem3d) {
+    setOpenFem3dResultaatModel(openFem3d);
+    setOpenFem3dResult(null);
+    setOpenFem3dCaseResults(new Map());
+    setOpenFem3dCombinationResults(new Map());
+  }
   const [openFem3dActiveCombinationId, setOpenFem3dActiveCombinationId] = useState<number | null>(null);
   // De combinaties zoals ze gerekend zijn: met scheefstand ontvouwt elke UGT-
   // combinatie in +X, −X, +Y en −Y. Leeg = nog niet gerekend.
